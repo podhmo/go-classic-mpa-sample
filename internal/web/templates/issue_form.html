@@ -3,7 +3,7 @@
   <h1>{{.Heading}}</h1>
 </div>
 
-<form method="post" action="{{.Action}}" class="card issue-form">
+<form method="post" action="{{.Action}}" class="card issue-form" novalidate>
   <div class="field">
     <label for="f-title">Title <span class="req" aria-hidden="true">*</span></label>
     <input type="text" id="f-title" name="title" value="{{.Input.Title}}" maxlength="{{maxTitleLen}}" required{{if .Errors.Title}} aria-invalid="true" aria-describedby="f-title-error"{{end}}>

@@ -19,6 +19,8 @@
 | 11 | nit | 修正済 | `-db ""` で無名 ephemeral DB が開かれデータが黙って消える | 対応: main.go で空文字を `log.Fatal` |
 | 12 | nit | 修正済 | 生成リンクが常に `status=open` を含む | デフォルト値の冗長なクエリ。対応: `issuesURL` で open/"" 時は省略 |
 | 13 | info | 修正済 | `X-Content-Type-Options` / `X-Frame-Options` 等のヘッダが無い | 対応: `securityHeaders` middleware で `nosniff` + `frame DENY` + `referrer-policy: same-origin` を全レスポンスに付与 |
+| 14 | minor | 修正済 | HTML5 `required` 属性がサーバー側バリデーションを阻害 | **実ブラウザ検証で発見**（curl/httptest では見えない）。title 入力・コメント textarea の `required` がブラウザネイティブのバブル（「このフィールドを入力してください」）を発火させ、サーバー側の 422 + インラインエラー再表示に一切到達しない。仕様の「検証エラー時は入力内容を保持してフォームを再表示」をブラウザ上で満たせていなかった。対応: 両フォームに `novalidate` 追加（`required` 属性は意味論として残存） |
+| 15 | nit | 修正済 | `favicon.ico` が 404 でコンソールエラー | 対応: layout に data-URI の SVG アイコンを埋め込み（追加リクエスト・ファイル不要） |
 
 ## 修正しない（記録のみ）
 
