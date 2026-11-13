@@ -215,8 +215,8 @@ func TestE2ECommentsAndValidation(t *testing.T) {
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("POST %s/comments status = %d, want 303", loc, resp.StatusCode)
 	}
-	if loc2 := resp.Header.Get("Location"); !strings.HasPrefix(loc2, loc) {
-		t.Fatalf("comment redirect = %q, want %s…", loc2, loc)
+	if loc2 := resp.Header.Get("Location"); !strings.HasPrefix(loc2, loc+"#comment-") {
+		t.Fatalf("comment redirect = %q, want %s#comment-…", loc2, loc)
 	}
 	_, _, body := e2eGet(t, srv, loc)
 	if !strings.Contains(body, "Comments (1)") {
@@ -224,6 +224,9 @@ func TestE2ECommentsAndValidation(t *testing.T) {
 	}
 	if !strings.Contains(body, `markdown-body"><p>hello there</p>`) {
 		t.Error("comment should be rendered in the comments section")
+	}
+	if !strings.Contains(body, `id="comment-`) || !strings.Contains(body, `href="#comment-`) {
+		t.Error("comment should render with a permalink anchor and link")
 	}
 
 	// Empty and whitespace-only comments are rejected with 422: the detail

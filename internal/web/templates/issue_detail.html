@@ -51,9 +51,9 @@
   {{if .Comments}}
   <ol class="comment-list">
     {{range .Comments}}
-    <li class="card comment">
+    <li class="card comment" id="comment-{{.ID}}">
       <header class="comment-meta">
-        <time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .CreatedAt}}</time>
+        <a class="comment-permalink" href="#comment-{{.ID}}"><time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .CreatedAt}}</time></a>
       </header>
       <div class="comment-body markdown-body">{{markdown .Body}}</div>
     </li>

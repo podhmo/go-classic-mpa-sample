@@ -579,16 +579,22 @@ func TestCreateComment(t *testing.T) {
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("status = %d, want 303", resp.StatusCode)
 	}
-	if loc := resp.Header.Get("Location"); !strings.HasPrefix(loc, "/issues/1") {
-		t.Fatalf("Location = %q, want /issues/1…", loc)
+	if loc := resp.Header.Get("Location"); !strings.HasPrefix(loc, "/issues/1#comment-") {
+		t.Fatalf("Location = %q, want /issues/1#comment-…", loc)
 	}
 
 	resp2, err := srv.Client().Get(srv.URL + "/issues/1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if body := getBody(t, resp2); !strings.Contains(body, "hello there") {
+	body := getBody(t, resp2)
+	if !strings.Contains(body, "hello there") {
 		t.Error("comment should appear on the detail page")
+	}
+	// Each comment carries a permalink: an id anchor on the <li> and the
+	// timestamp linking back to it.
+	if !strings.Contains(body, `id="comment-1"`) || !strings.Contains(body, `href="#comment-1"`) {
+		t.Error("comment should render with a permalink anchor and link")
 	}
 }
 

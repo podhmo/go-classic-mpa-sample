@@ -323,7 +323,7 @@ func (h *handler) deleteIssue(w http.ResponseWriter, r *http.Request) {
 }
 
 // createComment validates POST /issues/{id}/comments and redirects back to
-// the detail page anchored at the comment list.
+// the detail page anchored at the new comment's permalink.
 func (h *handler) createComment(w http.ResponseWriter, r *http.Request) {
 	id, ok := parseID(r)
 	if !ok {
@@ -363,11 +363,12 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.store.CreateComment(r.Context(), id, body); err != nil {
+	commentID, err := h.store.CreateComment(r.Context(), id, body)
+	if err != nil {
 		h.issueError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, issueURL(id)+"#comments", http.StatusSeeOther)
+	http.Redirect(w, r, fmt.Sprintf("%s#comment-%d", issueURL(id), commentID), http.StatusSeeOther)
 }
 
 // issueError maps store.ErrNotFound to a 404 page and delegates everything
