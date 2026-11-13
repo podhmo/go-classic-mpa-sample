@@ -1,0 +1,29 @@
+{{define "layout"}}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}} · Issue Tracker</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="site-title" href="/issues">Issue Tracker</a>
+      <nav class="site-nav" aria-label="Main">
+        <a href="/issues">Issues</a>
+        <a class="btn btn-primary" href="/issues/new">New issue</a>
+      </nav>
+    </div>
+  </header>
+  <main class="container main-content">
+    {{template "content" .}}
+  </main>
+  <footer class="site-footer">
+    <div class="container">
+      <p>A classic multi-page app built with Go's net/http and html/template. No JavaScript.</p>
+    </div>
+  </footer>
+</body>
+</html>
+{{end}}
