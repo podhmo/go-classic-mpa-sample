@@ -289,3 +289,318 @@ func TestE2ECommentsAndValidation(t *testing.T) {
 		t.Error("detail page must not render a literal <script> tag")
 	}
 }
+
+/* ---------- second round: seeded fixtures, CSRF, pagination ---------- */
+
+// newSeededServer is newRealServer plus the demo fixture (SeedDemoData):
+// labels Bug, Documentation, Enhancement and Feature, and seven backdated
+// issues — five open and two closed, several with comments. The concrete
+// titles quoted below come straight from internal/store/seed.go.
+func newSeededServer(t *testing.T) (*httptest.Server, *store.Store) {
+	t.Helper()
+	srv, st := newRealServer(t)
+	if err := st.SeedDemoData(context.Background()); err != nil {
+		t.Fatalf("SeedDemoData: %v", err)
+	}
+	return srv, st
+}
+
+// postFormWithHeaders is postForm plus explicit request headers — needed to
+// drive the CrossOriginProtection middleware (Sec-Fetch-Site, Origin),
+// which client.PostForm cannot set.
+func postFormWithHeaders(t *testing.T, rawurl string, form url.Values, headers map[string]string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, rawurl, strings.NewReader(form.Encode()))
+	if err != nil {
+		t.Fatalf("POST %s: %v", rawurl, err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	resp, err := noRedirectClient().Do(req)
+	if err != nil {
+		t.Fatalf("POST %s: %v", rawurl, err)
+	}
+	return resp
+}
+
+// TestE2EListInteractions drives every control on the issue list — status
+// tabs, keyword search, the label filter, sort order and pagination —
+// against the seeded database, asserting on the rendered rows.
+func TestE2EListInteractions(t *testing.T) {
+	srv, st := newSeededServer(t)
+	ctx := context.Background()
+
+	openSeedTitles := []string{
+		"Crash when opening an empty project",
+		"Add dark mode to the settings page",
+		// html/template escapes "+" as "&#43;", so match the title up
+		// to the "+" rather than the full "10,000+ records" text.
+		"Search slows down with 10,000",
+		"Improve onboarding for first-time users",
+		"Export issues as CSV",
+	}
+	closedSeedTitles := []string{
+		"Typo in the getting-started guide",
+		"Update screenshots in the user manual",
+	}
+	// Rows are counted via the issue-row <li>; the quoted class cannot
+	// false-match the issue-row-main / issue-row-meta children.
+	countRows := func(body string) int { return strings.Count(body, `class="issue-row"`) }
+
+	// The default list is the open tab.
+	status, _, body := e2eGet(t, srv, "/issues")
+	if status != http.StatusOK {
+		t.Fatalf("GET /issues status = %d, want 200", status)
+	}
+	if n := countRows(body); n != len(openSeedTitles) {
+		t.Errorf("default list rendered %d rows, want %d", n, len(openSeedTitles))
+	}
+	for _, title := range openSeedTitles {
+		if !strings.Contains(body, title) {
+			t.Errorf("default list missing seeded title %q", title)
+		}
+	}
+	for _, title := range closedSeedTitles {
+		if strings.Contains(body, title) {
+			t.Errorf("default list should not show closed issue %q", title)
+		}
+	}
+
+	// The closed tab shows the complement.
+	_, _, body = e2eGet(t, srv, "/issues?status=closed")
+	if n := countRows(body); n != len(closedSeedTitles) {
+		t.Errorf("closed list rendered %d rows, want %d", n, len(closedSeedTitles))
+	}
+	for _, title := range closedSeedTitles {
+		if !strings.Contains(body, title) {
+			t.Errorf("closed list missing seeded title %q", title)
+		}
+	}
+	for _, title := range openSeedTitles {
+		if strings.Contains(body, title) {
+			t.Errorf("closed list should not show open issue %q", title)
+		}
+	}
+
+	// q searches bodies, not just titles: "trigram" appears only in the
+	// body of "Search slows down with 10,000+ records" (seed.go).
+	_, _, body = e2eGet(t, srv, "/issues?q=trigram")
+	if n := countRows(body); n != 1 {
+		t.Errorf("q=trigram rendered %d rows, want 1", n)
+	}
+	if !strings.Contains(body, "Search slows down with 10,000") {
+		t.Error("q=trigram should match via the issue body")
+	}
+	if strings.Contains(body, "Crash when opening an empty project") {
+		t.Error("q=trigram must not match unrelated issues")
+	}
+
+	// Sort flips the row order. Seed ages are fixed relative to now:
+	// "Update screenshots…" (8h) is the newest seed and "Crash…" (6.5d) the
+	// oldest — assert their relative positions, not absolute offsets.
+	_, _, newestFirst := e2eGet(t, srv, "/issues?status=all")
+	_, _, oldestFirst := e2eGet(t, srv, "/issues?status=all&sort=oldest")
+	shotsIdx := strings.Index(newestFirst, "Update screenshots in the user manual")
+	crashIdx := strings.Index(newestFirst, "Crash when opening an empty project")
+	if shotsIdx < 0 || crashIdx < 0 {
+		t.Error("status=all should list both boundary seeds")
+	} else if shotsIdx > crashIdx {
+		t.Error("newest-first should list the newest seed before the oldest")
+	}
+	shotsIdx = strings.Index(oldestFirst, "Update screenshots in the user manual")
+	crashIdx = strings.Index(oldestFirst, "Crash when opening an empty project")
+	if shotsIdx < 0 || crashIdx < 0 {
+		t.Error("sort=oldest should list both boundary seeds")
+	} else if crashIdx > shotsIdx {
+		t.Error("oldest-first should list the oldest seed before the newest")
+	}
+
+	// The label filter keeps the default open status: the Bug-labeled open
+	// seeds are "Crash…" and "Search slows…" only.
+	labels, err := st.ListLabels(ctx)
+	if err != nil {
+		t.Fatalf("ListLabels: %v", err)
+	}
+	var bugID int64
+	for _, l := range labels {
+		if l.Name == "Bug" {
+			bugID = l.ID
+		}
+	}
+	if bugID == 0 {
+		t.Fatal("seeded Bug label not found")
+	}
+	_, _, body = e2eGet(t, srv, "/issues?label="+strconv.FormatInt(bugID, 10))
+	if n := countRows(body); n != 2 {
+		t.Errorf("label=Bug rendered %d rows, want 2", n)
+	}
+	for _, title := range []string{
+		"Crash when opening an empty project",
+		"Search slows down with 10,000",
+	} {
+		if !strings.Contains(body, title) {
+			t.Errorf("Bug filter missing %q", title)
+		}
+	}
+	for _, title := range []string{
+		"Add dark mode to the settings page",    // open, but not Bug-labeled
+		"Typo in the getting-started guide",     // closed, not Bug-labeled
+		"Update screenshots in the user manual", // closed, not Bug-labeled
+	} {
+		if strings.Contains(body, title) {
+			t.Errorf("Bug filter should not list %q", title)
+		}
+	}
+
+	// Pagination: seven seeds fit on a single page, so add twenty more
+	// issues to create a real second page (perPage = 20 → 27 total).
+	for i := 1; i <= 20; i++ {
+		e2eCreateIssue(t, srv, url.Values{"title": {"Filler issue " + strconv.Itoa(i)}})
+	}
+
+	// An out-of-range page clamps to the last page — the oldest rows, i.e.
+	// all seven seeds — instead of the misleading empty state.
+	status, _, body = e2eGet(t, srv, "/issues?status=all&page=999")
+	if status != http.StatusOK {
+		t.Fatalf("GET page=999 status = %d, want 200", status)
+	}
+	if !strings.Contains(body, "Showing 21–27 of 27 issues") || !strings.Contains(body, "Page 2 of 2") {
+		t.Error("page=999 should clamp to the last page")
+	}
+	if !strings.Contains(body, "Crash when opening an empty project") {
+		t.Error("clamped last page should contain the oldest seeded issue")
+	}
+	if strings.Contains(body, "Filler issue") || strings.Contains(body, "empty-state") {
+		t.Error("clamped last page should hold only the oldest rows")
+	}
+
+	// A non-numeric page falls back to page 1 — the twenty newest rows,
+	// which are all fillers (seeds are backdated by hours or days).
+	status, _, body = e2eGet(t, srv, "/issues?status=all&page=abc")
+	if status != http.StatusOK {
+		t.Fatalf("GET page=abc status = %d, want 200", status)
+	}
+	if !strings.Contains(body, "Showing 1–20 of 27 issues") {
+		t.Error("page=abc should fall back to page 1")
+	}
+	if !strings.Contains(body, "Filler issue") || strings.Contains(body, "Crash when opening an empty project") {
+		t.Error("page 1 should hold the twenty newest issues")
+	}
+}
+
+// TestE2ECSRF proves the CrossOriginProtection middleware guards the real
+// stack: cross-site browser POSTs are rejected with 403 before reaching the
+// handler, while same-site traffic keeps working.
+func TestE2ECSRF(t *testing.T) {
+	srv, _ := newRealServer(t) // empty store: any forged create would be visible
+
+	// A cross-site POST is rejected.
+	resp := postFormWithHeaders(t, srv.URL+"/issues", url.Values{
+		"title": {"Cross-site forged issue"},
+		"body":  {"forged"},
+	}, map[string]string{"Sec-Fetch-Site": "cross-site"})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("cross-site POST status = %d, want 403", resp.StatusCode)
+	}
+
+	// Without Sec-Fetch-Site the middleware falls back to comparing the
+	// Origin host with the request host; a foreign Origin is rejected too.
+	resp = postFormWithHeaders(t, srv.URL+"/issues", url.Values{
+		"title": {"Origin forged issue"},
+	}, map[string]string{"Origin": "http://evil.example"})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("foreign-Origin POST status = %d, want 403", resp.StatusCode)
+	}
+
+	// Both rejections happened before the handler: the store is still empty.
+	_, _, body := e2eGet(t, srv, "/issues")
+	for _, forged := range []string{"Cross-site forged issue", "Origin forged issue"} {
+		if strings.Contains(body, forged) {
+			t.Errorf("rejected POST must not create %q", forged)
+		}
+	}
+	if !strings.Contains(body, "empty-state") {
+		t.Error("list should still render the empty state after rejected POSTs")
+	}
+
+	// Same-origin fetch metadata passes through to the handler.
+	resp = postFormWithHeaders(t, srv.URL+"/issues", url.Values{
+		"title": {"Same-origin issue"},
+	}, map[string]string{"Sec-Fetch-Site": "same-origin"})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("same-origin POST status = %d, want 303", resp.StatusCode)
+	}
+	if _, _, body := e2eGet(t, srv, "/issues"); !strings.Contains(body, "Same-origin issue") {
+		t.Error("same-origin POST should have created the issue")
+	}
+}
+
+// TestE2ESeededDataRenders checks that the seed fixture renders faithfully:
+// every seeded title with its label badges on the list, and seeded labels
+// plus comments on a detail page.
+func TestE2ESeededDataRenders(t *testing.T) {
+	srv, st := newSeededServer(t)
+	ctx := context.Background()
+
+	status, _, body := e2eGet(t, srv, "/issues?status=all")
+	if status != http.StatusOK {
+		t.Fatalf("GET /issues?status=all status = %d, want 200", status)
+	}
+	if n := strings.Count(body, `class="issue-row"`); n < 6 {
+		t.Errorf("seeded list rendered %d rows, want at least 6", n)
+	}
+	if !strings.Contains(body, `class="label-badge"`) {
+		t.Error("seeded rows should render label badges")
+	}
+	if !strings.Contains(body, "background-color: #d73a4a") {
+		t.Error("expected the Bug label badge color")
+	}
+	for _, title := range []string{
+		"Crash when opening an empty project",
+		"Add dark mode to the settings page",
+		"Typo in the getting-started guide",
+		// "+" renders as "&#43;" — match the unescaped prefix.
+		"Search slows down with 10,000",
+		"Improve onboarding for first-time users",
+		"Export issues as CSV",
+		"Update screenshots in the user manual",
+	} {
+		if !strings.Contains(body, title) {
+			t.Errorf("seeded list missing title %q", title)
+		}
+	}
+
+	// Pick a seeded issue through the store instead of assuming id=1: the
+	// oldest row is "Crash when opening an empty project" (age 6.5d).
+	issues, _, err := st.ListIssues(ctx, store.ListFilter{Status: "all", Sort: "oldest", PerPage: 1})
+	if err != nil {
+		t.Fatalf("ListIssues: %v", err)
+	}
+	if len(issues) == 0 {
+		t.Fatal("expected seeded issues")
+	}
+	seeded := issues[0]
+	if seeded.Title != "Crash when opening an empty project" {
+		t.Fatalf("oldest seed = %q, want the Crash issue", seeded.Title)
+	}
+	status, _, body = e2eGet(t, srv, "/issues/"+strconv.FormatInt(seeded.ID, 10))
+	if status != http.StatusOK {
+		t.Fatalf("GET detail status = %d, want 200", status)
+	}
+	for _, want := range []string{
+		"Crash when opening an empty project",
+		`class="label-badge"`, ">Bug<",
+		`id="comments"`, "Comments (2)",
+		"Reproduced on macOS and Linux. Windows seems unaffected.",
+		"Bisected to the changes in the file scanner last week.",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("seeded detail missing %q", want)
+		}
+	}
+}
