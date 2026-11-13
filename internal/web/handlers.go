@@ -56,6 +56,12 @@ type issueFormErrors struct {
 
 func (e issueFormErrors) any() bool { return e.Title != "" || e.Body != "" }
 
+// issueDeletePage is the view model for the delete confirmation page.
+type issueDeletePage struct {
+	Title string
+	Issue *store.Issue
+}
+
 // home redirects the bare root to the issue list.
 func (h *handler) home(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/issues", http.StatusSeeOther)
@@ -106,7 +112,7 @@ func (h *handler) listIssues(w http.ResponseWriter, r *http.Request) {
 		data.RangeStart = (f.Page-1)*perPage + 1
 		data.RangeEnd = min(f.Page*perPage, total)
 	}
-	h.render(w, "issues", http.StatusOK, data)
+	h.r.renderIssueList(w, http.StatusOK, data)
 }
 
 // newIssue renders the empty create form.
@@ -116,7 +122,7 @@ func (h *handler) newIssue(w http.ResponseWriter, r *http.Request) {
 		h.internalError(w, r, err)
 		return
 	}
-	h.render(w, "issue_form", http.StatusOK, issueFormPage{
+	h.r.renderIssueForm(w, http.StatusOK, issueFormPage{
 		Title:       "New issue",
 		Heading:     "New issue",
 		Action:      "/issues",
@@ -137,7 +143,7 @@ func (h *handler) createIssue(w http.ResponseWriter, r *http.Request) {
 			h.internalError(w, r, err)
 			return
 		}
-		h.render(w, "issue_form", http.StatusUnprocessableEntity, issueFormPage{
+		h.r.renderIssueForm(w, http.StatusUnprocessableEntity, issueFormPage{
 			Title:       "New issue",
 			Heading:     "New issue",
 			Action:      "/issues",
@@ -173,7 +179,7 @@ func (h *handler) showIssue(w http.ResponseWriter, r *http.Request) {
 		h.internalError(w, r, err)
 		return
 	}
-	h.render(w, "issue_detail", http.StatusOK, issueDetailPage{
+	h.r.renderIssueDetail(w, http.StatusOK, issueDetailPage{
 		Title:    fmt.Sprintf("#%d %s", issue.ID, issue.Title),
 		Issue:    issue,
 		Comments: comments,
@@ -205,7 +211,7 @@ func (h *handler) editIssue(w http.ResponseWriter, r *http.Request) {
 	for _, l := range issue.Labels {
 		in.LabelIDs = append(in.LabelIDs, l.ID)
 	}
-	h.render(w, "issue_form", http.StatusOK, issueFormPage{
+	h.r.renderIssueForm(w, http.StatusOK, issueFormPage{
 		Title:       fmt.Sprintf("Edit issue #%d", issue.ID),
 		Heading:     fmt.Sprintf("Edit issue #%d", issue.ID),
 		Action:      issueURL(id) + "/edit",
@@ -238,7 +244,7 @@ func (h *handler) updateIssue(w http.ResponseWriter, r *http.Request) {
 			h.internalError(w, r, err)
 			return
 		}
-		h.render(w, "issue_form", http.StatusUnprocessableEntity, issueFormPage{
+		h.r.renderIssueForm(w, http.StatusUnprocessableEntity, issueFormPage{
 			Title:       fmt.Sprintf("Edit issue #%d", id),
 			Heading:     fmt.Sprintf("Edit issue #%d", id),
 			Action:      issueURL(id) + "/edit",
@@ -270,7 +276,7 @@ func (h *handler) setStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	status := r.PostFormValue("status")
 	if status != store.StatusOpen && status != store.StatusClosed {
-		h.renderError(w, http.StatusBadRequest, "Bad request", "Invalid status value.")
+		h.r.renderError(w, http.StatusBadRequest, "Bad request", "Invalid status value.")
 		return
 	}
 	if err := h.store.SetIssueStatus(r.Context(), id, status); err != nil {
@@ -293,10 +299,7 @@ func (h *handler) confirmDelete(w http.ResponseWriter, r *http.Request) {
 		h.issueError(w, r, err)
 		return
 	}
-	h.render(w, "issue_delete", http.StatusOK, struct {
-		Title string
-		Issue *store.Issue
-	}{
+	h.r.renderIssueDelete(w, http.StatusOK, issueDeletePage{
 		Title: fmt.Sprintf("Delete issue #%d", issue.ID),
 		Issue: issue,
 	})
@@ -350,7 +353,7 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request) {
 			h.internalError(w, r, err)
 			return
 		}
-		h.render(w, "issue_detail", http.StatusUnprocessableEntity, issueDetailPage{
+		h.r.renderIssueDetail(w, http.StatusUnprocessableEntity, issueDetailPage{
 			Title:        fmt.Sprintf("#%d %s", issue.ID, issue.Title),
 			Issue:        issue,
 			Comments:     comments,
