@@ -222,7 +222,7 @@ func TestE2ECommentsAndValidation(t *testing.T) {
 	if !strings.Contains(body, "Comments (1)") {
 		t.Error("detail should show a comment count of 1")
 	}
-	if !strings.Contains(body, `comment-body">hello there<`) {
+	if !strings.Contains(body, `markdown-body"><p>hello there</p>`) {
 		t.Error("comment should be rendered in the comments section")
 	}
 

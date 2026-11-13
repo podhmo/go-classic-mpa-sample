@@ -14,7 +14,7 @@
     <label for="f-body">Body</label>
     <textarea id="f-body" name="body" rows="10"{{if .Errors.Body}} aria-invalid="true" aria-describedby="f-body-error"{{end}}>{{.Input.Body}}</textarea>
     {{if .Errors.Body}}<p class="field-error" id="f-body-error" role="alert">{{.Errors.Body}}</p>{{end}}
-    <p class="field-hint">Plain text only. Line breaks are preserved.</p>
+    <p class="field-hint">Markdown (GFM) supported. Raw HTML is not rendered; line breaks are preserved.</p>
   </div>
 
   {{if .Labels}}

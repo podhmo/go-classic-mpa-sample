@@ -30,6 +30,15 @@
 - **契約未固定だと並行実装が破綻する**: web層がstore実装を待つと逐次になる。先にstore APIの型・シグネチャ・意味論をスケルトンとしてコミットし、web側は consumer-side interface + fake でテストする構成にした。
 - **worktree はリポジトリ内 `.worktrees/` に置く**: サンドボックスの権限範囲をまたがないため。`.gitignore` への追加を忘れないこと。
 
+## Markdown（goldmark）
+
+- **v1 と v2 で API が別物**: v1 は `goldmark.New(WithExtensions(...)).Convert()` の facade、v2 は `parser.New(parser.WithExtensions(...))` と `html.New(html.WithExtensions(...))` を個別に組み、`p.Parse(src)` → `r.Render(&buf, src, doc)` と手動で繋ぐ。拡張も `extension.NewGFMParser()` / `NewGFMHTMLRenderer()` のように parser 側・renderer 側に分離している。サードパーティ拡張を選ぶときは対応メジャーを確認すること（`yuin/goldmark-alert` は v2 専用、`zmtcreative/gm-alert-callouts` は v1 用）。
+- **生 HTML は「エスケープ表示」ではなく「コメントに置換」される**: `html.WithUnsafe` なしのデフォルトでは `<script>` などの生 HTML が出力上 `<!-- raw HTML omitted -->` になる。ユーザーが `<details>` などを書いても表示されず消える — 「見えない」挙動なのでテストでは「生タグが出ない」ことだけを assert する。`<b>` のようなインライン HTML でもタグだけが omitted コメントになり中身のテキストは残る。
+- **危険スキームは goldmark が潰す**: `[x](javascript:...)` → `href=""`、`![i](javascript:...)` → `src=""`。`data:` も同様。別 sanitizer は不要だった（v1.8.7 と v2.1.15 で実測確認）。
+- **`template.HTML` を返す箇所は最小化**: `renderMarkdown` だけが HTML を生成し、テンプレート側は `{{markdown .Body}}` と書くだけ。フォーム再表示用の生テキスト（`CommentDraft`・`Input.Body`）は markdown を通さないこと — 二重変換・エスケープ崩れのもと。
+- **`pre-wrap` を外し忘れると段落間が二重に空く**: markdown 出力は `<p>` 等のブロック要素なので、旧来の `white-space: pre-wrap` を残すと `<!-- raw HTML omitted -->` コメント由来の空行含め見た目が崩れる。`.markdown-body` にスタイルを集約した。
+- **goldmark-alert の SVG アイコンは `fill` 未指定**: `GithubAlertIcons` の SVG に fill 属性がないため `fill: currentColor` を CSS で与えないとアイコンだけ黒になる。タイトル文字色と揃えるのが GitHub 流。
+
 ## 実際にハマったところ
 
 - **`go mod tidy` は未使用依存を落とす**: スケルトン時点で `go get modernc.org/sqlite` しても、スタブが import していないため `tidy` で require から消える。実装マージ後に再度 `go mod tidy` すれば戻るので実害はないが、「依存をピン留めしたつもり」にならないよう注意。

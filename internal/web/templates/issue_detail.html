@@ -23,7 +23,7 @@
   </header>
 
   {{if .Issue.Body}}
-  <div class="issue-body">{{.Issue.Body}}</div>
+  <div class="issue-body markdown-body">{{markdown .Issue.Body}}</div>
   {{else}}
   <div class="issue-body issue-body-empty"><em>No description provided.</em></div>
   {{end}}
@@ -55,7 +55,7 @@
       <header class="comment-meta">
         <time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .CreatedAt}}</time>
       </header>
-      <div class="comment-body">{{.Body}}</div>
+      <div class="comment-body markdown-body">{{markdown .Body}}</div>
     </li>
     {{end}}
   </ol>
@@ -68,6 +68,7 @@
       <label for="comment-body">Add a comment</label>
       <textarea id="comment-body" name="body" rows="4" required{{if .CommentError}} aria-invalid="true" aria-describedby="comment-error"{{end}}>{{.CommentDraft}}</textarea>
       {{if .CommentError}}<p class="field-error" id="comment-error" role="alert">{{.CommentError}}</p>{{end}}
+      <p class="field-hint">Markdown (GFM) supported. Raw HTML is not rendered.</p>
     </div>
     <button type="submit" class="btn btn-primary">Comment</button>
   </form>

@@ -14,6 +14,8 @@ POST → Redirect → GET (PRG) pattern.
 - Go 1.27 (`net/http`, `html/template`, `embed`, `context`, …)
 - `http.ServeMux` with Go 1.22+ method+path patterns (`GET /issues/{id}`)
 - `database/sql` + SQLite via `modernc.org/sqlite` (no CGO)
+- `yuin/goldmark` for Markdown (GFM + GitHub-style `> [!NOTE]` alerts)
+  rendering of issue bodies/comments
 - Hand-written HTML/CSS — no frameworks, no ORM, no build step
 
 ## Run
@@ -100,8 +102,12 @@ Notes:
 - CSRF protection uses the stdlib `http.NewCrossOriginProtection()`
   middleware (rejects cross-site non-GET requests via `Sec-Fetch-Site` /
   `Origin`), and POST bodies are capped at 1 MiB with `http.MaxBytesReader`.
-- Issue bodies and comments are stored and rendered as plaintext
-  (`white-space: pre-wrap`); `html/template` escaping prevents XSS.
+- Issue bodies and comments are stored as raw text and rendered as
+  Markdown (GFM via `goldmark`, including GitHub-style
+  `> [!NOTE|TIP|IMPORTANT|WARNING|CAUTION]` alerts) at display time.
+  Raw HTML in the source is omitted and unsafe link schemes
+  (`javascript:`, `data:`, …) are neutralized by the renderer, so
+  stored-XSS is not possible.
 
 ## Data storage
 
@@ -141,6 +147,5 @@ Key design choices:
 - **Authentication / authorization** — single local user; bind stays on
   localhost by default.
 - **JavaScript** — none, anywhere. Toggles and deletes are ordinary forms.
-- **Markdown / rich text** — bodies and comments are plaintext.
 - **Label admin UI** — labels are seeded; issue↔label assignment is supported.
 - **i18n** — UI strings are English.

@@ -483,6 +483,41 @@ func TestShowIssueRendersDetail(t *testing.T) {
 	}
 }
 
+func TestShowIssueRendersMarkdown(t *testing.T) {
+	srv, f := newTestServer(t)
+	f.addIssue("MD issue", "# Heading\n\n```\ncode <x>\n```\n\n<script>alert(1)</script>",
+		store.StatusOpen, time.Now())
+	f.comments[1] = append(f.comments[1], &store.Comment{
+		ID: 1, IssueID: 1, Body: "**bold** comment", CreatedAt: time.Now()})
+
+	resp, err := srv.Client().Get(srv.URL + "/issues/1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := getBody(t, resp)
+	for _, want := range []string{"<h1>Heading</h1>", "<pre><code", "<strong>bold</strong> comment"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("detail missing rendered markdown %q", want)
+		}
+	}
+	if strings.Contains(body, "<script>alert(1)</script>") {
+		t.Error("raw HTML in the markdown source must not render")
+	}
+	if !strings.Contains(body, "code &lt;x&gt;") {
+		t.Error("fenced code content should appear escaped inside the block")
+	}
+
+	// The edit form must keep the raw markdown source, not rendered HTML.
+	resp2, err := srv.Client().Get(srv.URL + "/issues/1/edit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body2 := getBody(t, resp2)
+	if !strings.Contains(body2, "```") || !strings.Contains(body2, "&lt;script&gt;") {
+		t.Error("edit form should preserve the raw markdown source in the textarea")
+	}
+}
+
 func TestCreateIssueValidationError(t *testing.T) {
 	srv, _ := newTestServer(t)
 	resp := postForm(t, srv.Client(), srv.URL+"/issues", url.Values{

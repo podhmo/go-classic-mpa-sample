@@ -105,6 +105,7 @@ type handler struct {
 
 var funcMap = template.FuncMap{
 	"fmtTime":     fmtTime,
+	"markdown":    renderMarkdown,
 	"add":         func(a, b int) int { return a + b },
 	"sub":         func(a, b int) int { return a - b },
 	"isChecked":   isChecked,

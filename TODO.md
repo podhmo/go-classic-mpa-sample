@@ -99,6 +99,15 @@ E2E = `store.Open(temp file db)` + `web.New(realStore)` + `httptest.NewServer` �
 - [x] T4. CSRF through the real middleware: cross-site `Sec-Fetch-Site` POST → 403 with no mutation; same-origin POST → 303
 - [x] T5. Seed sanity: `SeedDemoData` → list renders seeded issues with label badges; closed seed issues appear only under `?status=closed|all`
 
+## Markdown rendering (user request — supersedes "plaintext only" spec note)
+
+- [x] M1. `github.com/yuin/goldmark/v2` v2.1.15 dependency (GFM extension, `html.WithHardWraps()`); raw HTML omitted, dangerous URL schemes neutralized by default renderer. Started on v1.8.7, then migrated to v2 for the official alert extension
+- [x] M2. `internal/web/markdown.go`: `renderMarkdown` → `template.HTML` via `parser.New` + `html.New`; template func `markdown` in funcMap; detail template renders issue body + comments via it
+- [x] M3. CSS: `.markdown-body` content styles (pre/code/blockquote/headings/lists/tables/hr/img); drop `white-space: pre-wrap` from `.issue-body`/`.comment-body`
+- [x] M4. Tests: `markdown_test.go` unit tests + handler-level markdown test; fix E2E comment-body assertion for `<p>` wrapping
+- [x] M5. Docs: decisions.md (new section), README (notes + tech stack), pitfalls.md; verified live via curl + playwright screenshot
+- [x] M6. GitHub alerts `> [!NOTE|TIP|IMPORTANT|WARNING|CAUTION]` via `github.com/yuin/goldmark-alert` (official, v2-only); `.markdown-alert-*` CSS with per-kind colors + currentColor icons; unit test added
+
 ## Backlog — operational tooling (user request)
 
 - [x] O1. `init` subcommand / `-init` flag: `go run . init` (or `go run . -init`) creates the database file and lays down the complete schema — all tables WITH their indexes (`issues`, `comments`, `labels`, `issue_labels`, `issues(status, created_at)`-style indexes, any extra indexes deemed useful for list/search/label queries).
