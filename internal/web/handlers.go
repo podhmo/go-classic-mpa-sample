@@ -71,6 +71,20 @@ func (h *handler) listIssues(w http.ResponseWriter, r *http.Request) {
 		h.internalError(w, r, err)
 		return
 	}
+
+	// A page past the end would render the misleading empty state with no
+	// pagination to navigate back; clamp to the last page and re-fetch so
+	// the user lands on real results instead.
+	totalPages := (total + perPage - 1) / perPage
+	if total > 0 && f.Page > totalPages {
+		f.Page = totalPages
+		issues, total, err = h.store.ListIssues(r.Context(), f)
+		if err != nil {
+			h.internalError(w, r, err)
+			return
+		}
+	}
+
 	labels, err := h.store.ListLabels(r.Context())
 	if err != nil {
 		h.internalError(w, r, err)
@@ -84,7 +98,7 @@ func (h *handler) listIssues(w http.ResponseWriter, r *http.Request) {
 		Filter:     f,
 		Total:      total,
 		Page:       f.Page,
-		TotalPages: (total + perPage - 1) / perPage,
+		TotalPages: totalPages,
 		HasActiveFilter: f.Query != "" || f.LabelID != 0 ||
 			f.Status != store.StatusOpen || f.Sort != "",
 	}
@@ -146,7 +160,7 @@ func (h *handler) createIssue(w http.ResponseWriter, r *http.Request) {
 func (h *handler) showIssue(w http.ResponseWriter, r *http.Request) {
 	id, ok := parseID(r)
 	if !ok {
-		h.notFound(w)
+		h.notFound(w, r)
 		return
 	}
 	issue, err := h.store.GetIssue(r.Context(), id)
@@ -170,7 +184,7 @@ func (h *handler) showIssue(w http.ResponseWriter, r *http.Request) {
 func (h *handler) editIssue(w http.ResponseWriter, r *http.Request) {
 	id, ok := parseID(r)
 	if !ok {
-		h.notFound(w)
+		h.notFound(w, r)
 		return
 	}
 	issue, err := h.store.GetIssue(r.Context(), id)
@@ -205,7 +219,13 @@ func (h *handler) editIssue(w http.ResponseWriter, r *http.Request) {
 func (h *handler) updateIssue(w http.ResponseWriter, r *http.Request) {
 	id, ok := parseID(r)
 	if !ok {
-		h.notFound(w)
+		h.notFound(w, r)
+		return
+	}
+	// Fetch the issue up front so ANY POST to a missing issue — including
+	// one that fails validation — is a 404 rather than a 422 edit form.
+	if _, err := h.store.GetIssue(r.Context(), id); err != nil {
+		h.issueError(w, r, err)
 		return
 	}
 	if !h.parseForm(w, r) {
@@ -242,7 +262,7 @@ func (h *handler) updateIssue(w http.ResponseWriter, r *http.Request) {
 func (h *handler) setStatus(w http.ResponseWriter, r *http.Request) {
 	id, ok := parseID(r)
 	if !ok {
-		h.notFound(w)
+		h.notFound(w, r)
 		return
 	}
 	if !h.parseForm(w, r) {
@@ -265,7 +285,7 @@ func (h *handler) setStatus(w http.ResponseWriter, r *http.Request) {
 func (h *handler) confirmDelete(w http.ResponseWriter, r *http.Request) {
 	id, ok := parseID(r)
 	if !ok {
-		h.notFound(w)
+		h.notFound(w, r)
 		return
 	}
 	issue, err := h.store.GetIssue(r.Context(), id)
@@ -286,7 +306,7 @@ func (h *handler) confirmDelete(w http.ResponseWriter, r *http.Request) {
 func (h *handler) deleteIssue(w http.ResponseWriter, r *http.Request) {
 	id, ok := parseID(r)
 	if !ok {
-		h.notFound(w)
+		h.notFound(w, r)
 		return
 	}
 	if !h.parseForm(w, r) {
@@ -304,7 +324,7 @@ func (h *handler) deleteIssue(w http.ResponseWriter, r *http.Request) {
 func (h *handler) createComment(w http.ResponseWriter, r *http.Request) {
 	id, ok := parseID(r)
 	if !ok {
-		h.notFound(w)
+		h.notFound(w, r)
 		return
 	}
 	if !h.parseForm(w, r) {
@@ -351,7 +371,7 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request) {
 // else to the generic 500 handler.
 func (h *handler) issueError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, store.ErrNotFound) {
-		h.notFound(w)
+		h.notFound(w, r)
 		return
 	}
 	h.internalError(w, r, err)

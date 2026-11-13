@@ -72,9 +72,27 @@ func New(st Store) http.Handler {
 	mux.HandleFunc("GET /issues/{id}/delete", h.confirmDelete)
 	mux.HandleFunc("POST /issues/{id}/delete", h.deleteIssue)
 	mux.HandleFunc("POST /issues/{id}/comments", h.createComment)
-	mux.Handle("GET /static/", http.FileServerFS(staticFS))
+	// Serve the single stylesheet explicitly: a bare "GET /static/" file
+	// server would expose a directory listing and unstyled plaintext 404s.
+	mux.HandleFunc("GET /static/app.css", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, staticFS, "static/app.css")
+	})
+	// Catch-all: anything no specific pattern matched (any method) renders
+	// the styled 404 page instead of the mux's plaintext default.
+	mux.HandleFunc("/", h.notFound)
 
-	return http.NewCrossOriginProtection().Handler(mux)
+	return securityHeaders(http.NewCrossOriginProtection().Handler(mux))
+}
+
+// securityHeaders adds a minimal set of defense-in-depth response headers.
+// No CSP: label badges use inline styles, which would require unsafe-inline.
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Referrer-Policy", "same-origin")
+		next.ServeHTTP(w, r)
+	})
 }
 
 // handler bundles the dependencies shared by all route handlers.
@@ -131,7 +149,8 @@ func isChecked(id int64, ids []int64) bool {
 // pagination, tabs and label links preserve active filters.
 func issuesURL(f store.ListFilter) string {
 	v := url.Values{}
-	if f.Status != "" {
+	// "open" is the default filter, so keep URLs clean by omitting it.
+	if f.Status != "" && f.Status != store.StatusOpen {
 		v.Set("status", f.Status)
 	}
 	if f.Query != "" {
@@ -203,7 +222,7 @@ func (h *handler) renderError(w http.ResponseWriter, status int, heading, messag
 	})
 }
 
-func (h *handler) notFound(w http.ResponseWriter) {
+func (h *handler) notFound(w http.ResponseWriter, _ *http.Request) {
 	h.renderError(w, http.StatusNotFound, "Not found",
 		"The page or issue you are looking for does not exist or may have been deleted.")
 }
@@ -262,7 +281,9 @@ func parseListFilter(r *http.Request) store.ListFilter {
 	if f.Sort != "oldest" {
 		f.Sort = ""
 	}
-	if n, err := strconv.Atoi(q.Get("page")); err == nil && n > 0 {
+	// Reject absurd page numbers: huge values can overflow the store's
+	// (page-1)*perPage offset arithmetic and are never meaningful anyway.
+	if n, err := strconv.Atoi(q.Get("page")); err == nil && n > 0 && n <= 1_000_000 {
 		f.Page = n
 	}
 	if v := q.Get("label"); v != "" {

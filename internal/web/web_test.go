@@ -763,8 +763,12 @@ func TestCSRFRejectsCrossSitePost(t *testing.T) {
 	}
 }
 
-func TestMethodNotAllowed(t *testing.T) {
+func TestUnsupportedMethodRendersStyled404(t *testing.T) {
 	srv, _ := newTestServer(t)
+	// The method-less "/" catch-all matches DELETE too, so a disallowed
+	// method on a known path renders the styled 404 rather than the mux's
+	// automatic 405. The request still reaches no handler, so nothing is
+	// mutated.
 	req, err := http.NewRequest(http.MethodDelete, srv.URL+"/issues", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -773,9 +777,12 @@ func TestMethodNotAllowed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusMethodNotAllowed {
-		t.Fatalf("status = %d, want 405", resp.StatusCode)
+	body := getBody(t, resp)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", resp.StatusCode)
+	}
+	if !strings.Contains(body, "Not found") {
+		t.Error("expected the styled Not found page")
 	}
 }
 
@@ -820,5 +827,187 @@ func TestNewIssueFormRenders(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("form missing %q", want)
 		}
+	}
+}
+
+func TestListOutOfRangePageShowsLastPage(t *testing.T) {
+	srv, f := newTestServer(t)
+	now := time.Now()
+	for i := 0; i < 25; i++ {
+		f.addIssue("Paged issue "+strconv.Itoa(i), "", store.StatusOpen, now.Add(-time.Duration(i)*time.Hour))
+	}
+
+	resp, err := srv.Client().Get(srv.URL + "/issues?page=99999")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := getBody(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	// Clamped to the last page: real items plus a correct range header and
+	// working pagination — not the misleading empty state.
+	if !strings.Contains(body, "Showing 21–25 of 25 issues") {
+		t.Errorf("expected last-page range header, got:\n%s", body)
+	}
+	if !strings.Contains(body, "Page 2 of 2") {
+		t.Error("expected pagination nav reflecting the clamped page")
+	}
+	if !strings.Contains(body, ">Previous</a>") {
+		t.Error("expected a working Previous link on the clamped last page")
+	}
+	if strings.Contains(body, "empty-state") {
+		t.Error("out-of-range page must not render the empty state")
+	}
+}
+
+func TestListAbsurdPageFallsBackToFirst(t *testing.T) {
+	srv, f := newTestServer(t)
+	now := time.Now()
+	for i := 0; i < 25; i++ {
+		f.addIssue("Paged issue "+strconv.Itoa(i), "", store.StatusOpen, now.Add(-time.Duration(i)*time.Hour))
+	}
+
+	// 2^62 would overflow the store's (page-1)*perPage offset arithmetic.
+	resp, err := srv.Client().Get(srv.URL + "/issues?page=4611686018427387904")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := getBody(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if !strings.Contains(body, "Showing 1–20 of 25 issues") {
+		t.Errorf("expected first-page range header, got:\n%s", body)
+	}
+	if strings.Contains(body, "Showing -") {
+		t.Error("absurd page must not produce a negative range")
+	}
+}
+
+func TestUnknownPathRendersStyled404(t *testing.T) {
+	srv, _ := newTestServer(t)
+	resp, err := srv.Client().Get(srv.URL + "/nonexistent-path")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := getBody(t, resp)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "text/html") {
+		t.Fatalf("Content-Type = %q, want text/html", ct)
+	}
+	if !strings.Contains(body, "Not found") {
+		t.Error("expected the styled Not found page")
+	}
+	if strings.Contains(body, "404 page not found") {
+		t.Error("must not render the mux's plaintext 404")
+	}
+}
+
+func TestIssuesTrailingSlashRendersStyled404(t *testing.T) {
+	srv, _ := newTestServer(t)
+	resp, err := srv.Client().Get(srv.URL + "/issues/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := getBody(t, resp)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "text/html") {
+		t.Fatalf("Content-Type = %q, want text/html", ct)
+	}
+	if !strings.Contains(body, "Not found") {
+		t.Error("expected the styled Not found page")
+	}
+}
+
+func TestStaticDirectoryListing404(t *testing.T) {
+	srv, _ := newTestServer(t)
+	resp, err := srv.Client().Get(srv.URL + "/static/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := getBody(t, resp)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", resp.StatusCode)
+	}
+	if !strings.Contains(body, "Not found") {
+		t.Error("expected the styled Not found page, not a directory listing")
+	}
+}
+
+func TestUpdateIssueMissingIssue404(t *testing.T) {
+	srv, _ := newTestServer(t)
+	// A validation-failing POST to a nonexistent issue must 404, not 422.
+	resp := postForm(t, srv.Client(), srv.URL+"/issues/999/edit", url.Values{
+		"title": {""},
+	})
+	getBody(t, resp)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
+func TestSecurityHeaders(t *testing.T) {
+	srv, _ := newTestServer(t)
+	resp, err := srv.Client().Get(srv.URL + "/issues")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if v := resp.Header.Get("X-Content-Type-Options"); v != "nosniff" {
+		t.Errorf("X-Content-Type-Options = %q, want nosniff", v)
+	}
+	if v := resp.Header.Get("X-Frame-Options"); v != "DENY" {
+		t.Errorf("X-Frame-Options = %q, want DENY", v)
+	}
+	if v := resp.Header.Get("Referrer-Policy"); v != "same-origin" {
+		t.Errorf("Referrer-Policy = %q, want same-origin", v)
+	}
+}
+
+func TestDetailLabelLinkUsesStatusAll(t *testing.T) {
+	srv, f := newTestServer(t)
+	f.addIssue("Labeled issue", "", store.StatusClosed, time.Now(), 1)
+
+	resp, err := srv.Client().Get(srv.URL + "/issues/1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := getBody(t, resp)
+	// The link must reach the closed issue too, so it carries status=all.
+	if !strings.Contains(body, `href="/issues?status=all&amp;label=1"`) {
+		t.Errorf("expected label link with status=all, got:\n%s", body)
+	}
+}
+
+func TestListLinksOmitDefaultStatus(t *testing.T) {
+	srv, f := newTestServer(t)
+	seedIssues(t, f)
+
+	resp, err := srv.Client().Get(srv.URL + "/issues")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := getBody(t, resp)
+	// "open" is the default filter; generated links keep URLs clean.
+	if strings.Contains(body, "status=open") {
+		t.Error("generated links must not carry the redundant status=open")
+	}
+	if !strings.Contains(body, `href="/issues"`) {
+		t.Error("expected the Open tab link to be bare /issues")
+	}
+
+	// Non-default statuses are still preserved in generated links.
+	resp2, err := srv.Client().Get(srv.URL + "/issues?status=closed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body2 := getBody(t, resp2)
+	if !strings.Contains(body2, "status=closed") {
+		t.Error("closed-filter links must keep status=closed")
 	}
 }
