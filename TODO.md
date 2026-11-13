@@ -98,3 +98,12 @@ E2E = `store.Open(temp file db)` + `web.New(realStore)` + `httptest.NewServer` �
 - [ ] T3. List interactions on seeded data: `?status=closed` shows only closed; `?q=` matches title AND body; `?label=` filters; `?sort=oldest` reverses order; pagination `?page=2` + `?page=999` clamps
 - [ ] T4. CSRF through the real middleware: cross-site `Sec-Fetch-Site` POST → 403 with no mutation; same-origin POST → 303
 - [ ] T5. Seed sanity: `SeedDemoData` → list renders seeded issues with label badges; closed seed issues appear only under `?status=closed|all`
+
+## Backlog — operational tooling (user request, shape TBD)
+
+- [ ] O1. SQLite index-configuration tooling. Goal: a repeatable way to (re)create/verify indexes beyond the base schema (`issues(status, created_at)` etc.) — e.g. additional indexes for the label/search paths discovered in QA, `ANALYZE` after bulk changes.
+      Shape is intentionally undecided ("スクリプトが良いのかわからない") — evaluate and pick one:
+      a) `scripts/indexes.sql` applied via a small `go run` subcommand/flag (e.g. `go run . -reindex` or `cmd/indexer`)
+      b) embed the statements as an optional migration step in `store.Open` behind a flag/env
+      c) a plain `.sql` file documented in README for `sqlite3` CLI users (no Go code)
+      Constraints: must not break `go run .` zero-config startup; schema init stays `CREATE TABLE IF NOT EXISTS`-idempotent; document whichever is chosen in `docs/ja/decisions.md`.
