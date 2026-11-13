@@ -4,7 +4,7 @@ go 1.27.3
 
 require (
 	github.com/yuin/goldmark-alert v1.0.2
-	github.com/yuin/goldmark/v2 v2.1.15
+	github.com/yuin/goldmark/v2 v2.1.16
 	modernc.org/sqlite v1.62.0
 )
 
