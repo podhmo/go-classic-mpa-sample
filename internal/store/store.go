@@ -289,9 +289,14 @@ func (s *Store) SetIssueStatus(ctx context.Context, id int64, status string) err
 	if status != StatusOpen && status != StatusClosed {
 		return fmt.Errorf("store: invalid status %q", status)
 	}
+	// updated_at is bumped only when the status actually changes; a no-op
+	// post (e.g. closing an already-closed issue) leaves it alone. The
+	// updated_at clause precedes the status assignment so the CASE compares
+	// against the pre-update status. An existing row always matches the
+	// UPDATE, so RowsAffected still reports 0 only when the issue is missing.
 	res, err := s.db.ExecContext(ctx,
-		"UPDATE issues SET status = ?, updated_at = ? WHERE id = ?",
-		status, time.Now().UTC().Unix(), id)
+		"UPDATE issues SET updated_at = CASE WHEN status != ? THEN ? ELSE updated_at END, status = ? WHERE id = ?",
+		status, time.Now().UTC().Unix(), status, id)
 	if err != nil {
 		return err
 	}
@@ -334,21 +339,38 @@ func (s *Store) ListComments(ctx context.Context, issueID int64) ([]*Comment, er
 // CreateComment appends a comment. Returns ErrNotFound if the issue is
 // missing.
 func (s *Store) CreateComment(ctx context.Context, issueID int64, body string) (int64, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
 	var exists int
-	err := s.db.QueryRowContext(ctx, "SELECT 1 FROM issues WHERE id = ?", issueID).Scan(&exists)
+	err = tx.QueryRowContext(ctx, "SELECT 1 FROM issues WHERE id = ?", issueID).Scan(&exists)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, ErrNotFound
 	}
 	if err != nil {
 		return 0, err
 	}
-	res, err := s.db.ExecContext(ctx,
+	now := time.Now().UTC().Unix()
+	res, err := tx.ExecContext(ctx,
 		"INSERT INTO comments(issue_id, body, created_at) VALUES(?, ?, ?)",
-		issueID, body, time.Now().UTC().Unix())
+		issueID, body, now)
 	if err != nil {
 		return 0, err
 	}
-	return res.LastInsertId()
+	// A new comment is activity on the issue, so bump its updated_at with
+	// the comment's timestamp.
+	if _, err := tx.ExecContext(ctx,
+		"UPDATE issues SET updated_at = ? WHERE id = ?", now, issueID); err != nil {
+		return 0, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	return id, tx.Commit()
 }
 
 // ListLabels returns all labels ordered by name.
@@ -410,8 +432,13 @@ func setIssueLabels(ctx context.Context, tx *sql.Tx, issueID int64, labelIDs []i
 		return err
 	}
 	for _, lid := range labelIDs {
+		// Label ids that do not exist in labels make the SELECT yield no
+		// row (nothing inserted); duplicates hit the PRIMARY KEY conflict
+		// that OR IGNORE skips. Both are silently dropped rather than
+		// failing with a constraint error.
 		if _, err := tx.ExecContext(ctx,
-			"INSERT INTO issue_labels(issue_id, label_id) VALUES(?, ?)", issueID, lid); err != nil {
+			"INSERT OR IGNORE INTO issue_labels(issue_id, label_id) SELECT ?, id FROM labels WHERE id = ?",
+			issueID, lid); err != nil {
 			return err
 		}
 	}

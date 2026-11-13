@@ -164,6 +164,42 @@ func TestUpdateIssue(t *testing.T) {
 	}
 }
 
+// TestIssueLabelsSkipUnknownAndDuplicates verifies that unknown and
+// duplicated label ids are silently dropped instead of failing with
+// constraint errors.
+func TestIssueLabelsSkipUnknownAndDuplicates(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	bug := mustLabel(t, s, "Bug", "#d73a4a")
+
+	id, err := s.CreateIssue(ctx, IssueInput{
+		Title: "x", LabelIDs: []int64{bug, bug, 99999},
+	})
+	if err != nil {
+		t.Fatalf("CreateIssue: %v", err)
+	}
+	i, err := s.GetIssue(ctx, id)
+	if err != nil {
+		t.Fatalf("GetIssue: %v", err)
+	}
+	if len(i.Labels) != 1 || i.Labels[0].ID != bug {
+		t.Fatalf("labels = %+v, want [Bug]", i.Labels)
+	}
+
+	// Replacing the label set with only unknown ids succeeds and clears it.
+	if err := s.UpdateIssue(ctx, id, IssueInput{Title: "x", LabelIDs: []int64{99999}}); err != nil {
+		t.Fatalf("UpdateIssue: %v", err)
+	}
+	i, err = s.GetIssue(ctx, id)
+	if err != nil {
+		t.Fatalf("GetIssue: %v", err)
+	}
+	if len(i.Labels) != 0 {
+		t.Fatalf("labels = %+v, want empty", i.Labels)
+	}
+}
+
 func TestSetIssueStatus(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
@@ -195,6 +231,52 @@ func TestSetIssueStatus(t *testing.T) {
 		t.Fatal("expected error for invalid status")
 	} else if errors.Is(err, ErrNotFound) {
 		t.Fatalf("invalid status should not yield ErrNotFound: %v", err)
+	}
+}
+
+// TestSetIssueStatusUpdatedAt verifies updated_at is bumped only by an
+// actual status change, while ErrNotFound still reports missing issues.
+func TestSetIssueStatusUpdatedAt(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	id, err := s.CreateIssue(ctx, IssueInput{Title: "x"})
+	if err != nil {
+		t.Fatalf("CreateIssue: %v", err)
+	}
+	backdate(t, s, id, time.Hour)
+	before, err := s.GetIssue(ctx, id)
+	if err != nil {
+		t.Fatalf("GetIssue: %v", err)
+	}
+
+	// Re-posting the current status is a no-op: updated_at is unchanged.
+	if err := s.SetIssueStatus(ctx, id, StatusOpen); err != nil {
+		t.Fatalf("SetIssueStatus(same): %v", err)
+	}
+	same, err := s.GetIssue(ctx, id)
+	if err != nil {
+		t.Fatalf("GetIssue: %v", err)
+	}
+	if !same.UpdatedAt.Equal(before.UpdatedAt) {
+		t.Fatalf("no-op status bumped updated_at: %v -> %v", before.UpdatedAt, same.UpdatedAt)
+	}
+
+	// An actual change bumps updated_at.
+	if err := s.SetIssueStatus(ctx, id, StatusClosed); err != nil {
+		t.Fatalf("SetIssueStatus: %v", err)
+	}
+	changed, err := s.GetIssue(ctx, id)
+	if err != nil {
+		t.Fatalf("GetIssue: %v", err)
+	}
+	if !changed.UpdatedAt.After(before.UpdatedAt) {
+		t.Fatalf("updated_at not bumped: %v -> %v", before.UpdatedAt, changed.UpdatedAt)
+	}
+
+	// Missing issue still yields ErrNotFound (RowsAffected semantics kept).
+	if err := s.SetIssueStatus(ctx, 4242, StatusClosed); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("SetIssueStatus missing = %v, want ErrNotFound", err)
 	}
 }
 
@@ -269,6 +351,45 @@ func TestComments(t *testing.T) {
 		if c.IssueID != id || c.ID <= 0 {
 			t.Fatalf("bad comment: %+v", c)
 		}
+	}
+}
+
+// TestCreateCommentBumpsIssueUpdatedAt verifies that a new comment counts
+// as activity on its issue.
+func TestCreateCommentBumpsIssueUpdatedAt(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	id, err := s.CreateIssue(ctx, IssueInput{Title: "x"})
+	if err != nil {
+		t.Fatalf("CreateIssue: %v", err)
+	}
+	backdate(t, s, id, time.Hour)
+	before, err := s.GetIssue(ctx, id)
+	if err != nil {
+		t.Fatalf("GetIssue: %v", err)
+	}
+
+	cid, err := s.CreateComment(ctx, id, "ping")
+	if err != nil {
+		t.Fatalf("CreateComment: %v", err)
+	}
+	after, err := s.GetIssue(ctx, id)
+	if err != nil {
+		t.Fatalf("GetIssue: %v", err)
+	}
+	if !after.UpdatedAt.After(before.UpdatedAt) {
+		t.Fatalf("comment did not bump updated_at: %v -> %v", before.UpdatedAt, after.UpdatedAt)
+	}
+	cs, err := s.ListComments(ctx, id)
+	if err != nil {
+		t.Fatalf("ListComments: %v", err)
+	}
+	if len(cs) != 1 || cs[0].ID != cid {
+		t.Fatalf("comments = %+v, want 1 comment id=%d", cs, cid)
+	}
+	if after.UpdatedAt.Before(cs[0].CreatedAt) {
+		t.Fatalf("updated_at %v before comment created_at %v", after.UpdatedAt, cs[0].CreatedAt)
 	}
 }
 
