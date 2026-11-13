@@ -129,10 +129,7 @@ func (f *fakeStore) ListIssues(_ context.Context, fl store.ListFilter) ([]*store
 	})
 
 	total := len(matched)
-	page := fl.Page
-	if page < 1 {
-		page = 1
-	}
+	page := max(fl.Page, 1)
 	per := fl.PerPage
 	if per <= 0 {
 		per = 20
@@ -141,10 +138,7 @@ func (f *fakeStore) ListIssues(_ context.Context, fl store.ListFilter) ([]*store
 	if start >= total {
 		return nil, total, nil
 	}
-	end := start + per
-	if end > total {
-		end = total
-	}
+	end := min(start+per, total)
 	out := make([]*store.Issue, 0, end-start)
 	for _, is := range matched[start:end] {
 		out = append(out, cloneIssue(is))
@@ -418,7 +412,7 @@ func TestListPagination(t *testing.T) {
 	srv, f := newTestServer(t)
 	now := time.Now()
 	// 25 open issues → page size 20 → 2 pages.
-	for i := 0; i < 25; i++ {
+	for i := range 25 {
 		f.addIssue("Issue number "+strconv.Itoa(i), "", store.StatusOpen, now.Add(-time.Duration(i)*time.Hour))
 	}
 
@@ -828,7 +822,7 @@ func TestNewIssueFormRenders(t *testing.T) {
 func TestListOutOfRangePageShowsLastPage(t *testing.T) {
 	srv, f := newTestServer(t)
 	now := time.Now()
-	for i := 0; i < 25; i++ {
+	for i := range 25 {
 		f.addIssue("Paged issue "+strconv.Itoa(i), "", store.StatusOpen, now.Add(-time.Duration(i)*time.Hour))
 	}
 
@@ -859,7 +853,7 @@ func TestListOutOfRangePageShowsLastPage(t *testing.T) {
 func TestListAbsurdPageFallsBackToFirst(t *testing.T) {
 	srv, f := newTestServer(t)
 	now := time.Now()
-	for i := 0; i < 25; i++ {
+	for i := range 25 {
 		f.addIssue("Paged issue "+strconv.Itoa(i), "", store.StatusOpen, now.Add(-time.Duration(i)*time.Hour))
 	}
 

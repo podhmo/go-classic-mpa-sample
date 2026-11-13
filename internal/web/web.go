@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -123,12 +124,7 @@ func fmtTime(t time.Time) string {
 
 // isChecked reports whether id is among the selected label IDs.
 func isChecked(id int64, ids []int64) bool {
-	for _, v := range ids {
-		if v == id {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ids, id)
 }
 
 // issuesURL builds /issues URLs carrying the current filter state, so
@@ -197,8 +193,7 @@ func (h *handler) internalError(w http.ResponseWriter, r *http.Request, err erro
 func (h *handler) parseForm(w http.ResponseWriter, r *http.Request) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, maxFormBytes)
 	if err := r.ParseForm(); err != nil {
-		var mbErr *http.MaxBytesError
-		if errors.As(err, &mbErr) {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			h.r.renderError(w, http.StatusRequestEntityTooLarge, "Form too large",
 				"The submitted form exceeded the size limit.")
 			return false

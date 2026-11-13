@@ -229,10 +229,7 @@ func (s *Store) ListIssues(ctx context.Context, f ListFilter) ([]*Issue, int, er
 	if f.Sort == "oldest" {
 		dir = "ASC"
 	}
-	page := f.Page
-	if page < 1 {
-		page = 1
-	}
+	page := max(f.Page, 1)
 	perPage := f.PerPage
 	if perPage <= 0 {
 		perPage = 20

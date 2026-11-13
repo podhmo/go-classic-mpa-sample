@@ -537,7 +537,7 @@ func TestFileDBPragmas(t *testing.T) {
 	t.Cleanup(func() { s.Close() })
 	ctx := context.Background()
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		conn, err := s.db.Conn(ctx)
 		if err != nil {
 			t.Fatalf("Conn: %v", err)
