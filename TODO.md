@@ -60,22 +60,22 @@ Schema notes: `issues.id INTEGER PRIMARY KEY AUTOINCREMENT` (issue number = id, 
 ## Bug-fix round (worktrees `fix/store`, `fix/web`; see `docs/ja/bugs.md` for severity/detail)
 
 Store (`internal/store/**` only):
-- [ ] F1. Unknown/duplicate `label_id` → 500: `setIssueLabels` → `INSERT OR IGNORE ... SELECT id FROM labels` (silently skip, consistent with web dropping non-numeric ids)
-- [ ] F2. `SetIssueStatus` bumps `updated_at` only when status actually changes (CASE WHEN)
-- [ ] F3. `CreateComment` bumps parent issue `updated_at` in same tx
-- [ ] F4. Tests: unknown+dup label ids on create/update, no-op status keeps updated_at, comment bumps updated_at
+- [x] F1. Unknown/duplicate `label_id` → 500: `setIssueLabels` → `INSERT OR IGNORE ... SELECT id FROM labels` (silently skip, consistent with web dropping non-numeric ids)
+- [x] F2. `SetIssueStatus` bumps `updated_at` only when status actually changes (CASE WHEN)
+- [x] F3. `CreateComment` bumps parent issue `updated_at` in same tx
+- [x] F4. Tests: unknown+dup label ids on create/update, no-op status keeps updated_at, comment bumps updated_at
 
 Web (`internal/web/**`, `main.go` only):
-- [ ] F5. Out-of-range `page`: parse bound (≤1e6, kill int64 overflow) + clamp to `TotalPages` & re-query so out-of-range shows last page with pagination
-- [ ] F6. Catch-all `"/"` → styled 404; explicit `GET /static/app.css` (kills `/static/` dir listing)
-- [ ] F7. `updateIssue`: existence check before validation re-render (missing issue → 404 not 422)
-- [ ] F8. Detail-page label links → `?status=all&label=N`
-- [ ] F9. `issuesURL`: omit `status` when open (default)
-- [ ] F10. main.go: reject `-db ""`
-- [ ] F11. Security headers middleware: nosniff + frame DENY + referrer-policy
-- [ ] F12. Regression tests per bug (see docs/ja/bugs.md)
+- [x] F5. Out-of-range `page`: parse bound (≤1e6, kill int64 overflow) + clamp to `TotalPages` & re-query so out-of-range shows last page with pagination
+- [x] F6. Catch-all `"/"` → styled 404; explicit `GET /static/app.css` (kills `/static/` dir listing)
+- [x] F7. `updateIssue`: existence check before validation re-render (missing issue → 404 not 422)
+- [x] F8. Detail-page label links → `?status=all&label=N`
+- [x] F9. `issuesURL`: omit `status` when open (default)
+- [x] F10. main.go: reject `-db ""`
+- [x] F11. Security headers middleware: nosniff + frame DENY + referrer-policy
+- [x] F12. Regression tests per bug (see docs/ja/bugs.md)
 
 Post-fix integration (me):
-- [ ] P1. Merge `fix/store` + `fix/web`; `go mod tidy`; build+vet+test+race
-- [ ] P2. Re-run smoke test incl. the fixed paths (bogus label_id, page=99999, /nonexistent styled 404)
+- [x] P1. Merge `fix/store` + `fix/web`; `go mod tidy`; build+vet+test+race
+- [x] P2. Re-run smoke test incl. the fixed paths (bogus label_id, page=99999, /nonexistent styled 404)
 - [ ] P3. Update bugs.md statuses → fixed; update decisions/pitfalls; final checklist §11; cleanup worktrees; final report
