@@ -1,1 +1,1 @@
-# go-clasic-mpa-sample
+# go-classic-mpa-sample
