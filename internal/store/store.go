@@ -144,6 +144,54 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
+// Analyze runs the SQLite ANALYZE command, refreshing the query planner's
+// statistics (the internal sqlite_stat% tables). It is safe to re-run — the
+// "init" subcommand uses it so a freshly set up database does not start
+// with stale or missing planner statistics.
+func (s *Store) Analyze(ctx context.Context) error {
+	if _, err := s.db.ExecContext(ctx, "ANALYZE"); err != nil {
+		return fmt.Errorf("store: analyze: %w", err)
+	}
+	return nil
+}
+
+// SchemaObjects lists the database's tables and named indexes as recorded
+// in sqlite_master, each sorted by name. Internal bookkeeping objects are
+// filtered so the result reflects only the schema declared by Open:
+// sqlite_stat% tables (ANALYZE output) are excluded from tables and
+// sqlite_autoindex% (UNIQUE/PRIMARY KEY backing indexes) from indexes.
+// sqlite_sequence (AUTOINCREMENT bookkeeping) is a real part of the
+// declared schema and stays in the table list.
+func (s *Store) SchemaObjects(ctx context.Context) (tables, indexes []string, err error) {
+	list := func(where string) ([]string, error) {
+		rows, err := s.db.QueryContext(ctx,
+			"SELECT name FROM sqlite_master WHERE "+where+" ORDER BY name")
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		var out []string
+		for rows.Next() {
+			var name string
+			if err := rows.Scan(&name); err != nil {
+				return nil, err
+			}
+			out = append(out, name)
+		}
+		return out, rows.Err()
+	}
+
+	tables, err = list("type='table' AND name NOT LIKE 'sqlite_stat%'")
+	if err != nil {
+		return nil, nil, fmt.Errorf("store: list tables: %w", err)
+	}
+	indexes, err = list("type='index' AND name NOT LIKE 'sqlite_autoindex%'")
+	if err != nil {
+		return nil, nil, fmt.Errorf("store: list indexes: %w", err)
+	}
+	return tables, indexes, nil
+}
+
 // ListIssues returns the page of issues matching f (each with Labels
 // populated) and the total number of matching issues before pagination.
 func (s *Store) ListIssues(ctx context.Context, f ListFilter) ([]*Issue, int, error) {
