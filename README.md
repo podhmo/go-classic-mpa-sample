@@ -30,6 +30,25 @@ comments (only when the issues table is empty).
 > authentication**. Only bind to a public interface inside a trusted
 > network.
 
+### `init` subcommand
+
+```sh
+go run . -db issues.db init     # or: go run . -init
+```
+
+`init` creates the database file if needed, applies the complete schema
+(all tables and their indexes), runs `ANALYZE` so the query planner has
+statistics, prints a report, and exits without starting the server. The
+same schema init already happens automatically at every startup, so this
+step is purely optional — an explicit provisioning step for deployment
+scripts and the like. It does **not** seed demo data, and re-running it is
+safe: the schema DDL is idempotent and `ANALYZE` refreshes the planner
+statistics on a populated database.
+
+Flags must come **before** the `init` argument — Go's `flag` package stops
+parsing at the first positional argument, so write `go run . -db x.db
+init`, not `go run . init -db x.db`. `-addr` has no effect in init mode.
+
 ## Test
 
 ```sh
@@ -41,15 +60,18 @@ implementation (`internal/web/web_test.go`).
 
 ## Configuration
 
-| Flag    | Env var       | Default          | Description                |
-| ------- | ------------- | ---------------- | -------------------------- |
-| `-addr` | `ISSUES_ADDR` | `127.0.0.1:8080` | Listen address             |
-| `-db`   | `ISSUES_DB`   | `issues.db`      | SQLite database file path  |
+| Flag    | Env var       | Default          | Description                                                            |
+| ------- | ------------- | ---------------- | ---------------------------------------------------------------------- |
+| `-addr` | `ISSUES_ADDR` | `127.0.0.1:8080` | Listen address                                                         |
+| `-db`   | `ISSUES_DB`   | `issues.db`      | SQLite database file path                                              |
+| `-init` | —             | `false`          | Initialize the database and exit (same as the `init` subcommand)       |
 
 Example: `go run . -addr :8080 -db /tmp/my-issues.db` or
 `ISSUES_ADDR=:8080 go run .`.
 
-Use `-db :memory:` for a throwaway database.
+Use `-db :memory:` for a throwaway database. `go run . -db PATH init` (or
+`-init`) prepares the database without serving — see the `init` subcommand
+above; flags must precede the `init` argument.
 
 ## Routes
 

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -652,5 +654,57 @@ func TestSeedDemoData(t *testing.T) {
 	}
 	if n != 1 {
 		t.Fatalf("expected 1 issue, got %d", n)
+	}
+}
+
+func TestSchemaObjects(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	tables, indexes, err := s.SchemaObjects(ctx)
+	if err != nil {
+		t.Fatalf("SchemaObjects: %v", err)
+	}
+
+	// All four application tables plus sqlite_sequence (AUTOINCREMENT
+	// bookkeeping), sorted by name.
+	wantTables := []string{"comments", "issue_labels", "issues", "labels", "sqlite_sequence"}
+	if !slices.Equal(tables, wantTables) {
+		t.Errorf("tables = %v, want %v", tables, wantTables)
+	}
+
+	// Only the three named indexes from schemaDDL; the UNIQUE/PK backing
+	// indexes (sqlite_autoindex%) must be filtered out.
+	wantIndexes := []string{"idx_comments_issue_created", "idx_issue_labels_label", "idx_issues_status_created"}
+	if !slices.Equal(indexes, wantIndexes) {
+		t.Errorf("indexes = %v, want %v", indexes, wantIndexes)
+	}
+	for _, name := range indexes {
+		if strings.HasPrefix(name, "sqlite_autoindex") {
+			t.Errorf("internal index %q leaked into SchemaObjects", name)
+		}
+	}
+}
+
+func TestAnalyze(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	if err := s.Analyze(ctx); err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if err := s.Analyze(ctx); err != nil {
+		t.Fatalf("second Analyze: %v", err)
+	}
+
+	// ANALYZE may create sqlite_stat% bookkeeping tables; SchemaObjects
+	// filters them, so the reported schema stays stable across runs.
+	tables, _, err := s.SchemaObjects(ctx)
+	if err != nil {
+		t.Fatalf("SchemaObjects after ANALYZE: %v", err)
+	}
+	wantTables := []string{"comments", "issue_labels", "issues", "labels", "sqlite_sequence"}
+	if !slices.Equal(tables, wantTables) {
+		t.Errorf("tables after ANALYZE = %v, want %v", tables, wantTables)
 	}
 }
