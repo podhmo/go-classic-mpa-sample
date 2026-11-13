@@ -27,6 +27,12 @@ func main() {
 		"SQLite database file path (env ISSUES_DB)")
 	flag.Parse()
 
+	// An explicitly empty -db would open an unnamed ephemeral SQLite
+	// database whose data silently vanishes; fail fast instead.
+	if *dbPath == "" {
+		log.Fatal("empty database path: pass -db PATH or set ISSUES_DB")
+	}
+
 	st, err := store.Open(*dbPath)
 	if err != nil {
 		log.Fatalf("open database %q: %v", *dbPath, err)
