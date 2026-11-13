@@ -5,11 +5,9 @@
 package web
 
 import (
-	"bytes"
 	"context"
 	"embed"
 	"errors"
-	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -58,7 +56,7 @@ const (
 // CrossOriginProtection middleware, which rejects cross-site state-changing
 // browser requests (CSRF) via Sec-Fetch-Site / Origin headers.
 func New(st Store) http.Handler {
-	h := &handler{store: st, pages: parsePages()}
+	h := &handler{store: st, r: NewRenderer()}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", h.home)
@@ -101,22 +99,7 @@ func securityHeaders(next http.Handler) http.Handler {
 // handler bundles the dependencies shared by all route handlers.
 type handler struct {
 	store Store
-	pages map[string]*template.Template
-}
-
-// parsePages builds one template set per page. Each set contains the shared
-// layout plus a single page template that defines the "content" block.
-func parsePages() map[string]*template.Template {
-	names := []string{"issues", "issue_detail", "issue_form", "issue_delete", "error"}
-	pages := make(map[string]*template.Template, len(names))
-	for _, name := range names {
-		pages[name] = template.Must(template.New(name).Funcs(funcMap).ParseFS(
-			templateFS,
-			"templates/layout.html",
-			"templates/"+name+".html",
-		))
-	}
-	return pages
+	r     *Renderer
 }
 
 var funcMap = template.FuncMap{
@@ -194,47 +177,18 @@ func labelURL(f store.ListFilter, labelID int64) string {
 	return issuesURL(f)
 }
 
-// render executes a page template through the shared layout. The body is
-// rendered into a buffer first so template failures cannot produce a
-// half-written response.
-func (h *handler) render(w http.ResponseWriter, name string, status int, data any) {
-	var buf bytes.Buffer
-	if err := h.pages[name].ExecuteTemplate(&buf, "layout", data); err != nil {
-		log.Printf("web: render %q: %v", name, err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(status)
-	_, _ = buf.WriteTo(w)
-}
-
-type errorPageData struct {
-	Title   string
-	Code    int
-	Heading string
-	Message string
-}
-
-func (h *handler) renderError(w http.ResponseWriter, status int, heading, message string) {
-	h.render(w, "error", status, errorPageData{
-		Title:   fmt.Sprintf("%d %s", status, heading),
-		Code:    status,
-		Heading: heading,
-		Message: message,
-	})
-}
-
+// notFound serves the styled 404 page. It is registered as a route handler for
+// the catch-all patterns, so it keeps the http.HandlerFunc signature; the
+// request itself is unused.
 func (h *handler) notFound(w http.ResponseWriter, _ *http.Request) {
-	h.renderError(w, http.StatusNotFound, "Not found",
-		"The page or issue you are looking for does not exist or may have been deleted.")
+	h.r.notFound(w)
 }
 
 // internalError logs the underlying error but renders a generic page so no
 // internals leak to the client.
 func (h *handler) internalError(w http.ResponseWriter, r *http.Request, err error) {
 	log.Printf("web: %s %s: %v", r.Method, r.URL.Path, err)
-	h.renderError(w, http.StatusInternalServerError, "Internal server error",
+	h.r.renderError(w, http.StatusInternalServerError, "Internal server error",
 		"Something went wrong on our side. Please try again.")
 }
 
@@ -245,11 +199,11 @@ func (h *handler) parseForm(w http.ResponseWriter, r *http.Request) bool {
 	if err := r.ParseForm(); err != nil {
 		var mbErr *http.MaxBytesError
 		if errors.As(err, &mbErr) {
-			h.renderError(w, http.StatusRequestEntityTooLarge, "Form too large",
+			h.r.renderError(w, http.StatusRequestEntityTooLarge, "Form too large",
 				"The submitted form exceeded the size limit.")
 			return false
 		}
-		h.renderError(w, http.StatusBadRequest, "Bad request",
+		h.r.renderError(w, http.StatusBadRequest, "Bad request",
 			"The submitted form could not be read.")
 		return false
 	}
