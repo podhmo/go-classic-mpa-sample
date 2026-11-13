@@ -62,6 +62,10 @@
 - **静的配信**: ファイル単位の明示登録（`GET /static/app.css` → `ServeFileFS`）。ディレクトリ mount によるリスティング露出を防ぐ。
 - **セキュリティヘッダ**: `X-Content-Type-Options: nosniff`、`X-Frame-Options: DENY`、`Referrer-Policy: same-origin` を middleware で全レスポンスに付与。CSP は inline style（ラベル色）と衝突するため見送り。
 
+## 今後の予定（backlog で確定済みの方向）
+
+- **DB 初期化の明示コマンド**: `go run . init`（または `-init` フラグ）でデータベースファイルを作成し、index 付きの全テーブルを揃える。ユーザー指示による決定 — index 設定を「暗黙の起動時スキーマ初期化」に留めず、明示的な ops 手順として提供する。詳細は `TODO.md` O1。実装時に検討: 通常起動の自動 init 併存可否、DDL の単一ソース化、`ANALYZE` 実施、冪等性。
+
 ## 意図的に実装しないもの
 
 - 認証・認可（ローカル単一ユーザー前提。公開ネットワーク向けではない）

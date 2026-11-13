@@ -99,11 +99,12 @@ E2E = `store.Open(temp file db)` + `web.New(realStore)` + `httptest.NewServer` �
 - [ ] T4. CSRF through the real middleware: cross-site `Sec-Fetch-Site` POST → 403 with no mutation; same-origin POST → 303
 - [ ] T5. Seed sanity: `SeedDemoData` → list renders seeded issues with label badges; closed seed issues appear only under `?status=closed|all`
 
-## Backlog — operational tooling (user request, shape TBD)
+## Backlog — operational tooling (user request)
 
-- [ ] O1. SQLite index-configuration tooling. Goal: a repeatable way to (re)create/verify indexes beyond the base schema (`issues(status, created_at)` etc.) — e.g. additional indexes for the label/search paths discovered in QA, `ANALYZE` after bulk changes.
-      Shape is intentionally undecided ("スクリプトが良いのかわからない") — evaluate and pick one:
-      a) `scripts/indexes.sql` applied via a small `go run` subcommand/flag (e.g. `go run . -reindex` or `cmd/indexer`)
-      b) embed the statements as an optional migration step in `store.Open` behind a flag/env
-      c) a plain `.sql` file documented in README for `sqlite3` CLI users (no Go code)
-      Constraints: must not break `go run .` zero-config startup; schema init stays `CREATE TABLE IF NOT EXISTS`-idempotent; document whichever is chosen in `docs/ja/decisions.md`.
+- [ ] O1. `init` subcommand / `-init` flag: `go run . init` (or `go run . -init`) creates the database file and lays down the complete schema — all tables WITH their indexes (`issues`, `comments`, `labels`, `issue_labels`, `issues(status, created_at)`-style indexes, any extra indexes deemed useful for list/search/label queries).
+      Decided shape (user): explicit init step rather than a loose SQL script.
+      Design questions to resolve at implementation time:
+      - Does normal startup (`go run .`) still auto-init an empty DB (keep zero-config) or require `init` first (explicit)? Prefer keeping auto-init for `go run .` simplicity — `init` then acts as an explicit idempotent "create/verify schema" step usable for ops/`ANALYZE`.
+      - Factor schema DDL so `init` and `store.Open` share one source of truth (e.g. exported `store.EnsureSchema`/`store.Init` or a `cmd` path that opens + migrates + exits).
+      - `init` should print what it did (created file, applied N tables/indexes) and exit 0; safe to run twice.
+      - Consider `ANALYZE` after init/seed for the sqlite query planner.
