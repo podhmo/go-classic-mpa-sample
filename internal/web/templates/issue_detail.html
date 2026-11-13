@@ -1,0 +1,75 @@
+{{define "content"}}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="/issues">Issues</a> <span aria-hidden="true">/</span> <span>#{{.Issue.ID}}</span>
+</nav>
+
+<article class="card issue-detail">
+  <header class="issue-detail-head">
+    <div class="issue-title-row">
+      <span class="badge badge-{{.Issue.Status}}">{{if eq .Issue.Status "open"}}Open{{else}}Closed{{end}}</span>
+      <h1>{{.Issue.Title}} <span class="issue-num">#{{.Issue.ID}}</span></h1>
+    </div>
+    {{if .Issue.Labels}}
+    <div class="issue-labels">
+      {{range .Issue.Labels}}
+      <a class="label-badge" style="background-color: {{.Color}}" href="/issues?label={{.ID}}">{{.Name}}</a>
+      {{end}}
+    </div>
+    {{end}}
+    <p class="issue-meta">
+      Opened <time datetime="{{.Issue.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .Issue.CreatedAt}}</time>
+      · Last updated <time datetime="{{.Issue.UpdatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .Issue.UpdatedAt}}</time>
+    </p>
+  </header>
+
+  {{if .Issue.Body}}
+  <div class="issue-body">{{.Issue.Body}}</div>
+  {{else}}
+  <div class="issue-body issue-body-empty"><em>No description provided.</em></div>
+  {{end}}
+
+  <div class="issue-actions">
+    <a class="btn" href="/issues/{{.Issue.ID}}/edit">Edit</a>
+    {{if eq .Issue.Status "open"}}
+    <form method="post" action="/issues/{{.Issue.ID}}/status" class="inline-form">
+      <input type="hidden" name="status" value="closed">
+      <button type="submit" class="btn">Close issue</button>
+    </form>
+    {{else}}
+    <form method="post" action="/issues/{{.Issue.ID}}/status" class="inline-form">
+      <input type="hidden" name="status" value="open">
+      <button type="submit" class="btn">Reopen issue</button>
+    </form>
+    {{end}}
+    <a class="btn btn-danger" href="/issues/{{.Issue.ID}}/delete">Delete</a>
+  </div>
+</article>
+
+<section id="comments" class="comments">
+  <h2>Comments{{if .Comments}} ({{len .Comments}}){{end}}</h2>
+
+  {{if .Comments}}
+  <ol class="comment-list">
+    {{range .Comments}}
+    <li class="card comment">
+      <header class="comment-meta">
+        <time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .CreatedAt}}</time>
+      </header>
+      <div class="comment-body">{{.Body}}</div>
+    </li>
+    {{end}}
+  </ol>
+  {{else}}
+  <p class="muted">No comments yet.</p>
+  {{end}}
+
+  <form method="post" action="/issues/{{.Issue.ID}}/comments" class="comment-form card">
+    <div class="field">
+      <label for="comment-body">Add a comment</label>
+      <textarea id="comment-body" name="body" rows="4" required{{if .CommentError}} aria-invalid="true" aria-describedby="comment-error"{{end}}>{{.CommentDraft}}</textarea>
+      {{if .CommentError}}<p class="field-error" id="comment-error" role="alert">{{.CommentError}}</p>{{end}}
+    </div>
+    <button type="submit" class="btn btn-primary">Comment</button>
+  </form>
+</section>
+{{end}}
