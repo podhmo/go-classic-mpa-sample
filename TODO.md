@@ -78,4 +78,4 @@ Web (`internal/web/**`, `main.go` only):
 Post-fix integration (me):
 - [x] P1. Merge `fix/store` + `fix/web`; `go mod tidy`; build+vet+test+race
 - [x] P2. Re-run smoke test incl. the fixed paths (bogus label_id, page=99999, /nonexistent styled 404)
-- [ ] P3. Update bugs.md statuses → fixed; update decisions/pitfalls; final checklist §11; cleanup worktrees; final report
+- [x] P3. Update bugs.md statuses → fixed; update decisions/pitfalls; final checklist §11; cleanup worktrees; final report
