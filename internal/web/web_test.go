@@ -763,12 +763,10 @@ func TestCSRFRejectsCrossSitePost(t *testing.T) {
 	}
 }
 
-func TestUnsupportedMethodRendersStyled404(t *testing.T) {
+func TestUnsupportedMethodRenders405(t *testing.T) {
 	srv, _ := newTestServer(t)
-	// The method-less "/" catch-all matches DELETE too, so a disallowed
-	// method on a known path renders the styled 404 rather than the mux's
-	// automatic 405. The request still reaches no handler, so nothing is
-	// mutated.
+	// The catch-alls are method-scoped (GET/POST only), so a disallowed
+	// method on a known path falls through to the mux's automatic 405.
 	req, err := http.NewRequest(http.MethodDelete, srv.URL+"/issues", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -777,12 +775,9 @@ func TestUnsupportedMethodRendersStyled404(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	body := getBody(t, resp)
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404", resp.StatusCode)
-	}
-	if !strings.Contains(body, "Not found") {
-		t.Error("expected the styled Not found page")
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want 405", resp.StatusCode)
 	}
 }
 

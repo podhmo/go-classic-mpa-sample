@@ -77,9 +77,12 @@ func New(st Store) http.Handler {
 	mux.HandleFunc("GET /static/app.css", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFileFS(w, r, staticFS, "static/app.css")
 	})
-	// Catch-all: anything no specific pattern matched (any method) renders
-	// the styled 404 page instead of the mux's plaintext default.
-	mux.HandleFunc("/", h.notFound)
+	// Catch-alls: unknown GET/POST paths render the styled 404 page instead
+	// of the mux's plaintext default. They are method-scoped on purpose — a
+	// method-less "/" pattern would match PUT/DELETE too and swallow the
+	// mux's automatic 405 Method Not Allowed.
+	mux.HandleFunc("GET /", h.notFound)
+	mux.HandleFunc("POST /", h.notFound)
 
 	return securityHeaders(http.NewCrossOriginProtection().Handler(mux))
 }
