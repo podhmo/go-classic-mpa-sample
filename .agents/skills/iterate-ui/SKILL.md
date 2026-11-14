@@ -1,9 +1,9 @@
 ---
-name: for-ui-designer
-description: For whoever works on go-classic-mpa-sample's design — templates, `static/app.css`, view-models, or any task that changes how a page looks — iterate and check the rendered result **without provisioning the app's runtime** (no `go run .`, no database, no seed data) via the repo's homemade storybook.
+name: iterate-ui
+description: Use the moment a task decides to change go-classic-mpa-sample's UI — editing `internal/web/templates/` or `internal/web/static/`, touching `internal/web/story_pages.go`, or modifying a handler/page in `internal/web` — to iterate and check the rendered result **without provisioning the app's runtime** (no `go run .`, no database, no seed data) via the repo's homemade storybook. When the change must afterwards be exercised in the real running app (JS behavior, PRG flows, console/CSP errors), switch to the `verify-ui` skill.
 ---
 
-# For UI designers: design iteration without the backend
+# Iterate on the UI without the backend
 
 In this repo backend and frontend work can split: a page's markup and
 CSS are fully exercised by the homemade storybook (`cmd/storybook`,
@@ -93,4 +93,7 @@ a snapshot to a PR.
 - JavaScript is intentionally absent (`script-src 'none'`); verify
   behavior with server-rendered markup + CSS only.
 
-The human-facing version of this workflow lives in `docs/ja/for-ui-designer.md`.
+The human-facing version of this workflow lives in
+`docs/ja/for-ui-designer.md`. When a change must afterwards be
+exercised against the real running app end-to-end, switch to the
+`verify-ui` skill.

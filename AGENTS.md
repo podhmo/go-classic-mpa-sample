@@ -17,7 +17,8 @@
 
 - `.agents/skills/todo-md/` — TODO.md / TODO-archive.md の運用ルール。タスクの追記・完了・部分完了時は必ず参照する
 - `.agents/skills/modern-web-guidance/` — HTML/CSS・クライアント側UIの実装・更新前に `npx -y modern-web-guidance@latest search "<query>"` でモダンなベストプラクティスを検索するスキル。テンプレートや app.css を触る作業では先に実行する
-- `.agents/skills/for-ui-designer/` — デザイン担当者向け。デザイン部分(templates/static/story_pages.go)の試行錯誤をアプリ本体の環境構築なしで行うためのスキル。自作 storybook(`make storybook` → :6006)を使う。UI を触る作業では必ず参照する
+- `.agents/skills/iterate-ui/` — UI を変更すると決めたときのスキル。デザイン部分(templates/static/story_pages.go)の試行錯誤をアプリ本体の環境構築なしで行う。自作 storybook(`make storybook` → :6006)を使う。UI を触る作業では必ず参照する
+- `.agents/skills/verify-ui/` — UI 変更後に動作確認をアプリ全体へ広げるときのスキル。実サーバ(`go run .` → :8080、demo データ自動シード)と playwright-cli で実ブラウザ検証を行う
 
 ## 主要コマンド
 
@@ -30,4 +31,4 @@ go fix ./...                # モダナイズ（必要に応じて）
 make todo-gc                # TODO.md の [x] 項目を TODO-archive.md へ移す
 ```
 
-実ブラウザでの画面検証が必要なら `playwright-cli`（`.claude/skills/playwright-cli` スキル参照、`pnpm dlx @playwright/cli` 経由）を使える。
+実ブラウザでの画面検証が必要なら `playwright-cli`（`.claude/skills/playwright-cli` スキル参照、`pnpm dlx @playwright/cli` 経由）を使える。UI 変更後の動作確認フローは `.agents/skills/verify-ui/` 参照。

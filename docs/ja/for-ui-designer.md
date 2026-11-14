@@ -96,8 +96,10 @@ index.html + grid_*.html + static/ が出力される。ライブサーバーと
 
 ## 関連
 
-- `.agents/skills/for-ui-designer/` — エージェント向けのワークフロー版（この
+- `.agents/skills/iterate-ui/` — エージェント向けのワークフロー版（この
   ドキュメントと同じ内容を手順化したもの）
+- `.agents/skills/verify-ui/` — 変更後に実アプリで動作確認へ広げる
+  エージェント向けスキル（実サーバ + playwright-cli）
 - `docs/sketch/ja/storybook-with-minigo.md` — ツール自体の設計・検証
   レポート
 - `cmd/storybook/README.md` — ツールのリファレンス
