@@ -30,6 +30,7 @@
 | 19 | minor | 修正済 | todo-gc: note 配下の完了項目が sweep されない | `sweepNode` が `note` 状態の子を丸ごと skip するため、`- 完了の条件:` 等の配下にある `- [x]` 項目が TODO.md に残り続けていた（同上）。対応: note 自体は残しつつ配下を再帰的に sweep する（チェーンは `P > 完了の条件 > **C**`）。回帰テスト追加済 |
 | 20 | minor | 修正済 | ラベルバッジの文字色コントラスト不足 | ダークモード対応時に計算で発見（ライトモードでも同じ）: `.label-badge` の文字色が固定 `#1f2328` のため、シードの Bug `#d73a4a` で 3.46:1、Documentation `#1f6feb` で 3.41:1、Feature `#0075ca` で 3.31:1 と WCAG AA（4.5:1）未満。対応: 色を `--label-color` で渡し `contrast-color()`（非対応時は RCS の XYZ 計算）で白/黒を選ぶ。結果 Bug/Enhancement は黒、Documentation/Feature は白（いずれも 4.5:1 以上）。実ブラウザ（Chromium）の計算値で確認 |
 | 21 | minor | 修正済 | サーバー側エラーが読み上げ・フォーカスともに不確実 / Firefox・Safari で未操作の必須欄が invalid 扱い | フォームフィードバック整備時にガイド照合で発見: (1) 422 再表示のエラー文が `role="alert"` だったが、ページロード時から存在する live region は確実には読み上げられず、フォーカスも先頭のまま（エラー欄へ移動しない）。(2) エラーなしの欄は `aria-invalid` 未指定で、Firefox/Safari は空の `required` 欄をロード直後から invalid として公開する。対応: `role="alert"` を外し、最初のエラー欄に `autofocus`（読み上げは `aria-describedby` 経由）。エラーなしの欄は `aria-invalid="false"` を明示。テスト追加済 |
+| 22 | minor | 修正済 | 文字サイズが px 固定でブラウザ/OS の文字サイズ設定に追従しない / 640px 以下で本文を 14px に縮小 / 一覧の長いタイトルが無制限に伸びる | Responsive & typography pass の監査で発見: `body { font-size: 15px }` と各所の px 指定のため、ブラウザの既定文字サイズを変えても本文が大きくならなかった。さらに狭幅で本文を 14px に縮めていた。長いタイトル・ラベル名は一覧の行を何行にも伸ばしていた。対応: rem 化 + `<meta name="text-scale">`、狭幅での縮小を廃止、一覧タイトル 2 行 clamp・ラベル ellipsis。px font-size が無いことをテストで固定 |
 
 ## 修正しない（記録のみ）
 

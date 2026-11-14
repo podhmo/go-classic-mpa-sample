@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -923,8 +924,28 @@ func TestStaticCSS(t *testing.T) {
 	if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "text/css") {
 		t.Fatalf("Content-Type = %q, want text/css", ct)
 	}
-	if body := getBody(t, resp); !strings.Contains(body, "@view-transition") {
+	body := getBody(t, resp)
+	if !strings.Contains(body, "@view-transition") {
 		t.Error("app.css does not opt in to cross-document view transitions")
+	}
+	// Text must follow the browser/OS text size: no px font sizes, and no
+	// root font-size override that would defeat <meta name="text-scale">.
+	if m := regexp.MustCompile(`font-size:\s*[0-9.]+px`).FindString(body); m != "" {
+		t.Errorf("app.css uses a px font size: %q", m)
+	}
+	if regexp.MustCompile(`(?s)(?:^|[}\s])(?::root|html)\s*\{[^}]*font-size`).MatchString(body) {
+		t.Error("app.css overrides the root font size")
+	}
+}
+
+func TestLayoutOptsIntoOSTextScale(t *testing.T) {
+	srv, _ := newTestServer(t)
+	resp, err := srv.Client().Get(srv.URL + "/issues")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if body := getBody(t, resp); !strings.Contains(body, `<meta name="text-scale" content="scale">`) {
+		t.Error(`layout lacks <meta name="text-scale" content="scale">`)
 	}
 }
 

@@ -155,29 +155,35 @@ body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans",
     Helvetica, Arial, sans-serif;
-  font-size: 15px;
+  /* rem, not px: follows the browser font-size setting and, through
+     <meta name="text-scale">, the OS text scale. The root size is left to
+     the browser. */
+  font-size: 0.9375rem;
   line-height: 1.55;
   color: var(--text);
   background: var(--bg);
 }
 
 .container {
-  max-width: 960px;
+  max-width: 60rem;
   margin: 0 auto;
   padding: 0 16px;
 }
 
+/* Fluid between 1.25rem and 1.5rem with the width of .main-content. */
 h1 {
-  font-size: 1.5rem;
+  font-size: clamp(1.25rem, 1rem + 2cqi, 1.5rem);
   font-weight: 600;
   margin: 0;
   overflow-wrap: anywhere;
+  text-wrap: balance;
 }
 
 h2 {
   font-size: 1.15rem;
   font-weight: 600;
   margin: 0 0 12px;
+  text-wrap: balance;
 }
 
 a {
@@ -202,6 +208,7 @@ a:hover {
 
 .header-inner {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
@@ -222,6 +229,7 @@ a:hover {
 
 .site-nav {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 16px;
 }
@@ -236,6 +244,7 @@ a:hover {
 }
 
 .main-content {
+  container: main / inline-size;
   padding-top: 24px;
   padding-bottom: 48px;
 }
@@ -333,6 +342,7 @@ textarea:focus-visible {
 
 .page-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
@@ -358,8 +368,8 @@ textarea:focus-visible {
 .badge::before {
   content: "";
   display: inline-block;
-  width: 9px;
-  height: 9px;
+  width: 0.7em;
+  height: 0.7em;
   border-radius: 50%;
 }
 
@@ -388,8 +398,16 @@ textarea:focus-visible {
 
 /* ---------- label badges ---------- */
 
+/* Long label names end in an ellipsis instead of widening the row; the full
+   name stays in the DOM (accessible name, find-in-page) and the badge grows
+   to it on hover or keyboard focus. */
 .label-badge {
   display: inline-block;
+  max-inline-size: min(100%, 12rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
   padding: 1px 10px;
   font-size: 0.78rem;
   font-weight: 600;
@@ -423,6 +441,16 @@ a.label-badge:hover {
   filter: brightness(0.95);
 }
 
+.label-badge:is(:hover, :focus-visible) {
+  max-inline-size: 100%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .label-badge {
+    transition: max-inline-size 0.3s;
+  }
+}
+
 /* ---------- tabs ---------- */
 
 .tabs {
@@ -453,10 +481,12 @@ a.label-badge:hover {
 
 /* ---------- filter bar ---------- */
 
+/* Reflowing columns instead of a breakpoint: four in a row when they fit,
+   then two, then one. rem keeps the threshold in step with the text size. */
 .filter-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+  align-items: end;
   gap: 12px;
   padding: 14px;
   background: var(--surface);
@@ -469,7 +499,7 @@ a.label-badge:hover {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  flex: 1 1 160px;
+  min-width: 0;
 }
 
 .filter-field label {
@@ -481,7 +511,10 @@ a.label-badge:hover {
 .filter-actions {
   display: flex;
   gap: 8px;
-  align-items: flex-end;
+}
+
+.filter-actions .btn {
+  flex: 1;
 }
 
 /* ---------- form controls ---------- */
@@ -495,6 +528,8 @@ textarea {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  /* 16px+ (at default settings) so iOS Safari does not zoom in on focus. */
+  font-size: max(1rem, 1em);
   padding: 7px 10px;
   width: 100%;
 }
@@ -504,8 +539,9 @@ textarea {
 }
 
 input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
+  width: 1rem;
+  height: 1rem;
+  flex: none;
   accent-color: var(--accent);
 }
 
@@ -604,7 +640,10 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   border-color: var(--danger);
 }
 
+/* min-inline-size: 0 overrides the fieldset default (min-content), which
+   would let a long label name widen the page instead of truncating. */
 .label-picker {
+  min-inline-size: 0;
   border: 1px solid var(--border-muted);
   border-radius: var(--radius);
   padding: 12px 14px;
@@ -617,8 +656,12 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   padding: 0 6px;
 }
 
-.label-option {
-  display: inline-flex;
+/* .label-picker > prefix: .field > label (display: block) would otherwise
+   win, and the truncating badge would then drop below its checkbox. */
+.label-picker > .label-option {
+  display: flex;
+  inline-size: fit-content;
+  max-inline-size: 100%;
   align-items: center;
   gap: 8px;
   margin: 4px 14px 4px 0;
@@ -642,6 +685,7 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
 }
 
 .issue-list {
+  container: issue-list / inline-size;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -651,12 +695,24 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   overflow: hidden;
 }
 
+/* Stacked by default (title, then status/labels/time); side by side once
+   the list is wide enough. A container query, so the threshold follows the
+   list's own width and its font size rather than the viewport. */
 .issue-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px 12px;
+  display: grid;
+  gap: 8px 16px;
   padding: 14px 16px;
+}
+
+@container issue-list (inline-size >= 48em) {
+  .issue-row {
+    grid-template-columns: minmax(0, 3fr) minmax(min-content, 2fr);
+    align-items: baseline;
+  }
+
+  .issue-row-meta {
+    justify-content: flex-end;
+  }
 }
 
 .issue-row + .issue-row {
@@ -667,12 +723,24 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   background: var(--surface-hover);
 }
 
+/* The number sits after the title as its own flex item, so it stays
+   visible when the title is clamped. */
 .issue-row-main {
-  flex: 1 1 auto;
+  display: flex;
+  align-items: baseline;
+  gap: 0.35em;
   min-width: 0;
 }
 
+/* Long titles are clamped to two lines; the full title is the link's
+   accessible name and is shown in full on the detail page. */
 .issue-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  min-width: 0;
   font-weight: 600;
   font-size: 1rem;
   color: var(--text);
@@ -684,6 +752,7 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
 }
 
 .issue-num {
+  flex: none;
   color: var(--text-muted);
   font-weight: 400;
   white-space: nowrap;
@@ -694,7 +763,7 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  flex: 0 0 auto;
+  min-width: 0;
 }
 
 .issue-time {
@@ -725,6 +794,7 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
 
 .pagination {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 14px;
@@ -932,6 +1002,12 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   margin: 0 0 12px;
 }
 
+/* Readable line length and fewer orphans in running text. */
+.markdown-body :is(p, li, blockquote) {
+  max-inline-size: 75ch;
+  text-wrap: pretty;
+}
+
 .markdown-body h1,
 .markdown-body h2,
 .markdown-body h3,
@@ -1108,7 +1184,7 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
 /* ---------- error page ---------- */
 
 .error-page {
-  max-width: 480px;
+  max-width: 30rem;
   margin: 48px auto;
   text-align: center;
 }
@@ -1142,43 +1218,14 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
 
 /* ---------- responsive ---------- */
 
-@media (max-width: 640px) {
-  body {
-    font-size: 14px;
-  }
-
+/* Component layouts (filter bar, issue rows) adapt on their own above; what
+   is left is page-level. The breakpoint is in em, which media queries resolve
+   against the browser's default font size, so it moves with the user's text
+   size instead of assuming 16px. Text is not shrunk on small screens. */
+@media (max-width: 40em) {
   .page-head {
     flex-direction: column;
     align-items: stretch;
-  }
-
-  .filter-bar {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .filter-field {
-    flex: 1 1 auto;
-  }
-
-  .filter-actions {
-    justify-content: stretch;
-  }
-
-  .filter-actions .btn {
-    flex: 1;
-  }
-
-  /* Larger touch targets on small screens. */
-  .btn {
-    padding: 9px 16px;
-    min-height: 40px;
-  }
-
-  .issue-row {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
   }
 
   .issue-actions {
@@ -1192,5 +1239,18 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
     width: 100%;
     display: block;
     text-align: center;
+  }
+}
+
+/* Larger touch targets for touch input, whatever the width. */
+@media (pointer: coarse) {
+  .btn,
+  input:not([type="checkbox"], [type="radio"]),
+  select {
+    min-block-size: 44px;
+  }
+
+  .btn {
+    padding: 9px 16px;
   }
 }
