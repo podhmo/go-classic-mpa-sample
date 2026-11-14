@@ -14,93 +14,82 @@ import (
 
 const webDir = "../../internal/web"
 
-var printNames = []string{
-	"StoryError404",
-	"StoryIssueDelete",
-	"StoryIssueDetail",
-	"StoryIssueDetailCommentError",
-	"StoryIssueFormEdit",
-	"StoryIssueFormErrors",
-	"StoryIssueFormNew",
-	"StoryIssueList",
-	"StoryIssueListEmpty",
-	"StoryIssueListPaged",
-}
-
-var httpNames = []string{
-	"StoryHttpIssueList",
-	"StoryHttpNotFound",
-}
-
 func newBook() *Book {
 	return &Book{Book: &storybook.Book{Dir: webDir, Tag: "story", Setup: bindApp}}
 }
 
+// The tests below assert properties of the whole discovered corpus, not
+// a hardcoded story list: adding a story or a handler never requires
+// updating this file — the corpus is the spec.
 func TestStories(t *testing.T) {
 	stories, err := newBook().Stories()
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantGroup := map[string]string{
-		"StoryIssueList":               "renderIssueList",
-		"StoryIssueListEmpty":          "renderIssueList",
-		"StoryIssueListPaged":          "renderIssueList",
-		"StoryIssueDetail":             "renderIssueDetail",
-		"StoryIssueDetailCommentError": "renderIssueDetail",
-		"StoryIssueFormNew":            "renderIssueForm",
-		"StoryIssueFormErrors":         "renderIssueForm",
-		"StoryIssueFormEdit":           "renderIssueForm",
-		"StoryIssueDelete":             "renderIssueDelete",
-		"StoryError404":                "renderError",
-	}
-	var names []string
+	var nPrint, nHTTP int
+	groups := map[string]int{}
 	for _, s := range stories {
-		names = append(names, s.Name)
 		if s.Doc == "" || s.Pos == "" {
 			t.Errorf("missing doc or position: %+v", s)
 		}
-		if want := strings.HasPrefix(s.Name, "StoryHttp"); s.IsHTTP() != want {
-			t.Errorf("%s: IsHTTP %v, want %v", s.Name, s.IsHTTP(), want)
-		}
-		// Print stories group by the render function they drive;
-		// handler stories stay ungrouped.
 		if s.IsHTTP() {
+			nHTTP++
+			// Handler stories stay ungrouped.
 			if s.Group != "" {
 				t.Errorf("%s: handler story must not group, got %q", s.Name, s.Group)
 			}
-		} else if got, want := s.Group, wantGroup[s.Name]; got != want {
-			t.Errorf("%s: group %q, want %q", s.Name, got, want)
+		} else {
+			nPrint++
+			// Print stories group by the render function they drive.
+			if s.Group == "" {
+				t.Errorf("%s: print story has no group", s.Name)
+			}
+			groups[s.Group]++
 		}
 	}
-	if len(names) != len(printNames)+len(httpNames) {
-		t.Errorf("want %d stories, got %d: %v", len(printNames)+len(httpNames), len(names), names)
+	if nPrint == 0 || nHTTP == 0 {
+		t.Errorf("want both story kinds, got %d print + %d http", nPrint, nHTTP)
+	}
+	// Grouping must discriminate: a single group holding every print
+	// story is the degenerate "all under the last helper" outcome.
+	if len(groups) < 2 && nPrint > 1 {
+		t.Errorf("print stories collapse into groups %v", groups)
 	}
 }
 
 func TestRender(t *testing.T) {
 	b := newBook()
-	for _, name := range append(append([]string{}, printNames...), httpNames...) {
-		t.Run(name, func(t *testing.T) {
-			page, err := b.Render(context.Background(), name)
+	stories, err := b.Stories()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sawNon200 := false
+	for _, s := range stories {
+		t.Run(s.Name, func(t *testing.T) {
+			page, err := b.Render(context.Background(), s.Name)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if !strings.Contains(string(page.Body), "<html") {
-				t.Errorf("%s: body misses the page markup", name)
+				t.Errorf("%s: body misses the page markup", s.Name)
+			}
+			if page.Status >= 500 {
+				t.Errorf("%s: status %d", s.Name, page.Status)
+			}
+			if s.IsHTTP() {
+				if page.Status != http.StatusOK {
+					sawNon200 = true
+				}
+				// A handler story replays the app's real headers.
+				if got := page.Header["Content-Security-Policy"]; len(got) == 0 || !strings.Contains(got[0], "script-src 'none'") {
+					t.Errorf("%s: CSP misses script-src 'none': %v", s.Name, got)
+				}
 			}
 		})
 	}
-	// A handler story replays the status its recorder captured.
-	page, err := b.Render(context.Background(), "StoryHttpNotFound")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if page.Status != http.StatusNotFound {
-		t.Errorf("StoryHttpNotFound: status %d, want 404", page.Status)
-	}
-	// And the app's real security headers.
-	if got := page.Header["Content-Security-Policy"]; len(got) == 0 || !strings.Contains(got[0], "script-src 'none'") {
-		t.Errorf("CSP misses script-src 'none': %v", got)
+	// Status replay is only proven when the corpus has a non-200 case.
+	if !sawNon200 {
+		t.Error("no http story replays a non-200 status")
 	}
 }
 
@@ -111,42 +100,81 @@ func TestRenderRejectsNonStory(t *testing.T) {
 }
 
 func TestHandler(t *testing.T) {
-	h := newBook().Handler()
+	b := newBook()
+	stories, err := b.Stories()
+	if err != nil {
+		t.Fatal(err)
+	}
+	members := map[string][]string{}
+	var aPrint string
+	var httpStories []Story
+	for _, s := range stories {
+		if s.IsHTTP() {
+			httpStories = append(httpStories, s)
+			continue
+		}
+		if aPrint == "" {
+			aPrint = s.Name
+		}
+		members[s.Group] = append(members[s.Group], s.Name)
+	}
+	// The largest group fills the grid the most.
+	var grid string
+	for g := range members {
+		if len(members[g]) > len(members[grid]) {
+			grid = g
+		}
+	}
 
+	h := b.Handler()
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	body := rec.Body.String()
 	for _, want := range []string{
-		`href="?s=StoryIssueList"`,
-		`target="_blank"`,              // http stories open in a new tab
-		`?w=360`,                       // viewport widths
-		`href="/grid/renderIssueList"`, // a variants grid per render function
+		`href="?s=` + aPrint + `"`,
+		`target="_blank"`,           // http stories open in a new tab
+		`?w=360`,                    // viewport widths
+		`href="/grid/` + grid + `"`, // a variants grid per render function
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("index misses %s", want)
 		}
 	}
 
-	// The grid lays one render function's variants side by side.
+	// The grid lays one render function's variants side by side and
+	// leaks no member of another group.
 	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/grid/renderIssueList", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/grid/"+grid, nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("grid status %d, want 200", rec.Code)
 	}
-	for _, name := range []string{"StoryIssueList", "StoryIssueListEmpty", "StoryIssueListPaged"} {
+	for _, name := range members[grid] {
 		if !strings.Contains(rec.Body.String(), `src="/story/`+name+`"`) {
 			t.Errorf("grid misses %s", name)
 		}
 	}
-	if strings.Contains(rec.Body.String(), "StoryIssueDetail") {
-		t.Error("grid leaks another render function's variants")
+	for g, names := range members {
+		if g == grid {
+			continue
+		}
+		for _, name := range names {
+			if strings.Contains(rec.Body.String(), `/story/`+name) {
+				t.Errorf("grid leaks %s of group %s", name, g)
+			}
+		}
 	}
 
-	// A handler story replays its recorded status and headers.
-	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/story/StoryHttpNotFound", nil))
-	if rec.Code != http.StatusNotFound {
-		t.Errorf("preview status for StoryHttpNotFound %d, want 404", rec.Code)
+	// Every handler story replays the status its recorder captured.
+	for _, s := range httpStories {
+		want, err := b.Render(context.Background(), s.Name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rec = httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/story/"+s.Name, nil))
+		if rec.Code != want.Status {
+			t.Errorf("preview status for %s %d, want %d", s.Name, rec.Code, want.Status)
+		}
 	}
 
 	// The app's real assets are served at their original path.
@@ -184,8 +212,16 @@ func TestExport(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(out, "static", "app.css")); err != nil {
 		t.Errorf("export misses static assets: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(out, "grid_renderIssueList.html")); err != nil {
-		t.Errorf("export misses the variants grid: %v", err)
+	grids := map[string]bool{}
+	for _, s := range stories {
+		if s.Group != "" {
+			grids[s.Group] = true
+		}
+	}
+	for g := range grids {
+		if _, err := os.Stat(filepath.Join(out, "grid_"+g+".html")); err != nil {
+			t.Errorf("export misses the variants grid for %s: %v", g, err)
+		}
 	}
 }
 
