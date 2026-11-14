@@ -936,6 +936,13 @@ func TestStaticCSS(t *testing.T) {
 	if regexp.MustCompile(`(?s)(?:^|[}\s])(?::root|html)\s*\{[^}]*font-size`).MatchString(body) {
 		t.Error("app.css overrides the root font size")
 	}
+	// content-visibility: auto without a placeholder size collapses skipped
+	// elements to 0px and makes the scrollbar jump.
+	for _, m := range regexp.MustCompile(`\{[^}]*content-visibility:\s*auto[^}]*\}`).FindAllString(body, -1) {
+		if !strings.Contains(m, "contain-intrinsic-") {
+			t.Errorf("content-visibility: auto without contain-intrinsic-size: %q", m)
+		}
+	}
 }
 
 func TestLayoutOptsIntoOSTextScale(t *testing.T) {
