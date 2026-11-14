@@ -6,11 +6,7 @@
 
 ## 未修正
 
-| # | 重要度 | 状態 | 概要 | 詳細 |
-|---|--------|------|------|------|
-| 17 | minor | 未修正 | todo-gc: archive 書き込み失敗時に完了項目を喪失 | `tools/todo-gc/main.go` `run`: TODO.md を先に書き換えるため、archive 側の `WriteFile` 失敗時に完了項目が両ファイルから消える。対応: archive を先に書く（PR #4 Devin Review 指摘、TODO.md「todo-gc のバグ修正」で対応予定） |
-| 18 | minor | 未修正 | todo-gc: 空行でネスト項目が root 化 | `parse` が空行で `stack = nil` するため、空行の後のネスト項目がトップレベル扱いになる。[x] 親が open な子を残したままアーカイブされたり、子の祖先チェーンが失われたりする（同上） |
-| 19 | minor | 未修正 | todo-gc: note 配下の完了項目が sweep されない | `sweepNode` が `note` 状態の子を丸ごと skip するため、`- 完了の条件:` 等の配下にある `- [x]` 項目が永遠に TODO.md に残る（同上） |
+（なし）
 
 ## 修正済み
 
@@ -29,6 +25,9 @@
 | 13 | info | 修正済 | `X-Content-Type-Options` / `X-Frame-Options` 等のヘッダが無い | 対応: `securityHeaders` middleware で `nosniff` + `frame DENY` + `referrer-policy: same-origin` を全レスポンスに付与 |
 | 14 | minor | 修正済 | HTML5 `required` 属性がサーバー側バリデーションを阻害 | **実ブラウザ検証で発見**（curl/httptest では見えない）。title 入力・コメント textarea の `required` がブラウザネイティブのバブル（「このフィールドを入力してください」）を発火させ、サーバー側の 422 + インラインエラー再表示に一切到達しない。仕様の「検証エラー時は入力内容を保持してフォームを再表示」をブラウザ上で満たせていなかった。対応: 両フォームに `novalidate` 追加（`required` 属性は意味論として残存） |
 | 15 | nit | 修正済 | `favicon.ico` が 404 でコンソールエラー | 対応: layout に data-URI の SVG アイコンを埋め込み（追加リクエスト・ファイル不要） |
+| 17 | minor | 修正済 | todo-gc: archive 書き込み失敗時に完了項目を喪失 | `tools/todo-gc/main.go` `run`: TODO.md を先に書き換えるため、archive 側の `WriteFile` 失敗時に完了項目が両ファイルから消えていた（PR #4 Devin Review 指摘）。対応: archive を先に書き、その後 TODO.md を書く（TODO.md 側で失敗しても項目は両方に残るだけで失われない）。回帰テスト追加済 |
+| 18 | minor | 修正済 | todo-gc: 空行でネスト項目が root 化 | `parse` が空行で `stack = nil` するため、空行の後のネスト項目がトップレベル扱いになり、[x] 親が open な子を残したままアーカイブされたり子の祖先チェーンが失われたりしていた（同上）。対応: 空行を保留し、次の行がインデントされたマーカー/継続行ならその項目の一部として扱う。回帰テスト追加済 |
+| 19 | minor | 修正済 | todo-gc: note 配下の完了項目が sweep されない | `sweepNode` が `note` 状態の子を丸ごと skip するため、`- 完了の条件:` 等の配下にある `- [x]` 項目が TODO.md に残り続けていた（同上）。対応: note 自体は残しつつ配下を再帰的に sweep する（チェーンは `P > 完了の条件 > **C**`）。回帰テスト追加済 |
 
 ## 修正しない（記録のみ）
 

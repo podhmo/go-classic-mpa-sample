@@ -65,3 +65,5 @@
 - O1. `init` subcommand / `-init` flag > Factor schema DDL so `init` and `store.Open` share one source of truth (e.g. exported `store.EnsureSchema`/`store.Init` or a `cmd` path that opens + migrates + exits).
 - O1. `init` subcommand / `-init` flag > `init` should print what it did (created file, applied N tables/indexes) and exit 0; safe to run twice.
 - O1. `init` subcommand / `-init` flag > Consider `ANALYZE` after init/seed for the sqlite query planner.
+
+- [x] **todo-gc のバグ修正** ([PR #4 Devin Review](https://github.com/podhmo/go-classic-mpa-sample/pull/4)): レビューで見つかった `tools/todo-gc` の3件。(a) archive 書き込み失敗時に TODO.md が先に書き換わり完了項目を喪失する → 書き込み順序の見直し。(b) 空行を挟むとネスト項目が root 扱いになり、[x] 親が open な子を残したままアーカイブされる・子の祖先チェーンが失われる → `parse` の修正。(c) note（`- 完了の条件:` 等）配下の完了項目が sweep されず TODO に残り続ける → `sweepNode` の修正。回帰テストを追加すること。同じコードが html-sandbox の `tools/todo-gc` にもあるので、直したら upstream へのフィードバックも検討する。

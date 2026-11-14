@@ -43,6 +43,9 @@ it when the rule changes.
 
 1. Delete each `[x]` entry from `TODO.md`. An `[x]` entry that still has an
    open child is left in place with a warning — fix the entry by hand.
+   A plain `- ` note (`完了の条件:`) is never deleted on its own, but `[x]`
+   entries under it are, with the note in their chain. Blank lines between
+   an item and its indented children do not break the nesting.
 2. Append it to the **end** of `TODO-archive.md` as **one physical line per
    item**, so `rg <word>` on any word of any item returns a line that also
    names every ancestor:
