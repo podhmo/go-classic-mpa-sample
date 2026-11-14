@@ -2,6 +2,9 @@
 {{/* Copies each comment's #comment-N permalink via Invoker Commands + the
    Async Clipboard API. Deferred external file (CSP script-src 'self'). */}}
 <script src="/static/copy-permalink.js" defer></script>
+{{/* Ctrl/Cmd+Enter submits the comment form from the textarea — IME-safe by
+   construction (guide ime-safe-enter-submit). Deferred external file. */}}
+<script src="/static/enter-submit.js" defer></script>
 <nav class="breadcrumb" aria-label="Breadcrumb">
   <a href="/issues">Issues</a> <span aria-hidden="true">/</span> <span aria-current="page">#{{.Issue.ID}}</span>
 </nav>
@@ -83,9 +86,9 @@
   <form method="post" action="/issues/{{.Issue.ID}}/comments" class="comment-form card" novalidate>
     <div class="field">
       <label for="comment-body">Add a comment</label>
-      <textarea id="comment-body" name="body" rows="4" required{{if .CommentError}} aria-invalid="true" aria-describedby="comment-error comment-hint" autofocus{{else}} aria-invalid="false" aria-describedby="comment-hint"{{end}}>{{.CommentDraft}}</textarea>
+      <textarea id="comment-body" name="body" rows="4" required aria-keyshortcuts="Control+Enter Meta+Enter"{{if .CommentError}} aria-invalid="true" aria-describedby="comment-error comment-hint" autofocus{{else}} aria-invalid="false" aria-describedby="comment-hint"{{end}}>{{.CommentDraft}}</textarea>
       <p class="field-error{{if not .CommentError}} field-error-pending{{end}}" id="comment-error">{{or .CommentError "Comment is required."}}</p>
-      <p class="field-hint" id="comment-hint">Markdown (GFM) supported. Raw HTML is not rendered.</p>
+      <p class="field-hint" id="comment-hint">Markdown (GFM) supported. Raw HTML is not rendered. Ctrl+Enter (Cmd+Enter on macOS) submits.</p>
     </div>
     <button type="submit" class="btn btn-primary">Comment</button>
   </form>

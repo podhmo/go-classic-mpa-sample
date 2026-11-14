@@ -205,6 +205,15 @@
 - **hover だけに依存しない**: `(hover: hover)` 環境では opacity 0→hover/focus-within で表示、タッチは常時表示。コピー成功/失敗中は状態表示のため表示維持。
 - **検証**: storybook の `StoryIssueDetail` で実ブラウザ確認 — クリックで `…#comment-1` が writeText に渡り、"Copied" 表示と `data-copied` 状態を確認。
 
+## Ctrl/Cmd+Enter でのフォーム送信（2026-11-15、`ime-enter-submit` ブランチ）
+
+- **ガイド**: modern-web-guidance `ime-safe-enter-submit`。要点は「裸の Enter で送信するカスタム keydown ハンドラは IME 確定 Enter と衝突する」こと。修飾キー併用については明示的に「Cmd+Enter や Ctrl+Enter などのショートカットは IME の確定キーと競合しないため IME 安全チェックは不要」とある。
+- **Ctrl+Enter / Cmd+Enter を採用**: textarea で改行を潰さない（コメント/本文は改行必須）ことと、IME 安全を構造で担保するため裸 Enter ではなく修飾キー併用にした。`isComposing`/`keyCode === 229` のチェックはガイド上不要と判断し実装しない（将来裸 Enter 送信を追加する場合はその時点で必須）。
+- **`requestSubmit()` を使う**: `form.submit()` ではなく `requestSubmit()` — submit イベントを発火させフォーム本来の送信経路を通す。`event.preventDefault()` で textarea への改行挿入を抑止。
+- **対象は `form textarea` 全て**: コメント欄 (`#comment-body`) と issue 本文 (`#f-body`)。将来フォーム textarea が増えても追随不要なように個別 ID ではなく包括セレクタにした。
+- **発見可能性**: 各 textarea に `aria-keyshortcuts="Control+Enter Meta+Enter"` を付与し、既存の `.field-hint`（aria-describedby 済み）に「Ctrl+Enter (Cmd+Enter on macOS) submits.」を追記。送信ボタン自体は従来通り `<button type="submit">`（ガイドの必須要件「explicit submit button」は既に満たしている）。
+- **検証**: storybook の `StoryIssueDetail` で実ブラウザ確認 — Ctrl+Enter で submit イベント発火、裸 Enter では発火しないこと。
+
 （随時追記）
 
 ## minigo storybook 環境の構成（2026-11-14）
