@@ -179,6 +179,13 @@
 - **検証方法の記録**: 投機 fetch は Playwright `requests`/Network ドメインに出ないため、標準ライブラリのロギングプロキシを `:8081` に立ててサーバー側ヘッダーで観測。hover → `GET /issues/2` `Sec-Purpose: 'prefetch'` `Sec-Speculation-Tags: '"issue-list"'`（`tag` がサーバー側識別に効く）、Next で `/issues?page=2` も発火、セレクタ外（New issue 等）は発火しない、クリック遷移正常、console エラー・警告ゼロを確認。
 - **付けなかったもの**: HSTS（平 HTTP の localhost アプリであり、HTTP 経由ではブラウザが無視する）、`upgrade-insecure-requests`（全 URL を https に書き換えてアプリ自体が壊れる）、`require-trusted-types-for 'script'`（`script-src 'none'` で DOM シンクに届くスクリプト自体存在しないため無意味）、`report-to`（レポート endpoint がない）、`sandbox`（フォームまで塞がる）。`Referrer-Policy` は現行 `same-origin` 維持（ガイド既定の `strict-origin-when-cross-origin` より cross-origin への漏洩が少なく、外部参照ゼロなので実害なし）。
 
+## textarea の自動フィット（2026-11-15、modern-web-guidance `form-fields-automatically-fit-contents`）
+
+- **`field-sizing: content` を textarea に適用**: 入力量に追従して伸縮。Baseline 2026-06（Newly available）のプログレッシブエンハンスメント — 非対応ブラウザは `rows` 属性の固定高に落ちるだけなのでフォールバック JS（guide の grid-mirror 方式）は入れない。
+- **インライン方向は `width: 100%` 据え置き**: ガイドの「長い placeholder で横方向が暴れる」対策どおり、textarea は水平 auto-size させず縦のみ伸縮。
+- **上下限はフィールドごとに `lh` 単位で指定**: `#comment-body` は 4–16lh（旧 `rows=4` 相当を下限に）、`#f-body` は 10–32lh（旧 `rows=10` 相当）。`box-sizing: border-box` なので padding を含む。`lh` 単位は要素の line-height 基準で、文字サイズ設定に追従する。
+- **実ブラウザ検証（Chromium 156、storybook）**: `#f-body` が空で 248px（min 10lh）、40 行入力で 794px（max 32lh、内部スクロール）にキャップされ、短文に戻すと min に縮むことを確認。
+
 （随時追記）
 
 ## minigo storybook 環境の構成（2026-11-14）
