@@ -179,6 +179,14 @@
 - **検証方法の記録**: 投機 fetch は Playwright `requests`/Network ドメインに出ないため、標準ライブラリのロギングプロキシを `:8081` に立ててサーバー側ヘッダーで観測。hover → `GET /issues/2` `Sec-Purpose: 'prefetch'` `Sec-Speculation-Tags: '"issue-list"'`（`tag` がサーバー側識別に効く）、Next で `/issues?page=2` も発火、セレクタ外（New issue 等）は発火しない、クリック遷移正常、console エラー・警告ゼロを確認。
 - **付けなかったもの**: HSTS（平 HTTP の localhost アプリであり、HTTP 経由ではブラウザが無視する）、`upgrade-insecure-requests`（全 URL を https に書き換えてアプリ自体が壊れる）、`require-trusted-types-for 'script'`（`script-src 'none'` で DOM シンクに届くスクリプト自体存在しないため無意味）、`report-to`（レポート endpoint がない）、`sandbox`（フォームまで塞がる）。`Referrer-Policy` は現行 `same-origin` 維持（ガイド既定の `strict-origin-when-cross-origin` より cross-origin への漏洩が少なく、外部参照ゼロなので実害なし）。
 
+## Sticky サイトヘッダー（2026-11-15、`sticky-header` ブランチ）
+
+- **ガイド**: modern-web-guidance `state-aware-sticky-headers`。`position: sticky` + `@container scroll-state(stuck: block-start)` で JS なしに「stuck 時だけ見た目を変える」を実現（scroll-state queries は Chrome/Edge 144+。Firefox/Safari では影が出ないだけで sticky 自体は動く — ガイド推奨の progressive enhancement として受け入れ、IntersectionObserver フォールバックは入れない）。
+- **ガイドの制約「クエリはコンテナの子孫にしか効かない」対応**: `.site-header`（=stickyコンテナ）に置いていた背景・下ボーダーを全幅の子 `.header-bar` に移し、`header-inner` をその内側に保つ構造に変更。stuck 状態では `.header-bar` に `box-shadow` を追加。
+- **box-model を変えない**: stuck では影のみ変更。高さ・padding を触らないのでガイドの scroll anchoring 振動問題は起きず、`overflow-anchor: none` も不要（親は body で本来置けない）。
+- **`scroll-padding-top: 5rem`**: sticky で隠れる分を anchor ジャンプ（`#comment-N` 等）とフォーカス可視性（WCAG 2.4.11）に配慮して html に設定。
+- **検証**: storybook の `StoryIssueDetail` で実ブラウザ確認 — スクロール前 `box-shadow: none`、スクロール後に影が出て `site-header` が `top: 0` に留まることを確認。
+
 （随時追記）
 
 ## minigo storybook 環境の構成（2026-11-14）
