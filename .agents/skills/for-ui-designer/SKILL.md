@@ -1,9 +1,9 @@
 ---
-name: ui-test
-description: Design iteration and visual checks on go-classic-mpa-sample's pages **without provisioning the app's runtime** — no `go run .`, no database, no seed data. Use whenever a task changes how a page looks (templates, `static/app.css`, view-models, handlers/pages in `internal/web`) or asks for a visual check, especially when backend setup would be out of scope for a design-only change.
+name: for-ui-designer
+description: For whoever works on go-classic-mpa-sample's design — templates, `static/app.css`, view-models, or any task that changes how a page looks — iterate and check the rendered result **without provisioning the app's runtime** (no `go run .`, no database, no seed data) via the repo's homemade storybook.
 ---
 
-# UI-test: design iteration without the backend
+# For UI designers: design iteration without the backend
 
 In this repo backend and frontend work can split: a page's markup and
 CSS are fully exercised by the homemade storybook (`cmd/storybook`,
@@ -93,4 +93,4 @@ a snapshot to a PR.
 - JavaScript is intentionally absent (`script-src 'none'`); verify
   behavior with server-rendered markup + CSS only.
 
-The human-facing version of this workflow lives in `docs/ja/ui-test.md`.
+The human-facing version of this workflow lives in `docs/ja/for-ui-designer.md`.

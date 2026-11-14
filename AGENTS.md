@@ -9,7 +9,7 @@
 - `docs/ja/decisions.md` — 設計判断の記録（変更時は追記する）
 - `docs/ja/bugs.md` — 既知のバグ・問題点（発見したら重要度つきで記録）
 - `docs/ja/prompts.md` — 元の仕様書
-- `docs/ja/ui-test.md` — css/js/html を書き換えながら見た目を確認する人向け。自作 storybook でアプリ本体なしにデザインの試行錯誤をする手順
+- `docs/ja/for-ui-designer.md` — デザイン担当者向け。css/js/html を書き換えながら見た目を確認する人が、自作 storybook でアプリ本体なしに試行錯誤する手順
 - `TODO.md` — タスクの分解・進捗（追加・完了・GC の運用ルールは `.agents/skills/todo-md/SKILL.md` に必ず従う）
 - `TODO-archive.md` — 完了済みタスクの追記専用アーカイブ（直接編集しない、`make todo-gc` で自動追記）
 
@@ -17,7 +17,7 @@
 
 - `.agents/skills/todo-md/` — TODO.md / TODO-archive.md の運用ルール。タスクの追記・完了・部分完了時は必ず参照する
 - `.agents/skills/modern-web-guidance/` — HTML/CSS・クライアント側UIの実装・更新前に `npx -y modern-web-guidance@latest search "<query>"` でモダンなベストプラクティスを検索するスキル。テンプレートや app.css を触る作業では先に実行する
-- `.agents/skills/ui-test/` — デザイン部分(templates/static/story_pages.go)の試行錯誤をアプリ本体の環境構築なしで行うためのスキル。自作 storybook(`make storybook` → :6006)を使う。UI を触る作業では必ず参照する
+- `.agents/skills/for-ui-designer/` — デザイン担当者向け。デザイン部分(templates/static/story_pages.go)の試行錯誤をアプリ本体の環境構築なしで行うためのスキル。自作 storybook(`make storybook` → :6006)を使う。UI を触る作業では必ず参照する
 
 ## 主要コマンド
 
