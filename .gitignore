@@ -39,5 +39,6 @@ go.work.sum
 
 # Agent worktrees
 .worktrees/
-# Playwright CLI output (may contain credentials)
+# Playwright CLI output (may contain credentials) and local CLI config
 .playwright-cli/
+.playwright/

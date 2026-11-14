@@ -9,7 +9,7 @@
   <a class="tab {{if eq .Filter.Status "all"}}tab-active{{end}}" href="{{statusURL .Filter "all"}}"{{if eq .Filter.Status "all"}} aria-current="page"{{end}}>All</a>
 </nav>
 
-<form method="get" action="/issues" class="filter-bar">
+<form method="get" action="/issues" class="filter-bar" role="search" aria-label="Filter issues">
   <input type="hidden" name="status" value="{{.Filter.Status}}">
   <div class="filter-field">
     <label for="filter-q">Search</label>
@@ -39,7 +39,7 @@
 
 {{if .Issues}}
 <p class="result-count">Showing {{.RangeStart}}–{{.RangeEnd}} of {{.Total}} issues</p>
-<ul class="issue-list">
+<ul class="issue-list" role="list">
   {{range .Issues}}
   <li class="issue-row">
     <div class="issue-row-main">

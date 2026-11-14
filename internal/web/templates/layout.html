@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
   <header class="site-header">
     <div class="container header-inner">
       <a class="site-title" href="/issues">Issue Tracker</a>
@@ -19,7 +20,7 @@
       </nav>
     </div>
   </header>
-  <main class="container main-content">
+  <main class="container main-content" id="main-content" tabindex="-1">
     {{template "content" .}}
   </main>
   <footer class="site-footer">

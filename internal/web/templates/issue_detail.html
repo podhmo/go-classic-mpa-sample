@@ -1,6 +1,6 @@
 {{define "content"}}
 <nav class="breadcrumb" aria-label="Breadcrumb">
-  <a href="/issues">Issues</a> <span aria-hidden="true">/</span> <span>#{{.Issue.ID}}</span>
+  <a href="/issues">Issues</a> <span aria-hidden="true">/</span> <span aria-current="page">#{{.Issue.ID}}</span>
 </nav>
 
 <article class="card issue-detail">
@@ -59,11 +59,11 @@
   <h2>Comments{{if .Comments}} ({{len .Comments}}){{end}}</h2>
 
   {{if .Comments}}
-  <ol class="comment-list">
+  <ol class="comment-list" role="list">
     {{range .Comments}}
     <li class="card comment" id="comment-{{.ID}}">
       <header class="comment-meta">
-        <a class="comment-permalink" href="#comment-{{.ID}}"><time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .CreatedAt}}</time></a>
+        <a class="comment-permalink" href="#comment-{{.ID}}"><time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .CreatedAt}}</time> <span class="visually-hidden">(comment {{.ID}})</span></a>
       </header>
       <div class="comment-body markdown-body">{{markdown .Body}}</div>
     </li>

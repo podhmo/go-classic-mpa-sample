@@ -1186,3 +1186,97 @@ func TestListLinksOmitDefaultStatus(t *testing.T) {
 		t.Error("closed-filter links must keep status=closed")
 	}
 }
+
+// Every page (including the styled error page) shares the layout contract:
+// a skip link as the first element in <body>, one focusable-out-of-tab-order
+// <main> as its target, one <h1>, and header/nav/footer landmarks.
+func TestSkipLinkAndLandmarks(t *testing.T) {
+	srv, f := newTestServer(t)
+	seedIssues(t, f)
+
+	pages := []struct {
+		name string
+		path string
+	}{
+		{"list", "/issues"},
+		{"detail", "/issues/1"},
+		{"new form", "/issues/new"},
+		{"edit form", "/issues/1/edit"},
+		{"delete confirm", "/issues/1/delete"},
+		{"styled 404", "/nonexistent"},
+	}
+	for _, p := range pages {
+		resp, err := srv.Client().Get(srv.URL + p.path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body := getBody(t, resp)
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("%s: status = %d", p.name, resp.StatusCode)
+		}
+		if !strings.Contains(body, `<a class="skip-link" href="#main-content">Skip to main content</a>`) {
+			t.Errorf("%s: missing skip link", p.name)
+		}
+		// The skip link is the first Tab stop, so it must precede the header.
+		if strings.Index(body, `class="skip-link"`) > strings.Index(body, `<header class="site-header"`) {
+			t.Errorf("%s: skip link must come before the site header", p.name)
+		}
+		// The target is focusable (screen magnifiers follow the focus) but
+		// stays out of the tab order itself.
+		if n := strings.Count(body, `<main class="container main-content" id="main-content" tabindex="-1">`); n != 1 {
+			t.Errorf("%s: want exactly one skip-link target main, got %d", p.name, n)
+		}
+		if n := strings.Count(body, "<h1"); n != 1 {
+			t.Errorf("%s: want exactly one h1, got %d", p.name, n)
+		}
+		for _, want := range []string{`<header class="site-header"`, `aria-label="Main"`, `<footer class="site-footer"`} {
+			if !strings.Contains(body, want) {
+				t.Errorf("%s: missing landmark markup %q", p.name, want)
+			}
+		}
+	}
+}
+
+func TestListA11ySemantics(t *testing.T) {
+	srv, f := newTestServer(t)
+	seedIssues(t, f)
+
+	resp, err := srv.Client().Get(srv.URL + "/issues")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := getBody(t, resp)
+	// The filter form is the page's search region.
+	if !strings.Contains(body, `class="filter-bar" role="search" aria-label="Filter issues"`) {
+		t.Error("filter form lacks role=search")
+	}
+	// list-style: none strips list semantics in Safari; role="list" restores it.
+	if !strings.Contains(body, `<ul class="issue-list" role="list">`) {
+		t.Error("issue-list lacks role=list")
+	}
+}
+
+func TestDetailA11ySemantics(t *testing.T) {
+	srv, f := newTestServer(t)
+	is := f.addIssue("Detail target", "body", store.StatusOpen, time.Now(), 1)
+	if _, err := f.CreateComment(context.Background(), is.ID, "first comment"); err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := srv.Client().Get(srv.URL + "/issues/1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := getBody(t, resp)
+	if !strings.Contains(body, `<span aria-current="page">#1</span>`) {
+		t.Error("breadcrumb current item lacks aria-current")
+	}
+	if !strings.Contains(body, `<ol class="comment-list" role="list">`) {
+		t.Error("comment-list lacks role=list")
+	}
+	// Permalinks share the same visible text; the hidden comment id keeps
+	// each link's accessible name distinct.
+	if !strings.Contains(body, `class="visually-hidden">(comment 1)</span>`) {
+		t.Error("permalink lacks the hidden comment id")
+	}
+}
