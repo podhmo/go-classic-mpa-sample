@@ -841,6 +841,9 @@ func TestStaticCSS(t *testing.T) {
 	if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "text/css") {
 		t.Fatalf("Content-Type = %q, want text/css", ct)
 	}
+	if body := getBody(t, resp); !strings.Contains(body, "@view-transition") {
+		t.Error("app.css does not opt in to cross-document view transitions")
+	}
 }
 
 func TestNewIssueFormRenders(t *testing.T) {
