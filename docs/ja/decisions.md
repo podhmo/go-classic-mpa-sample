@@ -123,4 +123,16 @@
 - **必須マークの説明**: ガイドに従いフォーム冒頭に「Fields marked * are required.」を 1 回置く。ラベル内の `*` は従来どおり `aria-hidden`（`required` が読み上げられるため）。ヒント文は `aria-describedby` で欄に紐付けた（エラーがあればエラー id を先に）。
 - **checkbox 群・select への適用可否（確認結果）**: セレクタは `input, select, textarea` 共通で、`fieldset.field:has(:is(:user-invalid, [aria-invalid="true"]))` が枠線と legend も赤くする。実ブラウザ（Chromium 156）で、ラベルの checkbox に一時的に `required` を付けて操作すると fieldset 枠・legend が赤くなり、フィルタの `<select>` に `required` を付けてキーボードで選び直すと `:user-invalid` で枠が赤くなることを確認。ただし現状どちらにも検証ルールが無い（ラベルは任意、select は常に有効値）ので属性は付けていない。なお「少なくとも 1 つ選択」は HTML 制約で表現できず（各 checkbox の `required` は「それぞれ必須」の意味）、JS なしでは実現できない。必要になったらサーバー側検証 + `aria-invalid` を fieldset 内の欄に出すパターンで足りる。
 
+## レスポンシブ・タイポグラフィ（2026-11-14、modern-web-guidance `responsive-design` / `respect-os-text-scale` / `fluid-scaling` / `single-line-overflow` / `typography`）
+
+- **本文は `0.9375rem`（既定設定で従来と同じ 15px）、root の `font-size` は触らない**: px 指定はブラウザの文字サイズ設定を無視する。`<meta name="text-scale" content="scale">` を layout に追加し、対応ブラウザでは OS のテキストスケールが root の既定サイズに反映される（ガイド: root を上書きするとこれを打ち消す）。`app.css` に px の `font-size` と `:root`/`html` の `font-size` が無いことをテスト（`TestStaticCSS`）で固定。フォーム部品は `max(1rem, 1em)` で既定設定時 16px 以上（iOS Safari のフォーカス時ズーム回避）。余白・枠線などの px は文字サイズと連動させる必要がないので残した。
+- **640px 単一ブレークポイントの監査結果と置き換え**: 旧 `@media (max-width: 640px)` は (1) 本文を 14px に縮めていた（ガイド: 小画面で文字を縮めない）→ 廃止、(2) filter-bar を縦積み → コンポーネント側で解決、(3) issue-row を縦積み → コンテナクエリ、(4) page-head / issue-actions の縦積み → ページ単位なので media query のまま残し、閾値を `40em` にした（media query の em はブラウザ既定文字サイズ基準なので、文字を大きくした利用者ほど早く縦積みになる）。
+- **filter-bar は `grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr))`**: ブレークポイントなしで 4→3→2→1 列に折り返す。`min(100%, …)` で 320px 未満でもはみ出さない。640px 幅では 3 列 + Apply/Clear が 2 行目になる（4 列に収めるには最小幅を下げる必要があり、select が窮屈になるので受け入れた）。
+- **issue-row はコンテナクエリ `@container issue-list (inline-size >= 48em)`**: 既定は縦積み（タイトル → 状態/ラベル/時刻）、リスト自体が十分広いときだけ横並び。閾値を em にしたのでテキストを拡大すると自動的に縦積みに戻る。
+- **長いタイトルは一覧で 2 行 clamp（`line-clamp: 2` + `-webkit-` 版）、詳細ページは全文**: ガイドの single-line-overflow は 1 行 ellipsis だが、issue タイトルは識別に情報量が要るので 2 行にした。全文は DOM に残り（リンクのアクセシブルネーム・ページ内検索）、詳細ページの h1 で全文表示。`#番号` はタイトルの後ろの独立した flex item（`flex: none`）なので、タイトルが clamp されても見える。区切りのない長い文字列は `overflow-wrap: anywhere` で折る。
+- **ラベルバッジは 1 行 ellipsis（最大 `min(100%, 12rem)`）、hover / キーボードフォーカスで全幅**: ガイドの「切り詰めた全文を見る手段を用意する」を `title` 属性（タッチ・キーボードで使えない）ではなく `:is(:hover, :focus-visible)` で実現。`prefers-reduced-motion: no-preference` のときだけ幅をトランジション。
+- **h1 は `clamp(1.25rem, 1rem + 2cqi, 1.5rem)`**: `.main-content` を inline-size コンテナにし、ビューポートではなくコンテンツ幅に流体追従。上下限が rem なのでズーム・文字サイズ設定に従う（vw のみの指定はズームで大きくならない — ガイドの WCAG 1.4.4 注意）。
+- **タッチ端末は幅に関係なく `@media (pointer: coarse)` でボタン・入力を 44px 以上**: 旧来は「狭い = タッチ」とみなしていたのを入力方式で分けた（`form-factor-adaptation`）。
+- **本文段落は `max-inline-size: 75ch` + `text-wrap: pretty`、見出しは `text-wrap: balance`**: 1 行の長さを読みやすい範囲に抑える。`text-wrap` 非対応ブラウザは通常の折り返し。
+
 （随時追記）

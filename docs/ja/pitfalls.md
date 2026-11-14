@@ -57,4 +57,8 @@
 - **Playwright の `selectOption` では `:user-invalid` が立たない**: `fill` で空にしたテキスト欄は `:user-invalid` になるが、`<select>` に `selectOption` で値を入れ直しても Chromium 156 ではマッチしなかった（ユーザー操作扱いにならない）。select の検証表示を確かめるときは `focus` → `ArrowDown`/`ArrowUp` → `Tab` のキーボード操作で行う。
 - **フォーム送信直後のスクリーンショットは view transition の途中を撮る**: POST→422 のページ表示にもクロスフェード（0.18s）がかかるため、`waitForLoadState()` 直後だと新旧ページが重なった画像になる。数百 ms 待ってから撮る。
 
+- **`<fieldset>` は既定で `min-inline-size: min-content`**: 中身（例: `white-space: nowrap` のラベルバッジ）が長いと fieldset が親より広がり、ページ全体が横スクロールする。ellipsis で切り詰めたい要素を fieldset に入れるときは fieldset に `min-inline-size: 0` を付ける（`.label-picker`）。
+- **`.field > label { display: block }` が `.label-option` に勝つ**: ラベル選択の `<label class="label-option">` は `.field` 直下なので、`.label-option { display: … }` は詳細度で負ける。`.label-picker > .label-option` のように詳細度を上げる。flex にした checkbox は縮むので `flex: none` も要る。
+- **ブラウザの既定文字サイズを変えた確認は CDP の `Page.setFontSizes` で**: Playwright にはブラウザの「文字サイズ」設定を変えるオプションが無く、ページズーム（`deviceScaleFactor`）では rem/px の差が出ない。`context.newCDPSession(page)` で `Page.setFontSizes({ fontSizes: { standard: 24 } })` を送ってから遷移すると、rem は追従し px は追従しないことを確認できる。`<meta name="text-scale">` 自体の OS 連動は VM では再現できないので、この rem 連動で代理確認する。
+
 （随時追記）
