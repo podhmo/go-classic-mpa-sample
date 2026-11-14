@@ -53,7 +53,10 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 		b.Src = strings.Split(*src, ",")
 	}
 	stories, err := b.Stories()
-	if err != nil {
+	// -http tolerates a discovery failure: the server starts anyway and
+	// the index shows the error, so a book with no stories yet (or one
+	// being added live) still serves.
+	if err != nil && *addr == "" {
 		return err
 	}
 	switch {
@@ -65,6 +68,9 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 	case *out != "":
 		return b.Export(ctx, *out, stories)
 	case *addr != "":
+		if err != nil {
+			slog.WarnContext(ctx, "story discovery failed; serving anyway", "err", err)
+		}
 		slog.InfoContext(ctx, "serving stories", "addr", *addr, "dir", b.Dir, "stories", len(stories))
 		return http.ListenAndServe(*addr, b.Handler())
 	case fs.NArg() >= 2:

@@ -33,6 +33,7 @@ iframe { flex: 1; border: 0; }
 <body>
 <nav>
 <strong>{{.Dir}}</strong>
+{{if .Err}}<small class="err">{{.Err}}</small>{{end}}
 {{range .Entries}}<a href="{{.Href}}" target="story">{{.Name}}
 <small>{{.Doc}}</small>{{if .Err}}<small class="err">{{.Err}}</small>{{end}}</a>
 {{end}}</nav>
@@ -84,7 +85,15 @@ func (b *Book) Handler() http.Handler {
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		stories, err := b.Stories()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			// No stories yet (or a malformed one): show the error in the
+			// nav rather than failing, so the book is usable while the
+			// stories are written.
+			if err := indexTmpl.Execute(w, map[string]any{
+				"Dir": b.Dir,
+				"Err": err.Error(),
+			}); err != nil {
+				slog.ErrorContext(r.Context(), "index", "err", err)
+			}
 			return
 		}
 		entries := make([]entry, len(stories))
