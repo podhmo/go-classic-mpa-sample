@@ -83,6 +83,14 @@ func New(st Store) http.Handler {
 		w.Header().Set("Content-Type", "application/speculationrules+json")
 		http.ServeFileFS(w, r, staticFS, "static/speculation-rules.json")
 	})
+	// Search-term highlighting on the list page (CSS Custom Highlight API).
+	mux.HandleFunc("GET /static/search-highlight.js", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, staticFS, "static/search-highlight.js")
+	})
+	// Comment permalink copy buttons on the detail page.
+	mux.HandleFunc("GET /static/copy-permalink.js", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, staticFS, "static/copy-permalink.js")
+	})
 	// Ctrl/Cmd+Enter form submission from textareas.
 	mux.HandleFunc("GET /static/enter-submit.js", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFileFS(w, r, staticFS, "static/enter-submit.js")

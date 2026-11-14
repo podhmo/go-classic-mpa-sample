@@ -1,4 +1,7 @@
 {{define "content"}}
+{{/* Copies each comment's #comment-N permalink via Invoker Commands + the
+   Async Clipboard API. Deferred external file (CSP script-src 'self'). */}}
+<script src="/static/copy-permalink.js" defer></script>
 {{/* Ctrl/Cmd+Enter submits the comment form from the textarea — IME-safe by
    construction (guide ime-safe-enter-submit). Deferred external file. */}}
 <script src="/static/enter-submit.js" defer></script>
@@ -67,6 +70,10 @@
     <li class="card comment" id="comment-{{.ID}}">
       <header class="comment-meta">
         <a class="comment-permalink" href="#comment-{{.ID}}"><time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .CreatedAt}}</time> <span class="visually-hidden">(comment {{.ID}})</span></a>
+        <span class="copy-wrap">
+          <button type="button" class="copy-btn" command="--copy-permalink" commandfor="comment-{{.ID}}" data-url="/issues/{{$.Issue.ID}}#comment-{{.ID}}" aria-label="Copy link to comment {{.ID}}">copy link</button>
+          <span class="copy-tip" role="status"></span>
+        </span>
       </header>
       <div class="comment-body markdown-body">{{markdown .Body}}</div>
     </li>
