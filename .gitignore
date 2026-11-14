@@ -42,3 +42,9 @@ go.work.sum
 # Playwright CLI output (may contain credentials) and local CLI config
 .playwright-cli/
 .playwright/
+
+# minigo clone used by cmd/storybook (unstable, not yet published)
+/third_party/
+
+# storybook binary
+cmd/storybook/storybook

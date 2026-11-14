@@ -1,0 +1,205 @@
+//go:build story
+
+// Page stories for the storybook preview (cmd/storybook). Each one calls a
+// Renderer method with one data state and prints the response body, so a
+// browser shows how the page's markup and CSS hold up without a database,
+// a request, or real data. This file is excluded from ordinary builds by
+// the story tag.
+
+package web
+
+import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"time"
+
+	"github.com/podhmo/go-classic-mpa-sample/internal/store"
+)
+
+var (
+	storyTime  = time.Date(2026, 10, 30, 14, 30, 0, 0, time.UTC)
+	storyTime2 = time.Date(2026, 11, 2, 9, 15, 0, 0, time.UTC)
+
+	storyLabels = []*store.Label{
+		{ID: 1, Name: "bug", Color: "#d73a4a"},
+		{ID: 2, Name: "enhancement", Color: "#a2eeef"},
+		{ID: 3, Name: "documentation", Color: "#0075ca"},
+		{ID: 4, Name: "very-long-label-name-for-layout", Color: "#7057ff"},
+	}
+
+	storyIssues = []*store.Issue{
+		{
+			ID: 3, Title: "Long unbreakable title Anticonstitutionnellement-supercalifragilisticexpialidocious overflowing the row",
+			Body:      "A very long single-line title to check clamping.",
+			Status:    store.StatusOpen,
+			CreatedAt: storyTime2, UpdatedAt: storyTime2,
+			Labels: []store.Label{*storyLabels[0], *storyLabels[3]},
+		},
+		{
+			ID: 2, Title: "Improve responsive layout",
+			Body:      "The filter bar wraps poorly on narrow screens.",
+			Status:    store.StatusOpen,
+			CreatedAt: storyTime, UpdatedAt: storyTime2,
+			Labels: []store.Label{*storyLabels[1]},
+		},
+		{
+			ID: 1, Title: "Fix escaping in titles",
+			Body:      "Done.",
+			Status:    store.StatusClosed,
+			CreatedAt: storyTime, UpdatedAt: storyTime,
+			Labels: []store.Label{*storyLabels[0], *storyLabels[2]},
+		},
+	}
+
+	storyIssue = &store.Issue{
+		ID: 2, Title: "Improve responsive layout",
+		Body:      "The **filter bar** wraps poorly on narrow screens.\n\n- [ ] check 360px\n- [ ] check `label` select\n\n> [!NOTE]\n> Single newlines should render as line breaks.",
+		Status:    store.StatusOpen,
+		CreatedAt: storyTime, UpdatedAt: storyTime2,
+		Labels: []store.Label{*storyLabels[0], *storyLabels[1]},
+	}
+
+	storyComments = []*store.Comment{
+		{ID: 1, IssueID: 2, Body: "Reproduced on Firefox at 360px.", CreatedAt: storyTime},
+		{ID: 2, IssueID: 2, Body: "The select keeps its intrinsic width; see `min-width` on `.filter-field`.", CreatedAt: storyTime2},
+	}
+)
+
+func printRec(rec *httptest.ResponseRecorder) {
+	fmt.Print(rec.Body.String())
+}
+
+// StoryIssueList renders the issue list with several issues.
+func StoryIssueList() {
+	rec := httptest.NewRecorder()
+	NewRenderer().renderIssueList(rec, http.StatusOK, issueListPage{
+		Title:      "Issues",
+		Issues:     storyIssues,
+		Labels:     storyLabels,
+		Filter:     store.ListFilter{Status: store.StatusOpen, Page: 1, PerPage: perPage},
+		Total:      len(storyIssues),
+		Page:       1,
+		TotalPages: 1,
+		RangeStart: 1,
+		RangeEnd:   len(storyIssues),
+	})
+	printRec(rec)
+}
+
+// StoryIssueListEmpty renders the issue list with no results.
+func StoryIssueListEmpty() {
+	rec := httptest.NewRecorder()
+	NewRenderer().renderIssueList(rec, http.StatusOK, issueListPage{
+		Title:           "Issues",
+		Labels:          storyLabels,
+		Filter:          store.ListFilter{Status: store.StatusOpen, Query: "zzz", Page: 1, PerPage: perPage},
+		Page:            1,
+		TotalPages:      0,
+		HasActiveFilter: true,
+	})
+	printRec(rec)
+}
+
+// StoryIssueListPaged renders a middle page of a long filtered list.
+func StoryIssueListPaged() {
+	rec := httptest.NewRecorder()
+	NewRenderer().renderIssueList(rec, http.StatusOK, issueListPage{
+		Title:           "Issues",
+		Issues:          storyIssues,
+		Labels:          storyLabels,
+		Filter:          store.ListFilter{Status: "all", Sort: "oldest", LabelID: 1, Page: 3, PerPage: perPage},
+		Total:           95,
+		Page:            3,
+		TotalPages:      5,
+		RangeStart:      41,
+		RangeEnd:        60,
+		HasActiveFilter: true,
+	})
+	printRec(rec)
+}
+
+// StoryIssueDetail renders the issue detail page with comments.
+func StoryIssueDetail() {
+	rec := httptest.NewRecorder()
+	NewRenderer().renderIssueDetail(rec, http.StatusOK, issueDetailPage{
+		Title:    "#2 Improve responsive layout",
+		Issue:    storyIssue,
+		Comments: storyComments,
+	})
+	printRec(rec)
+}
+
+// StoryIssueDetailCommentError re-renders the detail page after a failed
+// comment submission.
+func StoryIssueDetailCommentError() {
+	rec := httptest.NewRecorder()
+	NewRenderer().renderIssueDetail(rec, http.StatusUnprocessableEntity, issueDetailPage{
+		Title:        "#2 Improve responsive layout",
+		Issue:        storyIssue,
+		Comments:     storyComments,
+		CommentDraft: "   ",
+		CommentError: "Comment is required.",
+	})
+	printRec(rec)
+}
+
+// StoryIssueFormNew renders the empty create form.
+func StoryIssueFormNew() {
+	rec := httptest.NewRecorder()
+	NewRenderer().renderIssueForm(rec, http.StatusOK, issueFormPage{
+		Title:       "New issue",
+		Heading:     "New issue",
+		Action:      "/issues",
+		SubmitLabel: "Create issue",
+		Labels:      storyLabels,
+	})
+	printRec(rec)
+}
+
+// StoryIssueFormErrors re-renders the create form with validation errors.
+func StoryIssueFormErrors() {
+	rec := httptest.NewRecorder()
+	NewRenderer().renderIssueForm(rec, http.StatusUnprocessableEntity, issueFormPage{
+		Title:       "New issue",
+		Heading:     "New issue",
+		Action:      "/issues",
+		SubmitLabel: "Create issue",
+		Input:       store.IssueInput{Body: "title was empty"},
+		Labels:      storyLabels,
+		Errors:      issueFormErrors{Title: "Title is required."},
+	})
+	printRec(rec)
+}
+
+// StoryIssueFormEdit renders the populated edit form.
+func StoryIssueFormEdit() {
+	rec := httptest.NewRecorder()
+	NewRenderer().renderIssueForm(rec, http.StatusOK, issueFormPage{
+		Title:       "Edit issue #2",
+		Heading:     "Edit issue #2",
+		Action:      "/issues/2/edit",
+		SubmitLabel: "Save changes",
+		Input:       store.IssueInput{Title: storyIssue.Title, Body: storyIssue.Body, LabelIDs: []int64{1, 2}},
+		Labels:      storyLabels,
+	})
+	printRec(rec)
+}
+
+// StoryIssueDelete renders the delete confirmation page.
+func StoryIssueDelete() {
+	rec := httptest.NewRecorder()
+	NewRenderer().renderIssueDelete(rec, http.StatusOK, issueDeletePage{
+		Title: "Delete issue #2",
+		Issue: storyIssue,
+	})
+	printRec(rec)
+}
+
+// StoryError404 renders the styled 404 page.
+func StoryError404() {
+	rec := httptest.NewRecorder()
+	NewRenderer().renderError(rec, http.StatusNotFound, "Not found",
+		"The page or issue you are looking for does not exist or may have been deleted.")
+	printRec(rec)
+}

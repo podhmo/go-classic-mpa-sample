@@ -12,6 +12,8 @@ Module path: `github.com/podhmo/go-classic-mpa-sample`
 
 ## To Be Implemented
 
+- [x] **minigo storybook preview**: minigo（third_party clone + cmd/storybook ネスト module）で sqlite 非実行の storybook 的プレビュー環境を構築。`make setup-minigo` + `make storybook` で起動。設計と発見は `docs/sketch/ja/storybook-with-minigo.md`、minigo への制限フィードバックは issue 化して minigo 側へ送る。
+
 Guides referenced below are in the `modern-web-guidance` catalog (`.agents/skills/modern-web-guidance/`): run `npx -y modern-web-guidance@latest retrieve "<id>"` before implementing. Everything must stay JavaScript-free per `docs/ja/prompts.md`; all picks below are declarative HTML/CSS only.
 
 - [x] **Dark mode support** (guides: `dark-mode`, `contrast-color`): `:root` に `color-scheme: light dark` と `<meta name="color-scheme">` を追加し、固定ライトパレットを `light-dark()` トークン化 + `@media (prefers-color-scheme: dark)` フォールバック。ラベルバッジ（DB 由来の動的色）の文字色コントラストと favicon のダーク時視認性も確認する。
