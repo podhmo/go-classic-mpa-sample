@@ -998,6 +998,22 @@ input[type="checkbox"] {
   margin: 4px 0 12px;
 }
 
+/* ---------- page transitions ---------- */
+
+/* Cross-document view transitions: a short cross-fade between pages in
+   browsers that support them; everyone else gets a normal navigation.
+   Both pages opt in through this shared stylesheet. */
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition {
+    navigation: auto;
+  }
+}
+
+::view-transition-group(root) {
+  animation-duration: 0.18s;
+  animation-timing-function: ease-out;
+}
+
 /* ---------- responsive ---------- */
 
 @media (max-width: 640px) {
