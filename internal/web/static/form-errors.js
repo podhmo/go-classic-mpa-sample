@@ -52,6 +52,12 @@
   };
 
   const flagged = new WeakSet();
+  // Fields that arrived with a server-rendered aria-invalid="true". Once
+  // the script flags such a field, clearing a client-side :user-invalid
+  // must restore the server state, not wipe it: the server error element
+  // stays visible until the next submit (it may report a constraint the
+  // client cannot check, e.g. a server-side length limit).
+  const serverFlagged = new WeakSet();
   // Fields whose current error has been announced, or read out by focus
   // after a failed submit.
   const announced = new WeakSet();
@@ -63,16 +69,28 @@
         announceError(el);
         announced.add(el);
       }
+      if (el.getAttribute("aria-invalid") === "true" && !flagged.has(el)) {
+        serverFlagged.add(el);
+      }
       el.setAttribute("aria-invalid", "true");
       linkError(el, true);
       flagged.add(el);
-    } else if (flagged.has(el) || el.getAttribute("aria-invalid") !== "true") {
-      el.setAttribute("aria-invalid", "false");
-      linkError(el, false);
+    } else if (flagged.has(el)) {
+      const serverErr = serverFlagged.has(el);
+      el.setAttribute("aria-invalid", serverErr ? "true" : "false");
+      linkError(el, serverErr);
       flagged.delete(el);
       announced.delete(el);
       // Clear a fixed field's announcement so it isn't found later when
       // reading the page.
+      if (announcedField === el) {
+        clearTimeout(announceTimer);
+        announcer.textContent = "";
+      }
+    } else if (el.getAttribute("aria-invalid") !== "true") {
+      el.setAttribute("aria-invalid", "false");
+      linkError(el, false);
+      announced.delete(el);
       if (announcedField === el) {
         clearTimeout(announceTimer);
         announcer.textContent = "";
