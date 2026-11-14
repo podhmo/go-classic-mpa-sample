@@ -594,6 +594,23 @@ textarea {
 
 textarea {
   resize: vertical;
+  /* Grow/shrink with content (Baseline 2026-06, newly available). The
+     rows= attribute stays as the fixed-height fallback in browsers without
+     field-sizing — they degrade to a scrollable fixed box. width: 100% from
+     the shared rule keeps the inline size stable, per the guide. */
+  field-sizing: content;
+}
+
+/* Per-field vertical bounds, keyed off the current rows= values.
+   min keeps the same floor as before; max stops runaway growth and scrolls. */
+#comment-body {
+  min-block-size: 4lh;
+  max-block-size: 16lh;
+}
+
+#f-body {
+  min-block-size: 10lh;
+  max-block-size: 32lh;
 }
 
 input[type="checkbox"] {
@@ -807,6 +824,14 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
 
 .issue-title:hover {
   color: var(--accent);
+}
+
+/* Registered by search-highlight.js: occurrences of the ?q= term inside
+   issue titles. --accent-emphasis + --on-emphasis (the filled-button pair)
+   keeps text contrast AA and the background 3:1+ against the surface. */
+::highlight(search-match) {
+  background-color: var(--accent-emphasis);
+  color: var(--on-emphasis);
 }
 
 .issue-num {
