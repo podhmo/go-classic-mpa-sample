@@ -76,6 +76,26 @@ e.Bind("modernc.org/sqlite", map[string]runtime.Value{})
 
 bound な `html/template` には `ParseFS` が無く、仮にあっても script 側の `fs.FS`（解釈された embed.FS）をホスト側 reflect 経由で呼べない（`io/fs` が source 解釈に留まる minigo の境界）。そこで `parsePages` は `templateFS.ReadFile` + `t.Parse(string(src))` に変更した。挙動は同一で、本番コードパスもこの関数を通るのでテスト済み。
 
+## 再起動不要性（実測済み）
+
+storybook に追いつくための要点である「書き換えたら再起動不要」は以下の通り全て成立する（サーバ起動中に実測）:
+
+| 編集対象 | 再起動 | 仕組み |
+|---|---|---|
+| テンプレート (`templates/*.html`) | **不要** | embed.FS の中身はパッケージ再解釈の都度ディスクから読み直される |
+| モックデータ (`story_pages.go`) | **不要** | 同上。fixture 値を書き換えると次のリクエストで反映 |
+| story の追加 | **不要** | index は `b.Stories()` を毎リクエスト実行してナビを再構築する。新しい `StoryXxx` 関数は即座に一覧・描画とも有効（実測: 起動中に `StoryZzzRuntimeCheck` を追加してそのまま `/story/StoryZzzRuntimeCheck` が描画できた） |
+| CSS・静的アセット (`static/`) | **不要** | `http.FileServer` が毎回ディスクから出すだけ（インタプリタすら通らない） |
+| 本番コード (`web.go`, `handlers.go` 等) | **不要** | story が呼ぶ renderer もインタプリタ実行なので同じく都度再評価される |
+| storybook 本体 (`cmd/storybook`) | **必要** | ここだけは普通の Go バイナリ。`go run` なら再起動で再コンパイル |
+
+### JS が入ってきた場合
+
+- **静的 JS ファイル**: `internal/web/static` 配下に置けば `/static/` FileServer がそのまま配信する。CSS と同様にリロードで反映。物理ファイルを出すだけなので問題なし。
+- **テンプレート内の inline `<script>`**: テンプレートはただのテキストとして出力されるので、ブラウザでは普通に実行される。プレビューサーバは CSP を付けない（後述の制限）のでブロックもされない。
+- **storybook 側の JS**: index ページは JS 無しのナビ＋iframe で足りている。本物の storybook のような「props を UI でいじる」機能を足すならここに JS を書くことになる（future work）。
+- **注意点（実測で見えたギャップ）**: プレビューは renderer が出す **body だけ**を返す。アプリ側ハンドラが付ける HTTP ヘッダ（CSP `script-src 'none'`、`Speculation-Rules` 等）はプレビュー経路では付かない。つまり「本番では CSP で塞がれる inline script」がプレビューでは動いてしまう。ヘッダまで含めて検証したければ story が `httptest.NewRequest` からハンドラ経由で呼ぶ形に変えるか、storybook 側にヘッダシミュレーションを噛ませる（future work）。
+
 ## 見つかったこと（minigo へのフィードバック素材）
 
 ### 事実として確認できたこと
@@ -101,6 +121,7 @@ bound な `html/template` には `ParseFS` が無く、仮にあっても script
 - **viewport/テーマの一括比較**: 狭幅 360px・ダークモードなどの state を story 名で切り替える仕組み（`prefers-color-scheme` は iframe 単位で切り替えられないので、パラメータか wrapper で）。
 - **minigo 側を書き換える方向**: 上記制限 1〜3 を minigo 側で直す実験を `third_party/minigo` 上でやってみる。
 - **story の自動発掘**: 現状は `//go:build story` ファイルを手で書いている。テンプレートと 1:1 の story を生成する lint/雛形コマンド。
+- **ヘッダ込みの検証**: 現状 story は renderer（body 出力）を直接呼ぶため CSP や Speculation-Rules などハンドラが付けるレスポンスヘッダを検証できない。`httptest.NewRequest` でハンドラ経由にする story 型（`StoryXxxHTTP` 等）を足すと良い。
 
 ## 実測メモ
 
