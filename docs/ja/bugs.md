@@ -28,6 +28,7 @@
 | 17 | minor | 修正済 | todo-gc: archive 書き込み失敗時に完了項目を喪失 | `tools/todo-gc/main.go` `run`: TODO.md を先に書き換えるため、archive 側の `WriteFile` 失敗時に完了項目が両ファイルから消えていた（PR #4 Devin Review 指摘）。対応: archive を先に書き、その後 TODO.md を書く（TODO.md 側で失敗しても項目は両方に残るだけで失われない）。回帰テスト追加済 |
 | 18 | minor | 修正済 | todo-gc: 空行でネスト項目が root 化 | `parse` が空行で `stack = nil` するため、空行の後のネスト項目がトップレベル扱いになり、[x] 親が open な子を残したままアーカイブされたり子の祖先チェーンが失われたりしていた（同上）。対応: 空行を保留し、次の行がインデントされたマーカー/継続行ならその項目の一部として扱う。回帰テスト追加済 |
 | 19 | minor | 修正済 | todo-gc: note 配下の完了項目が sweep されない | `sweepNode` が `note` 状態の子を丸ごと skip するため、`- 完了の条件:` 等の配下にある `- [x]` 項目が TODO.md に残り続けていた（同上）。対応: note 自体は残しつつ配下を再帰的に sweep する（チェーンは `P > 完了の条件 > **C**`）。回帰テスト追加済 |
+| 20 | minor | 修正済 | ラベルバッジの文字色コントラスト不足 | ダークモード対応時に計算で発見（ライトモードでも同じ）: `.label-badge` の文字色が固定 `#1f2328` のため、シードの Bug `#d73a4a` で 3.46:1、Documentation `#1f6feb` で 3.41:1、Feature `#0075ca` で 3.31:1 と WCAG AA（4.5:1）未満。対応: 色を `--label-color` で渡し `contrast-color()`（非対応時は RCS の XYZ 計算）で白/黒を選ぶ。結果 Bug/Enhancement は黒、Documentation/Feature は白（いずれも 4.5:1 以上）。実ブラウザ（Chromium）の計算値で確認 |
 
 ## 修正しない（記録のみ）
 

@@ -1,26 +1,148 @@
-/* Issue Tracker — hand-written light theme.
-   Neutral palette with a single blue accent. No JavaScript, no icon fonts. */
+/* Issue Tracker — hand-written light/dark theme.
+   Neutral palette with a single blue accent. No JavaScript, no icon fonts.
+   The page follows the OS color scheme: raw per-scheme values live in
+   --*-light / --*-dark, and the tokens below pick one of them — via
+   light-dark() where supported, else via prefers-color-scheme. */
 
 :root {
-  --bg: #f6f8fa;
-  --surface: #ffffff;
-  --border: #d0d7de;
-  --border-muted: #e4e9ee;
-  --text: #1f2328;
-  --text-muted: #656d76;
-  --accent: #0969da;
-  --accent-hover: #0757b8;
-  --accent-soft: #ddf4ff;
-  --open: #1a7f37;
-  --open-bg: #dafbe1;
-  --closed: #8250df;
-  --closed-bg: #fbefff;
-  --danger: #cf222e;
-  --danger-hover: #a40e26;
-  --danger-bg: #ffebe9;
-  --warn: #9a6700;
+  color-scheme: light dark;
+
+  --bg-light: #f6f8fa;
+  --bg-dark: #0d1117;
+  --surface-light: #ffffff;
+  --surface-dark: #151b23;
+  --surface-hover-light: #fbfcfd;
+  --surface-hover-dark: #1b222c;
+  --border-light: #d0d7de;
+  --border-dark: #3d444d;
+  --border-muted-light: #e4e9ee;
+  --border-muted-dark: #2a313c;
+  --text-light: #1f2328;
+  --text-dark: #f0f6fc;
+  --text-muted-light: #656d76;
+  --text-muted-dark: #9198a1;
+  --accent-light: #0969da;
+  --accent-dark: #4493f8;
+  --accent-emphasis-light: #0969da;
+  --accent-emphasis-dark: #1f6feb;
+  --accent-hover-light: #0757b8;
+  --accent-hover-dark: #1158c7;
+  --accent-soft-light: #ddf4ff;
+  --accent-soft-dark: #0c2d4f;
+  --on-emphasis-light: #ffffff;
+  --on-emphasis-dark: #ffffff;
+  --open-light: #1a7f37;
+  --open-dark: #3fb950;
+  --open-bg-light: #dafbe1;
+  --open-bg-dark: #12261e;
+  --open-border-light: #a8e6b8;
+  --open-border-dark: #238636;
+  --closed-light: #8250df;
+  --closed-dark: #ab7df8;
+  --closed-bg-light: #fbefff;
+  --closed-bg-dark: #241a37;
+  --closed-border-light: #d8b9f8;
+  --closed-border-dark: #6e40c9;
+  --danger-light: #cf222e;
+  --danger-dark: #f85149;
+  --danger-emphasis-light: #cf222e;
+  --danger-emphasis-dark: #b62324;
+  --danger-hover-light: #a40e26;
+  --danger-hover-dark: #8e1519;
+  --danger-bg-light: #ffebe9;
+  --danger-bg-dark: #2d1214;
+  --warn-light: #9a6700;
+  --warn-dark: #d29922;
+  --label-border-light: rgb(0 0 0 / 0.08);
+  --label-border-dark: rgb(255 255 255 / 0.12);
+
+  --bg: var(--bg-light);
+  --surface: var(--surface-light);
+  --surface-hover: var(--surface-hover-light);
+  --border: var(--border-light);
+  --border-muted: var(--border-muted-light);
+  --text: var(--text-light);
+  --text-muted: var(--text-muted-light);
+  --accent: var(--accent-light);
+  --accent-emphasis: var(--accent-emphasis-light);
+  --accent-hover: var(--accent-hover-light);
+  --accent-soft: var(--accent-soft-light);
+  --on-emphasis: var(--on-emphasis-light);
+  --open: var(--open-light);
+  --open-bg: var(--open-bg-light);
+  --open-border: var(--open-border-light);
+  --closed: var(--closed-light);
+  --closed-bg: var(--closed-bg-light);
+  --closed-border: var(--closed-border-light);
+  --danger: var(--danger-light);
+  --danger-emphasis: var(--danger-emphasis-light);
+  --danger-hover: var(--danger-hover-light);
+  --danger-bg: var(--danger-bg-light);
+  --warn: var(--warn-light);
+  --label-border: var(--label-border-light);
+
   --radius: 6px;
   --radius-lg: 8px;
+}
+
+/* Fallback for browsers without light-dark(). */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: var(--bg-dark);
+    --surface: var(--surface-dark);
+    --surface-hover: var(--surface-hover-dark);
+    --border: var(--border-dark);
+    --border-muted: var(--border-muted-dark);
+    --text: var(--text-dark);
+    --text-muted: var(--text-muted-dark);
+    --accent: var(--accent-dark);
+    --accent-emphasis: var(--accent-emphasis-dark);
+    --accent-hover: var(--accent-hover-dark);
+    --accent-soft: var(--accent-soft-dark);
+    --on-emphasis: var(--on-emphasis-dark);
+    --open: var(--open-dark);
+    --open-bg: var(--open-bg-dark);
+    --open-border: var(--open-border-dark);
+    --closed: var(--closed-dark);
+    --closed-bg: var(--closed-bg-dark);
+    --closed-border: var(--closed-border-dark);
+    --danger: var(--danger-dark);
+    --danger-emphasis: var(--danger-emphasis-dark);
+    --danger-hover: var(--danger-hover-dark);
+    --danger-bg: var(--danger-bg-dark);
+    --warn: var(--warn-dark);
+    --label-border: var(--label-border-dark);
+  }
+}
+
+/* light-dark() also follows color-scheme set on a subtree. */
+@supports (color: light-dark(#000, #fff)) {
+  :root {
+    --bg: light-dark(var(--bg-light), var(--bg-dark));
+    --surface: light-dark(var(--surface-light), var(--surface-dark));
+    --surface-hover: light-dark(var(--surface-hover-light), var(--surface-hover-dark));
+    --border: light-dark(var(--border-light), var(--border-dark));
+    --border-muted: light-dark(var(--border-muted-light), var(--border-muted-dark));
+    --text: light-dark(var(--text-light), var(--text-dark));
+    --text-muted: light-dark(var(--text-muted-light), var(--text-muted-dark));
+    --accent: light-dark(var(--accent-light), var(--accent-dark));
+    --accent-emphasis: light-dark(var(--accent-emphasis-light), var(--accent-emphasis-dark));
+    --accent-hover: light-dark(var(--accent-hover-light), var(--accent-hover-dark));
+    --accent-soft: light-dark(var(--accent-soft-light), var(--accent-soft-dark));
+    --on-emphasis: light-dark(var(--on-emphasis-light), var(--on-emphasis-dark));
+    --open: light-dark(var(--open-light), var(--open-dark));
+    --open-bg: light-dark(var(--open-bg-light), var(--open-bg-dark));
+    --open-border: light-dark(var(--open-border-light), var(--open-border-dark));
+    --closed: light-dark(var(--closed-light), var(--closed-dark));
+    --closed-bg: light-dark(var(--closed-bg-light), var(--closed-bg-dark));
+    --closed-border: light-dark(var(--closed-border-light), var(--closed-border-dark));
+    --danger: light-dark(var(--danger-light), var(--danger-dark));
+    --danger-emphasis: light-dark(var(--danger-emphasis-light), var(--danger-emphasis-dark));
+    --danger-hover: light-dark(var(--danger-hover-light), var(--danger-hover-dark));
+    --danger-bg: light-dark(var(--danger-bg-light), var(--danger-bg-dark));
+    --warn: light-dark(var(--warn-light), var(--warn-dark));
+    --label-border: light-dark(var(--label-border-light), var(--label-border-dark));
+  }
 }
 
 *,
@@ -148,9 +270,9 @@ a:hover {
 }
 
 .btn-primary {
-  color: #fff;
-  background: var(--accent);
-  border-color: var(--accent);
+  color: var(--on-emphasis);
+  background: var(--accent-emphasis);
+  border-color: var(--accent-emphasis);
 }
 
 .btn-primary:hover {
@@ -165,9 +287,9 @@ a:hover {
 }
 
 .btn-danger:hover {
-  color: #fff;
-  background: var(--danger);
-  border-color: var(--danger);
+  color: var(--on-emphasis);
+  background: var(--danger-emphasis);
+  border-color: var(--danger-emphasis);
 }
 
 .btn-quiet {
@@ -244,7 +366,7 @@ textarea:focus-visible {
 .badge-open {
   color: var(--open);
   background: var(--open-bg);
-  border-color: #a8e6b8;
+  border-color: var(--open-border);
 }
 
 .badge-open::before {
@@ -256,7 +378,7 @@ textarea:focus-visible {
 .badge-closed {
   color: var(--closed);
   background: var(--closed-bg);
-  border-color: #d8b9f8;
+  border-color: var(--closed-border);
 }
 
 .badge-closed::before {
@@ -273,9 +395,27 @@ textarea:focus-visible {
   font-weight: 600;
   line-height: 1.6;
   border-radius: 999px;
-  color: #1f2328;
-  background: var(--border-muted); /* fallback if a color is missing */
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  /* --label-color is the DB-provided color, set inline by the templates. */
+  --label-bg: var(--label-color, var(--border-muted));
+  background-color: var(--label-bg);
+  color: #1f2328; /* fallback when neither branch below is supported */
+  border: 1px solid var(--label-border);
+}
+
+/* Black or white text, whichever contrasts more with the label color:
+   relative luminance (XYZ y) below the WCAG crossover 0.17913 → white. */
+@supports (color: color(from red xyz-d65 calc(sign(0.5 - y)) y z)) {
+  .label-badge {
+    --label-y: max(0, sign(0.17913 - y));
+    color: color(from var(--label-bg) xyz-d65 calc(var(--label-y) * 0.9505)
+        var(--label-y) calc(var(--label-y) * 1.089));
+  }
+}
+
+@supports (color: contrast-color(red)) {
+  .label-badge {
+    color: contrast-color(var(--label-bg));
+  }
 }
 
 a.label-badge:hover {
@@ -460,7 +600,7 @@ input[type="checkbox"] {
 }
 
 .issue-row:hover {
-  background: #fbfcfd;
+  background: var(--surface-hover);
 }
 
 .issue-row-main {

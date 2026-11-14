@@ -51,5 +51,6 @@
 - **`go run` を pkill しても子プロセスが残る**: `go run .` は親が go toolchain、実際にポートを握るのは `go-build/.../exe/` 配下の子バイナリ。`pkill -f 'go run'` は親しか殺さず、旧バージョンのサーバーが応答し続ける。`lsof -ti:<port>` で実際の PID を殺すのが確実（二度目の遭遇）。
 - **embed.FS の変更はプロセス再起動が必要**: テンプレート/CSS を embed しているため、`go run` 中に HTML を直しても反映されない。ブラウザ検証では「今動いているバイナリが最新か」をまず確認する（今回は旧サーバーが `required` 付きテンプレートを返し続けていた）。
 - **`html/template` は `+` を `&#43;` にエスケープする**: UTF-7 XSS 対策のため。`"10,000+ records"` のような文字列はレンダリング後に verbatim で現れない — テストでタイトル文字列をそのまま assert すると落ちる。テストではエスケープされない部分文字列で assert する。
+- **`var()` を含む CSS 宣言は「後勝ちフォールバック」にならない**: `color: #000; color: contrast-color(var(--bg));` と書いても、`var()` を含む宣言は parse 時には常に有効扱いされ、未対応関数だと計算値時点で無効（IACVT）→ `unset`（`color` なら親から継承）になり、前の `#000` には戻らない。新しい色関数を custom property と組み合わせるときは `@supports (color: contrast-color(red))` のように宣言ごと囲う。
 
 （随時追記）
