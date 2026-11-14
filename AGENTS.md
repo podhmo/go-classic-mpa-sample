@@ -9,6 +9,7 @@
 - `docs/ja/decisions.md` — 設計判断の記録（変更時は追記する）
 - `docs/ja/bugs.md` — 既知のバグ・問題点（発見したら重要度つきで記録）
 - `docs/ja/prompts.md` — 元の仕様書
+- `docs/ja/ui-test.md` — css/js/html を書き換えながら見た目を確認する人向け。自作 storybook でアプリ本体なしにデザインの試行錯誤をする手順
 - `TODO.md` — タスクの分解・進捗（追加・完了・GC の運用ルールは `.agents/skills/todo-md/SKILL.md` に必ず従う）
 - `TODO-archive.md` — 完了済みタスクの追記専用アーカイブ（直接編集しない、`make todo-gc` で自動追記）
 

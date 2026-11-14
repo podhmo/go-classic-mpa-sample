@@ -92,3 +92,5 @@ a snapshot to a PR.
   storybook after an edit, something is wrong.
 - JavaScript is intentionally absent (`script-src 'none'`); verify
   behavior with server-rendered markup + CSS only.
+
+The human-facing version of this workflow lives in `docs/ja/ui-test.md`.
