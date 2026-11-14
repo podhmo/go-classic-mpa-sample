@@ -16,7 +16,7 @@ make storybook      # http://127.0.0.1:6006 で storybook 的 UI が立つ
 - `GET /static/` … `internal/web/static` をそのまま配信（本物の CSS/favicon）
 - CLI 単発描画: `go run . <pkgdir> <StoryName>`、一覧: `-list`、静的エクスポート: `-o <dir>`
 
-試した結果、**全 10 story（5 ページ × 複数状態）が描画でき、テンプレート/CSS の編集はブラウザリロードだけで反映される**（毎リクエスト新規エンジンで再インタプリトするため）。1 リクエストあたり 100〜150ms。
+試した結果、**全 10 story（5 ページ × 複数状態）が描画でき、テンプレート/CSS の編集はブラウザリロードだけで反映される**（毎リクエスト `Engine.NewSession()` で package cache が空の session を fork し、ソースを再インタプリトするため）。1 リクエストあたり 100〜200ms。
 
 ## 何を作ったか
 
@@ -53,7 +53,7 @@ minigo 側の `examples/storybook` は example 内のハーネスで、外部パ
 
 - **`/static/` の実アセット配信**（`http.FileServer`）。example は静的ファイルを持たない。layout が参照する `/static/app.css` を実ディレクトリから出すので CSS 編集も即反映。
 - **index ページ（ナビ＋iframe）** は example と同型。
-- **engine の per-request 生成** = 「浅い探索の遅延実行インタプリタが都度実行される」形。`b.Render` 毎に `minigo.NewEngine` を作るので、ソース・テンプレート・embed・story の全てが最新のファイル内容で解釈される（要望のキャッシュ懸念はこの方式では起きない＝実測済み）。
+- **per-request な session fork** = 「浅い探索の遅延実行インタプリタが都度実行される」形。長寿命の base engine（bind・BuildConfig・PackageModes を一度だけ設定）から `b.Render` 毎に `e.NewSession()` を fork する。session は bind と設定を継承しつつ package cache が空なので、ソース・テンプレート・embed・story の全てが最新のファイル内容で解釈され、bound package（stdlib・goldmark）はロード済みのまま再利用される（要望のキャッシュ懸念はこの方式では起きない＝実測済み）。出力先は request 毎に `minigo.WithOutput(&buf)(session)` で差し替える。初期版は毎回 `NewEngine` + 全 bind 再登録だったが、`NewSession` が「bind を共有して実行状態だけ隔離する」ための正規 API だった。
 
 ### bind の切り分け（sqlite を実行しない仕組み）
 
@@ -94,7 +94,19 @@ storybook に追いつくための要点である「書き換えたら再起動�
 - **静的 JS ファイル**: `internal/web/static` 配下に置けば `/static/` FileServer がそのまま配信する。CSS と同様にリロードで反映。物理ファイルを出すだけなので問題なし。
 - **テンプレート内の inline `<script>`**: テンプレートはただのテキストとして出力されるので、ブラウザでは普通に実行される。プレビューサーバは CSP を付けない（後述の制限）のでブロックもされない。
 - **storybook 側の JS**: index ページは JS 無しのナビ＋iframe で足りている。本物の storybook のような「props を UI でいじる」機能を足すならここに JS を書くことになる（future work）。
-- **注意点（実測で見えたギャップ）**: プレビューは renderer が出す **body だけ**を返す。アプリ側ハンドラが付ける HTTP ヘッダ（CSP `script-src 'none'`、`Speculation-Rules` 等）はプレビュー経路では付かない。つまり「本番では CSP で塞がれる inline script」がプレビューでは動いてしまう。ヘッダまで含めて検証したければ story が `httptest.NewRequest` からハンドラ経由で呼ぶ形に変えるか、storybook 側にヘッダシミュレーションを噛ませる（future work）。
+- **注意点（実測で見えたギャップ → 後で解消）**: プレビューは renderer が出す **body だけ**を返す。アプリ側ハンドラが付ける HTTP ヘッダ（CSP `script-src 'none'`、`Speculation-Rules` 等）はプレビュー経路では付かない。つまり「本番では CSP で塞がれる inline script」がプレビューでは動いてしまう。→ このギャップは後述の **ハンドラ同型 story（`StoryHttp` prefix）** で解消した。
+
+## ハンドラ同型 story（`StoryHttp` prefix）
+
+「story が Response を返せるようにすれば status code や header も取れる。いっその事 `http.Handler` と同型にする」という発想で追加した2つ目の story 形式。
+
+- **宣言**: `StoryHttp` で始まる名前の func は `func(http.ResponseWriter, *http.Request)` 型を必須とする（AST で構造的に判定するので import alias 不問）。それ以外の `Story` func は従来どおり `func()`。
+- **実行**: `Render` は `httptest.NewRecorder` + `httptest.NewRequest(GET /)` をホスト側で作り `s.Call(ctx, pkg, name, rec, req)` で story に渡す。host の Go オブジェクトは `vm.SnapshotOf` 経由でそのまま script に見えるので、`*httptest.ResponseRecorder` を script から書き込める。
+- **返却**: 戻り値は `*Page{Status, Header, Body}`。`/story/<Name>` が recorder の status・headers をそのまま replay するので、story が実 mux（`web.New(storyStore{})`）を通せば CSP・`Referrer-Policy`・`Speculation-Rules` など実ハンドラのヘッダや 404 等の非 200 状態までプレビューできる。print 型 story は従来どおり常に 200。
+- **fixture**: `Store` interface の script 側 fake（`storyStore`）を実装して mux に渡す。`web`・`store` パッケージは interpreted なので、script 内で定義した struct が interface をそのまま満たす。
+- **実測**: `StoryHttpIssueList`（実 mux → `GET /issues`）は 200 + CSP/X-Content-Type-Options/nosniff 等つき、`StoryHttpNotFound` は 404 + styled body を返すことを確認。
+
+print 型と使い分け: **見た目（マークアップ）の確認は print 型**、**ヘッダ・status・ルーティングを含めた検証は `StoryHttp` 型**と使い分ける。
 
 ## 見つかったこと（minigo へのフィードバック素材）
 
@@ -106,7 +118,7 @@ storybook に追いつくための要点である「書き換えたら再起動�
 - script で定義した FuncMap 関数（`formatTime` 等）も bound template 内で呼べる（`vm.RegisterFuncMapType` による型適合）。
 - `//go:embed` は解釈モードでも動き、**ファイル内容はパッケージ再解釈の都度読み直される**（テンプレート編集→リロード反映を実測）。
 - `httptest.ResponseRecorder` は bound 済みでそのまま使えた。
-- キャッシュ問題（「パッケージのキャッシュが期待通りにリセットされない」）は**観測されなかった**。per-request 新規 engine なら 100〜150ms/req で十分速く、より大きなパッケージでキャッシュが欲しくなって初めて問題になると思われる。
+- キャッシュ問題（「パッケージのキャッシュが期待通りにリセットされない」）は**観測されなかった**。per-request session なら 100〜200ms/req で十分速く、より大きなパッケージでキャッシュが欲しくなって初めて問題になると思われる。なお未使用だった minigo の機能として `WithInitMode(LazyInit)`・`WithPackageModes` の ModeSource/ModeDeny（sourceModes は使用済み）・`inspect`・`BoundSymbols`・`WithHostPolicy`・`ScriptProfiler` がある（発見時の記録は html-sandbox の slops 記事に記載）。
 
 ### 明らかになった制限（ドキュメント化か改善を要望したい点）
 

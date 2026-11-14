@@ -9,9 +9,12 @@ import (
 	"go/parser"
 	"go/token"
 	"maps"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/podhmo/minigo"
 	"github.com/podhmo/minigo/resolve"
@@ -29,13 +32,42 @@ type Book struct {
 	Tag       string   // build tag guarding the story files
 	Src       []string // extra packages to interpret from source
 	StaticDir string   // directory served under /static/ in -http mode
+
+	once    sync.Once
+	base    *minigo.Engine // configured once; each Render forks a session
+	dir     string         // absolute Dir, computed with base
+	baseErr error
 }
+
+// StoryKind distinguishes the two story shapes.
+type StoryKind int
+
+const (
+	// KindPrint is `func StoryXxx()` writing HTML to stdout.
+	KindPrint StoryKind = iota
+	// KindHTTP is `func StoryHttpXxx(w http.ResponseWriter, r *http.Request)` —
+	// handler-shaped, so the story exercises real handlers and the recorder
+	// captures status code and headers too.
+	KindHTTP
+)
 
 // Story is a story function found in a tagged file.
 type Story struct {
-	Name string // StoryXxx
+	Name string // StoryXxx or StoryHttpXxx
 	Doc  string // first line of the doc comment
 	Pos  string // file:line
+	Kind StoryKind
+}
+
+// IsHTTP reports whether the story is the handler-shaped kind.
+func (s Story) IsHTTP() bool { return s.Kind == KindHTTP }
+
+// Page is one rendered story: body plus, for handler-shaped stories, the
+// recorded status code and response headers.
+type Page struct {
+	Status int
+	Header map[string][]string
+	Body   []byte
 }
 
 // Stories lists the story funcs declared in files that the build tag
@@ -78,11 +110,17 @@ func (b *Book) Stories() ([]Story, error) {
 				continue
 			}
 			pos := fset.Position(fd.Pos())
-			if !isStoryShape(fd.Type) {
+			kind := KindPrint
+			if strings.HasPrefix(fd.Name.Name, "StoryHttp") {
+				if !isHandlerShape(fd.Type) {
+					return nil, fmt.Errorf("%s:%d: %s must be func(http.ResponseWriter, *http.Request)", pos.Filename, pos.Line, fd.Name.Name)
+				}
+				kind = KindHTTP
+			} else if !isStoryShape(fd.Type) {
 				return nil, fmt.Errorf("%s:%d: %s must be func()", pos.Filename, pos.Line, fd.Name.Name)
 			}
 			doc, _, _ := strings.Cut(strings.TrimSpace(fd.Doc.Text()), "\n")
-			stories = append(stories, Story{Name: fd.Name.Name, Doc: doc, Pos: fmt.Sprintf("%s:%d", pos.Filename, pos.Line)})
+			stories = append(stories, Story{Name: fd.Name.Name, Doc: doc, Pos: fmt.Sprintf("%s:%d", pos.Filename, pos.Line), Kind: kind})
 		}
 	}
 	if len(stories) == 0 {
@@ -99,6 +137,24 @@ func isStoryShape(ft *ast.FuncType) bool {
 		(ft.Results == nil || len(ft.Results.List) == 0)
 }
 
+// isHandlerShape accepts func(http.ResponseWriter, *http.Request) — the
+// http.HandlerFunc signature, detected structurally so the import alias
+// does not matter.
+func isHandlerShape(ft *ast.FuncType) bool {
+	if (ft.TypeParams != nil && len(ft.TypeParams.List) > 0) ||
+		(ft.Results != nil && len(ft.Results.List) > 0) ||
+		ft.Params == nil || len(ft.Params.List) != 2 {
+		return false
+	}
+	sel0, ok0 := ft.Params.List[0].Type.(*ast.SelectorExpr)
+	star, ok1 := ft.Params.List[1].Type.(*ast.StarExpr)
+	if !ok0 || !ok1 {
+		return false
+	}
+	sel1, ok2 := star.X.(*ast.SelectorExpr)
+	return ok2 && sel0.Sel.Name == "ResponseWriter" && sel1.Sel.Name == "Request"
+}
+
 // sourceModes are packages to interpret from source instead of the bound
 // stdlib — empty by default; -src forces more for experiments. The bound
 // html/template suffices because minigo adapts script FuncMap funcs into
@@ -106,11 +162,14 @@ func isStoryShape(ft *ast.FuncType) bool {
 // parsePages now avoids by reading embedded files itself.
 var sourceModes = map[string]minigo.PackageMode{}
 
-// Render runs one story in a fresh engine, so an edit to the package —
-// template, Go code, or an //go:embed'ed file — shows up on the next call,
-// and captures its stdout as HTML. Stories own their fixtures; the helper
-// injects no HTTP values.
-func (b *Book) Render(ctx context.Context, name string) ([]byte, error) {
+// Render runs one story in a session forked from the book's base engine:
+// the session keeps the configuration and host bindings but starts with an
+// empty package cache, so an edit to the package — template, Go code, or an
+// //go:embed'ed file — shows up on the next call while bound packages stay
+// loaded. Stories own their fixtures; the helper injects no HTTP values.
+// Print stories answer Status 200 with an empty Header; handler stories
+// report the recorder's result.
+func (b *Book) Render(ctx context.Context, name string) (*Page, error) {
 	stories, err := b.Stories()
 	if err != nil {
 		return nil, err
@@ -118,30 +177,70 @@ func (b *Book) Render(ctx context.Context, name string) ([]byte, error) {
 	if !slices.ContainsFunc(stories, func(s Story) bool { return s.Name == name }) {
 		return nil, fmt.Errorf("%s: not a story", name)
 	}
+	kind := KindPrint
+	for _, st := range stories {
+		if st.Name == name {
+			kind = st.Kind
+			break
+		}
+	}
+	base, dir, err := b.baseEngine()
+	if err != nil {
+		return nil, err
+	}
+	s := base.NewSession()
 	var output bytes.Buffer
-	modes := maps.Clone(sourceModes)
-	for _, p := range b.Src {
-		modes[p] = minigo.ModeSource
-	}
-	opts := []minigo.Option{
-		minigo.WithOutput(&output),
-		minigo.WithBuildConfig(resolve.BuildConfig{Tags: []string{b.Tag}}),
-		minigo.WithPackageModes(modes),
-	}
-	dir, err := filepath.Abs(b.Dir)
+	minigo.WithOutput(&output)(s)
+	pkg, err := s.Package(ctx, dir)
 	if err != nil {
 		return nil, err
 	}
-	e := minigo.NewEngine(dir, opts...)
-	bindApp(e)
-	pkg, err := e.Package(ctx, dir)
-	if err != nil {
-		return nil, err
+	if kind == KindHTTP {
+		// Handler-shaped story: drive it through a recorder so the
+		// response status and headers (security headers, CSP, …) are
+		// captured, not just the body. The request is a plain GET /;
+		// stories wanting a specific path build their own with
+		// httptest.NewRequest inside.
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		if _, err := s.Call(ctx, pkg, name, rec, req); err != nil {
+			return nil, fmt.Errorf("%s: %w", name, err)
+		}
+		res := rec.Result()
+		// the handler writes to the recorder, not to stdout: the page
+		// body is the recorder's buffer, not the captured print output.
+		return &Page{Status: res.StatusCode, Header: res.Header, Body: rec.Body.Bytes()}, nil
 	}
-	if _, err := e.Call(ctx, pkg, name); err != nil {
+	if _, err := s.Call(ctx, pkg, name); err != nil {
 		return nil, fmt.Errorf("%s: %w", name, err)
 	}
-	return output.Bytes(), nil
+	return &Page{Status: http.StatusOK, Body: output.Bytes()}, nil
+}
+
+// baseEngine lazily builds the long-lived engine all renders fork from.
+// Build-time options (tags, package modes, host binds) live here; the
+// per-request output buffer is installed on each session instead.
+func (b *Book) baseEngine() (*minigo.Engine, string, error) {
+	// the handler can serve concurrent first requests, so the build is
+	// serialized: otherwise b.base could be observed before b.dir.
+	b.once.Do(func() {
+		dir, err := filepath.Abs(b.Dir)
+		if err != nil {
+			b.baseErr = err
+			return
+		}
+		modes := maps.Clone(sourceModes)
+		for _, p := range b.Src {
+			modes[p] = minigo.ModeSource
+		}
+		e := minigo.NewEngine(dir,
+			minigo.WithBuildConfig(resolve.BuildConfig{Tags: []string{b.Tag}}),
+			minigo.WithPackageModes(modes),
+		)
+		bindApp(e)
+		b.base, b.dir = e, dir
+	})
+	return b.base, b.dir, b.baseErr
 }
 
 // bindApp registers the host packages interpreted internal/web code
