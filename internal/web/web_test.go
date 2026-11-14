@@ -534,8 +534,54 @@ func TestCreateIssueValidationError(t *testing.T) {
 	if !strings.Contains(body, "keep this body") {
 		t.Error("expected submitted body to be preserved")
 	}
-	if !strings.Contains(body, `aria-describedby="f-title-error"`) {
-		t.Error("expected aria-describedby wiring for the error")
+	if !strings.Contains(body, `aria-invalid="true" aria-describedby="f-title-error" autofocus`) {
+		t.Error("expected aria-invalid, aria-describedby and autofocus on the invalid title")
+	}
+	if !strings.Contains(body, `<p class="field-error" id="f-title-error">Title is required.</p>`) {
+		t.Error("expected the server-rendered title error, not the pending one")
+	}
+	if strings.Contains(body, `role="alert"`) {
+		t.Error("errors are announced through focus on reload, not role=alert")
+	}
+	if !strings.Contains(body, `aria-invalid="false" aria-describedby="f-body-hint"`) {
+		t.Error("the valid body should stay aria-invalid=false without the error id")
+	}
+}
+
+// Before any submit, every field is aria-invalid="false" and no error id is
+// referenced from aria-describedby; the browser-side "required" message is in
+// the page but marked pending (shown by CSS only under :user-invalid).
+func TestFormFeedbackBeforeSubmit(t *testing.T) {
+	srv, f := newTestServer(t)
+	f.addIssue("Feedback", "", store.StatusOpen, time.Now())
+
+	for _, tc := range []struct {
+		path    string
+		pending string
+	}{
+		{"/issues/new", `<p class="field-error field-error-pending" id="f-title-error">Title is required.</p>`},
+		{"/issues/1/edit", `<p class="field-error field-error-pending" id="f-title-error">Title is required.</p>`},
+		{"/issues/1", `<p class="field-error field-error-pending" id="comment-error">Comment is required.</p>`},
+	} {
+		resp, err := srv.Client().Get(srv.URL + tc.path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body := getBody(t, resp)
+		if !strings.Contains(body, tc.pending) {
+			t.Errorf("%s: missing pending error %q", tc.path, tc.pending)
+		}
+		for _, bad := range []string{`aria-describedby="f-title-error`, `aria-describedby="comment-error`, `-hint" autofocus`, `aria-invalid="false" autofocus`} {
+			if strings.Contains(body, bad) {
+				t.Errorf("%s: unexpected %q before submit", tc.path, bad)
+			}
+		}
+		if strings.Contains(body, `aria-invalid="true"`) {
+			t.Errorf("%s: no field should be invalid before submit", tc.path)
+		}
+		if !strings.Contains(body, `aria-invalid="false"`) {
+			t.Errorf("%s: fields should start at aria-invalid=false", tc.path)
+		}
 	}
 }
 
@@ -611,6 +657,12 @@ func TestCreateCommentEmpty(t *testing.T) {
 	}
 	if !strings.Contains(body, "Comment is required") {
 		t.Error("expected comment validation error")
+	}
+	if !strings.Contains(body, `aria-invalid="true" aria-describedby="comment-error comment-hint" autofocus`) {
+		t.Error("expected the invalid comment textarea to be described by its error and focused")
+	}
+	if strings.Contains(body, "field-error-pending") {
+		t.Error("the server error should replace the pending message")
 	}
 }
 

@@ -54,5 +54,7 @@
 - **`var()` を含む CSS 宣言は「後勝ちフォールバック」にならない**: `color: #000; color: contrast-color(var(--bg));` と書いても、`var()` を含む宣言は parse 時には常に有効扱いされ、未対応関数だと計算値時点で無効（IACVT）→ `unset`（`color` なら親から継承）になり、前の `#000` には戻らない。新しい色関数を custom property と組み合わせるときは `@supports (color: contrast-color(red))` のように宣言ごと囲う。
 - **出荷済みの Blink 機能は `--disable-blink-features` で無効化できない**: Invoker Commands / `sibling-index()` 非対応ブラウザを Chromium で再現しようとフラグを渡しても、ランタイムフラグが既に削除されていて効かない（Chrome 156）。CSS の `@supports` 分岐を確かめるなら、Playwright の `page.route` で `app.css` を差し替え、条件の関数名を未知の名前に書き換えるほうが確実。
 - **form 内の `<button commandfor>` は `type="button"` を明示する**: form owner があると `type="submit"` は command より送信が優先され、`type` 省略は Chrome 156 では送信も command もしない（コンソールに "Buttons associated with forms that include command or commandfor attributes are ambiguous, and require a type=button attribute. No action will be taken."）。「非対応ブラウザでは submit、対応ブラウザでは command」という type 省略の二刀流は成立しない。
+- **Playwright の `selectOption` では `:user-invalid` が立たない**: `fill` で空にしたテキスト欄は `:user-invalid` になるが、`<select>` に `selectOption` で値を入れ直しても Chromium 156 ではマッチしなかった（ユーザー操作扱いにならない）。select の検証表示を確かめるときは `focus` → `ArrowDown`/`ArrowUp` → `Tab` のキーボード操作で行う。
+- **フォーム送信直後のスクリーンショットは view transition の途中を撮る**: POST→422 のページ表示にもクロスフェード（0.18s）がかかるため、`waitForLoadState()` 直後だと新旧ページが重なった画像になる。数百 ms 待ってから撮る。
 
 （随時追記）
