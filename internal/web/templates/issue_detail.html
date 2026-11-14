@@ -12,7 +12,7 @@
     {{if .Issue.Labels}}
     <div class="issue-labels">
       {{range .Issue.Labels}}
-      <a class="label-badge" style="background-color: {{.Color}}" href="/issues?status=all&amp;label={{.ID}}">{{.Name}}</a>
+      <a class="label-badge" style="--label-color: {{.Color}}" href="/issues?status=all&amp;label={{.ID}}">{{.Name}}</a>
       {{end}}
     </div>
     {{end}}

@@ -560,8 +560,11 @@ func TestE2ESeededDataRenders(t *testing.T) {
 	if !strings.Contains(body, `class="label-badge"`) {
 		t.Error("seeded rows should render label badges")
 	}
-	if !strings.Contains(body, "background-color: #d73a4a") {
+	if !strings.Contains(body, "--label-color: #d73a4a") {
 		t.Error("expected the Bug label badge color")
+	}
+	if !strings.Contains(body, `<meta name="color-scheme" content="light dark">`) {
+		t.Error("layout should declare light and dark color schemes")
 	}
 	for _, title := range []string{
 		"Crash when opening an empty project",
