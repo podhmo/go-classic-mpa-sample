@@ -11,7 +11,7 @@ make setup-minigo   # third_party/minigo に clone（gitignore 済み・1度だ�
 make storybook      # http://127.0.0.1:6006 で storybook 的 UI が立つ
 ```
 
-- `GET /` … 左ナビ（story 一覧）＋ iframe で各 story を表示
+- `GET /` … 左ナビ（story 一覧）＋ iframe で各 story を表示。`?w=320|360|768` で iframe 幅を固定できるビューポート切替付き（モバイル確認用）
 - `GET /story/{name}` … story 個別描画（毎回 minigo インタプリタが走る）
 - `GET /static/` … `internal/web/static` をそのまま配信（本物の CSS/favicon）
 - CLI 単発描画: `go run . <pkgdir> <StoryName>`、一覧: `-list`、静的エクスポート: `-o <dir>`
@@ -123,6 +123,10 @@ storybook に追いつくための要点である「書き換えたら再起動�
 - **minigo 側を書き換える方向**: 上記制限 1〜3 を minigo 側で直す実験を `third_party/minigo` 上でやってみる。
 - **story の自動発掘**: 現状は `//go:build story` ファイルを手で書いている。テンプレートと 1:1 の story を生成する lint/雛形コマンド。
 - **ヘッダ込みの検証**: 現状 story は renderer（body 出力）を直接呼ぶため CSP や Speculation-Rules などハンドラが付けるレスポンスヘッダを検証できない。`httptest.NewRequest` でハンドラ経由にする story 型（`StoryXxxHTTP` 等）を足すと良い。
+
+## モバイル対応の検証（この環境でやったこと）
+
+`?w=` のビューポート切替で全 10 story を 360px / 320px で目視確認した。フィルタバーの縦積み・ラベル折返し・ボタン全幅化・長いタイトルのクランプは先行の responsive 対応で済んでおり、WCAG 1.4.10 の 320px 基準でも横スクロール・はみ出しは検出されなかった。モバイル向けの試行錯誤自体はこの環境で十分回る — 残る課題は viewport やテーマの一括比較（下記 future work）。
 
 ## 実測メモ
 

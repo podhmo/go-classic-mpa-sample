@@ -15,8 +15,9 @@ import (
 // entry is one row of the index page.
 type entry struct {
 	Story
-	Href string
-	Err  string
+	Href   string
+	Target string // "story" in the static export, empty when served
+	Err    string
 }
 
 var indexTmpl = template.Must(template.New("index").Parse(`<!doctype html>
@@ -26,18 +27,24 @@ body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; }
 nav { width: 18rem; overflow: auto; border-right: 1px solid #ccc; padding: .5rem; }
 nav a { display: block; padding: .25rem; color: inherit; text-decoration: none; }
 nav a:hover { background: #eef; }
+nav a.active { background: #eef; font-weight: 600; }
 nav small { display: block; color: #666; }
 .err { color: #b00; }
+.viewport { display: flex; gap: .5em; margin: .5rem 0; font-size: .9em; }
+.viewport a { padding: .1em .4em; border: 1px solid #ccc; border-radius: .3em; }
+.viewport a.active { background: #def; border-color: #79b; }
 iframe { flex: 1; border: 0; }
+iframe.sized { flex: none; margin-inline: auto; border-inline: 1px dashed #ccc; }
 </style></head>
 <body>
 <nav>
 <strong>{{.Dir}}</strong>
 {{if .Err}}<small class="err">{{.Err}}</small>{{end}}
-{{range .Entries}}<a href="{{.Href}}" target="story">{{.Name}}
+<div class="viewport">{{range .Widths}}<a href="?w={{.}}&s={{$.S}}"{{if eq . $.W}} class="active"{{end}}>{{if .}}{{.}}px{{else}}full{{end}}</a>{{end}}</div>
+{{range .Entries}}<a href="{{.Href}}"{{if .Target}} target="{{.Target}}"{{end}}{{if eq .Name $.S}} class="active"{{end}}>{{.Name}}
 <small>{{.Doc}}</small>{{if .Err}}<small class="err">{{.Err}}</small>{{end}}</a>
 {{end}}</nav>
-<iframe name="story"{{with .Entries}} src="{{(index . 0).Href}}"{{end}}></iframe>
+<iframe name="story"{{if .S}} src="/story/{{.S}}"{{else}}{{with .Entries}} src="{{(index . 0).Href}}"{{end}}{{end}}{{if .W}} class="sized" style="width: {{.W}}px"{{end}}></iframe>
 </body></html>
 `))
 
@@ -51,7 +58,7 @@ func (b *Book) Export(ctx context.Context, dir string, stories []Story) error {
 	var errs []error
 	entries := make([]entry, len(stories))
 	for i, s := range stories {
-		entries[i] = entry{Story: s, Href: s.Name + ".html"}
+		entries[i] = entry{Story: s, Href: s.Name + ".html", Target: "story"}
 		res, err := b.Render(ctx, s.Name)
 		if err != nil {
 			entries[i].Err = firstLine(err.Error())
@@ -96,11 +103,36 @@ func (b *Book) Handler() http.Handler {
 			}
 			return
 		}
+		wpx := r.URL.Query().Get("w")
 		entries := make([]entry, len(stories))
 		for i, s := range stories {
-			entries[i] = entry{Story: s, Href: "/story/" + s.Name}
+			href := "?s=" + s.Name
+			if wpx != "" {
+				href += "&w=" + wpx
+			}
+			entries[i] = entry{Story: s, Href: href}
 		}
-		if err := indexTmpl.Execute(w, map[string]any{"Dir": b.Dir, "Entries": entries}); err != nil {
+		// ?s=<Name> selects the previewed story so width switching (a full
+		// index reload) keeps it; an unknown or missing name falls back to
+		// the first entry.
+		sel := r.URL.Query().Get("s")
+		known := false
+		for _, s := range stories {
+			if s.Name == sel {
+				known = true
+				break
+			}
+		}
+		if !known && len(stories) > 0 {
+			sel = stories[0].Name
+		}
+		if err := indexTmpl.Execute(w, map[string]any{
+			"Dir":     b.Dir,
+			"Entries": entries,
+			"S":       sel,
+			"W":       wpx,
+			"Widths":  []string{"", "320", "360", "768"},
+		}); err != nil {
 			slog.ErrorContext(r.Context(), "index", "err", err)
 		}
 	})
