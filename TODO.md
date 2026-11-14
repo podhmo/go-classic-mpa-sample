@@ -12,18 +12,4 @@ Module path: `github.com/podhmo/go-classic-mpa-sample`
 
 ## To Be Implemented
 
-- [x] **minigo storybook preview**: minigo（third_party clone + cmd/storybook ネスト module）で sqlite 非実行の storybook 的プレビュー環境を構築。`make setup-minigo` + `make storybook` で起動。設計と発見は `docs/sketch/ja/storybook-with-minigo.md`、minigo への制限フィードバックは issue 化して minigo 側へ送る。
-
 Guides referenced below are in the `modern-web-guidance` catalog (`.agents/skills/modern-web-guidance/`): run `npx -y modern-web-guidance@latest retrieve "<id>"` before implementing. Everything must stay JavaScript-free per `docs/ja/prompts.md`; all picks below are declarative HTML/CSS only.
-
-- [x] **Dark mode support** (guides: `dark-mode`, `contrast-color`): `:root` に `color-scheme: light dark` と `<meta name="color-scheme">` を追加し、固定ライトパレットを `light-dark()` トークン化 + `@media (prefers-color-scheme: dark)` フォールバック。ラベルバッジ（DB 由来の動的色）の文字色コントラストと favicon のダーク時視認性も確認する。
-- [x] **Cross-document view transitions** (guide: `cross-document-transitions`): `@view-transition { navigation: auto }` で MPA 遷移に控えめなクロスフェードを入れる。純粋な CSS のプログレッシブエンハンスメント。ページネーション等は transition `types` で方向アニメーションも検討。
-- [x] **Declarative delete confirmation** (guides: `declarative-dialog-popover-control`, `dialog`, `light-dismiss-a-dialog`): 詳細ページの削除確認を `popovertarget`/Invoker Commands で動く `[popover]`/`<dialog>` にし、JS なしで開閉できるようにする。既存の GET 確認ページは非対応ブラウザ向けフォールバックとして残す。Baseline サポートと dismiss 時のフォーカス復帰を確認。
-- [x] **Form feedback polish** (guides: `required-field-feedback`, `accessible-error-announcement`, `style-parent-with-has`, `forms`): 視覚的なエラー表示を `aria-invalid` と `:user-invalid`/`:has()` で同期させ、インタラクション後にのみエラーが出るよう統一。ラベルの checkbox 群・select にも同じパターンを適用できるか確認。
-- [x] **Responsive & typography pass** (guides: `responsive-design`, `respect-os-text-scale`, `fluid-scaling`, `single-line-overflow`, `typography`): `body { font-size: 15px }` が px 指定なので rem 化して OS テキストスケールに追従させる。640px 単一ブレークポイントの現状を監査し、filter-bar / issue-row の狭幅表示と長いタイトルの clamp/ellipsis を整える。
-- [x] **Rendering performance for long lists** (guides: `defer-rendering-heavy-content`, `performance`): `.issue-row` / コメントに `content-visibility: auto` + `contain-intrinsic-size` を検討し、画面外レンダリングを省く。CSS のみ。
-- [x] **CSP & header hardening** (guides: `security`, `privacy`): JS ゼロなので `script-src 'none'` を含む Content-Security-Policy を付けられる（`object-src 'none'`, `base-uri 'none'`, `frame-ancestors 'deny'` 等）。ラベル色の inline `style=` と `style-src` の両立方法を決める（bugs.md #13' で CSP はこの理由で見送り済み）。
-- [x] **Skip link & a11y sweep** (guide: `accessibility`): "Skip to content" リンク追加、`:focus-visible`、ランドマーク・見出し階層の監査を全テンプレートで実施。
-- [x] **Speculation rules prefetching** (guide: `improve-next-page-load-performance`): `<script type="speculationrules">` で Next ページや issue リンクを prefetch/prerender。実行 JS ではなく宣言的 JSON だが、no-JavaScript ポリシーに合うか判断してから実装する（合わないと判断したら wontfix で記録）。
-  - 実装: inline `<script>` は CSP `script-src 'none'` にブロックされるため、`Speculation-Rules` レスポンスヘッダー + `/static/speculation-rules.json` で配信（decisions.md 参照）。
-- [x] **bugs.md #23 mitigation**: 50件以上のスレッドでスキップ中コメントが AX ツリーから落ちる問題を、`content-visibility` の対象を `<li>` から `.comment-body` に移して部分緩和（listitem+パーマリンクは残り欠落は本文のみ）。bugs.md #23 のステータスを部分緩和に更新（decisions.md「長いリストのレンダリング」参照）。
