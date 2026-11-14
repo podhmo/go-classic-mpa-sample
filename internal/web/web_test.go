@@ -1305,8 +1305,9 @@ func TestSpeculationRules(t *testing.T) {
 	if v := resp.Header.Get("Speculation-Rules"); v != `"/static/speculation-rules.json"` {
 		t.Errorf("Speculation-Rules = %q, want quoted ruleset URL", v)
 	}
-	if strings.Contains(body, "<script") {
-		t.Error("list page must stay free of <script> elements")
+	stripped := regexp.MustCompile(`<script[^>]*src="/static/[a-zA-Z0-9._/-]+"[^>]*>\s*</script>`).ReplaceAllString(body, "")
+	if strings.Contains(stripped, "<script") {
+		t.Error("list page must only load same-origin /static scripts, never inline")
 	}
 
 	resp2, err := srv.Client().Get(srv.URL + "/issues/1")

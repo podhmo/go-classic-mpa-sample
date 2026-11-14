@@ -1291,6 +1291,43 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   animation-timing-function: ease-out;
 }
 
+/* Directional slide for paginated navigation: pagereveal tags the
+   transition "forward"/"backward" (pagination-transition.js) and these
+   replace the default fade. Animating transform only, per the guide. */
+@keyframes vt-slide-to-left {
+  to { transform: translateX(-100%); }
+}
+@keyframes vt-slide-from-right {
+  from { transform: translateX(100%); }
+}
+@keyframes vt-slide-to-right {
+  to { transform: translateX(100%); }
+}
+@keyframes vt-slide-from-left {
+  from { transform: translateX(-100%); }
+}
+
+html:active-view-transition-type(forward)::view-transition-old(root),
+html:active-view-transition-type(forward)::view-transition-new(root),
+html:active-view-transition-type(backward)::view-transition-old(root),
+html:active-view-transition-type(backward)::view-transition-new(root) {
+  animation-duration: 0.22s;
+  animation-timing-function: ease-in-out; /* non-linear, per the guide */
+}
+
+html:active-view-transition-type(forward)::view-transition-old(root) {
+  animation-name: vt-slide-to-left;
+}
+html:active-view-transition-type(forward)::view-transition-new(root) {
+  animation-name: vt-slide-from-right;
+}
+html:active-view-transition-type(backward)::view-transition-old(root) {
+  animation-name: vt-slide-to-right;
+}
+html:active-view-transition-type(backward)::view-transition-new(root) {
+  animation-name: vt-slide-from-left;
+}
+
 /* ---------- responsive ---------- */
 
 /* Component layouts (filter bar, issue rows) adapt on their own above; what

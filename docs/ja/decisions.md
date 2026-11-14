@@ -179,6 +179,14 @@
 - **検証方法の記録**: 投機 fetch は Playwright `requests`/Network ドメインに出ないため、標準ライブラリのロギングプロキシを `:8081` に立ててサーバー側ヘッダーで観測。hover → `GET /issues/2` `Sec-Purpose: 'prefetch'` `Sec-Speculation-Tags: '"issue-list"'`（`tag` がサーバー側識別に効く）、Next で `/issues?page=2` も発火、セレクタ外（New issue 等）は発火しない、クリック遷移正常、console エラー・警告ゼロを確認。
 - **付けなかったもの**: HSTS（平 HTTP の localhost アプリであり、HTTP 経由ではブラウザが無視する）、`upgrade-insecure-requests`（全 URL を https に書き換えてアプリ自体が壊れる）、`require-trusted-types-for 'script'`（`script-src 'none'` で DOM シンクに届くスクリプト自体存在しないため無意味）、`report-to`（レポート endpoint がない）、`sandbox`（フォームまで塞がる）。`Referrer-Policy` は現行 `same-origin` 維持（ガイド既定の `strict-origin-when-cross-origin` より cross-origin への漏洩が少なく、外部参照ゼロなので実害なし）。
 
+## ページネーションの方向付き遷移（2026-11-15、`pagination-transitions` ブランチ）
+
+- **ガイド**: modern-web-guidance `directional-navigation-transitions`。ガイド本文は SPA 向け（`startViewTransition({types})`）だが、MPA では cross-document View Transitions + `pagereveal` の `viewTransition.types.add()` が同等手段。既存の cross-fade（`@view-transition { navigation: auto }`）はそのまま、ページ間移動時のみ forward/backward タイプを付けてスライドに置き換える。
+- **方向検出は `page` パラメータの差分**: `navigation.activation.from.url`（旧URL）と `entry.url`（新URL）の `?page=` を比較。増→`forward`、減→`backward`。パスが同じ・page のみ異なる遷移に限定（issue 詳細への遷移等では何もしない→既定 cross-fade）。page パラメータ無しは 1 扱い。
+- **タイミング**: `pagereveal` は新ドキュメント側で発火し、`vt.types` は mutable（Chrome 実測で add 確認）。bfcache restore 時は `viewTransition` が null なのでガード。`navigation.activation` 非対応ブラウザもガード — いずれも既定 cross-fade にフォールバック（ガイドの progressive enhancement 方針）。
+- **CSS**: `html:active-view-transition-type(forward|backward)` で `::view-transition-old/new(root)` の animation-name を差し替え（旧ページ→進行方向へ100%、新ページ→逆方向から100%、transform のみ・非線形 ease-in-out）。`prefers-reduced-motion: no-preference` の `@view-transition` ゲートは既存のまま — reduce 環境では cross-doc VT 自体が無効なので追加対応不要。
+- **検証**: storybook では実際の document 遷移を再現できないため verify-ui ルート — `go run .` の実アプリ + Playwright（`addInitScript` で pagereveal を記録）。Next クリック→`["forward"]`、Previous クリック→`["backward"]` を確認。なお計測は listener 内で `setTimeout(0)` して読む必要があった（addInitScript の listener は外部 JS の listener より先に走り、即時読みだと types 追加前の空配列が見える）。
+
 （随時追記）
 
 ## minigo storybook 環境の構成（2026-11-14）

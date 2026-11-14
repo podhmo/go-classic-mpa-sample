@@ -1,4 +1,8 @@
 {{define "content"}}
+{{/* Tags cross-document view transitions between pages with forward/backward
+   so the slide direction matches the pagination direction. Deferred external
+   file (CSP script-src 'self'); no-ops without View Transitions support. */}}
+<script src="/static/pagination-transition.js" defer></script>
 <div class="page-head">
   <h1>Issues</h1>
 </div>
