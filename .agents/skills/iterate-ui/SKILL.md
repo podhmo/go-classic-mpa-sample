@@ -42,7 +42,7 @@ rendering **500**, not silently — treat that as the failure signal.
   side by side.
 - **Handler stories** (`StoryHttp*`): replay a real request through the
   app's mux against the fake `storyStore` — recorded status AND headers
-  (CSP `script-src 'none'` included). They open in a new tab.
+  (CSP `script-src 'self'` included). They open in a new tab.
 - **Viewport switcher**: `?w=320|360|768` narrows the iframe — use it to
   check responsive behavior without resizing a window.
 
