@@ -109,7 +109,7 @@ func (b *Book) Handler() http.Handler {
 			"Dir":     b.Dir,
 			"Entries": entries,
 			"W":       r.URL.Query().Get("w"),
-			"Widths":  []string{"", "360", "768"},
+			"Widths":  []string{"", "320", "360", "768"},
 		}); err != nil {
 			slog.ErrorContext(r.Context(), "index", "err", err)
 		}
