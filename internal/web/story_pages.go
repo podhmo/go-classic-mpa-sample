@@ -153,6 +153,23 @@ func StoryIssueListPaged() {
 	})
 }
 
+// StoryIssueListSearch renders the list with a search term that matches
+// issue titles — the search-highlight.js enhancement should mark them.
+func StoryIssueListSearch() {
+	renderIssueList(http.StatusOK, issueListPage{
+		Title:           "Issues",
+		Issues:          storyIssues,
+		Labels:          storyLabels,
+		Filter:          store.ListFilter{Status: "all", Query: "layout", Page: 1, PerPage: perPage},
+		Total:           len(storyIssues),
+		Page:            1,
+		TotalPages:      1,
+		RangeStart:      1,
+		RangeEnd:        len(storyIssues),
+		HasActiveFilter: true,
+	})
+}
+
 // StoryIssueDetail renders the issue detail page with comments.
 func StoryIssueDetail() {
 	renderIssueDetail(http.StatusOK, issueDetailPage{

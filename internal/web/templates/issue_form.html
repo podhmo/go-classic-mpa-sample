@@ -1,4 +1,7 @@
 {{define "content"}}
+{{/* Ctrl/Cmd+Enter submits the issue form from the body textarea
+   (guide ime-safe-enter-submit). Deferred external file. */}}
+<script src="/static/enter-submit.js" defer></script>
 <div class="page-head">
   <h1>{{.Heading}}</h1>
 </div>
@@ -14,9 +17,9 @@
 
   <div class="field">
     <label for="f-body">Body</label>
-    <textarea id="f-body" name="body" rows="10"{{if .Errors.Body}} aria-invalid="true" aria-describedby="f-body-error f-body-hint"{{if not .Errors.Title}} autofocus{{end}}{{else}} aria-invalid="false" aria-describedby="f-body-hint"{{end}}>{{.Input.Body}}</textarea>
+    <textarea id="f-body" name="body" rows="10" aria-keyshortcuts="Control+Enter Meta+Enter"{{if .Errors.Body}} aria-invalid="true" aria-describedby="f-body-error f-body-hint"{{if not .Errors.Title}} autofocus{{end}}{{else}} aria-invalid="false" aria-describedby="f-body-hint"{{end}}>{{.Input.Body}}</textarea>
     {{if .Errors.Body}}<p class="field-error" id="f-body-error">{{.Errors.Body}}</p>{{end}}
-    <p class="field-hint" id="f-body-hint">Markdown (GFM) supported. Raw HTML is not rendered; line breaks are preserved.</p>
+    <p class="field-hint" id="f-body-hint">Markdown (GFM) supported. Raw HTML is not rendered; line breaks are preserved. Ctrl+Enter (Cmd+Enter on macOS) submits.</p>
   </div>
 
   {{if .Labels}}
