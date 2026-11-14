@@ -76,6 +76,13 @@ func New(st Store) http.Handler {
 	mux.HandleFunc("GET /static/app.css", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFileFS(w, r, staticFS, "static/app.css")
 	})
+	// External speculation rules for the issue list (Speculation-Rules
+	// response header). The spec requires this exact media type; .json's
+	// application/json default would make the browser ignore the file.
+	mux.HandleFunc("GET /static/speculation-rules.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/speculationrules+json")
+		http.ServeFileFS(w, r, staticFS, "static/speculation-rules.json")
+	})
 	// Catch-alls: unknown GET/POST paths render the styled 404 page instead
 	// of the mux's plaintext default. They are method-scoped on purpose — a
 	// method-less "/" pattern would match PUT/DELETE too and swallow the
@@ -98,6 +105,12 @@ func New(st Store) http.Handler {
 // Browsers too old for style-src-attr fall back to style-src for the
 // attribute and simply render badges in the muted fallback color instead of
 // breaking layout.
+//
+// prefetch-src is deliberately absent: Chromium does not implement that
+// draft directive (it logs "Unrecognized Content-Security-Policy
+// directive"), and same-origin document prefetches triggered by the
+// Speculation-Rules header are not blocked by default-src 'none' —
+// verified in real Chromium on the issue list.
 //
 // img-src is 'self' data: on purpose: goldmark renders user-posted
 // ![i](https://...) as <img>, and remote images in user content are a

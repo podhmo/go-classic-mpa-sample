@@ -84,4 +84,13 @@
   {{end}}
 </div>
 {{end}}
+
+{{/*
+  Speculative loading is delivered via the Speculation-Rules response header
+  pointing at /static/speculation-rules.json (set by listIssues in web.go) —
+  not an inline <script>, which CSP script-src 'none' would block. The rules
+  prefetch the documents behind the primary navigation targets of this page
+  (issue titles and pagination links). Declarative JSON: browsers without
+  Speculation Rules support ignore it.
+*/}}
 {{end}}

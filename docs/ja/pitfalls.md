@@ -66,5 +66,8 @@
 - **`content-visibility: auto` のスキップ判定は要素自身ではなく子で見る**: `el.checkVisibility({ contentVisibilityAuto: true })` は、`content-visibility: auto` を持つ要素自身に対しては（中身がスキップ中でも）`true` を返す。スキップされるのは中身なので、子要素（`.comment-body`）に対して呼ぶ。
 - **スキップ中の中身は CDP の AX ツリーに出ない / Playwright の `ariaSnapshot` は DOM ベース**: `Accessibility.getFullAXTree` ではスキップ中の要素は子なし、中身は `ignored`（`notRendered`）。一方 `locator.ariaSnapshot()` は DOM から組み立てるのでスキップ中でも全文が出て、ブラウザの AX ツリーの確認にはならない。`Accessibility.getPartialAXTree` は `fetchRelatives: false` だと子を返さないので、子の有無を見るなら `true` にする。
 - **`content-visibility` の効果測定は CDP `Performance.getMetrics` の `LayoutDuration` / `RecalcStyleDuration`**: `Emulation.setCPUThrottlingRate` で 4x にし、`page.route` で `app.css` のルールを外した版と比べる。件数による損益分岐はスレッドの HTML を `page.route` で切り詰めると DB を作り直さずに測れる。
+- **inline の `<script type="speculationrules">` は `script-src` の対象**: 「実行されない JSON だから CSP の外」という予想に反し、Chromium 156 は inline speculation rules を `script-src 'none'` でブロックする（"Applying inline speculation rules violates ... 'script-src 'none''"）。`Speculation-Rules: "<url>"` レスポンスヘッダー + 外部 JSON ruleset にすると `<script>` 要素自体が要らず共存できる。ヘッダー値は引用符付き sf-string が必須（無引用だと "Cannot parse" 警告）、外部 ruleset は `Content-Type: application/speculationrules+json` が必須（`application/json` では無視される）。
+- **Chrome は CSP `prefetch-src` を未実装**: 指定しても "Unrecognized Content-Security-Policy directive" と警告されるだけ。投機 fetch を CSP で絞る術は現状無いので、speculation rules の `where.selector_matches` で対象リンクを絞るのが実質の防御線になる。
+- **投機的読み込みは Playwright の `requests` / Network ドメインに出ない**: ブラウザプロセス発のフェッチなのでページ側からは観測不能。サーバー側で `Sec-Purpose: prefetch` / `Sec-Speculation-Tags` ヘッダーを見るのが確実（このアプリはリクエストログが無いので標準ライブラリのロギングプロキシを `:8081` に立てて観測した）。hover による `moderate` eagerness の発火は Playwright の `hover`（CDP 入力）で起きる。
 
 （随時追記）
