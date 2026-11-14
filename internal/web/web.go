@@ -83,6 +83,10 @@ func New(st Store) http.Handler {
 		w.Header().Set("Content-Type", "application/speculationrules+json")
 		http.ServeFileFS(w, r, staticFS, "static/speculation-rules.json")
 	})
+	// Search-term highlighting on the list page (CSS Custom Highlight API).
+	mux.HandleFunc("GET /static/search-highlight.js", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, staticFS, "static/search-highlight.js")
+	})
 	// Catch-alls: unknown GET/POST paths render the styled 404 page instead
 	// of the mux's plaintext default. They are method-scoped on purpose — a
 	// method-less "/" pattern would match PUT/DELETE too and swallow the

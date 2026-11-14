@@ -809,6 +809,14 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   color: var(--accent);
 }
 
+/* Registered by search-highlight.js: occurrences of the ?q= term inside
+   issue titles. --accent-emphasis + --on-emphasis (the filled-button pair)
+   keeps text contrast AA and the background 3:1+ against the surface. */
+::highlight(search-match) {
+  background-color: var(--accent-emphasis);
+  color: var(--on-emphasis);
+}
+
 .issue-num {
   flex: none;
   color: var(--text-muted);

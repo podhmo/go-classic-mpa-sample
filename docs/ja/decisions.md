@@ -179,6 +179,16 @@
 - **検証方法の記録**: 投機 fetch は Playwright `requests`/Network ドメインに出ないため、標準ライブラリのロギングプロキシを `:8081` に立ててサーバー側ヘッダーで観測。hover → `GET /issues/2` `Sec-Purpose: 'prefetch'` `Sec-Speculation-Tags: '"issue-list"'`（`tag` がサーバー側識別に効く）、Next で `/issues?page=2` も発火、セレクタ外（New issue 等）は発火しない、クリック遷移正常、console エラー・警告ゼロを確認。
 - **付けなかったもの**: HSTS（平 HTTP の localhost アプリであり、HTTP 経由ではブラウザが無視する）、`upgrade-insecure-requests`（全 URL を https に書き換えてアプリ自体が壊れる）、`require-trusted-types-for 'script'`（`script-src 'none'` で DOM シンクに届くスクリプト自体存在しないため無意味）、`report-to`（レポート endpoint がない）、`sandbox`（フォームまで塞がる）。`Referrer-Policy` は現行 `same-origin` 維持（ガイド既定の `strict-origin-when-cross-origin` より cross-origin への漏洩が少なく、外部参照ゼロなので実害なし）。
 
+## 検索語ハイライト（2026-11-15、modern-web-guidance `highlight-text-ranges`）— 初の JS
+
+- **CSS Custom Highlight API で `?q=` の語を issue タイトル上にマーキング**: `/static/search-highlight.js` が `#filter-q` の値を読み、`.issue-list .issue-title` 配下のテキストノードを TreeWalker で走査して `Range` を `search-match` ハイライトに登録。DOM 不変・要素追加なし。一覧がタイトルしか表示しないため、ボディ側のヒットは対象外。
+- **初の JS ファイル**: JS 方針緩和後の最初の適用。CSP `script-src 'self'` で `/static/` の外部ファイルのみ許可、inline `<script>` は引き続きブロック — issues.html の `<script src defer>` で読み込み、一覧ページのみに限定。
+- **一致判定はサーバーと同じ `instr(lower())` 相当**: 大文字小文字を無視した部分文字列（語分割しない）。オフセットは lowercase 化した文字列ではなく原文上で走査（`'İ'` 等のケースフォールドで長さが変わる文字への対策）。
+- **`::highlight(search-match)` は `--accent-emphasis` 背景 + `--on-emphasis` 文字**: 既存の塗りボタン色ペアでライト/ダーク両方のコントラストを担保（文字 4.5:1+、背景 vs サーフェス 3:1+）。
+- **非対応ブラウザはハイライト無しで終了**: `CSS.highlights` 不在なら早期 return。ガイドの `<mark>` フォールバックは「ハイライトが必須機能の場合のみ」推奨なので不採用 — 検索自体はサーバー側フィルタで機能する。
+- **フッターの "No JavaScript." を更新**: 実態に合わせ "Declarative first; minimal JavaScript where it earns its place." に変更。
+- **検証（Chromium 156、storybook StoryIssueListSearch）**: `CSS.highlights.get('search-match').size === 1`、"Improve responsive layout" の "layout" が視覚的にマーキングされることを確認。コンソールエラー・CSP 違反なし。旧 `TestSpeculationRules` の「`<script>` 全禁止」アサーションを「外部 /static スクリプトのみ許可、inline 禁止」に更新。
+
 （随時追記）
 
 ## minigo storybook 環境の構成（2026-11-14）
