@@ -1,15 +1,17 @@
 ---
-name: storybook
-description: Frontend verification workflow for go-classic-mpa-sample. Use whenever a task changes how a page renders — editing `internal/web/templates/` or `internal/web/static/`, touching `internal/web/story_pages.go`, adding or modifying a handler/page in `internal/web`, or when a visual/interactive check is requested — to iterate against the repo's homemade storybook (hot-reload, variant grids, HTTP replay) instead of booting the real app.
+name: ui-test
+description: Design iteration and visual checks on go-classic-mpa-sample's pages **without provisioning the app's runtime** — no `go run .`, no database, no seed data. Use whenever a task changes how a page looks (templates, `static/app.css`, view-models, handlers/pages in `internal/web`) or asks for a visual check, especially when backend setup would be out of scope for a design-only change.
 ---
 
-# Storybook-driven frontend verification
+# UI-test: design iteration without the backend
 
-This repo ships a homemade storybook (`cmd/storybook`, built on
-`github.com/podhmo/minigo/storybook`). Frontend changes — templates,
-`static/app.css`, page view-models — should be tried out here **before**
-booting the real app: it renders pages with fake data instantly, groups a
-page's data-state variants into one grid, and hot-reloads every edit.
+In this repo backend and frontend work can split: a page's markup and
+CSS are fully exercised by the homemade storybook (`cmd/storybook`,
+built on `github.com/podhmo/minigo/storybook`), which renders
+`internal/web` pages against **fake data**. You never need the app
+running — no DB file, no `init`, no seeded records — to try design
+changes. That is the whole point of the tool: the design loop is
+independent of the backend loop.
 
 ## Start it
 
@@ -44,7 +46,7 @@ rendering **500**, not silently — treat that as the failure signal.
 - **Viewport switcher**: `?w=320|360|768` narrows the iframe — use it to
   check responsive behavior without resizing a window.
 
-## Verifying a frontend change — checklist
+## Checking a design change
 
 1. `make storybook` (once per task).
 2. Open `http://127.0.0.1:6006`. In a headless context use
