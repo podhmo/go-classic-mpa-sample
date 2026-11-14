@@ -16,7 +16,7 @@ make storybook      # http://127.0.0.1:6006 で storybook 的 UI が立つ
 - `GET /static/` … `internal/web/static` をそのまま配信（本物の CSS/favicon）
 - CLI 単発描画: `go run . <pkgdir> <StoryName>`、一覧: `-list`、静的エクスポート: `-o <dir>`
 
-試した結果、**全 10 story（5 ページ × 複数状態）が描画でき、テンプレート/CSS の編集はブラウザリロードだけで反映される**（毎リクエスト新規エンジンで再インタプリトするため）。1 リクエストあたり 100〜150ms。
+試した結果、**全 10 story（5 ページ × 複数状態）が描画でき、テンプレート/CSS の編集はブラウザリロードだけで反映される**（毎リクエスト `Engine.NewSession()` で package cache が空の session を fork し、ソースを再インタプリトするため）。1 リクエストあたり 100〜200ms。
 
 ## 何を作ったか
 
@@ -53,7 +53,7 @@ minigo 側の `examples/storybook` は example 内のハーネスで、外部パ
 
 - **`/static/` の実アセット配信**（`http.FileServer`）。example は静的ファイルを持たない。layout が参照する `/static/app.css` を実ディレクトリから出すので CSS 編集も即反映。
 - **index ページ（ナビ＋iframe）** は example と同型。
-- **engine の per-request 生成** = 「浅い探索の遅延実行インタプリタが都度実行される」形。`b.Render` 毎に `minigo.NewEngine` を作るので、ソース・テンプレート・embed・story の全てが最新のファイル内容で解釈される（要望のキャッシュ懸念はこの方式では起きない＝実測済み）。
+- **per-request な session fork** = 「浅い探索の遅延実行インタプリタが都度実行される」形。長寿命の base engine（bind・BuildConfig・PackageModes を一度だけ設定）から `b.Render` 毎に `e.NewSession()` を fork する。session は bind と設定を継承しつつ package cache が空なので、ソース・テンプレート・embed・story の全てが最新のファイル内容で解釈され、bound package（stdlib・goldmark）はロード済みのまま再利用される（要望のキャッシュ懸念はこの方式では起きない＝実測済み）。出力先は request 毎に `minigo.WithOutput(&buf)(session)` で差し替える。初期版は毎回 `NewEngine` + 全 bind 再登録だったが、`NewSession` が「bind を共有して実行状態だけ隔離する」ための正規 API だった。
 
 ### bind の切り分け（sqlite を実行しない仕組み）
 
@@ -106,7 +106,7 @@ storybook に追いつくための要点である「書き換えたら再起動�
 - script で定義した FuncMap 関数（`formatTime` 等）も bound template 内で呼べる（`vm.RegisterFuncMapType` による型適合）。
 - `//go:embed` は解釈モードでも動き、**ファイル内容はパッケージ再解釈の都度読み直される**（テンプレート編集→リロード反映を実測）。
 - `httptest.ResponseRecorder` は bound 済みでそのまま使えた。
-- キャッシュ問題（「パッケージのキャッシュが期待通りにリセットされない」）は**観測されなかった**。per-request 新規 engine なら 100〜150ms/req で十分速く、より大きなパッケージでキャッシュが欲しくなって初めて問題になると思われる。
+- キャッシュ問題（「パッケージのキャッシュが期待通りにリセットされない」）は**観測されなかった**。per-request session なら 100〜200ms/req で十分速く、より大きなパッケージでキャッシュが欲しくなって初めて問題になると思われる。なお未使用だった minigo の機能として `WithInitMode(LazyInit)`・`WithPackageModes` の ModeSource/ModeDeny（sourceModes は使用済み）・`inspect`・`BoundSymbols`・`WithHostPolicy`・`ScriptProfiler` がある（発見時の記録は html-sandbox の slops 記事に記載）。
 
 ### 明らかになった制限（ドキュメント化か改善を要望したい点）
 
