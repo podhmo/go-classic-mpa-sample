@@ -65,7 +65,7 @@ func (b *Book) Export(ctx context.Context, dir string, stories []Story) error {
 			errs = append(errs, err)
 			continue
 		}
-		if err := os.WriteFile(filepath.Join(dir, s.Name+".html"), res, 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, s.Name+".html"), res.Body, 0o644); err != nil {
 			return err
 		}
 	}
@@ -145,8 +145,18 @@ func (b *Book) Handler() http.Handler {
 			fmt.Fprintln(w, err)
 			return
 		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write(res)
+		// Handler-shaped stories recorded real response headers and a
+		// status — replay them so the preview exercises what the app's
+		// handler emits (security headers, CSP, non-200 states).
+		h := w.Header()
+		for k, vs := range res.Header {
+			h[k] = vs
+		}
+		if len(res.Body) > 0 && h.Get("Content-Type") == "" {
+			h.Set("Content-Type", "text/html; charset=utf-8")
+		}
+		w.WriteHeader(res.Status)
+		w.Write(res.Body)
 	})
 	mux.Handle("GET /static/", b.staticHandler())
 	return mux

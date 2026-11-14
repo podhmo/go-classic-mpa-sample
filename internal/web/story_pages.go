@@ -9,6 +9,7 @@
 package web
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -207,4 +208,55 @@ func StoryError404() {
 	NewRenderer().renderError(rec, http.StatusNotFound, "Not found",
 		"The page or issue you are looking for does not exist or may have been deleted.")
 	printRec(rec)
+}
+
+// storyStore implements the Store contract with story fixtures so
+// handler-shaped stories drive the real mux — routing, security
+// headers, status codes — without a database.
+type storyStore struct{}
+
+func (storyStore) ListIssues(ctx context.Context, f store.ListFilter) ([]*store.Issue, int, error) {
+	return storyIssues, len(storyIssues), nil
+}
+func (storyStore) GetIssue(ctx context.Context, id int64) (*store.Issue, error) {
+	for _, is := range storyIssues {
+		if is.ID == id {
+			return is, nil
+		}
+	}
+	return nil, store.ErrNotFound
+}
+func (storyStore) CreateIssue(ctx context.Context, in store.IssueInput) (int64, error) {
+	return 99, nil
+}
+func (storyStore) UpdateIssue(ctx context.Context, id int64, in store.IssueInput) error {
+	return nil
+}
+func (storyStore) SetIssueStatus(ctx context.Context, id int64, status string) error {
+	return nil
+}
+func (storyStore) DeleteIssue(ctx context.Context, id int64) error {
+	return nil
+}
+func (storyStore) ListComments(ctx context.Context, issueID int64) ([]*store.Comment, error) {
+	return storyComments, nil
+}
+func (storyStore) CreateComment(ctx context.Context, issueID int64, body string) (int64, error) {
+	return 1, nil
+}
+func (storyStore) ListLabels(ctx context.Context) ([]*store.Label, error) {
+	return storyLabels, nil
+}
+
+// StoryHttpIssueList drives the real mux for GET /issues, so the
+// preview replays the handler's status and security headers too.
+func StoryHttpIssueList(w http.ResponseWriter, r *http.Request) {
+	New(storyStore{}).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/issues", nil))
+}
+
+// StoryHttpNotFound drives the real mux for an unknown path; the
+// recorded 404 status is replayed by the preview, unlike print
+// stories which always answer 200.
+func StoryHttpNotFound(w http.ResponseWriter, r *http.Request) {
+	New(storyStore{}).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/no-such-page", nil))
 }

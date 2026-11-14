@@ -79,7 +79,7 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 		if err != nil {
 			return err
 		}
-		_, err = stdout.Write(res)
+		_, err = stdout.Write(res.Body)
 		return err
 	default:
 		return errors.New("one of -list, -o, -http or a story name is required")
