@@ -9,7 +9,13 @@
 - `docs/ja/decisions.md` — 設計判断の記録（変更時は追記する）
 - `docs/ja/bugs.md` — 既知のバグ・問題点（発見したら重要度つきで記録）
 - `docs/ja/prompts.md` — 元の仕様書
-- `TODO.md` — タスクの分解・進捗
+- `TODO.md` — タスクの分解・進捗（追加・完了・GC の運用ルールは `.agents/skills/todo-md/SKILL.md` に必ず従う）
+- `TODO-archive.md` — 完了済みタスクの追記専用アーカイブ（直接編集しない、`make todo-gc` で自動追記）
+
+## スキル
+
+- `.agents/skills/todo-md/` — TODO.md / TODO-archive.md の運用ルール。タスクの追記・完了・部分完了時は必ず参照する
+- `.agents/skills/modern-web-guidance/` — HTML/CSS・クライアント側UIの実装・更新前に `npx -y modern-web-guidance@latest search "<query>"` でモダンなベストプラクティスを検索するスキル。テンプレートや app.css を触る作業では先に実行する
 
 ## 主要コマンド
 
@@ -19,6 +25,7 @@ go run . -db app.db init    # DB スキーマ+index を明示的に初期化
 go test ./...               # 全テスト（unit + store + E2E）
 go vet ./... && gofmt -l .  # 静的解析・フォーマット確認（コミット前に）
 go fix ./...                # モダナイズ（必要に応じて）
+make todo-gc                # TODO.md の [x] 項目を TODO-archive.md へ移す
 ```
 
 実ブラウザでの画面検証が必要なら `playwright-cli`（`.claude/skills/playwright-cli` スキル参照、`pnpm dlx @playwright/cli` 経由）を使える。
