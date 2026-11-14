@@ -52,5 +52,7 @@
 - **embed.FS の変更はプロセス再起動が必要**: テンプレート/CSS を embed しているため、`go run` 中に HTML を直しても反映されない。ブラウザ検証では「今動いているバイナリが最新か」をまず確認する（今回は旧サーバーが `required` 付きテンプレートを返し続けていた）。
 - **`html/template` は `+` を `&#43;` にエスケープする**: UTF-7 XSS 対策のため。`"10,000+ records"` のような文字列はレンダリング後に verbatim で現れない — テストでタイトル文字列をそのまま assert すると落ちる。テストではエスケープされない部分文字列で assert する。
 - **`var()` を含む CSS 宣言は「後勝ちフォールバック」にならない**: `color: #000; color: contrast-color(var(--bg));` と書いても、`var()` を含む宣言は parse 時には常に有効扱いされ、未対応関数だと計算値時点で無効（IACVT）→ `unset`（`color` なら親から継承）になり、前の `#000` には戻らない。新しい色関数を custom property と組み合わせるときは `@supports (color: contrast-color(red))` のように宣言ごと囲う。
+- **出荷済みの Blink 機能は `--disable-blink-features` で無効化できない**: Invoker Commands / `sibling-index()` 非対応ブラウザを Chromium で再現しようとフラグを渡しても、ランタイムフラグが既に削除されていて効かない（Chrome 156）。CSS の `@supports` 分岐を確かめるなら、Playwright の `page.route` で `app.css` を差し替え、条件の関数名を未知の名前に書き換えるほうが確実。
+- **form 内の `<button commandfor>` は `type="button"` を明示する**: form owner があると `type="submit"` は command より送信が優先され、`type` 省略は Chrome 156 では送信も command もしない（コンソールに "Buttons associated with forms that include command or commandfor attributes are ambiguous, and require a type=button attribute. No action will be taken."）。「非対応ブラウザでは submit、対応ブラウザでは command」という type 省略の二刀流は成立しない。
 
 （随時追記）
