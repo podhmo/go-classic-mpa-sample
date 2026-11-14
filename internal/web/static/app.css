@@ -529,14 +529,78 @@ input[type="checkbox"] {
   color: var(--text-muted);
 }
 
+.form-note {
+  margin: 0 0 16px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+/* ---------- validation feedback ---------- */
+
+/* Two sources mark a field invalid, styled the same way:
+   - the server, after a failed submit: aria-invalid="true" plus a rendered
+     message, kept until the next submit (no JS to clear it);
+   - the browser, before submitting: :user-invalid, which only matches after
+     the user has edited and left the field, never on page load.
+   Without JS aria-invalid cannot follow :user-invalid, so client-side
+   feedback is visual only. :is() keeps the aria-invalid half working where
+   :user-invalid is unsupported (one unknown selector in a plain list would
+   drop the whole rule). */
+
 .field-error {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
   margin: 6px 0 0;
   font-size: 0.85rem;
   font-weight: 500;
   color: var(--danger);
 }
 
-[aria-invalid="true"] {
+/* Decorative icon; the empty alt text keeps it out of the accessible name.
+   Browsers without alt text for content drop the declaration and the icon. */
+.field-error::before {
+  content: "!" / "";
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  width: 1.1em;
+  height: 1.1em;
+  border-radius: 50%;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--on-emphasis);
+  background: var(--danger-emphasis);
+}
+
+/* The browser-side message ("… is required.") stays hidden until its field
+   is :user-invalid. Where :has() or :user-invalid is unsupported the rule
+   is dropped and the message simply never shows. */
+.field-error-pending {
+  display: none;
+}
+
+.field:has(> :user-invalid) > .field-error-pending {
+  display: flex;
+}
+
+:is(input, select, textarea):is(:user-invalid, [aria-invalid="true"]) {
+  border-color: var(--danger);
+  background-color: var(--danger-bg);
+}
+
+:is(input, select, textarea):is(:user-invalid, [aria-invalid="true"]):focus-visible {
+  outline: 2px solid var(--danger);
+  outline-offset: 2px;
+}
+
+.field:has(:is(input, select, textarea):is(:user-invalid, [aria-invalid="true"]))
+  > :is(label, legend) {
+  color: var(--danger);
+}
+
+fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   border-color: var(--danger);
 }
 
