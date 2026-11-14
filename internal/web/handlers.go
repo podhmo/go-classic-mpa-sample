@@ -112,6 +112,12 @@ func (h *handler) listIssues(w http.ResponseWriter, r *http.Request) {
 		data.RangeStart = (f.Page-1)*perPage + 1
 		data.RangeEnd = min(f.Page*perPage, total)
 	}
+	// External speculation rules (issue titles + pagination, moderate
+	// eagerness): the Speculation-Rules header delivery keeps the no-JS
+	// markup free of <script> elements, which CSP script-src 'none'
+	// would block even for the inert speculationrules JSON type. The
+	// header value is an sf-string — the quotes are mandatory.
+	w.Header().Set("Speculation-Rules", `"/static/speculation-rules.json"`)
 	h.r.renderIssueList(w, http.StatusOK, data)
 }
 

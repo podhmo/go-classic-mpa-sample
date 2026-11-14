@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -1278,5 +1279,65 @@ func TestDetailA11ySemantics(t *testing.T) {
 	// each link's accessible name distinct.
 	if !strings.Contains(body, `class="visually-hidden">(comment 1)</span>`) {
 		t.Error("permalink lacks the hidden comment id")
+	}
+}
+
+func TestSpeculationRules(t *testing.T) {
+	srv, f := newTestServer(t)
+	f.addIssue("Speculated target", "body", store.StatusOpen, time.Now())
+
+	resp, err := srv.Client().Get(srv.URL + "/issues")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := getBody(t, resp)
+	// The rules are delivered by header (external JSON ruleset), keeping
+	// the no-JS markup free of <script> elements — inline speculationrules
+	// is still a <script> to CSP and script-src 'none' blocks it.
+	if v := resp.Header.Get("Speculation-Rules"); v != `"/static/speculation-rules.json"` {
+		t.Errorf("Speculation-Rules = %q, want quoted ruleset URL", v)
+	}
+	if strings.Contains(body, "<script") {
+		t.Error("list page must stay free of <script> elements")
+	}
+
+	resp2, err := srv.Client().Get(srv.URL + "/issues/1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp2.Body.Close()
+	if v := resp2.Header.Get("Speculation-Rules"); v != "" {
+		t.Errorf("Speculation-Rules on detail page = %q, want empty (list page only)", v)
+	}
+
+	resp3, err := srv.Client().Get(srv.URL + "/static/speculation-rules.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp3.Body.Close()
+	if v := resp3.Header.Get("Content-Type"); v != "application/speculationrules+json" {
+		t.Errorf("ruleset Content-Type = %q, want application/speculationrules+json", v)
+	}
+	var rules struct {
+		Prefetch []struct {
+			Where struct {
+				SelectorMatches string `json:"selector_matches"`
+			} `json:"where"`
+			Eagerness string `json:"eagerness"`
+		} `json:"prefetch"`
+	}
+	if err := json.NewDecoder(resp3.Body).Decode(&rules); err != nil {
+		t.Fatalf("ruleset is not valid JSON: %v", err)
+	}
+	if len(rules.Prefetch) != 1 {
+		t.Fatalf("prefetch rules = %d, want 1", len(rules.Prefetch))
+	}
+	if e := rules.Prefetch[0].Eagerness; e != "moderate" {
+		t.Errorf("eagerness = %q, want moderate", e)
+	}
+	for _, sel := range []string{".issue-list", ".pagination"} {
+		if !strings.Contains(rules.Prefetch[0].Where.SelectorMatches, sel) {
+			t.Errorf("selector_matches %q lacks %q", rules.Prefetch[0].Where.SelectorMatches, sel)
+		}
 	}
 }

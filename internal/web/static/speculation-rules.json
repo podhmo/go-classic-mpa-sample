@@ -1,0 +1,9 @@
+{
+  "prefetch": [
+    {
+      "tag": "issue-list",
+      "where": {"selector_matches": ".issue-list a.issue-title, .pagination a"},
+      "eagerness": "moderate"
+    }
+  ]
+}
