@@ -41,7 +41,7 @@ iframe.sized { flex: none; margin-inline: auto; border-inline: 1px dashed #ccc; 
 <strong>{{.Dir}}</strong>
 {{if .Err}}<small class="err">{{.Err}}</small>{{end}}
 <div class="viewport">{{range .Widths}}<a href="?w={{.}}&s={{$.S}}"{{if eq . $.W}} class="active"{{end}}>{{if .}}{{.}}px{{else}}full{{end}}</a>{{end}}</div>
-{{range .Entries}}<a href="{{.Href}}"{{if .Target}} target="{{.Target}}"{{end}}{{if eq .Name $.S}} class="active"{{end}}>{{.Name}}
+{{range .Entries}}<a href="{{.Href}}"{{if .Target}} target="{{.Target}}"{{end}}{{if eq .Name $.S}} class="active"{{end}}>{{.Name}}{{if .IsHTTP}} <small>↗</small>{{end}}
 <small>{{.Doc}}</small>{{if .Err}}<small class="err">{{.Err}}</small>{{end}}</a>
 {{end}}</nav>
 <iframe name="story"{{if .S}} src="/story/{{.S}}"{{else}}{{with .Entries}} src="{{(index . 0).Href}}"{{end}}{{end}}{{if .W}} class="sized" style="width: {{.W}}px"{{end}}></iframe>
@@ -85,8 +85,8 @@ func (b *Book) Export(ctx context.Context, dir string, stories []Story) error {
 // Speculation-Rules header reference), so previews render with the live
 // stylesheet. A fresh interpretation on each request reflects source and
 // template edits on reload; CSS needs no re-execution at all. Story
-// failures answer 500; successful previews answer 200, independent of a
-// handler's original status.
+// failures answer 500. Print stories answer 200; handler-shaped stories
+// replay the status and headers their recorder captured.
 func (b *Book) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
@@ -106,6 +106,14 @@ func (b *Book) Handler() http.Handler {
 		wpx := r.URL.Query().Get("w")
 		entries := make([]entry, len(stories))
 		for i, s := range stories {
+			if s.IsHTTP() {
+				// Handler stories replay the app's real response headers,
+				// which include frame-ancestors 'none' / X-Frame-Options:
+				// DENY — they cannot render inside the iframe, so they
+				// open in a new tab with the headers intact.
+				entries[i] = entry{Story: s, Href: "/story/" + s.Name, Target: "_blank"}
+				continue
+			}
 			href := "?s=" + s.Name
 			if wpx != "" {
 				href += "&w=" + wpx
@@ -118,13 +126,18 @@ func (b *Book) Handler() http.Handler {
 		sel := r.URL.Query().Get("s")
 		known := false
 		for _, s := range stories {
-			if s.Name == sel {
+			if s.Name == sel && !s.IsHTTP() {
 				known = true
 				break
 			}
 		}
-		if !known && len(stories) > 0 {
-			sel = stories[0].Name
+		if !known {
+			for _, s := range stories {
+				if !s.IsHTTP() {
+					sel = s.Name
+					break
+				}
+			}
 		}
 		if err := indexTmpl.Execute(w, map[string]any{
 			"Dir":     b.Dir,
