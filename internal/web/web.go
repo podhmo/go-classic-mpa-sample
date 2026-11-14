@@ -86,13 +86,58 @@ func New(st Store) http.Handler {
 	return securityHeaders(http.NewCrossOriginProtection().Handler(mux))
 }
 
-// securityHeaders adds a minimal set of defense-in-depth response headers.
-// No CSP: label badges use inline styles, which would require unsafe-inline.
+// contentSecurityPolicy is the enforced CSP for every response. The app runs
+// zero JavaScript and serves every byte itself — one stylesheet plus a
+// data: favicon — so the policy can be near-default-deny.
+//
+// The one deliberate hole is style-src-attr 'unsafe-inline': label badges
+// carry their DB-driven color in a style="--label-color: ..." attribute, and
+// CSP offers no nonce/hash mechanism for style attribute values. The hole is
+// narrow — <style> elements stay blocked under style-src 'self', and CSS
+// url() loads can't exfiltrate because img-src allows no remote origin.
+// Browsers too old for style-src-attr fall back to style-src for the
+// attribute and simply render badges in the muted fallback color instead of
+// breaking layout.
+//
+// img-src is 'self' data: on purpose: goldmark renders user-posted
+// ![i](https://...) as <img>, and remote images in user content are a
+// tracking-pixel channel. data: is needed only for our own favicon.
+//
+// Deliberately absent: require-trusted-types-for (inert under
+// script-src 'none'), upgrade-insecure-requests (the app is served over
+// plain HTTP and the directive would rewrite every URL to https), report-to
+// (no reporting endpoint exists), and HSTS (ignored over HTTP; this is a
+// localhost app with no TLS).
+const contentSecurityPolicy = "default-src 'none'; " +
+	"script-src 'none'; " +
+	"style-src 'self'; " +
+	"style-src-attr 'unsafe-inline'; " +
+	"img-src 'self' data:; " +
+	"object-src 'none'; " +
+	"base-uri 'none'; " +
+	"form-action 'self'; " +
+	"frame-ancestors 'none'"
+
+// permissionsPolicy denies powerful features the app never uses; CSP has no
+// directive covering them.
+const permissionsPolicy = "accelerometer=(), camera=(), geolocation=(), " +
+	"gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"
+
+// securityHeaders adds defense-in-depth response headers. Vary mirrors the
+// request headers CrossOriginProtection inspects so shared caches cannot
+// serve a response keyed on another request's fetch metadata.
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("X-Frame-Options", "DENY")
-		w.Header().Set("Referrer-Policy", "same-origin")
+		h := w.Header()
+		h.Set("Content-Security-Policy", contentSecurityPolicy)
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "same-origin")
+		h.Set("Cross-Origin-Opener-Policy", "same-origin-allow-popups")
+		h.Set("Cross-Origin-Resource-Policy", "same-origin")
+		h.Set("Permissions-Policy", permissionsPolicy)
+		h.Add("Vary", "Sec-Fetch-Site")
+		h.Add("Vary", "Origin")
 		next.ServeHTTP(w, r)
 	})
 }

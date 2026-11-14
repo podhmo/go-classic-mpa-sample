@@ -56,6 +56,8 @@
 - **form 内の `<button commandfor>` は `type="button"` を明示する**: form owner があると `type="submit"` は command より送信が優先され、`type` 省略は Chrome 156 では送信も command もしない（コンソールに "Buttons associated with forms that include command or commandfor attributes are ambiguous, and require a type=button attribute. No action will be taken."）。「非対応ブラウザでは submit、対応ブラウザでは command」という type 省略の二刀流は成立しない。
 - **Playwright の `selectOption` では `:user-invalid` が立たない**: `fill` で空にしたテキスト欄は `:user-invalid` になるが、`<select>` に `selectOption` で値を入れ直しても Chromium 156 ではマッチしなかった（ユーザー操作扱いにならない）。select の検証表示を確かめるときは `focus` → `ArrowDown`/`ArrowUp` → `Tab` のキーボード操作で行う。
 - **フォーム送信直後のスクリーンショットは view transition の途中を撮る**: POST→422 のページ表示にもクロスフェード（0.18s）がかかるため、`waitForLoadState()` 直後だと新旧ページが重なった画像になる。数百 ms 待ってから撮る。
+- **`page.goto` では cross-document view transition が発火しない**: `pagereveal` の `e.viewTransition` で検証する場合、Playwright の `page.goto` 遷移では viewTransition が falsy のまま（pagereveal 自体は来る）。リンクの `page.click` 遷移では true になる。「発火しない = 壊れている」と読み違えないこと（CSP 導入時に一回誤診しかけた）。
+- **CSP 導入後のブラウザ検証は「意図したブロック」と「壊れ」を分けて読む**: `script-src 'none'` でも Playwright の `page.evaluate` は動く（CDP/隔離ワールド経由）が、eval で注入した `<style>`/`<img>` のリソース処理はページの CSP に従う。注入物がブロックされること自体が CSP 有効の証拠になる — コンソールの違反ログは必ずしもバグではない。
 
 - **`<fieldset>` は既定で `min-inline-size: min-content`**: 中身（例: `white-space: nowrap` のラベルバッジ）が長いと fieldset が親より広がり、ページ全体が横スクロールする。ellipsis で切り詰めたい要素を fieldset に入れるときは fieldset に `min-inline-size: 0` を付ける（`.label-picker`）。
 - **`.field > label { display: block }` が `.label-option` に勝つ**: ラベル選択の `<label class="label-option">` は `.field` 直下なので、`.label-option { display: … }` は詳細度で負ける。`.label-picker > .label-option` のように詳細度を上げる。flex にした checkbox は縮むので `flex: none` も要る。

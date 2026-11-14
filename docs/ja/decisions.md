@@ -60,7 +60,7 @@
 - **ページング**: `page` は `1..1_000_000` のみ受理（int64オーバーフロー防止）。`Page > TotalPages` は最終ページにクランプして再クエリ（空表示+復帰不能を防ぐ）。
 - **404/405 の分担**: GET/POST の未知パスは `GET /`・`POST /` キャッチオール → styled 404。PUT/DELETE 等のブラウザが出さないメソッドは mux 自動 405（素の text/plain、`Allow` 付き）をそのまま使う。
 - **静的配信**: ファイル単位の明示登録（`GET /static/app.css` → `ServeFileFS`）。ディレクトリ mount によるリスティング露出を防ぐ。
-- **セキュリティヘッダ**: `X-Content-Type-Options: nosniff`、`X-Frame-Options: DENY`、`Referrer-Policy: same-origin` を middleware で全レスポンスに付与。CSP は inline style（ラベル色）と衝突するため見送り。
+- **セキュリティヘッダ**: `X-Content-Type-Options: nosniff`、`X-Frame-Options: DENY`、`Referrer-Policy: same-origin` を middleware で全レスポンスに付与。CSP は当初 inline style（ラベル色）と衝突するため見送ったが、後日 `style-src-attr` で解消して追加（下記「CSP・セキュリティヘッダ」参照）。
 
 ## 今後の予定（backlog で確定済みの方向）
 
@@ -143,5 +143,13 @@
 - **`contain-intrinsic-block-size: auto 6lh`**: 仮サイズは「短いコメント」（padding + 日時行 + 本文 3 行ほど ≈ 140px）。`auto` で一度描画した実寸を覚えるので、スクロールで戻ってもジャンプしない。重いコメントばかりのスレッドでは読み込み時の `scrollHeight` が実寸より小さく（200 件で 38,248px → 全部描画後 72,126px）、スクロールバーのつまみが進むにつれ縮むが、スクロール位置自体はスクロールアンカリングで飛ばない。インライン方向は親に引き伸ばされるので `contain-intrinsic-size` ではなく block 方向だけ指定した。`content-visibility: auto` に仮サイズが必ず付くことは `TestStaticCSS` で固定。
 - **確認したこと（Chromium 156、ライト・ダーク両方）**: ホイールで最後までスクロールして各コメントが描画されること、`#comment-N`（150 件目）へのリンクで読み込み直後〜1 秒後まで対象が top=0 のまま `:target` の枠が付くこと、`window.find()`（ページ内検索相当）がスキップ中のコメントの文字列を見つけて描画させること、Tab でスキップ中のコメント内のリンクへ順に移動しフォーカス先が表示域に入ること、コメントフォームの `:has(:user-invalid)` エラー表示・空送信の 422 + `autofocus`、削除ダイアログの開閉とフォーカス復帰。
 - **トレードオフ: スキップ中のコメントはアクセシビリティツリーから外れる**: Chromium 156 の CDP `Accessibility.getFullAXTree` では、スキップ中の `<li>` は子なしの listitem になり、中身は `ignored`（`notRendered`）。スクリーンリーダーのブラウズモードのリンク一覧・見出しジャンプ等では、近くまでスクロールするまでその内容が見えない可能性がある（VM では実際の支援技術で確かめられない）。50 件未満のスレッドでは発生しない — 閾値を設けた最大の理由。bugs.md #23 に記録。
+
+## CSP・セキュリティヘッダ（2026-11-14、modern-web-guidance `security` / `privacy`）
+
+- **CSP を `default-src 'none'` ベースで有効化**: `script-src 'none'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'`。JS ゼロなので `script-src 'none'` が張れるのが本アプリの最大の利点。bugs.md #13' で「inline style と相性を考えると過剰」として見送った判断を `style-src-attr` で解消し取り下げた（#24 で解消済み）。
+- **inline `style=` は `style-src-attr 'unsafe-inline'` でのみ許可**: ラベルバッジの `style="--label-color: {{.Color}}"` は DB 由来の動的値で、nonce/hash は style 属性値には使えない（nonce は `<style>`/`<script>` 要素のみに効く）。`-attr` を分けて指定することで「属性だけ通して `<style>` 要素は塞ぐ」最小の穴にした — 実ブラウザで `<style>` 要素注入が `style-src 'self'` にブロックされることを確認済み。`style-src-attr` 未対応の古いブラウザは `style-src` にフォールバックしてバッジ色だけ muted に落ちる graceful degradation（レイアウトは壊れない）。
+- **`img-src 'self' data:`**: `data:` は自前の SVG favicon 用。goldmark はユーザー投稿の `![i](https://…)` を `<img>` で出力しうるが、外部画像は tracking pixel になるため意図的に遮断（privacy ガイドの「サードパーティリソースはプライバシー漏洩源」）。実ブラウザでブロックされることを確認。CSS の `url()` 経由の外部送信もこれで塞がる。もしユーザー画像を許したくなったら `https:` を足す判断ポイント。
+- **追加ヘッダ**: `Cross-Origin-Opener-Policy: same-origin-allow-popups`（ポップアップ利用なし、ガイド既定値）、`Cross-Origin-Resource-Policy: same-origin`（全レスポンスがアプリ内部向け）、`Permissions-Policy` で未使用の強力機能を拒否（`accelerometer/camera/geolocation/gyroscope/magnetometer/microphone/payment/usb`）、`Vary: Sec-Fetch-Site, Origin`（`CrossOriginProtection` が参照するリクエストヘッダ — 共有キャッシュが 403/200 を別リクエストへ流用しないように）。
+- **付けなかったもの**: HSTS（平 HTTP の localhost アプリであり、HTTP 経由ではブラウザが無視する）、`upgrade-insecure-requests`（全 URL を https に書き換えてアプリ自体が壊れる）、`require-trusted-types-for 'script'`（`script-src 'none'` で DOM シンクに届くスクリプト自体存在しないため無意味）、`report-to`（レポート endpoint がない）、`sandbox`（フォームまで塞がる）。`Referrer-Policy` は現行 `same-origin` 維持（ガイド既定の `strict-origin-when-cross-origin` より cross-origin への漏洩が少なく、外部参照ゼロなので実害なし）。
 
 （随時追記）

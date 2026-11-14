@@ -31,6 +31,7 @@
 | 20 | minor | 修正済 | ラベルバッジの文字色コントラスト不足 | ダークモード対応時に計算で発見（ライトモードでも同じ）: `.label-badge` の文字色が固定 `#1f2328` のため、シードの Bug `#d73a4a` で 3.46:1、Documentation `#1f6feb` で 3.41:1、Feature `#0075ca` で 3.31:1 と WCAG AA（4.5:1）未満。対応: 色を `--label-color` で渡し `contrast-color()`（非対応時は RCS の XYZ 計算）で白/黒を選ぶ。結果 Bug/Enhancement は黒、Documentation/Feature は白（いずれも 4.5:1 以上）。実ブラウザ（Chromium）の計算値で確認 |
 | 21 | minor | 修正済 | サーバー側エラーが読み上げ・フォーカスともに不確実 / Firefox・Safari で未操作の必須欄が invalid 扱い | フォームフィードバック整備時にガイド照合で発見: (1) 422 再表示のエラー文が `role="alert"` だったが、ページロード時から存在する live region は確実には読み上げられず、フォーカスも先頭のまま（エラー欄へ移動しない）。(2) エラーなしの欄は `aria-invalid` 未指定で、Firefox/Safari は空の `required` 欄をロード直後から invalid として公開する。対応: `role="alert"` を外し、最初のエラー欄に `autofocus`（読み上げは `aria-describedby` 経由）。エラーなしの欄は `aria-invalid="false"` を明示。テスト追加済 |
 | 22 | minor | 修正済 | 文字サイズが px 固定でブラウザ/OS の文字サイズ設定に追従しない / 640px 以下で本文を 14px に縮小 / 一覧の長いタイトルが無制限に伸びる | Responsive & typography pass の監査で発見: `body { font-size: 15px }` と各所の px 指定のため、ブラウザの既定文字サイズを変えても本文が大きくならなかった。さらに狭幅で本文を 14px に縮めていた。長いタイトル・ラベル名は一覧の行を何行にも伸ばしていた。対応: rem 化 + `<meta name="text-scale">`、狭幅での縮小を廃止、一覧タイトル 2 行 clamp・ラベル ellipsis。px font-size が無いことをテストで固定 |
+| 24 | info | 修正済 | CSP 未設定（#13' の CSP 部分を解消） | `securityHeaders` middleware に `default-src 'none'` ベースの CSP を付与。ラベル色の inline `style=` は `style-src-attr 'unsafe-inline'` でのみ許可し `<style>` 要素は遮断、外部画像は `img-src 'self' data:` で遮断。COOP/CORP/Permissions-Policy/Vary も追加（decisions.md「CSP・セキュリティヘッダ」）。実ブラウザで違反なし・注入 `<style>`/外部 `<img>` がブロックされることを確認 |
 
 ## 修正しない（記録のみ）
 
@@ -40,7 +41,7 @@
 | 5' | nit | wontfix | `UpdateIssue` は同一内容でも `updated_at` を bump | フォーム送信=更新意思ありと解釈。GitHub も同様の挙動 |
 | 7 | nit | wontfix | `multipart/form-data` の POST は 422 "Title is required" になる | `ParseForm` が multipart を PostForm に入れない仕様。フォームは multipart を使わないので実害なし。fail closed で安全 |
 | 10 | info | wontfix | 検索の `lower()` は ASCII のみ（`Ä`↔`ä` 不一致） | SQLite の `lower()` の制限。ローカルデモとして許容 |
-| 13' | info | wontfix | `fmtTime` が分単位のため同分内の updated_at 変化が見えない / CSP 未設定 | 表示解像度の話。CSP は inline style（ラベル色）と相性を考えると過剰 |
+| 13' | info | wontfix | `fmtTime` が分単位のため同分内の updated_at 変化が見えない | 表示解像度の話（この項目に同居していた「CSP 未設定」は #24 で解消済み） |
 | 16 | nit | wontfix | 空白のみのコメントのドラフトが trim されて空で再表示される | E2Eテストで確認（E2Eエージェント指摘）: `createComment` が `strings.TrimSpace` 後の値を `CommentDraft` に使うため `"   "` 投稿失敗時は空の textarea になる。「入力内容を保持」の字面どおりではないが、空白のみは意味を持たないため実害なし。挙動はテストで固定済（`integration_test.go`） |
 | 23 | minor | wontfix | 50 件以上のスレッドで画面外のコメントがアクセシビリティツリーに出ない | 長いリストのレンダリング最適化で実ブラウザ（Chromium 156）の AX ツリーを確認して発見: `content-visibility: auto` でスキップ中のコメントは子なしの listitem になり、本文は `notRendered` で ignored。Tab 移動・ページ内検索・`#comment-N` は問題なし。50 件未満のスレッドには `content-visibility` を当てないことで影響を長いスレッドに限定した（decisions.md「長いリストのレンダリング」）。長いスレッドでも問題になるようなら閾値を上げるかルールを消す |
 
