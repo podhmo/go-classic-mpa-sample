@@ -29,6 +29,9 @@ type Book struct {
 	Tag       string   // build tag guarding the story files
 	Src       []string // extra packages to interpret from source
 	StaticDir string   // directory served under /static/ in -http mode
+
+	base *minigo.Engine // configured once; each Render forks a session
+	dir  string         // absolute Dir, computed with base
 }
 
 // Story is a story function found in a tagged file.
@@ -106,10 +109,11 @@ func isStoryShape(ft *ast.FuncType) bool {
 // parsePages now avoids by reading embedded files itself.
 var sourceModes = map[string]minigo.PackageMode{}
 
-// Render runs one story in a fresh engine, so an edit to the package —
-// template, Go code, or an //go:embed'ed file — shows up on the next call,
-// and captures its stdout as HTML. Stories own their fixtures; the helper
-// injects no HTTP values.
+// Render runs one story in a session forked from the book's base engine:
+// the session keeps the configuration and host bindings but starts with an
+// empty package cache, so an edit to the package — template, Go code, or an
+// //go:embed'ed file — shows up on the next call while bound packages stay
+// loaded. Stories own their fixtures; the helper injects no HTTP values.
 func (b *Book) Render(ctx context.Context, name string) ([]byte, error) {
 	stories, err := b.Stories()
 	if err != nil {
@@ -118,30 +122,44 @@ func (b *Book) Render(ctx context.Context, name string) ([]byte, error) {
 	if !slices.ContainsFunc(stories, func(s Story) bool { return s.Name == name }) {
 		return nil, fmt.Errorf("%s: not a story", name)
 	}
+	base, dir, err := b.baseEngine()
+	if err != nil {
+		return nil, err
+	}
+	s := base.NewSession()
 	var output bytes.Buffer
-	modes := maps.Clone(sourceModes)
-	for _, p := range b.Src {
-		modes[p] = minigo.ModeSource
-	}
-	opts := []minigo.Option{
-		minigo.WithOutput(&output),
-		minigo.WithBuildConfig(resolve.BuildConfig{Tags: []string{b.Tag}}),
-		minigo.WithPackageModes(modes),
-	}
-	dir, err := filepath.Abs(b.Dir)
+	minigo.WithOutput(&output)(s)
+	pkg, err := s.Package(ctx, dir)
 	if err != nil {
 		return nil, err
 	}
-	e := minigo.NewEngine(dir, opts...)
-	bindApp(e)
-	pkg, err := e.Package(ctx, dir)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := e.Call(ctx, pkg, name); err != nil {
+	if _, err := s.Call(ctx, pkg, name); err != nil {
 		return nil, fmt.Errorf("%s: %w", name, err)
 	}
 	return output.Bytes(), nil
+}
+
+// baseEngine lazily builds the long-lived engine all renders fork from.
+// Build-time options (tags, package modes, host binds) live here; the
+// per-request output buffer is installed on each session instead.
+func (b *Book) baseEngine() (*minigo.Engine, string, error) {
+	if b.base == nil {
+		dir, err := filepath.Abs(b.Dir)
+		if err != nil {
+			return nil, "", err
+		}
+		modes := maps.Clone(sourceModes)
+		for _, p := range b.Src {
+			modes[p] = minigo.ModeSource
+		}
+		e := minigo.NewEngine(dir,
+			minigo.WithBuildConfig(resolve.BuildConfig{Tags: []string{b.Tag}}),
+			minigo.WithPackageModes(modes),
+		)
+		bindApp(e)
+		b.base, b.dir = e, dir
+	}
+	return b.base, b.dir, nil
 }
 
 // bindApp registers the host packages interpreted internal/web code
