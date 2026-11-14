@@ -230,6 +230,14 @@
 - **`scroll-padding-top: 5rem`**: sticky で隠れる分を anchor ジャンプ（`#comment-N` 等）とフォーカス可視性（WCAG 2.4.11）に配慮して html に設定。
 - **検証**: storybook の `StoryIssueDetail` で実ブラウザ確認 — スクロール前 `box-shadow: none`、スクロール後に影が出て `site-header` が `top: 0` に留まることを確認。
 
+## Back to Top ボタン（2026-11-15、`back-to-top` ブランチ）
+
+- **ガイド**: modern-web-guidance `scroll-position-aware-elements`。スクロール量で要素の表示を切り替える container scroll-state queries（`scrollable: top`）を使用 — JS scroll listener 不要。
+- **スクロールコンテナは `html`**: アプリのスクローラは document viewport なので `html { container-type: scroll-state }`。ガイドの `.scroller`（中身が div）相当をルートに適用した形。sticky-header の `container-name: site-header` とは別コンテナで衝突しない。
+- **ボタンは `position: fixed`**: ガイドは scroller 内 `sticky` を使うが、document スクローラに対応するのは fixed。issue detail ページのみに配置（TODO「長いスレッドで」）。リンク先は `#main-content` — skip-link と同じ既存アンカーを再利用、focus も移る。
+- **フォールバックはガイドの Basic Fallback**: 未対応ブラウザでは常時表示（ボタンが消えたままになる方が悪い）。`@supports (container-type: scroll-state)` で対応ブラウザだけ hidden + scroll 連動に切替。IntersectionObserver の Advanced Fallback は入れない（常時表示で十分）。
+- **検証**: 新規 story `StoryIssueDetailLong`（24件コメントの長いスレッド）で実ブラウザ確認 — 初期 `visibility:hidden/opacity:0`、スクロール後 `visible/1`、クリックで `#main-content` に遷移。
+
 （随時追記）
 
 ## minigo storybook 環境の構成（2026-11-14）
