@@ -1048,6 +1048,74 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   text-decoration: underline;
 }
 
+/* copy-link button on each comment header: revealed on hover/focus-within
+   (pointer: fine), always visible on touch (guide: never hover-only) */
+.copy-wrap {
+  position: relative;
+  margin-inline-start: 0.5rem;
+}
+
+.copy-btn {
+  font: inherit;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1px 6px;
+  min-inline-size: 24px;
+  min-block-size: 24px;
+  cursor: pointer;
+}
+
+.copy-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.copy-btn[data-copied] {
+  color: var(--open);
+  border-color: var(--open);
+}
+
+.copy-btn[data-failed] {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.copy-tip {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-inline-start: 0.4rem;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.copy-btn[data-copied] + .copy-tip,
+.copy-btn[data-failed] + .copy-tip {
+  opacity: 1;
+}
+
+@media (hover: hover) {
+  .copy-btn {
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .comment:hover .copy-btn,
+  .comment:focus-within .copy-btn,
+  .copy-btn:focus-visible,
+  .copy-btn[data-copied],
+  .copy-btn[data-failed] {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .copy-btn, .copy-tip {
+    transition: opacity 0.15s;
+  }
+}
+
 .comment-body {
   overflow-wrap: anywhere;
 }

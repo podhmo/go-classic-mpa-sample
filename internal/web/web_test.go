@@ -768,8 +768,9 @@ func TestDetailDeleteDialog(t *testing.T) {
 			t.Errorf("detail missing %q", want)
 		}
 	}
-	if strings.Contains(body, "<script") {
-		t.Error("detail page must not contain <script>")
+	stripped := regexp.MustCompile(`<script[^>]*src="/static/[a-zA-Z0-9._/-]+"[^>]*>\s*</script>`).ReplaceAllString(body, "")
+	if strings.Contains(stripped, "<script") {
+		t.Error("detail page must only load same-origin /static scripts, never inline")
 	}
 }
 

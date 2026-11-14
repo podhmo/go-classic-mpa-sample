@@ -179,6 +179,15 @@
 - **検証方法の記録**: 投機 fetch は Playwright `requests`/Network ドメインに出ないため、標準ライブラリのロギングプロキシを `:8081` に立ててサーバー側ヘッダーで観測。hover → `GET /issues/2` `Sec-Purpose: 'prefetch'` `Sec-Speculation-Tags: '"issue-list"'`（`tag` がサーバー側識別に効く）、Next で `/issues?page=2` も発火、セレクタ外（New issue 等）は発火しない、クリック遷移正常、console エラー・警告ゼロを確認。
 - **付けなかったもの**: HSTS（平 HTTP の localhost アプリであり、HTTP 経由ではブラウザが無視する）、`upgrade-insecure-requests`（全 URL を https に書き換えてアプリ自体が壊れる）、`require-trusted-types-for 'script'`（`script-src 'none'` で DOM シンクに届くスクリプト自体存在しないため無意味）、`report-to`（レポート endpoint がない）、`sandbox`（フォームまで塞がる）。`Referrer-Policy` は現行 `same-origin` 維持（ガイド既定の `strict-origin-when-cross-origin` より cross-origin への漏洩が少なく、外部参照ゼロなので実害なし）。
 
+## コメントのパーマリンクコピーボタン（2026-11-15、`copy-permalink` ブランチ）
+
+- **ガイド**: modern-web-guidance `copy-button`。「copy text that doesn't exist on the page — URL, code block」用途（コメントの `#comment-N` リンクはDOM上に文字列として存在しない）に該当するため、クリップボードへの書き込みは JS 必須。宣言的に書ける部分（ボタン、状態表示）は全てHTML/CSS。
+- **Invoker Commands (`command`/`commandfor`)**: ガイド推奨の宣言的呼び出し。`command` イベントは bubble しないので `document` で capture phase に listen。`event.source` がボタン、`event.target` が `commandfor` の指すコメント要素。`CommandEvent` 非対応ブラウザは同じマークアップを click フォールバックで処理。
+- **`navigator.clipboard.writeText` + `execCommand` フォールバック**: ガイド通り Async Clipboard API を優先し、失敗時（権限拒否・非対応）は非推奨だが依然動く `execCommand("copy")` に落とす。
+- **フィードバックは `role="status"` の `<span>`**: ガイドの「Copy a tokenから離れ、可視の toast/inline 表示を SR にも届ける」に従い、ボタン隣に "Copied"/"Copy failed" を2秒表示。VoiceOver が同一メッセージの再読みをスキップする問題には NBSP 追加で対処。`aria-label` はボタン自体（コメント番号込み）に付け、`role=status` 側にエコーを書かない（重複読み上げ回避）。
+- **hover だけに依存しない**: `(hover: hover)` 環境では opacity 0→hover/focus-within で表示、タッチは常時表示。コピー成功/失敗中は状態表示のため表示維持。
+- **検証**: storybook の `StoryIssueDetail` で実ブラウザ確認 — クリックで `…#comment-1` が writeText に渡り、"Copied" 表示と `data-copied` 状態を確認。
+
 （随時追記）
 
 ## minigo storybook 環境の構成（2026-11-14）
