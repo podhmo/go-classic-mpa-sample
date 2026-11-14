@@ -162,6 +162,24 @@ func StoryIssueDetail() {
 	})
 }
 
+// StoryIssueDetailLong renders the detail page with a long comment thread
+// so the back-to-top affordance can be exercised by scrolling.
+func StoryIssueDetailLong() {
+	var comments []*store.Comment
+	for i := range 24 {
+		comments = append(comments, &store.Comment{
+			ID: int64(i + 1), IssueID: 2,
+			Body:      fmt.Sprintf("Comment %d — a filler line to make the thread tall enough to scroll.", i+1),
+			CreatedAt: storyTime.Add(time.Duration(i) * time.Hour),
+		})
+	}
+	renderIssueDetail(http.StatusOK, issueDetailPage{
+		Title:    "#2 Improve responsive layout",
+		Issue:    storyIssue,
+		Comments: comments,
+	})
+}
+
 // StoryIssueDetailCommentError re-renders the detail page after a failed
 // comment submission.
 func StoryIssueDetailCommentError() {
