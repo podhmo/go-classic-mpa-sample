@@ -93,9 +93,12 @@ func New(st Store) http.Handler {
 	return securityHeaders(http.NewCrossOriginProtection().Handler(mux))
 }
 
-// contentSecurityPolicy is the enforced CSP for every response. The app runs
-// zero JavaScript and serves every byte itself — one stylesheet plus a
-// data: favicon — so the policy can be near-default-deny.
+// contentSecurityPolicy is the enforced CSP for every response. The app
+// serves every byte itself — one stylesheet plus a data: favicon — so the
+// policy can be near-default-deny. script-src is 'self' rather than 'none':
+// JavaScript is allowed once its behavior is verifiable via the storybook
+// (see docs/ja/decisions.md), but only from same-origin files under
+// /static/ — inline <script> stays blocked.
 //
 // The one deliberate hole is style-src-attr 'unsafe-inline': label badges
 // carry their DB-driven color in a style="--label-color: ..." attribute, and
@@ -116,13 +119,13 @@ func New(st Store) http.Handler {
 // ![i](https://...) as <img>, and remote images in user content are a
 // tracking-pixel channel. data: is needed only for our own favicon.
 //
-// Deliberately absent: require-trusted-types-for (inert under
-// script-src 'none'), upgrade-insecure-requests (the app is served over
+// Deliberately absent: require-trusted-types-for (the app has no DOM
+// script sinks to guard), upgrade-insecure-requests (the app is served over
 // plain HTTP and the directive would rewrite every URL to https), report-to
 // (no reporting endpoint exists), and HSTS (ignored over HTTP; this is a
 // localhost app with no TLS).
 const contentSecurityPolicy = "default-src 'none'; " +
-	"script-src 'none'; " +
+	"script-src 'self'; " +
 	"style-src 'self'; " +
 	"style-src-attr 'unsafe-inline'; " +
 	"img-src 'self' data:; " +

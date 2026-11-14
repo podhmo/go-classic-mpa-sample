@@ -92,8 +92,9 @@ a snapshot to a PR.
   storybook after an edit, something is wrong.
 - JavaScript: not banned — allowed when its behavior is verifiable via the
   storybook (`docs/ja/decisions.md` "JavaScript 方針"), but declarative
-  HTML/CSS stays preferred. Current CSP is `script-src 'none'`, so using
-  JS means relaxing it; `StoryHttp*` replay surfaces CSP drift.
+  HTML/CSS stays preferred. CSP is `script-src 'self'`: put JS in
+  `/static/` files — inline `<script>` stays blocked; `StoryHttp*` replay
+  surfaces CSP drift.
 
 The human-facing version of this workflow lives in
 `docs/ja/for-ui-designer.md`. When a change must afterwards be

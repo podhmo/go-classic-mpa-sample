@@ -1124,7 +1124,7 @@ func TestSecurityHeaders(t *testing.T) {
 	csp := resp.Header.Get("Content-Security-Policy")
 	for _, directive := range []string{
 		"default-src 'none'",
-		"script-src 'none'",
+		"script-src 'self'", // external /static scripts allowed, inline still blocked
 		"style-src 'self'",
 		"style-src-attr 'unsafe-inline'", // label badges' style="--label-color"
 		"img-src 'self' data:",           // data: is for the favicon
@@ -1301,7 +1301,7 @@ func TestSpeculationRules(t *testing.T) {
 	body := getBody(t, resp)
 	// The rules are delivered by header (external JSON ruleset), keeping
 	// the no-JS markup free of <script> elements — inline speculationrules
-	// is still a <script> to CSP and script-src 'none' blocks it.
+	// is still a <script> to CSP and script-src 'self' blocks it.
 	if v := resp.Header.Get("Speculation-Rules"); v != `"/static/speculation-rules.json"` {
 		t.Errorf("Speculation-Rules = %q, want quoted ruleset URL", v)
 	}
