@@ -238,6 +238,15 @@
 - **フォールバックはガイドの Basic Fallback**: 未対応ブラウザでは常時表示（ボタンが消えたままになる方が悪い）。`@supports (container-type: scroll-state)` で対応ブラウザだけ hidden + scroll 連動に切替。IntersectionObserver の Advanced Fallback は入れない（常時表示で十分）。
 - **検証**: 新規 story `StoryIssueDetailLong`（24件コメントの長いスレッド）で実ブラウザ確認 — 初期 `visibility:hidden/opacity:0`、スクロール後 `visible/1`、クリックで `#main-content` に遷移。
 
+## aria-invalid ↔ :user-invalid 同期 JS（2026-11-15、`user-invalid-sync` ブランチ）
+
+- **ガイド**: modern-web-guidance `accessible-error-announcement`。JS 解禁により「見送り」と記録していた同期を実装。送信前のクライアント側エラーがこれまで視覚のみだったのを、支援技術にも同じタイミングで届くようにした。
+- **同期の中核はガイドのスクリプトそのまま**: blur/change は `syncAria(el, true)`（表示+読み上げ）、input は消去側、invalid（novalidate なので将来向け保険）、reset は `setTimeout` 後に全フィールド。`flagged`/`announced` の WeakSet 管理も踏襲。
+- **`data-error` で欄→エラー要素を結ぶ**: `#comment-body`→`comment-error`、`#f-title`→`f-title-error`。`aria-describedby` には表示中だけエラー id を入れる（ガイド: 参照先は非表示でも読まれる）。pending エラー要素は既存のものを再利用 — `.field:has(:user-invalid)` で CSS が出すのと同じ瞬間に describedby に載るので、見た目と読み上げが一致する。
+- **サーバー側エラーは従来どおり次の送信まで残す**: スクリプトが立てていない `aria-invalid="true"` は触らない（ガイドの設計と一致）。`#f-body` はクライアント制約なし（optional）なので `data-error` 不付与 — サーバー側のみ。
+- **読み上げはページに1つの polite live region**: `visually-hidden` div を動的生成し、エラー出現時に「ラベル: エラー文」を 500ms 遅延で設定（次フィールドの読み上げと被らないように）。送信失敗後の focus 移動は既存（サーバー再描画の `autofocus`）で担保。
+- **検証**: storybook で実ブラウザ確認 — `#comment-body` に実入力→消去→Tab で `aria-invalid=true` + `aria-describedby="comment-hint comment-error"` + announcer「Add a comment: Comment is required.」、再入力で `false` に戻る、`StoryIssueDetailCommentError`（サーバーエラー状態）では blur しても `aria-invalid="true"` が維持されること。
+
 （随時追記）
 
 ## minigo storybook 環境の構成（2026-11-14）

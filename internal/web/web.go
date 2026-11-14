@@ -100,6 +100,11 @@ func New(st Store) http.Handler {
 	mux.HandleFunc("GET /static/pagination-transition.js", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFileFS(w, r, staticFS, "static/pagination-transition.js")
 	})
+	// aria-invalid ↔ :user-invalid sync + polite error announcements on
+	// pages with forms (detail comment form, issue create/edit form).
+	mux.HandleFunc("GET /static/form-errors.js", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, staticFS, "static/form-errors.js")
+	})
 	// Catch-alls: unknown GET/POST paths render the styled 404 page instead
 	// of the mux's plaintext default. They are method-scoped on purpose — a
 	// method-less "/" pattern would match PUT/DELETE too and swallow the

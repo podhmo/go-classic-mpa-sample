@@ -2,6 +2,10 @@
 {{/* Ctrl/Cmd+Enter submits the issue form from the body textarea
    (guide ime-safe-enter-submit). Deferred external file. */}}
 <script src="/static/enter-submit.js" defer></script>
+{{/* Syncs aria-invalid/aria-describedby with :user-invalid and announces
+   newly-shown errors via a polite live region (guide
+   accessible-error-announcement). Deferred external file. */}}
+<script src="/static/form-errors.js" defer></script>
 <div class="page-head">
   <h1>{{.Heading}}</h1>
 </div>
@@ -11,7 +15,7 @@
 
   <div class="field">
     <label for="f-title">Title <span class="req" aria-hidden="true">*</span></label>
-    <input type="text" id="f-title" name="title" value="{{.Input.Title}}" maxlength="{{maxTitleLen}}" pattern=".*\S.*" required{{if .Errors.Title}} aria-invalid="true" aria-describedby="f-title-error" autofocus{{else}} aria-invalid="false"{{end}}>
+    <input type="text" id="f-title" name="title" value="{{.Input.Title}}" maxlength="{{maxTitleLen}}" pattern=".*\S.*" required data-error="f-title-error"{{if .Errors.Title}} aria-invalid="true" aria-describedby="f-title-error" autofocus{{else}} aria-invalid="false"{{end}}>
     <p class="field-error{{if not .Errors.Title}} field-error-pending{{end}}" id="f-title-error">{{or .Errors.Title "Title is required."}}</p>
   </div>
 
