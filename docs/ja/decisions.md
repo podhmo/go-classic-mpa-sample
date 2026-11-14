@@ -179,6 +179,65 @@
 - **検証方法の記録**: 投機 fetch は Playwright `requests`/Network ドメインに出ないため、標準ライブラリのロギングプロキシを `:8081` に立ててサーバー側ヘッダーで観測。hover → `GET /issues/2` `Sec-Purpose: 'prefetch'` `Sec-Speculation-Tags: '"issue-list"'`（`tag` がサーバー側識別に効く）、Next で `/issues?page=2` も発火、セレクタ外（New issue 等）は発火しない、クリック遷移正常、console エラー・警告ゼロを確認。
 - **付けなかったもの**: HSTS（平 HTTP の localhost アプリであり、HTTP 経由ではブラウザが無視する）、`upgrade-insecure-requests`（全 URL を https に書き換えてアプリ自体が壊れる）、`require-trusted-types-for 'script'`（`script-src 'none'` で DOM シンクに届くスクリプト自体存在しないため無意味）、`report-to`（レポート endpoint がない）、`sandbox`（フォームまで塞がる）。`Referrer-Policy` は現行 `same-origin` 維持（ガイド既定の `strict-origin-when-cross-origin` より cross-origin への漏洩が少なく、外部参照ゼロなので実害なし）。
 
+## textarea の自動フィット（2026-11-15、modern-web-guidance `form-fields-automatically-fit-contents`）
+
+- **`field-sizing: content` を textarea に適用**: 入力量に追従して伸縮。Baseline 2026-06（Newly available）のプログレッシブエンハンスメント — 非対応ブラウザは `rows` 属性の固定高に落ちるだけなのでフォールバック JS（guide の grid-mirror 方式）は入れない。
+- **インライン方向は `width: 100%` 据え置き**: ガイドの「長い placeholder で横方向が暴れる」対策どおり、textarea は水平 auto-size させず縦のみ伸縮。
+- **上下限はフィールドごとに `lh` 単位で指定**: `#comment-body` は 4–16lh（旧 `rows=4` 相当を下限に）、`#f-body` は 10–32lh（旧 `rows=10` 相当）。`box-sizing: border-box` なので padding を含む。`lh` 単位は要素の line-height 基準で、文字サイズ設定に追従する。
+- **実ブラウザ検証（Chromium 156、storybook）**: `#f-body` が空で 248px（min 10lh）、40 行入力で 794px（max 32lh、内部スクロール）にキャップされ、短文に戻すと min に縮むことを確認。
+
+## 検索語ハイライト（2026-11-15、modern-web-guidance `highlight-text-ranges`）— 初の JS
+
+- **CSS Custom Highlight API で `?q=` の語を issue タイトル上にマーキング**: `/static/search-highlight.js` が `#filter-q` の値を読み、`.issue-list .issue-title` 配下のテキストノードを TreeWalker で走査して `Range` を `search-match` ハイライトに登録。DOM 不変・要素追加なし。一覧がタイトルしか表示しないため、ボディ側のヒットは対象外。
+- **初の JS ファイル**: JS 方針緩和後の最初の適用。CSP `script-src 'self'` で `/static/` の外部ファイルのみ許可、inline `<script>` は引き続きブロック — issues.html の `<script src defer>` で読み込み、一覧ページのみに限定。
+- **一致判定はサーバーと同じ `instr(lower())` 相当**: 大文字小文字を無視した部分文字列（語分割しない）。オフセットは lowercase 化した文字列ではなく原文上で走査（`'İ'` 等のケースフォールドで長さが変わる文字への対策）。
+- **`::highlight(search-match)` は `--accent-emphasis` 背景 + `--on-emphasis` 文字**: 既存の塗りボタン色ペアでライト/ダーク両方のコントラストを担保（文字 4.5:1+、背景 vs サーフェス 3:1+）。
+- **非対応ブラウザはハイライト無しで終了**: `CSS.highlights` 不在なら早期 return。ガイドの `<mark>` フォールバックは「ハイライトが必須機能の場合のみ」推奨なので不採用 — 検索自体はサーバー側フィルタで機能する。
+- **フッターの "No JavaScript." を更新**: 実態に合わせ "Declarative first; minimal JavaScript where it earns its place." に変更。
+- **検証（Chromium 156、storybook StoryIssueListSearch）**: `CSS.highlights.get('search-match').size === 1`、"Improve responsive layout" の "layout" が視覚的にマーキングされることを確認。コンソールエラー・CSP 違反なし。旧 `TestSpeculationRules` の「`<script>` 全禁止」アサーションを「外部 /static スクリプトのみ許可、inline 禁止」に更新。
+
+## コメントのパーマリンクコピーボタン（2026-11-15、`copy-permalink` ブランチ）
+
+- **ガイド**: modern-web-guidance `copy-button`。「copy text that doesn't exist on the page — URL, code block」用途（コメントの `#comment-N` リンクはDOM上に文字列として存在しない）に該当するため、クリップボードへの書き込みは JS 必須。宣言的に書ける部分（ボタン、状態表示）は全てHTML/CSS。
+- **Invoker Commands (`command`/`commandfor`)**: ガイド推奨の宣言的呼び出し。`command` イベントは bubble しないので `document` で capture phase に listen。`event.source` がボタン、`event.target` が `commandfor` の指すコメント要素。`CommandEvent` 非対応ブラウザは同じマークアップを click フォールバックで処理。
+- **`navigator.clipboard.writeText` + `execCommand` フォールバック**: ガイド通り Async Clipboard API を優先し、失敗時（権限拒否・非対応）は非推奨だが依然動く `execCommand("copy")` に落とす。
+- **フィードバックは `role="status"` の `<span>`**: ガイドの「Copy a tokenから離れ、可視の toast/inline 表示を SR にも届ける」に従い、ボタン隣に "Copied"/"Copy failed" を2秒表示。VoiceOver が同一メッセージの再読みをスキップする問題には NBSP 追加で対処。`aria-label` はボタン自体（コメント番号込み）に付け、`role=status` 側にエコーを書かない（重複読み上げ回避）。
+- **hover だけに依存しない**: `(hover: hover)` 環境では opacity 0→hover/focus-within で表示、タッチは常時表示。コピー成功/失敗中は状態表示のため表示維持。
+- **検証**: storybook の `StoryIssueDetail` で実ブラウザ確認 — クリックで `…#comment-1` が writeText に渡り、"Copied" 表示と `data-copied` 状態を確認。
+
+## Ctrl/Cmd+Enter でのフォーム送信（2026-11-15、`ime-enter-submit` ブランチ）
+
+- **ガイド**: modern-web-guidance `ime-safe-enter-submit`。要点は「裸の Enter で送信するカスタム keydown ハンドラは IME 確定 Enter と衝突する」こと。修飾キー併用については明示的に「Cmd+Enter や Ctrl+Enter などのショートカットは IME の確定キーと競合しないため IME 安全チェックは不要」とある。
+- **Ctrl+Enter / Cmd+Enter を採用**: textarea で改行を潰さない（コメント/本文は改行必須）ことと、IME 安全を構造で担保するため裸 Enter ではなく修飾キー併用にした。`isComposing`/`keyCode === 229` のチェックはガイド上不要と判断し実装しない（将来裸 Enter 送信を追加する場合はその時点で必須）。
+- **`requestSubmit()` を使う**: `form.submit()` ではなく `requestSubmit()` — submit イベントを発火させフォーム本来の送信経路を通す。`event.preventDefault()` で textarea への改行挿入を抑止。
+- **対象は `form textarea` 全て**: コメント欄 (`#comment-body`) と issue 本文 (`#f-body`)。将来フォーム textarea が増えても追随不要なように個別 ID ではなく包括セレクタにした。
+- **発見可能性**: 各 textarea に `aria-keyshortcuts="Control+Enter Meta+Enter"` を付与し、既存の `.field-hint`（aria-describedby 済み）に「Ctrl+Enter (Cmd+Enter on macOS) submits.」を追記。送信ボタン自体は従来通り `<button type="submit">`（ガイドの必須要件「explicit submit button」は既に満たしている）。
+- **検証**: storybook の `StoryIssueDetail` で実ブラウザ確認 — Ctrl+Enter で submit イベント発火、裸 Enter では発火しないこと。
+
+## ページネーションの方向付き遷移（2026-11-15、`pagination-transitions` ブランチ）
+
+- **ガイド**: modern-web-guidance `directional-navigation-transitions`。ガイド本文は SPA 向け（`startViewTransition({types})`）だが、MPA では cross-document View Transitions + `pagereveal` の `viewTransition.types.add()` が同等手段。既存の cross-fade（`@view-transition { navigation: auto }`）はそのまま、ページ間移動時のみ forward/backward タイプを付けてスライドに置き換える。
+- **方向検出は `page` パラメータの差分**: `navigation.activation.from.url`（旧URL）と `entry.url`（新URL）の `?page=` を比較。増→`forward`、減→`backward`。パスが同じ・page のみ異なる遷移に限定（issue 詳細への遷移等では何もしない→既定 cross-fade）。page パラメータ無しは 1 扱い。
+- **タイミング**: `pagereveal` は新ドキュメント側で発火し、`vt.types` は mutable（Chrome 実測で add 確認）。bfcache restore 時は `viewTransition` が null なのでガード。`navigation.activation` 非対応ブラウザもガード — いずれも既定 cross-fade にフォールバック（ガイドの progressive enhancement 方針）。
+- **CSS**: `html:active-view-transition-type(forward|backward)` で `::view-transition-old/new(root)` の animation-name を差し替え（旧ページ→進行方向へ100%、新ページ→逆方向から100%、transform のみ・非線形 ease-in-out）。`prefers-reduced-motion: no-preference` の `@view-transition` ゲートは既存のまま — reduce 環境では cross-doc VT 自体が無効なので追加対応不要。
+- **検証**: storybook では実際の document 遷移を再現できないため verify-ui ルート — `go run .` の実アプリ + Playwright（`addInitScript` で pagereveal を記録）。Next クリック→`["forward"]`、Previous クリック→`["backward"]` を確認。なお計測は listener 内で `setTimeout(0)` して読む必要があった（addInitScript の listener は外部 JS の listener より先に走り、即時読みだと types 追加前の空配列が見える）。
+
+## Sticky サイトヘッダー（2026-11-15、`sticky-header` ブランチ）
+
+- **ガイド**: modern-web-guidance `state-aware-sticky-headers`。`position: sticky` + `@container scroll-state(stuck: block-start)` で JS なしに「stuck 時だけ見た目を変える」を実現（scroll-state queries は Chrome/Edge 144+。Firefox/Safari では影が出ないだけで sticky 自体は動く — ガイド推奨の progressive enhancement として受け入れ、IntersectionObserver フォールバックは入れない）。
+- **ガイドの制約「クエリはコンテナの子孫にしか効かない」対応**: `.site-header`（=stickyコンテナ）に置いていた背景・下ボーダーを全幅の子 `.header-bar` に移し、`header-inner` をその内側に保つ構造に変更。stuck 状態では `.header-bar` に `box-shadow` を追加。
+- **box-model を変えない**: stuck では影のみ変更。高さ・padding を触らないのでガイドの scroll anchoring 振動問題は起きず、`overflow-anchor: none` も不要（親は body で本来置けない）。
+- **`scroll-padding-top: 5rem`**: sticky で隠れる分を anchor ジャンプ（`#comment-N` 等）とフォーカス可視性（WCAG 2.4.11）に配慮して html に設定。
+- **検証**: storybook の `StoryIssueDetail` で実ブラウザ確認 — スクロール前 `box-shadow: none`、スクロール後に影が出て `site-header` が `top: 0` に留まることを確認。
+
+## Back to Top ボタン（2026-11-15、`back-to-top` ブランチ）
+
+- **ガイド**: modern-web-guidance `scroll-position-aware-elements`。スクロール量で要素の表示を切り替える container scroll-state queries（`scrollable: top`）を使用 — JS scroll listener 不要。
+- **スクロールコンテナは `html`**: アプリのスクローラは document viewport なので `html { container-type: scroll-state }`。ガイドの `.scroller`（中身が div）相当をルートに適用した形。sticky-header の `container-name: site-header` とは別コンテナで衝突しない。
+- **ボタンは `position: fixed`**: ガイドは scroller 内 `sticky` を使うが、document スクローラに対応するのは fixed。issue detail ページのみに配置（TODO「長いスレッドで」）。リンク先は `#main-content` — skip-link と同じ既存アンカーを再利用、focus も移る。
+- **フォールバックはガイドの Basic Fallback**: 未対応ブラウザでは常時表示（ボタンが消えたままになる方が悪い）。`@supports (container-type: scroll-state)` で対応ブラウザだけ hidden + scroll 連動に切替。IntersectionObserver の Advanced Fallback は入れない（常時表示で十分）。
+- **検証**: 新規 story `StoryIssueDetailLong`（24件コメントの長いスレッド）で実ブラウザ確認 — 初期 `visibility:hidden/opacity:0`、スクロール後 `visible/1`、クリックで `#main-content` に遷移。
+
 ## aria-invalid ↔ :user-invalid 同期 JS（2026-11-15、`user-invalid-sync` ブランチ）
 
 - **ガイド**: modern-web-guidance `accessible-error-announcement`。JS 解禁により「見送り」と記録していた同期を実装。送信前のクライアント側エラーがこれまで視覚のみだったのを、支援技術にも同じタイミングで届くようにした。

@@ -153,12 +153,47 @@ func StoryIssueListPaged() {
 	})
 }
 
+// StoryIssueListSearch renders the list with a search term that matches
+// issue titles — the search-highlight.js enhancement should mark them.
+func StoryIssueListSearch() {
+	renderIssueList(http.StatusOK, issueListPage{
+		Title:           "Issues",
+		Issues:          storyIssues,
+		Labels:          storyLabels,
+		Filter:          store.ListFilter{Status: "all", Query: "layout", Page: 1, PerPage: perPage},
+		Total:           len(storyIssues),
+		Page:            1,
+		TotalPages:      1,
+		RangeStart:      1,
+		RangeEnd:        len(storyIssues),
+		HasActiveFilter: true,
+	})
+}
+
 // StoryIssueDetail renders the issue detail page with comments.
 func StoryIssueDetail() {
 	renderIssueDetail(http.StatusOK, issueDetailPage{
 		Title:    "#2 Improve responsive layout",
 		Issue:    storyIssue,
 		Comments: storyComments,
+	})
+}
+
+// StoryIssueDetailLong renders the detail page with a long comment thread
+// so the back-to-top affordance can be exercised by scrolling.
+func StoryIssueDetailLong() {
+	var comments []*store.Comment
+	for i := range 24 {
+		comments = append(comments, &store.Comment{
+			ID: int64(i + 1), IssueID: 2,
+			Body:      fmt.Sprintf("Comment %d — a filler line to make the thread tall enough to scroll.", i+1),
+			CreatedAt: storyTime.Add(time.Duration(i) * time.Hour),
+		})
+	}
+	renderIssueDetail(http.StatusOK, issueDetailPage{
+		Title:    "#2 Improve responsive layout",
+		Issue:    storyIssue,
+		Comments: comments,
 	})
 }
 
