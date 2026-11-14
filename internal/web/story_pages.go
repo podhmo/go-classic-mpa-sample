@@ -76,10 +76,43 @@ func printRec(rec *httptest.ResponseRecorder) {
 	fmt.Print(rec.Body.String())
 }
 
+// The renderXxx helpers each wrap one Renderer method: a story body ends
+// on one of these unqualified calls, so the storybook index can group a
+// page's data-state variants under the render function's name.
+
+func renderIssueList(status int, data issueListPage) {
+	rec := httptest.NewRecorder()
+	NewRenderer().renderIssueList(rec, status, data)
+	printRec(rec)
+}
+
+func renderIssueDetail(status int, data issueDetailPage) {
+	rec := httptest.NewRecorder()
+	NewRenderer().renderIssueDetail(rec, status, data)
+	printRec(rec)
+}
+
+func renderIssueForm(status int, data issueFormPage) {
+	rec := httptest.NewRecorder()
+	NewRenderer().renderIssueForm(rec, status, data)
+	printRec(rec)
+}
+
+func renderIssueDelete(status int, data issueDeletePage) {
+	rec := httptest.NewRecorder()
+	NewRenderer().renderIssueDelete(rec, status, data)
+	printRec(rec)
+}
+
+func renderError(status int, heading, message string) {
+	rec := httptest.NewRecorder()
+	NewRenderer().renderError(rec, status, heading, message)
+	printRec(rec)
+}
+
 // StoryIssueList renders the issue list with several issues.
 func StoryIssueList() {
-	rec := httptest.NewRecorder()
-	NewRenderer().renderIssueList(rec, http.StatusOK, issueListPage{
+	renderIssueList(http.StatusOK, issueListPage{
 		Title:      "Issues",
 		Issues:     storyIssues,
 		Labels:     storyLabels,
@@ -90,13 +123,11 @@ func StoryIssueList() {
 		RangeStart: 1,
 		RangeEnd:   len(storyIssues),
 	})
-	printRec(rec)
 }
 
 // StoryIssueListEmpty renders the issue list with no results.
 func StoryIssueListEmpty() {
-	rec := httptest.NewRecorder()
-	NewRenderer().renderIssueList(rec, http.StatusOK, issueListPage{
+	renderIssueList(http.StatusOK, issueListPage{
 		Title:           "Issues",
 		Labels:          storyLabels,
 		Filter:          store.ListFilter{Status: store.StatusOpen, Query: "zzz", Page: 1, PerPage: perPage},
@@ -104,13 +135,11 @@ func StoryIssueListEmpty() {
 		TotalPages:      0,
 		HasActiveFilter: true,
 	})
-	printRec(rec)
 }
 
 // StoryIssueListPaged renders a middle page of a long filtered list.
 func StoryIssueListPaged() {
-	rec := httptest.NewRecorder()
-	NewRenderer().renderIssueList(rec, http.StatusOK, issueListPage{
+	renderIssueList(http.StatusOK, issueListPage{
 		Title:           "Issues",
 		Issues:          storyIssues,
 		Labels:          storyLabels,
@@ -122,51 +151,43 @@ func StoryIssueListPaged() {
 		RangeEnd:        60,
 		HasActiveFilter: true,
 	})
-	printRec(rec)
 }
 
 // StoryIssueDetail renders the issue detail page with comments.
 func StoryIssueDetail() {
-	rec := httptest.NewRecorder()
-	NewRenderer().renderIssueDetail(rec, http.StatusOK, issueDetailPage{
+	renderIssueDetail(http.StatusOK, issueDetailPage{
 		Title:    "#2 Improve responsive layout",
 		Issue:    storyIssue,
 		Comments: storyComments,
 	})
-	printRec(rec)
 }
 
 // StoryIssueDetailCommentError re-renders the detail page after a failed
 // comment submission.
 func StoryIssueDetailCommentError() {
-	rec := httptest.NewRecorder()
-	NewRenderer().renderIssueDetail(rec, http.StatusUnprocessableEntity, issueDetailPage{
+	renderIssueDetail(http.StatusUnprocessableEntity, issueDetailPage{
 		Title:        "#2 Improve responsive layout",
 		Issue:        storyIssue,
 		Comments:     storyComments,
 		CommentDraft: "   ",
 		CommentError: "Comment is required.",
 	})
-	printRec(rec)
 }
 
 // StoryIssueFormNew renders the empty create form.
 func StoryIssueFormNew() {
-	rec := httptest.NewRecorder()
-	NewRenderer().renderIssueForm(rec, http.StatusOK, issueFormPage{
+	renderIssueForm(http.StatusOK, issueFormPage{
 		Title:       "New issue",
 		Heading:     "New issue",
 		Action:      "/issues",
 		SubmitLabel: "Create issue",
 		Labels:      storyLabels,
 	})
-	printRec(rec)
 }
 
 // StoryIssueFormErrors re-renders the create form with validation errors.
 func StoryIssueFormErrors() {
-	rec := httptest.NewRecorder()
-	NewRenderer().renderIssueForm(rec, http.StatusUnprocessableEntity, issueFormPage{
+	renderIssueForm(http.StatusUnprocessableEntity, issueFormPage{
 		Title:       "New issue",
 		Heading:     "New issue",
 		Action:      "/issues",
@@ -175,13 +196,11 @@ func StoryIssueFormErrors() {
 		Labels:      storyLabels,
 		Errors:      issueFormErrors{Title: "Title is required."},
 	})
-	printRec(rec)
 }
 
 // StoryIssueFormEdit renders the populated edit form.
 func StoryIssueFormEdit() {
-	rec := httptest.NewRecorder()
-	NewRenderer().renderIssueForm(rec, http.StatusOK, issueFormPage{
+	renderIssueForm(http.StatusOK, issueFormPage{
 		Title:       "Edit issue #2",
 		Heading:     "Edit issue #2",
 		Action:      "/issues/2/edit",
@@ -189,25 +208,20 @@ func StoryIssueFormEdit() {
 		Input:       store.IssueInput{Title: storyIssue.Title, Body: storyIssue.Body, LabelIDs: []int64{1, 2}},
 		Labels:      storyLabels,
 	})
-	printRec(rec)
 }
 
 // StoryIssueDelete renders the delete confirmation page.
 func StoryIssueDelete() {
-	rec := httptest.NewRecorder()
-	NewRenderer().renderIssueDelete(rec, http.StatusOK, issueDeletePage{
+	renderIssueDelete(http.StatusOK, issueDeletePage{
 		Title: "Delete issue #2",
 		Issue: storyIssue,
 	})
-	printRec(rec)
 }
 
 // StoryError404 renders the styled 404 page.
 func StoryError404() {
-	rec := httptest.NewRecorder()
-	NewRenderer().renderError(rec, http.StatusNotFound, "Not found",
+	renderError(http.StatusNotFound, "Not found",
 		"The page or issue you are looking for does not exist or may have been deleted.")
-	printRec(rec)
 }
 
 // storyStore implements the Store contract with story fixtures so

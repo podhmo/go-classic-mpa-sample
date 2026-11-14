@@ -1,16 +1,19 @@
 // Command storybook renders "stories" of the issue tracker with minigo,
 // without a database or a running server.
 //
-// A story is an exported func StoryXxx() in a file guarded by a build tag
-// (default "story"), so the go toolchain never builds it into the real
-// binary. The story calls the renderer with dummy view models; storybook
-// interprets internal/web with that tag enabled and captures what the
-// story prints to stdout. This file is a fork of minigo's
-// examples/storybook/cmd/storybook, extended with the binds this
-// application needs and static-asset serving.
+// A story is an exported func StoryXxx() — or a handler-shaped
+// func StoryHttpXxx(w, r) — in a file guarded by a build tag (default
+// "story"), so the go toolchain never builds it into the real binary. The
+// story calls the renderer with dummy view models; storybook interprets
+// internal/web with that tag enabled and captures what the story prints
+// to stdout, or what it writes to a recorder. Story discovery and the
+// render loop live in github.com/podhmo/minigo/storybook; this command
+// adds the binds this application needs (see bindApp) and static-asset
+// serving.
 //
 //	storybook -list ./internal/web          # list stories
 //	storybook ./internal/web StoryIssueList # print one story's body
+//	storybook -o out ./internal/web         # write out/index.html + one page per story
 //	storybook -http :6006 ./internal/web    # serve them, re-interpreting on every request
 package main
 
@@ -23,8 +26,9 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
+
+	"github.com/podhmo/minigo/storybook"
 )
 
 func main() {
@@ -48,7 +52,7 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 	if fs.NArg() < 1 {
 		return errors.New("usage: storybook [flags] <pkgdir> [Story]")
 	}
-	b := &Book{Dir: fs.Arg(0), Tag: *tag, StaticDir: *staticDir}
+	b := &Book{Book: &storybook.Book{Dir: fs.Arg(0), Tag: *tag, Setup: bindApp}, StaticDir: *staticDir}
 	if *src != "" {
 		b.Src = strings.Split(*src, ",")
 	}
@@ -84,19 +88,4 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 	default:
 		return errors.New("one of -list, -o, -http or a story name is required")
 	}
-}
-
-// staticHandler serves the application's real assets under /static/, the
-// same path layout.html references, so previews pick up CSS edits on a
-// plain browser reload.
-func (b *Book) staticHandler() http.Handler {
-	dir := b.StaticDir
-	if dir == "" {
-		dir = filepath.Join(b.Dir, "static")
-	}
-	root, err := filepath.Abs(dir)
-	if err != nil {
-		return http.NotFoundHandler()
-	}
-	return http.StripPrefix("/static/", http.FileServer(http.Dir(root)))
 }

@@ -21,23 +21,19 @@ func NewRenderer() *Renderer {
 }
 
 // parsePages builds one template set per page. Each set contains the shared
-// layout plus a single page template that defines the "content" block. The
-// files are read explicitly rather than via ParseFS so the embedding works
-// the same when this package is interpreted (e.g. by minigo for the
-// storybook preview): a bound host ParseFS cannot call a script-side fs.FS.
+// layout plus a single page template that defines the "content" block.
+// ParseFS works the same when this package is interpreted (e.g. by minigo
+// for the storybook preview): the bound template's ParseFS proxies a
+// script-side embed.FS through fs.FS.
 func parsePages() map[string]*template.Template {
 	names := []string{"issues", "issue_detail", "issue_form", "issue_delete", "error"}
 	pages := make(map[string]*template.Template, len(names))
 	for _, name := range names {
-		t := template.New(name).Funcs(funcMap)
-		for _, file := range []string{"templates/layout.html", "templates/" + name + ".html"} {
-			src, err := templateFS.ReadFile(file)
-			if err != nil {
-				panic(err)
-			}
-			template.Must(t.Parse(string(src)))
-		}
-		pages[name] = t
+		pages[name] = template.Must(template.New(name).Funcs(funcMap).ParseFS(
+			templateFS,
+			"templates/layout.html",
+			"templates/"+name+".html",
+		))
 	}
 	return pages
 }

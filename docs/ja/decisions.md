@@ -184,3 +184,11 @@
 ## storybook: ビューポート切替は iframe 幅の固定で実装（2026-11-14）
 
 モバイル確認用に `?w=320|360|768` で preview iframe の幅を固定する方式を選んだ。理由: JS なし・既存の index テンプレートだけで実現でき、デバイスエミュレーションより単純。全 story を 320px まで確認した結果、アプリ側 CSS の追修正は不要と判断（先行の responsive 対応で済んでいた）。
+
+## minigo 新版 (#1068 対応) に合わせた storybook 機構の整理（2026-11-15）
+
+- **自前の探索・描画機構を廃止し `github.com/podhmo/minigo/storybook` に移行**: minigo 側で共有化された `Book{Dir, Tag, Src, Setup}` + `Discover` + `Render`（`NewSession` fork 型）を使い、ローカルの `Book` は `*storybook.Book` の埋め込み + `StaticDir` の薄いラッパに縮小。重複コードを捨てて upstream 追従コストを下げる。
+- **`parsePages` を `ParseFS` に復帰**: minigo#1074 で bound `ParseFS` + script `fs.FS` ブリッジが入ったため、回避用の `ReadFile`+`Parse` は不要になった（2026-11-14 の暫定決定を打ち消し）。
+- **bind は plain Go 値 + `minigo.BindAs`**: `WrapFunc` の明示呼出しは不要になった（plain func は自動変換）。`goldmark-alert` の declared name 問題は `BoundOf().Name` 修正から `BindAs("alert")` へ。
+- **story に renderXxx helper を噛ませて `Story.Group` を活用**: storybook の group 判定は「story 本体が最後に呼ぶ無修飾関数」を見る。従来は全 story が `printRec` で終わり 1 グループに潰れたため、`renderIssueList`/`renderIssueDetail`/… の薄い helper を story 側ファイルに追加し、index の variants grid（`/grid/<name>`）が render メソッド単位で出るようにした。アプリ側コードは不変。
+- **internal/store は引き続き source 解釈**: `minigo.HostTypeOf` で bind に移す道はできたが、現状の source 解釈がゼロコストで supported のままなので移行しない（必要になれば gen-intrinsics で生成）。
