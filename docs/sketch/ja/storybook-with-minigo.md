@@ -114,6 +114,7 @@ storybook に追いつくための要点である「書き換えたら再起動�
 2. **bound host struct の script リテラルは script 側構造体になり、bound `html/template`（ホスト reflect）からフィールドを読めない**。`store.Issue{...}` を script で書くと `can't evaluate field ID in type interface {}` で死ぬ。回避: その型を提供するパッケージを source 解釈して script 構造体のままにする（今回は internal/store を解釈）。「bind したパッケージの型は値の受け渡し専用で、リテラル生成＋template 評価は非対応」との認識でいるが、正しい使い方のガイドがあると助かる。
 3. **bound `html/template`/`text/template` に `ParseFS` が無い**。加えて script 側 `fs.FS`（embed.FS）を bound 関数に渡してもホスト reflect から呼べないので、単に ParseFS を追加するだけでは不十分。`ReadFile`+`Parse` への書き換えで回避したが、`fs.FS` 経路を越えて bind する何らかのブリッジが欲しい。
 4. **bind はシンボル単位の手動列挙**。goldmark でも 8 個程度だが、1 パッケージ丸ごと bind する helper（あるいは example 流儀のベストプラクティス）が欲しい。
+5. **script 側構造体の存在しないフィールドを bound template で参照してもエラーにならず空になる**。本物の `html/template` なら `can't evaluate field Nonexistent in type ...` で実行エラー（→ 500）になるが、minigo では `<h1>{{.Nonexistent}}</h1>` が `<h1></h1>` と静かに描画される（実測）。story のフィールド typo を検知できないので、strict モードか少なくとも警告があると良い。（このため `printRec` は recorder が 5xx を返したら panic するガードを入れたが、本件はそれでも検出できない — フィールド欠落は「成功として 200 で空文字」を返すため）
 
 ### 今後試したいこと（future work）
 
