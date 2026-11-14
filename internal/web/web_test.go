@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -1109,6 +1110,37 @@ func TestSecurityHeaders(t *testing.T) {
 	}
 	if v := resp.Header.Get("Referrer-Policy"); v != "same-origin" {
 		t.Errorf("Referrer-Policy = %q, want same-origin", v)
+	}
+
+	csp := resp.Header.Get("Content-Security-Policy")
+	for _, directive := range []string{
+		"default-src 'none'",
+		"script-src 'none'",
+		"style-src 'self'",
+		"style-src-attr 'unsafe-inline'", // label badges' style="--label-color"
+		"img-src 'self' data:",           // data: is for the favicon
+		"object-src 'none'",
+		"base-uri 'none'",
+		"form-action 'self'",
+		"frame-ancestors 'none'",
+	} {
+		if !strings.Contains(csp, directive) {
+			t.Errorf("Content-Security-Policy missing %q, got %q", directive, csp)
+		}
+	}
+	if v := resp.Header.Get("Cross-Origin-Opener-Policy"); v != "same-origin-allow-popups" {
+		t.Errorf("Cross-Origin-Opener-Policy = %q, want same-origin-allow-popups", v)
+	}
+	if v := resp.Header.Get("Cross-Origin-Resource-Policy"); v != "same-origin" {
+		t.Errorf("Cross-Origin-Resource-Policy = %q, want same-origin", v)
+	}
+	if v := resp.Header.Get("Permissions-Policy"); v == "" {
+		t.Error("Permissions-Policy is not set")
+	}
+	// Vary must cover the request headers CrossOriginProtection inspects.
+	if v := resp.Header.Values("Vary"); !slices.Contains(v, "Sec-Fetch-Site") ||
+		!slices.Contains(v, "Origin") {
+		t.Errorf("Vary = %v, want Sec-Fetch-Site and Origin", v)
 	}
 }
 
