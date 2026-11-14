@@ -173,3 +173,10 @@
 - **付けなかったもの**: HSTS（平 HTTP の localhost アプリであり、HTTP 経由ではブラウザが無視する）、`upgrade-insecure-requests`（全 URL を https に書き換えてアプリ自体が壊れる）、`require-trusted-types-for 'script'`（`script-src 'none'` で DOM シンクに届くスクリプト自体存在しないため無意味）、`report-to`（レポート endpoint がない）、`sandbox`（フォームまで塞がる）。`Referrer-Policy` は現行 `same-origin` 維持（ガイド既定の `strict-origin-when-cross-origin` より cross-origin への漏洩が少なく、外部参照ゼロなので実害なし）。
 
 （随時追記）
+
+## minigo storybook 環境の構成（2026-11-14）
+
+- **minigo は `third_party/minigo` への plain clone + `cmd/storybook` のネスト module + `replace` で取り込む**: submodule/go.work/vendor は採用せず。ルート module を汚染せず、clone 無しでも `go build ./...`/`go test ./...` が通る opt-in 構成にした。詳細は `docs/sketch/ja/storybook-with-minigo.md`。
+- **sqlite 非実行は `modernc.org/sqlite` の空 bind で実現**: story 実行時は `import _ "modernc.org/sqlite"` が init されず driver 登録も走らない。`store.Open` を呼ぶ story は書かない。
+- **`internal/store` は source 解釈、goldmark 系は host bind**: bound host struct の script リテラルは bound html/template からフィールド評価できないため、view model を生産するパッケージは source 解釈に寄せる（minigo の制限、issue としてフィードバック予定）。
+- **`parsePages` を `ParseFS` から `ReadFile`+`Parse` に変更**: bound html/template に ParseFS が無く、script 側 `fs.FS` を bound 関数に渡せないため。挙動は同一。
