@@ -53,10 +53,11 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 		b.Src = strings.Split(*src, ",")
 	}
 	stories, err := b.Stories()
-	// -http tolerates a discovery failure: the server starts anyway and
-	// the index shows the error, so a book with no stories yet (or one
-	// being added live) still serves.
-	if err != nil && *addr == "" {
+	// -http alone tolerates a discovery failure: the server starts anyway
+	// and the index shows the error, so a book with no stories yet (or one
+	// being added live) still serves. Combined with -list or -o the error
+	// stays fatal — those modes would otherwise succeed on an empty book.
+	if err != nil && (*addr == "" || *list || *out != "") {
 		return err
 	}
 	switch {
