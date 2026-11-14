@@ -28,16 +28,21 @@ nav a { display: block; padding: .25rem; color: inherit; text-decoration: none; 
 nav a:hover { background: #eef; }
 nav small { display: block; color: #666; }
 .err { color: #b00; }
+.viewport { display: flex; gap: .5em; margin: .5rem 0; font-size: .9em; }
+.viewport a { padding: .1em .4em; border: 1px solid #ccc; border-radius: .3em; }
+.viewport a.active { background: #def; border-color: #79b; }
 iframe { flex: 1; border: 0; }
+iframe.sized { flex: none; margin-inline: auto; border-inline: 1px dashed #ccc; }
 </style></head>
 <body>
 <nav>
 <strong>{{.Dir}}</strong>
 {{if .Err}}<small class="err">{{.Err}}</small>{{end}}
+<div class="viewport">{{range .Widths}}<a href="?w={{.}}"{{if eq . $.W}} class="active"{{end}}>{{if .}}{{.}}px{{else}}full{{end}}</a>{{end}}</div>
 {{range .Entries}}<a href="{{.Href}}" target="story">{{.Name}}
 <small>{{.Doc}}</small>{{if .Err}}<small class="err">{{.Err}}</small>{{end}}</a>
 {{end}}</nav>
-<iframe name="story"{{with .Entries}} src="{{(index . 0).Href}}"{{end}}></iframe>
+<iframe name="story"{{with .Entries}} src="{{(index . 0).Href}}"{{end}}{{if .W}} class="sized" style="width: {{.W}}px"{{end}}></iframe>
 </body></html>
 `))
 
@@ -100,7 +105,12 @@ func (b *Book) Handler() http.Handler {
 		for i, s := range stories {
 			entries[i] = entry{Story: s, Href: "/story/" + s.Name}
 		}
-		if err := indexTmpl.Execute(w, map[string]any{"Dir": b.Dir, "Entries": entries}); err != nil {
+		if err := indexTmpl.Execute(w, map[string]any{
+			"Dir":     b.Dir,
+			"Entries": entries,
+			"W":       r.URL.Query().Get("w"),
+			"Widths":  []string{"", "360", "768"},
+		}); err != nil {
 			slog.ErrorContext(r.Context(), "index", "err", err)
 		}
 	})
