@@ -59,6 +59,9 @@ type Story struct {
 	Kind StoryKind
 }
 
+// IsHTTP reports whether the story is the handler-shaped kind.
+func (s Story) IsHTTP() bool { return s.Kind == KindHTTP }
+
 // Page is one rendered story: body plus, for handler-shaped stories, the
 // recorded status code and response headers.
 type Page struct {
@@ -204,7 +207,9 @@ func (b *Book) Render(ctx context.Context, name string) (*Page, error) {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}
 		res := rec.Result()
-		return &Page{Status: res.StatusCode, Header: res.Header, Body: output.Bytes()}, nil
+		// the handler writes to the recorder, not to stdout: the page
+		// body is the recorder's buffer, not the captured print output.
+		return &Page{Status: res.StatusCode, Header: res.Header, Body: rec.Body.Bytes()}, nil
 	}
 	if _, err := s.Call(ctx, pkg, name); err != nil {
 		return nil, fmt.Errorf("%s: %w", name, err)
