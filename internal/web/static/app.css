@@ -631,6 +631,23 @@ textarea {
 
 textarea {
   resize: vertical;
+  /* Grow/shrink with content (Baseline 2026-06, newly available). The
+     rows= attribute stays as the fixed-height fallback in browsers without
+     field-sizing — they degrade to a scrollable fixed box. width: 100% from
+     the shared rule keeps the inline size stable, per the guide. */
+  field-sizing: content;
+}
+
+/* Per-field vertical bounds, keyed off the current rows= values.
+   min keeps the same floor as before; max stops runaway growth and scrolls. */
+#comment-body {
+  min-block-size: 4lh;
+  max-block-size: 16lh;
+}
+
+#f-body {
+  min-block-size: 10lh;
+  max-block-size: 32lh;
 }
 
 input[type="checkbox"] {
@@ -844,6 +861,14 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
 
 .issue-title:hover {
   color: var(--accent);
+}
+
+/* Registered by search-highlight.js: occurrences of the ?q= term inside
+   issue titles. --accent-emphasis + --on-emphasis (the filled-button pair)
+   keeps text contrast AA and the background 3:1+ against the surface. */
+::highlight(search-match) {
+  background-color: var(--accent-emphasis);
+  color: var(--on-emphasis);
 }
 
 .issue-num {
@@ -1083,6 +1108,74 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
 .comment-permalink:hover {
   color: var(--accent);
   text-decoration: underline;
+}
+
+/* copy-link button on each comment header: revealed on hover/focus-within
+   (pointer: fine), always visible on touch (guide: never hover-only) */
+.copy-wrap {
+  position: relative;
+  margin-inline-start: 0.5rem;
+}
+
+.copy-btn {
+  font: inherit;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1px 6px;
+  min-inline-size: 24px;
+  min-block-size: 24px;
+  cursor: pointer;
+}
+
+.copy-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.copy-btn[data-copied] {
+  color: var(--open);
+  border-color: var(--open);
+}
+
+.copy-btn[data-failed] {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.copy-tip {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-inline-start: 0.4rem;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.copy-btn[data-copied] + .copy-tip,
+.copy-btn[data-failed] + .copy-tip {
+  opacity: 1;
+}
+
+@media (hover: hover) {
+  .copy-btn {
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .comment:hover .copy-btn,
+  .comment:focus-within .copy-btn,
+  .copy-btn:focus-visible,
+  .copy-btn[data-copied],
+  .copy-btn[data-failed] {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .copy-btn, .copy-tip {
+    transition: opacity 0.15s;
+  }
 }
 
 .comment-body {
@@ -1326,6 +1419,43 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
 ::view-transition-group(root) {
   animation-duration: 0.18s;
   animation-timing-function: ease-out;
+}
+
+/* Directional slide for paginated navigation: pagereveal tags the
+   transition "forward"/"backward" (pagination-transition.js) and these
+   replace the default fade. Animating transform only, per the guide. */
+@keyframes vt-slide-to-left {
+  to { transform: translateX(-100%); }
+}
+@keyframes vt-slide-from-right {
+  from { transform: translateX(100%); }
+}
+@keyframes vt-slide-to-right {
+  to { transform: translateX(100%); }
+}
+@keyframes vt-slide-from-left {
+  from { transform: translateX(-100%); }
+}
+
+html:active-view-transition-type(forward)::view-transition-old(root),
+html:active-view-transition-type(forward)::view-transition-new(root),
+html:active-view-transition-type(backward)::view-transition-old(root),
+html:active-view-transition-type(backward)::view-transition-new(root) {
+  animation-duration: 0.22s;
+  animation-timing-function: ease-in-out; /* non-linear, per the guide */
+}
+
+html:active-view-transition-type(forward)::view-transition-old(root) {
+  animation-name: vt-slide-to-left;
+}
+html:active-view-transition-type(forward)::view-transition-new(root) {
+  animation-name: vt-slide-from-right;
+}
+html:active-view-transition-type(backward)::view-transition-old(root) {
+  animation-name: vt-slide-to-right;
+}
+html:active-view-transition-type(backward)::view-transition-new(root) {
+  animation-name: vt-slide-from-left;
 }
 
 /* ---------- responsive ---------- */
