@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/podhmo/minigo"
 	"github.com/podhmo/minigo/resolve"
@@ -30,8 +31,10 @@ type Book struct {
 	Src       []string // extra packages to interpret from source
 	StaticDir string   // directory served under /static/ in -http mode
 
-	base *minigo.Engine // configured once; each Render forks a session
-	dir  string         // absolute Dir, computed with base
+	once    sync.Once
+	base    *minigo.Engine // configured once; each Render forks a session
+	dir     string         // absolute Dir, computed with base
+	baseErr error
 }
 
 // Story is a story function found in a tagged file.
@@ -143,10 +146,13 @@ func (b *Book) Render(ctx context.Context, name string) ([]byte, error) {
 // Build-time options (tags, package modes, host binds) live here; the
 // per-request output buffer is installed on each session instead.
 func (b *Book) baseEngine() (*minigo.Engine, string, error) {
-	if b.base == nil {
+	// the handler can serve concurrent first requests, so the build is
+	// serialized: otherwise b.base could be observed before b.dir.
+	b.once.Do(func() {
 		dir, err := filepath.Abs(b.Dir)
 		if err != nil {
-			return nil, "", err
+			b.baseErr = err
+			return
 		}
 		modes := maps.Clone(sourceModes)
 		for _, p := range b.Src {
@@ -158,8 +164,8 @@ func (b *Book) baseEngine() (*minigo.Engine, string, error) {
 		)
 		bindApp(e)
 		b.base, b.dir = e, dir
-	}
-	return b.base, b.dir, nil
+	})
+	return b.base, b.dir, b.baseErr
 }
 
 // bindApp registers the host packages interpreted internal/web code
