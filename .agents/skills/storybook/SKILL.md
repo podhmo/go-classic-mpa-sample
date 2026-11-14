@@ -1,6 +1,6 @@
 ---
 name: storybook
-description: Verifying html/template + CSS changes in go-classic-mpa-sample via its storybook preview (:6006). Use whenever a task touches `internal/web/templates/`, `internal/web/static/`, or `internal/web/story_pages.go`, adds or changes a page/handler in `internal/web`, or asks for a visual check — start the storybook first, iterate there, and only then run the real app.
+description: Frontend verification workflow for go-classic-mpa-sample. Use whenever a task changes how a page renders — editing `internal/web/templates/` or `internal/web/static/`, touching `internal/web/story_pages.go`, adding or modifying a handler/page in `internal/web`, or when a visual/interactive check is requested — to iterate against the repo's homemade storybook (hot-reload, variant grids, HTTP replay) instead of booting the real app.
 ---
 
 # Storybook-driven frontend verification
