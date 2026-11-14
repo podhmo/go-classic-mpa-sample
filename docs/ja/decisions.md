@@ -104,4 +104,12 @@
 - **POST → 303 リダイレクト後も遷移する**: 新規作成・編集・コメント投稿は PRG で同一オリジンにリダイレクトするため、フォーム送信後の表示にも同じクロスフェードがかかる（Chrome 156 で確認）。
 - **ページネーションの方向アニメーションは入れない**: `@view-transition` の `types` は遷移先ドキュメントに静的に付く値で、Prev/Next は同じテンプレートの同じページ種別なので「どちらから来たか」を表せない。方向を付けるにはガイドの `pagereveal` + Navigation API（JS）か、サーバーが Referer 等を見てページごとに `<style>` を出し分ける必要があり、前者は no-JS 方針、後者は将来の CSP（`style-src`）対応と衝突するので見送り。
 
+## 削除確認ダイアログ（2026-11-14、modern-web-guidance `declarative-dialog-popover-control` / `dialog` / `light-dismiss-a-dialog`）
+
+- **`[popover]` ではなくモーダル `<dialog>` + `command="show-modal"`**: 取り消せない破壊的操作の確認なので `dialog` ガイドの Rule 1（ページを inert にするモーダル）に当たる。`popovertarget` で開く `<dialog popover>` は非モーダル（ページ操作可能）で確認用途に合わない。開閉は Invoker Commands（`commandfor` + `command="show-modal"` / `command="close"`）のみで JS なし。フォーカス復帰は UA 任せ（Esc・Cancel・背景クリックいずれでもトリガーの Delete ボタンに戻ることを Chromium 156 で確認）。
+- **安全側に `autofocus`**: 開いた直後のフォーカスは Cancel。Delete issue は POST フォーム（既存の `POST /issues/{id}/delete`、CSRF 保護もそのまま）の submit ボタン。Cancel は同じ form 内なので `type="button"` を明示（無いと submit になり command が走らない）。
+- **`closedby="any"` で背景クリックでも閉じる**: Safari は `closedby` 未対応だが Esc・Cancel で閉じられるので劣化は「背景クリック無効」だけ。ガイドが示す JS フォールバックは no-JS 方針で入れない。
+- **非対応ブラウザは GET 確認ページへのリンクを出す（CSS で出し分け）**: Delete ボタン（dialog 用）と従来の `<a href="/issues/{id}/delete">` を両方出力し、`@supports` で片方だけ表示する。HTML の機能（Invoker Commands）は CSS から検出できず、またトリガーを GET フォームに入れて「対応なら dialog、非対応なら GET 送信」にする手も使えない（form owner を持つボタンは `type="submit"` なら command より送信が優先され、`type` 省略だと Chrome 156 では送信も command もせず "require a type=button attribute. No action will be taken." と警告するだけ）。そこで代理として `sibling-index()` を使う: MDN browser-compat-data 上、Chrome 138 / Firefox 154 / Safari 26.2 で、Invoker Commands（135 / 144 / 26.2）より後か同時にすべてのエンジンで出荷されているため、`@supports (order: sibling-index())` が真なら dialog を開ける。誤判定の方向は「対応しているのにリンク側が出る」（Chrome 135–137・Firefox 144–153）だけで、その場合も GET 確認ページで削除できる。CSS が読めない環境では両方表示される。polyfill（`invokers-polyfill`）は JS なので入れない。
+- **Baseline**: Invoker Commands は Baseline 2025-12-12（Newly available）、`<dialog>` は Widely available、`closedby` は Limited availability（Safari なし）。
+
 （随時追記）

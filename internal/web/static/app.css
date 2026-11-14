@@ -741,6 +741,68 @@ input[type="checkbox"] {
   margin: 0;
 }
 
+/* ---------- delete confirmation dialog ---------- */
+
+/* The Delete button opens a modal <dialog> through Invoker Commands
+   (command="show-modal"), with no JavaScript. Browsers without Invoker
+   Commands get the plain link to the GET confirmation page instead.
+   HTML features cannot be feature-detected from CSS, so sibling-index()
+   stands in for them: per MDN browser-compat-data it shipped in every
+   engine at or after Invoker Commands (Chrome 138 / Firefox 154 /
+   Safari 26.2 vs 135 / 144 / 26.2), so a browser that passes the check
+   can open the dialog. Selectors carry .issue-actions .btn to win over the
+   small-screen display rule. */
+@supports not (order: sibling-index()) {
+  .issue-actions .btn.delete-open {
+    display: none;
+  }
+}
+
+@supports (order: sibling-index()) {
+  .issue-actions .btn.delete-fallback {
+    display: none;
+  }
+}
+
+.confirm-dialog {
+  width: min(28rem, calc(100% - 32px));
+  padding: 20px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.25);
+}
+
+.confirm-dialog:modal {
+  overscroll-behavior: contain;
+}
+
+.confirm-dialog::backdrop {
+  background: rgb(0 0 0 / 0.45);
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+.confirm-dialog h2 {
+  margin: 0 0 8px;
+  font-size: 1.15rem;
+}
+
+.confirm-dialog p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.confirm-dialog p strong {
+  color: var(--text);
+}
+
+.confirm-dialog .form-actions {
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
 /* ---------- comments ---------- */
 
 .comment-list {

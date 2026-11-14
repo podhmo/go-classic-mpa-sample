@@ -41,8 +41,18 @@
       <button type="submit" class="btn">Reopen issue</button>
     </form>
     {{end}}
-    <a class="btn btn-danger" href="/issues/{{.Issue.ID}}/delete">Delete</a>
+    <button type="button" class="btn btn-danger delete-open" commandfor="delete-dialog" command="show-modal">Delete</button>
+    <a class="btn btn-danger delete-fallback" href="/issues/{{.Issue.ID}}/delete">Delete</a>
   </div>
+
+  <dialog id="delete-dialog" class="confirm-dialog" closedby="any" aria-labelledby="delete-dialog-title" aria-describedby="delete-dialog-desc">
+    <h2 id="delete-dialog-title">Delete issue #{{.Issue.ID}}?</h2>
+    <p id="delete-dialog-desc">This permanently removes <strong>{{.Issue.Title}}</strong> and all of its comments. This action cannot be undone.</p>
+    <form method="post" action="/issues/{{.Issue.ID}}/delete" class="form-actions">
+      <button type="button" class="btn" commandfor="delete-dialog" command="close" autofocus>Cancel</button>
+      <button type="submit" class="btn btn-danger">Delete issue</button>
+    </form>
+  </dialog>
 </article>
 
 <section id="comments" class="comments">

@@ -688,6 +688,36 @@ func TestDeleteFlow(t *testing.T) {
 	}
 }
 
+// The detail page opens a declarative modal <dialog> (Invoker Commands, no
+// JS) whose form POSTs the delete, and keeps the link to the GET
+// confirmation page for browsers without Invoker Commands.
+func TestDetailDeleteDialog(t *testing.T) {
+	srv, f := newTestServer(t)
+	f.addIssue("Dialog me", "", store.StatusOpen, time.Now())
+
+	resp, err := srv.Client().Get(srv.URL + "/issues/1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := getBody(t, resp)
+	for _, want := range []string{
+		`commandfor="delete-dialog" command="show-modal"`,
+		`<dialog id="delete-dialog"`,
+		`closedby="any"`,
+		`aria-labelledby="delete-dialog-title"`,
+		`<form method="post" action="/issues/1/delete"`,
+		`commandfor="delete-dialog" command="close" autofocus`,
+		`href="/issues/1/delete"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("detail missing %q", want)
+		}
+	}
+	if strings.Contains(body, "<script") {
+		t.Error("detail page must not contain <script>")
+	}
+}
+
 func TestEditFlow(t *testing.T) {
 	srv, f := newTestServer(t)
 	f.addIssue("Old title", "old body", store.StatusOpen, time.Now(), 1)
