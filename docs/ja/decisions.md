@@ -179,6 +179,15 @@
 - **検証方法の記録**: 投機 fetch は Playwright `requests`/Network ドメインに出ないため、標準ライブラリのロギングプロキシを `:8081` に立ててサーバー側ヘッダーで観測。hover → `GET /issues/2` `Sec-Purpose: 'prefetch'` `Sec-Speculation-Tags: '"issue-list"'`（`tag` がサーバー側識別に効く）、Next で `/issues?page=2` も発火、セレクタ外（New issue 等）は発火しない、クリック遷移正常、console エラー・警告ゼロを確認。
 - **付けなかったもの**: HSTS（平 HTTP の localhost アプリであり、HTTP 経由ではブラウザが無視する）、`upgrade-insecure-requests`（全 URL を https に書き換えてアプリ自体が壊れる）、`require-trusted-types-for 'script'`（`script-src 'none'` で DOM シンクに届くスクリプト自体存在しないため無意味）、`report-to`（レポート endpoint がない）、`sandbox`（フォームまで塞がる）。`Referrer-Policy` は現行 `same-origin` 維持（ガイド既定の `strict-origin-when-cross-origin` より cross-origin への漏洩が少なく、外部参照ゼロなので実害なし）。
 
+## aria-invalid ↔ :user-invalid 同期 JS（2026-11-15、`user-invalid-sync` ブランチ）
+
+- **ガイド**: modern-web-guidance `accessible-error-announcement`。JS 解禁により「見送り」と記録していた同期を実装。送信前のクライアント側エラーがこれまで視覚のみだったのを、支援技術にも同じタイミングで届くようにした。
+- **同期の中核はガイドのスクリプトそのまま**: blur/change は `syncAria(el, true)`（表示+読み上げ）、input は消去側、invalid（novalidate なので将来向け保険）、reset は `setTimeout` 後に全フィールド。`flagged`/`announced` の WeakSet 管理も踏襲。
+- **`data-error` で欄→エラー要素を結ぶ**: `#comment-body`→`comment-error`、`#f-title`→`f-title-error`。`aria-describedby` には表示中だけエラー id を入れる（ガイド: 参照先は非表示でも読まれる）。pending エラー要素は既存のものを再利用 — `.field:has(:user-invalid)` で CSS が出すのと同じ瞬間に describedby に載るので、見た目と読み上げが一致する。
+- **サーバー側エラーは従来どおり次の送信まで残す**: スクリプトが立てていない `aria-invalid="true"` は触らない（ガイドの設計と一致）。`#f-body` はクライアント制約なし（optional）なので `data-error` 不付与 — サーバー側のみ。
+- **読み上げはページに1つの polite live region**: `visually-hidden` div を動的生成し、エラー出現時に「ラベル: エラー文」を 500ms 遅延で設定（次フィールドの読み上げと被らないように）。送信失敗後の focus 移動は既存（サーバー再描画の `autofocus`）で担保。
+- **検証**: storybook で実ブラウザ確認 — `#comment-body` に実入力→消去→Tab で `aria-invalid=true` + `aria-describedby="comment-hint comment-error"` + announcer「Add a comment: Comment is required.」、再入力で `false` に戻る、`StoryIssueDetailCommentError`（サーバーエラー状態）では blur しても `aria-invalid="true"` が維持されること。
+
 （随時追記）
 
 ## minigo storybook 環境の構成（2026-11-14）
