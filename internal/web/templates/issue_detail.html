@@ -68,7 +68,7 @@
       <header class="comment-meta">
         <a class="comment-permalink" href="#comment-{{.ID}}"><time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .CreatedAt}}</time> <span class="visually-hidden">(comment {{.ID}})</span></a>
         <span class="copy-wrap">
-          <button type="button" class="copy-btn" command="--copy-permalink" commandfor="comment-{{.ID}}" aria-label="Copy link to comment {{.ID}}">copy link</button>
+          <button type="button" class="copy-btn" command="--copy-permalink" commandfor="comment-{{.ID}}" data-url="/issues/{{$.Issue.ID}}#comment-{{.ID}}" aria-label="Copy link to comment {{.ID}}">copy link</button>
           <span class="copy-tip" role="status"></span>
         </span>
       </header>

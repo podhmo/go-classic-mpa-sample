@@ -42,7 +42,11 @@
 
   async function copyPermalink(button, target) {
     if (!target || !target.id) { report(button, false); return; }
-    const text = location.href.split("#")[0] + "#" + target.id;
+    // Copy the canonical detail-page URL from data-url, not location.href:
+    // after a rejected comment POST the page is re-rendered at
+    // /issues/{id}/comments, a POST-only path that 404s on GET.
+    const rel = button.getAttribute("data-url");
+    const text = rel ? new URL(rel, location.href).href : location.href.split("#")[0] + "#" + target.id;
     try {
       await navigator.clipboard.writeText(text);
     } catch {
