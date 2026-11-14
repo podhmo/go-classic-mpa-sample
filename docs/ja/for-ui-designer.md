@@ -52,7 +52,7 @@ storybook プロセスを立てたまま、以下の編集は **再起動不要*
   され、グループ名は `/grid/<renderFunc>` へのリンク = **同じページの
   全バリアントを並べた grid**。
 - **StoryHttp\*** — 実際のルーティングを通した HTTP リプレイ。
-  ステータスとヘッダ（CSP の `script-src 'none'` 含む）が記録・再現される。
+  ステータスとヘッダ（CSP の `script-src 'self'` 含む）が記録・再現される。
   新しいタブで開く。
 - **viewport 切替** — `?w=320|360|768` で iframe の幅を変えられる。
   狭幅の確認はウィンドウをリサイズしなくて済む。
@@ -74,15 +74,17 @@ storybook プロセスを立てたまま、以下の編集は **再起動不要*
 
 ## JS について
 
-このリポジトリは **JavaScript を使わない方針**（no-JS）。HTML の
-宣言的な機能（invoker commands, view transitions 等）で完結させる。
+方針は「検証できるなら使ってよい」（`docs/ja/decisions.md`
+「JavaScript 方針」参照）。元々 JS を避けていたのは動作検証が面倒に
+なるためで、storybook 経由でイベント発火を含む挙動を確認できるなら
+書いてよい。ただし宣言的な HTML/CSS で実現できるものはそちらを優先する。
 
-- `static/` 下のファイルはそのまま配信されるので、仮に `static/x.js`
-  を置けば `200` で取れるが、ページからは読み込めない。
-- print story に inline `<script>` を書くと描画はされるが、実アプリ経路
-  （`StoryHttp*`）では CSP の `script-src 'none'` がリプレイされて
-  本番と同じく塞がれる。つまり storybook で「動いた」JS が本番で
-  動く保証はない — JS を足したい場合は先に方針自体を変える必要がある。
+- `static/` 下のファイルはそのまま配信されるので、`static/x.js` を
+  置けば `200 text/javascript` で取れ、リロードだけで反映される。
+- CSP は `script-src 'self'`: `/static/` の外部ファイルはそのまま動くが
+  inline `<script>` はブロックされる。JS は外部ファイルに置くこと。
+  実アプリ経路（`StoryHttp*`）が本番ヘッダをそのままリプレイするので
+  CSP とのズレはプレビュー時点で分かる。
 
 ## 静的スナップショット（export）
 

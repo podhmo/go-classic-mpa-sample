@@ -81,8 +81,8 @@ func TestRender(t *testing.T) {
 					sawNon200 = true
 				}
 				// A handler story replays the app's real headers.
-				if got := page.Header["Content-Security-Policy"]; len(got) == 0 || !strings.Contains(got[0], "script-src 'none'") {
-					t.Errorf("%s: CSP misses script-src 'none': %v", s.Name, got)
+				if got := page.Header["Content-Security-Policy"]; len(got) == 0 || !strings.Contains(got[0], "script-src 'self'") {
+					t.Errorf("%s: CSP misses script-src 'self': %v", s.Name, got)
 				}
 			}
 		})

@@ -114,7 +114,7 @@ func (h *handler) listIssues(w http.ResponseWriter, r *http.Request) {
 	}
 	// External speculation rules (issue titles + pagination, moderate
 	// eagerness): the Speculation-Rules header delivery keeps the no-JS
-	// markup free of <script> elements, which CSP script-src 'none'
+	// markup free of <script> elements, which CSP script-src 'self'
 	// would block even for the inert speculationrules JSON type. The
 	// header value is an sf-string — the quotes are mandatory.
 	w.Header().Set("Speculation-Rules", `"/static/speculation-rules.json"`)

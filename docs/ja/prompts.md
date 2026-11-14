@@ -42,7 +42,7 @@ Go の標準ライブラリで実装できる機能には、基本的に外部�
 
 ### 使用しないもの
 
-- JavaScript（インライン・外部ファイルともに禁止）
+- ~~JavaScript（インライン・外部ファイルともに禁止）~~ → 2026-11-15 に緩和: storybook で挙動を検証できる範囲なら使用可。宣言的な HTML/CSS を引き続き優先（`docs/ja/decisions.md`「JavaScript 方針」参照）
 - TypeScript
 - React、Vue、Svelte などの SPA フレームワーク
 - HTMX、Turbo

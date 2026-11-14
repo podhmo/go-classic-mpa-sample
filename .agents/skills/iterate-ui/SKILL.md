@@ -42,7 +42,7 @@ rendering **500**, not silently — treat that as the failure signal.
   side by side.
 - **Handler stories** (`StoryHttp*`): replay a real request through the
   app's mux against the fake `storyStore` — recorded status AND headers
-  (CSP `script-src 'none'` included). They open in a new tab.
+  (CSP `script-src 'self'` included). They open in a new tab.
 - **Viewport switcher**: `?w=320|360|768` narrows the iframe — use it to
   check responsive behavior without resizing a window.
 
@@ -90,8 +90,11 @@ a snapshot to a PR.
 - Stories and fixtures live in `story_pages.go` and are pure script —
   no restarts, no recompiles; if you find yourself restarting the
   storybook after an edit, something is wrong.
-- JavaScript is intentionally absent (`script-src 'none'`); verify
-  behavior with server-rendered markup + CSS only.
+- JavaScript: not banned — allowed when its behavior is verifiable via the
+  storybook (`docs/ja/decisions.md` "JavaScript 方針"), but declarative
+  HTML/CSS stays preferred. CSP is `script-src 'self'`: put JS in
+  `/static/` files — inline `<script>` stays blocked; `StoryHttp*` replay
+  surfaces CSP drift.
 
 The human-facing version of this workflow lives in
 `docs/ja/for-ui-designer.md`. When a change must afterwards be

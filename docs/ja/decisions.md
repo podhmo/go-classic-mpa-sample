@@ -75,9 +75,16 @@
 ## 意図的に実装しないもの
 
 - 認証・認可（ローカル単一ユーザー前提。公開ネットワーク向けではない）
-- JavaScript 全般（HTMX 等も含む）
+- ~~JavaScript 全般（HTMX 等も含む）~~ → 2026-11-15 に緩和（下記「JavaScript 方針」参照）。SPA 化や HTMX/Turbo のようなクライアント駆動の枠組みは引き続き入れない
 - ラベル管理画面（シードの固定ラベルのみ）
 - Docker
+
+## JavaScript 方針（2026-11-15 緩和）
+
+- **経緯**: 元々 JS を使わなかった理由は「動作検証（イベント発火含む）が面倒になる」ためで、JS 自体を否定していたわけではない。自作 storybook（`cmd/storybook`、PR #24）がページを偽データで描画し `StoryHttp*` が実際のルーティング・ヘッダ（CSP 含む）をリプレイするようになったため、イベントの発火を含む挙動を storybook 経由で問題なく確認できるなら JS を書くことは問題ない、という方針に緩和した。
+- **優先順位は変えない**: 宣言的な HTML/CSS（Invoker Commands、View Transitions、`speculationrules` 等）で実現できるものは引き続きそちらを優先する。JS は宣言的機能で届かない場合の手段。
+- **使うときの条件**: (1) storybook で挙動を検証できること（イベント発火を含む）。検証経路が無い JS は書かない。(2) JS は `/static/` の外部ファイルに置く — CSP は本緩和と同時に `script-src 'none'` → `'self'` へ変更済みで、同一生成元のファイルは読み込めるが inline `<script>` は引き続きブロックされる。`StoryHttp*` が本番ヘッダをそのままリプレイするため、CSP とのズレはプレビュー段階で表面化する。
+- **このセクション以前の記述について**: 各機能の実装ノートで「no-JS 方針」を理由に JS を採らなかった記述は、緩和前の実装経緯として残す（当時は宣言的実装が可能だったため JS を選ばなかった、という事実は変わらない）。
 
 ## Markdown レンダリング（2026-11-14 ユーザー要望で追加）
 
@@ -146,7 +153,7 @@
 
 ## CSP・セキュリティヘッダ（2026-11-14、modern-web-guidance `security` / `privacy`）
 
-- **CSP を `default-src 'none'` ベースで有効化**: `script-src 'none'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'`。JS ゼロなので `script-src 'none'` が張れるのが本アプリの最大の利点。bugs.md #13' で「inline style と相性を考えると過剰」として見送った判断を `style-src-attr` で解消し取り下げた（#24 で解消済み）。
+- **CSP を `default-src 'none'` ベースで有効化**: `style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'`。当初は JS ゼロだったため `script-src 'none'` を張っていたが、2026-11-15 の JS 方針緩和にあわせ `'self'` へ変更（`/static/` の外部ファイルは許可、inline は引き続きブロック）。bugs.md #13' で「inline style と相性を考えると過剰」として見送った判断を `style-src-attr` で解消し取り下げた（#24 で解消済み）。
 - **inline `style=` は `style-src-attr 'unsafe-inline'` でのみ許可**: ラベルバッジの `style="--label-color: {{.Color}}"` は DB 由来の動的値で、nonce/hash は style 属性値には使えない（nonce は `<style>`/`<script>` 要素のみに効く）。`-attr` を分けて指定することで「属性だけ通して `<style>` 要素は塞ぐ」最小の穴にした — 実ブラウザで `<style>` 要素注入が `style-src 'self'` にブロックされることを確認済み。`style-src-attr` 未対応の古いブラウザは `style-src` にフォールバックしてバッジ色だけ muted に落ちる graceful degradation（レイアウトは壊れない）。
 - **`img-src 'self' data:`**: `data:` は自前の SVG favicon 用。goldmark はユーザー投稿の `![i](https://…)` を `<img>` で出力しうるが、外部画像は tracking pixel になるため意図的に遮断（privacy ガイドの「サードパーティリソースはプライバシー漏洩源」）。実ブラウザでブロックされることを確認。CSS の `url()` 経由の外部送信もこれで塞がる。もしユーザー画像を許したくなったら `https:` を足す判断ポイント。
 - **追加ヘッダ**: `Cross-Origin-Opener-Policy: same-origin-allow-popups`（ポップアップ利用なし、ガイド既定値）、`Cross-Origin-Resource-Policy: same-origin`（全レスポンスがアプリ内部向け）、`Permissions-Policy` で未使用の強力機能を拒否（`accelerometer/camera/geolocation/gyroscope/magnetometer/microphone/payment/usb`）、`Vary: Sec-Fetch-Site, Origin`（`CrossOriginProtection` が参照するリクエストヘッダ — 共有キャッシュが 403/200 を別リクエストへ流用しないように）。

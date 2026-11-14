@@ -105,7 +105,7 @@ storybook に追いつくための要点である「書き換えたら再起動�
 
 - **静的 JS ファイル**: `internal/web/static` 配下に置けば `/static/` FileServer がそのまま配信する（実測: `hot.js` → `200 text/javascript`）。CSS と同様にリロードで反映。
 - **テンプレート内の inline `<script>`**: テンプレートはただのテキストとして出力されるので print story の body にそのまま出る（実測）。ブラウザでは普通に実行される — index ページ自体は CSP を付けない。
-- **`StoryHttp` 経路では実 CSP が replay される**: アプリのハンドラが付ける `script-src 'none'` を含むヘッダがそのまま返るので、本番で塞がれる inline script はプレビューでも塞がれる。「プレビューと本番で JS の可否がずれる」問題はハンドラ同型 story で既に解消済み。
+- **`StoryHttp` 経路では実 CSP が replay される**: アプリのハンドラが付ける `script-src`（現行 `'self'`、外部ファイルのみ許可）を含むヘッダがそのまま返るので、本番で塞がれる inline script はプレビューでも塞がれる。「プレビューと本番で JS の可否がずれる」問題はハンドラ同型 story で既に解消済み。
 - **storybook 側の JS**: index ページは JS 無しのナビ＋iframe + variants grid で足りている。本物の storybook のような「props を UI でいじる」機能を足すならここに JS を書くことになる（future work）。
 
 ## ハンドラ同型 story（`StoryHttp` prefix）

@@ -12,4 +12,4 @@ Module path: `github.com/podhmo/go-classic-mpa-sample`
 
 ## To Be Implemented
 
-Guides referenced below are in the `modern-web-guidance` catalog (`.agents/skills/modern-web-guidance/`): run `npx -y modern-web-guidance@latest retrieve "<id>"` before implementing. Everything must stay JavaScript-free per `docs/ja/prompts.md`; all picks below are declarative HTML/CSS only.
+Guides referenced below are in the `modern-web-guidance` catalog (`.agents/skills/modern-web-guidance/`): run `npx -y modern-web-guidance@latest retrieve "<id>"` before implementing. Prefer declarative HTML/CSS; JavaScript is allowed only when its behavior can be verified via the storybook (`docs/ja/decisions.md` "JavaScript 方針"). All picks below are declarative HTML/CSS only.
