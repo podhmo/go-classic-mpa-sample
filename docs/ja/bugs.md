@@ -42,6 +42,7 @@
 | 10 | info | wontfix | 検索の `lower()` は ASCII のみ（`Ä`↔`ä` 不一致） | SQLite の `lower()` の制限。ローカルデモとして許容 |
 | 13' | info | wontfix | `fmtTime` が分単位のため同分内の updated_at 変化が見えない / CSP 未設定 | 表示解像度の話。CSP は inline style（ラベル色）と相性を考えると過剰 |
 | 16 | nit | wontfix | 空白のみのコメントのドラフトが trim されて空で再表示される | E2Eテストで確認（E2Eエージェント指摘）: `createComment` が `strings.TrimSpace` 後の値を `CommentDraft` に使うため `"   "` 投稿失敗時は空の textarea になる。「入力内容を保持」の字面どおりではないが、空白のみは意味を持たないため実害なし。挙動はテストで固定済（`integration_test.go`） |
+| 23 | minor | wontfix | 50 件以上のスレッドで画面外のコメントがアクセシビリティツリーに出ない | 長いリストのレンダリング最適化で実ブラウザ（Chromium 156）の AX ツリーを確認して発見: `content-visibility: auto` でスキップ中のコメントは子なしの listitem になり、本文は `notRendered` で ignored。Tab 移動・ページ内検索・`#comment-N` は問題なし。50 件未満のスレッドには `content-visibility` を当てないことで影響を長いスレッドに限定した（decisions.md「長いリストのレンダリング」）。長いスレッドでも問題になるようなら閾値を上げるかルールを消す |
 
 ## 確認済み・非バグ
 

@@ -61,4 +61,8 @@
 - **`.field > label { display: block }` が `.label-option` に勝つ**: ラベル選択の `<label class="label-option">` は `.field` 直下なので、`.label-option { display: … }` は詳細度で負ける。`.label-picker > .label-option` のように詳細度を上げる。flex にした checkbox は縮むので `flex: none` も要る。
 - **ブラウザの既定文字サイズを変えた確認は CDP の `Page.setFontSizes` で**: Playwright にはブラウザの「文字サイズ」設定を変えるオプションが無く、ページズーム（`deviceScaleFactor`）では rem/px の差が出ない。`context.newCDPSession(page)` で `Page.setFontSizes({ fontSizes: { standard: 24 } })` を送ってから遷移すると、rem は追従し px は追従しないことを確認できる。`<meta name="text-scale">` 自体の OS 連動は VM では再現できないので、この rem 連動で代理確認する。
 
+- **`content-visibility: auto` のスキップ判定は要素自身ではなく子で見る**: `el.checkVisibility({ contentVisibilityAuto: true })` は、`content-visibility: auto` を持つ要素自身に対しては（中身がスキップ中でも）`true` を返す。スキップされるのは中身なので、子要素（`.comment-body`）に対して呼ぶ。
+- **スキップ中の中身は CDP の AX ツリーに出ない / Playwright の `ariaSnapshot` は DOM ベース**: `Accessibility.getFullAXTree` ではスキップ中の要素は子なし、中身は `ignored`（`notRendered`）。一方 `locator.ariaSnapshot()` は DOM から組み立てるのでスキップ中でも全文が出て、ブラウザの AX ツリーの確認にはならない。`Accessibility.getPartialAXTree` は `fetchRelatives: false` だと子を返さないので、子の有無を見るなら `true` にする。
+- **`content-visibility` の効果測定は CDP `Performance.getMetrics` の `LayoutDuration` / `RecalcStyleDuration`**: `Emulation.setCPUThrottlingRate` で 4x にし、`page.route` で `app.css` のルールを外した版と比べる。件数による損益分岐はスレッドの HTML を `page.route` で切り詰めると DB を作り直さずに測れる。
+
 （随時追記）

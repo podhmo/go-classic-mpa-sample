@@ -952,6 +952,19 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   padding: 14px 16px;
 }
 
+/* Long threads only: skip layout and paint of off-screen comments until
+   they scroll near the viewport. Chromium leaves skipped content out of the
+   accessibility tree, and below ~50 comments the measured saving is nil, so
+   ordinary threads keep rendering everything. The first two comments can be
+   in the initial viewport and are never skipped. Find-in-page, the Tab
+   order and #comment-N links still reach skipped comments. The placeholder
+   block size is a short comment (padding, meta line, about three lines of
+   text); `auto` keeps each comment's real size once it has been rendered. */
+.comment-list:has(> .comment:nth-child(50)) > .comment:nth-child(n + 3) {
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto 6lh;
+}
+
 .comment:target {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
