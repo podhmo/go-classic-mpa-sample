@@ -1,4 +1,8 @@
 {{define "content"}}
+{{/* Progressive enhancement: highlights the ?q= term inside issue titles
+   via the CSS Custom Highlight API. Deferred external file — CSP
+   script-src 'self' allows it; browsers without CSS.highlights no-op. */}}
+<script src="/static/search-highlight.js" defer></script>
 <div class="page-head">
   <h1>Issues</h1>
 </div>
