@@ -94,7 +94,19 @@ storybook に追いつくための要点である「書き換えたら再起動�
 - **静的 JS ファイル**: `internal/web/static` 配下に置けば `/static/` FileServer がそのまま配信する。CSS と同様にリロードで反映。物理ファイルを出すだけなので問題なし。
 - **テンプレート内の inline `<script>`**: テンプレートはただのテキストとして出力されるので、ブラウザでは普通に実行される。プレビューサーバは CSP を付けない（後述の制限）のでブロックもされない。
 - **storybook 側の JS**: index ページは JS 無しのナビ＋iframe で足りている。本物の storybook のような「props を UI でいじる」機能を足すならここに JS を書くことになる（future work）。
-- **注意点（実測で見えたギャップ）**: プレビューは renderer が出す **body だけ**を返す。アプリ側ハンドラが付ける HTTP ヘッダ（CSP `script-src 'none'`、`Speculation-Rules` 等）はプレビュー経路では付かない。つまり「本番では CSP で塞がれる inline script」がプレビューでは動いてしまう。ヘッダまで含めて検証したければ story が `httptest.NewRequest` からハンドラ経由で呼ぶ形に変えるか、storybook 側にヘッダシミュレーションを噛ませる（future work）。
+- **注意点（実測で見えたギャップ → 後で解消）**: プレビューは renderer が出す **body だけ**を返す。アプリ側ハンドラが付ける HTTP ヘッダ（CSP `script-src 'none'`、`Speculation-Rules` 等）はプレビュー経路では付かない。つまり「本番では CSP で塞がれる inline script」がプレビューでは動いてしまう。→ このギャップは後述の **ハンドラ同型 story（`StoryHttp` prefix）** で解消した。
+
+## ハンドラ同型 story（`StoryHttp` prefix）
+
+「story が Response を返せるようにすれば status code や header も取れる。いっその事 `http.Handler` と同型にする」という発想で追加した2つ目の story 形式。
+
+- **宣言**: `StoryHttp` で始まる名前の func は `func(http.ResponseWriter, *http.Request)` 型を必須とする（AST で構造的に判定するので import alias 不問）。それ以外の `Story` func は従来どおり `func()`。
+- **実行**: `Render` は `httptest.NewRecorder` + `httptest.NewRequest(GET /)` をホスト側で作り `s.Call(ctx, pkg, name, rec, req)` で story に渡す。host の Go オブジェクトは `vm.SnapshotOf` 経由でそのまま script に見えるので、`*httptest.ResponseRecorder` を script から書き込める。
+- **返却**: 戻り値は `*Page{Status, Header, Body}`。`/story/<Name>` が recorder の status・headers をそのまま replay するので、story が実 mux（`web.New(storyStore{})`）を通せば CSP・`Referrer-Policy`・`Speculation-Rules` など実ハンドラのヘッダや 404 等の非 200 状態までプレビューできる。print 型 story は従来どおり常に 200。
+- **fixture**: `Store` interface の script 側 fake（`storyStore`）を実装して mux に渡す。`web`・`store` パッケージは interpreted なので、script 内で定義した struct が interface をそのまま満たす。
+- **実測**: `StoryHttpIssueList`（実 mux → `GET /issues`）は 200 + CSP/X-Content-Type-Options/nosniff 等つき、`StoryHttpNotFound` は 404 + styled body を返すことを確認。
+
+print 型と使い分け: **見た目（マークアップ）の確認は print 型**、**ヘッダ・status・ルーティングを含めた検証は `StoryHttp` 型**と使い分ける。
 
 ## 見つかったこと（minigo へのフィードバック素材）
 
