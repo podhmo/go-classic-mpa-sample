@@ -199,6 +199,64 @@ a:hover {
   color: var(--text-muted);
 }
 
+/* Keeps content in the accessibility tree without showing it (extra context
+   in link names, e.g. the comment permalinks). Content that can itself take
+   focus opts out via :focus-within / :active so it can reveal instead. */
+.visually-hidden:where(:not(:focus-within, :active)) {
+  position: absolute !important;
+  clip-path: inset(50%) !important;
+  overflow: hidden !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: -1px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  white-space: nowrap !important;
+}
+
+/* ---------- skip link ---------- */
+
+/* First element in <body>, so the first Tab stop: invisible until focused,
+   then pinned to the top-left corner of the viewport. :focus (not
+   :focus-visible) is the trigger — the link can only be focused by keyboard
+   or by activating it, and :focus also works where :focus-visible is not
+   supported. */
+.skip-link {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.skip-link:is(:focus, :active) {
+  position: fixed;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 100;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 8px 14px;
+  overflow: visible;
+  clip-path: none;
+  white-space: normal;
+  color: var(--on-emphasis);
+  background: var(--accent-emphasis);
+  border-radius: var(--radius);
+  font-weight: 600;
+}
+
+/* The generic accent ring is invisible on the accent background; a light
+   ring keeps the focus indication readable. */
+.skip-link:focus-visible {
+  outline: 2px solid var(--on-emphasis);
+  outline-offset: 2px;
+}
+
 /* ---------- header / footer ---------- */
 
 .site-header {
