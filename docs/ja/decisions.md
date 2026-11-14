@@ -222,6 +222,14 @@
 - **CSS**: `html:active-view-transition-type(forward|backward)` で `::view-transition-old/new(root)` の animation-name を差し替え（旧ページ→進行方向へ100%、新ページ→逆方向から100%、transform のみ・非線形 ease-in-out）。`prefers-reduced-motion: no-preference` の `@view-transition` ゲートは既存のまま — reduce 環境では cross-doc VT 自体が無効なので追加対応不要。
 - **検証**: storybook では実際の document 遷移を再現できないため verify-ui ルート — `go run .` の実アプリ + Playwright（`addInitScript` で pagereveal を記録）。Next クリック→`["forward"]`、Previous クリック→`["backward"]` を確認。なお計測は listener 内で `setTimeout(0)` して読む必要があった（addInitScript の listener は外部 JS の listener より先に走り、即時読みだと types 追加前の空配列が見える）。
 
+## Sticky サイトヘッダー（2026-11-15、`sticky-header` ブランチ）
+
+- **ガイド**: modern-web-guidance `state-aware-sticky-headers`。`position: sticky` + `@container scroll-state(stuck: block-start)` で JS なしに「stuck 時だけ見た目を変える」を実現（scroll-state queries は Chrome/Edge 144+。Firefox/Safari では影が出ないだけで sticky 自体は動く — ガイド推奨の progressive enhancement として受け入れ、IntersectionObserver フォールバックは入れない）。
+- **ガイドの制約「クエリはコンテナの子孫にしか効かない」対応**: `.site-header`（=stickyコンテナ）に置いていた背景・下ボーダーを全幅の子 `.header-bar` に移し、`header-inner` をその内側に保つ構造に変更。stuck 状態では `.header-bar` に `box-shadow` を追加。
+- **box-model を変えない**: stuck では影のみ変更。高さ・padding を触らないのでガイドの scroll anchoring 振動問題は起きず、`overflow-anchor: none` も不要（親は body で本来置けない）。
+- **`scroll-padding-top: 5rem`**: sticky で隠れる分を anchor ジャンプ（`#comment-N` 等）とフォーカス可視性（WCAG 2.4.11）に配慮して html に設定。
+- **検証**: storybook の `StoryIssueDetail` で実ブラウザ確認 — スクロール前 `box-shadow: none`、スクロール後に影が出て `site-header` が `top: 0` に留まることを確認。
+
 （随時追記）
 
 ## minigo storybook 環境の構成（2026-11-14）
