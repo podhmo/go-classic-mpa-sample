@@ -2,7 +2,8 @@
 
 A small issue tracker built as a **classic multi-page application (MPA)** in
 Go — server-rendered HTML, plain HTML forms for every state change, and
-**zero JavaScript**.
+**no JavaScript** so far (allowed once its behavior is verifiable in the
+homemade storybook; see `docs/ja/decisions.md`).
 
 It demonstrates that a modern-looking, usable web UI can be built with only
 the request/response model: page navigation, forms, redirects, and URLs that
@@ -146,6 +147,9 @@ Key design choices:
 
 - **Authentication / authorization** — single local user; bind stays on
   localhost by default.
-- **JavaScript** — none, anywhere. Toggles and deletes are ordinary forms.
+- **JavaScript** — none today. Not banned: it was avoided because behavior
+  verification was costly, and is allowed now that the storybook can verify
+  interactions (see `docs/ja/decisions.md`). Declarative HTML/CSS stays
+  preferred — toggles and deletes are ordinary forms.
 - **Label admin UI** — labels are seeded; issue↔label assignment is supported.
 - **i18n** — UI strings are English.

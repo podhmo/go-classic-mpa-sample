@@ -90,8 +90,10 @@ a snapshot to a PR.
 - Stories and fixtures live in `story_pages.go` and are pure script —
   no restarts, no recompiles; if you find yourself restarting the
   storybook after an edit, something is wrong.
-- JavaScript is intentionally absent (`script-src 'none'`); verify
-  behavior with server-rendered markup + CSS only.
+- JavaScript: not banned — allowed when its behavior is verifiable via the
+  storybook (`docs/ja/decisions.md` "JavaScript 方針"), but declarative
+  HTML/CSS stays preferred. Current CSP is `script-src 'none'`, so using
+  JS means relaxing it; `StoryHttp*` replay surfaces CSP drift.
 
 The human-facing version of this workflow lives in
 `docs/ja/for-ui-designer.md`. When a change must afterwards be
