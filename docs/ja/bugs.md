@@ -43,7 +43,7 @@
 | 10 | info | wontfix | 検索の `lower()` は ASCII のみ（`Ä`↔`ä` 不一致） | SQLite の `lower()` の制限。ローカルデモとして許容 |
 | 13' | info | wontfix | `fmtTime` が分単位のため同分内の updated_at 変化が見えない | 表示解像度の話（この項目に同居していた「CSP 未設定」は #24 で解消済み） |
 | 16 | nit | wontfix | 空白のみのコメントのドラフトが trim されて空で再表示される | E2Eテストで確認（E2Eエージェント指摘）: `createComment` が `strings.TrimSpace` 後の値を `CommentDraft` に使うため `"   "` 投稿失敗時は空の textarea になる。「入力内容を保持」の字面どおりではないが、空白のみは意味を持たないため実害なし。挙動はテストで固定済（`integration_test.go`） |
-| 23 | minor | wontfix | 50 件以上のスレッドで画面外のコメントがアクセシビリティツリーに出ない | 長いリストのレンダリング最適化で実ブラウザ（Chromium 156）の AX ツリーを確認して発見: `content-visibility: auto` でスキップ中のコメントは子なしの listitem になり、本文は `notRendered` で ignored。Tab 移動・ページ内検索・`#comment-N` は問題なし。50 件未満のスレッドには `content-visibility` を当てないことで影響を長いスレッドに限定した（decisions.md「長いリストのレンダリング」）。長いスレッドでも問題になるようなら閾値を上げるかルールを消す |
+| 23 | minor | 部分緩和 | 50 件以上のスレッドで画面外コメントの**本文**がアクセシビリティツリーに出ない | 長いリストのレンダリング最適化で実ブラウザ（Chromium 156）の AX ツリーを確認して発見: `content-visibility: auto` でスキップ中のコメントは子なしの listitem になり、中身は `notRendered` で ignored。Tab 移動・ページ内検索・`#comment-N` は問題なし。50 件未満のスレッドには `content-visibility` を当てない。→ 緩和（2026-11-14）: ルールを `<li>` から `.comment-body` に移し、スキップ中でも listitem・パーマリンク（コメント識別・アンカー）は AX ツリーに残るようにした（CDP `Accessibility.getPartialAXTree` で確認: `listitem ignored=false children=2`）。残存: スキップ中の本文テキストだけはブラウズモードに出ない — これは `content-visibility` の本質的限界で、完全解消には最適化自体の撤去が必要（perf 回帰 ~169ms→のため見送り、decisions.md「長いリストのレンダリング」）。閾値は 50 のまま。本文まで重要なら閾値を上げるかルールを消す |
 
 ## 確認済み・非バグ
 

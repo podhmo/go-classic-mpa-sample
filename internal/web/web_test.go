@@ -945,6 +945,14 @@ func TestStaticCSS(t *testing.T) {
 			t.Errorf("content-visibility: auto without contain-intrinsic-size: %q", m)
 		}
 	}
+	// Skipped content leaves the accessibility tree, so the long-thread rule
+	// must skip only the comment body — the <li> and its permalink stay in
+	// the AX tree (bugs.md #23). Guard against the rule ever being moved
+	// back onto .comment itself.
+	cv := regexp.MustCompile(`([^{}]+)\{[^}]*content-visibility:\s*auto`).FindStringSubmatch(body)
+	if cv == nil || !strings.Contains(cv[1], ".comment-body") {
+		t.Errorf("content-visibility must target .comment-body, got selector %q", cv)
+	}
 }
 
 func TestLayoutOptsIntoOSTextScale(t *testing.T) {

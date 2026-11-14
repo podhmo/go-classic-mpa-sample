@@ -24,3 +24,4 @@ Guides referenced below are in the `modern-web-guidance` catalog (`.agents/skill
 - [x] **Skip link & a11y sweep** (guide: `accessibility`): "Skip to content" リンク追加、`:focus-visible`、ランドマーク・見出し階層の監査を全テンプレートで実施。
 - [x] **Speculation rules prefetching** (guide: `improve-next-page-load-performance`): `<script type="speculationrules">` で Next ページや issue リンクを prefetch/prerender。実行 JS ではなく宣言的 JSON だが、no-JavaScript ポリシーに合うか判断してから実装する（合わないと判断したら wontfix で記録）。
   - 実装: inline `<script>` は CSP `script-src 'none'` にブロックされるため、`Speculation-Rules` レスポンスヘッダー + `/static/speculation-rules.json` で配信（decisions.md 参照）。
+- [x] **bugs.md #23 mitigation**: 50件以上のスレッドでスキップ中コメントが AX ツリーから落ちる問題を、`content-visibility` の対象を `<li>` から `.comment-body` に移して部分緩和（listitem+パーマリンクは残り欠落は本文のみ）。bugs.md #23 のステータスを部分緩和に更新（decisions.md「長いリストのレンダリング」参照）。
