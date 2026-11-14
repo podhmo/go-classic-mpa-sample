@@ -180,3 +180,7 @@
 - **sqlite 非実行は `modernc.org/sqlite` の空 bind で実現**: story 実行時は `import _ "modernc.org/sqlite"` が init されず driver 登録も走らない。`store.Open` を呼ぶ story は書かない。
 - **`internal/store` は source 解釈、goldmark 系は host bind**: bound host struct の script リテラルは bound html/template からフィールド評価できないため、view model を生産するパッケージは source 解釈に寄せる（minigo の制限、issue としてフィードバック予定）。
 - **`parsePages` を `ParseFS` から `ReadFile`+`Parse` に変更**: bound html/template に ParseFS が無く、script 側 `fs.FS` を bound 関数に渡せないため。挙動は同一。
+
+## storybook: ビューポート切替は iframe 幅の固定で実装（2026-11-14）
+
+モバイル確認用に `?w=320|360|768` で preview iframe の幅を固定する方式を選んだ。理由: JS なし・既存の index テンプレートだけで実現でき、デバイスエミュレーションより単純。全 story を 320px まで確認した結果、アプリ側 CSS の追修正は不要と判断（先行の responsive 対応で済んでいた）。
