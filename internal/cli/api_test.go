@@ -63,6 +63,19 @@ func TestAPICommandFields(t *testing.T) {
 		t.Fatalf("api POST body: %v", body)
 	}
 
+	// A non-finite float stays a string rather than making the body
+	// unencodable (json.Marshal rejects NaN/Inf).
+	code, _, errOut = runAPI(t, "api", "issues", "-X", "POST", "-F", "v=NaN")
+	if code != ExitOK {
+		t.Fatalf("api -F v=NaN: exit %d\n%s", code, errOut)
+	}
+	if err := json.Unmarshal([]byte(got.body), &body); err != nil {
+		t.Fatalf("api POST NaN body not JSON: %q", got.body)
+	}
+	if body["v"] != "NaN" {
+		t.Fatalf("api -F NaN: body %v", body)
+	}
+
 	// --template renders the decoded body.
 	code, out, _ := runAPI(t, "api", "issues", "--template", "{{.ok}}")
 	if code != ExitOK || strings.TrimSpace(out) != "true" {
@@ -84,8 +97,8 @@ func TestCompletion(t *testing.T) {
 		t.Fatalf("completion bash: exit %d\n%s", code, out)
 	}
 	code, out, _ = run(t, o, "completion", "zsh")
-	if code != ExitOK || !strings.Contains(out, "#compdef issues") {
-		t.Fatalf("completion zsh: exit %d\n%s", code, out)
+	if code != ExitOK || !strings.Contains(out, "compdef _issues issues") {
+		t.Fatalf("completion zsh must register via compdef: exit %d\n%s", code, out)
 	}
 	code, out, _ = run(t, o, "completion", "fish")
 	if code != ExitOK || !strings.Contains(out, "complete -c issues") {

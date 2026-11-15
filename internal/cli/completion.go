@@ -147,7 +147,10 @@ _issues() {
 			_describe -t shells 'shell' '(bash zsh fish)' ;;
 	esac
 }
-_issues "$@"
+# Registering via compdef (not just defining _issues) is what makes both
+# eval "$(issues completion zsh)" and an fpath-installed _issues file
+# actually hook the command into the completion system.
+compdef _issues issues
 `
 
 const completionFish = `# fish completion for issues — save to ~/.config/fish/completions/issues.fish

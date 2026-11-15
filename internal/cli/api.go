@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -145,7 +146,9 @@ func splitField(kv string) (string, string, error) {
 }
 
 // typedFieldValue parses a -F value like gh: null, true/false, integer,
-// or floating point; anything else stays a string.
+// or floating point; anything else stays a string. Non-finite floats
+// (NaN, ±Inf) stay strings — encoding/json refuses to marshal them and a
+// field must never make the request unencodable.
 func typedFieldValue(v string) any {
 	switch v {
 	case "null":
@@ -158,7 +161,8 @@ func typedFieldValue(v string) any {
 	if i, err := strconv.ParseInt(v, 10, 64); err == nil {
 		return i
 	}
-	if f, err := strconv.ParseFloat(v, 64); err == nil {
+	if f, err := strconv.ParseFloat(v, 64); err == nil &&
+		!math.IsNaN(f) && !math.IsInf(f, 0) {
 		return f
 	}
 	return v
