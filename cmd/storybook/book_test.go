@@ -364,8 +364,12 @@ func TestHandlerWatch(t *testing.T) {
 			t.Errorf("%s: Content-Type %q vs script presence mismatch", s.Name, rec.Header().Get("Content-Type"))
 		}
 		// When the story replays a CSP, it must not block the script's
-		// EventSource: connect-src falls back to default-src.
-		if csp := rec.Header().Get("Content-Security-Policy"); html && csp != "" && !strings.Contains(csp, "connect-src") {
+		// EventSource: a policy with default-src but no connect-src
+		// forbids it, so AppendLiveReload must add one (minigo#1081).
+		// A policy without default-src leaves connections unrestricted
+		// and is intentionally untouched.
+		if csp := rec.Header().Get("Content-Security-Policy"); html &&
+			strings.Contains(csp, "default-src") && !strings.Contains(csp, "connect-src") {
 			t.Errorf("%s: CSP %q would block the reload EventSource", s.Name, csp)
 		}
 	}
