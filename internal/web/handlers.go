@@ -376,20 +376,19 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request) {
 		errMsg = fmt.Sprintf("Comment must be %d characters or fewer.", maxBodyRunes)
 	}
 	if errMsg != "" {
-		// A partial request swaps only the form; a minimal view model
-		// (the issue ID for the action URL) is enough — no list reload.
+		issue, err := h.store.GetIssue(r.Context(), id)
+		if err != nil {
+			h.issueError(w, r, err)
+			return
+		}
+		// A partial request swaps only the form; no list reload.
 		if partial {
 			h.r.renderFragment(w, "issue_detail", "issue_comment_form", http.StatusUnprocessableEntity, issueDetailPage{
-				Issue:        &store.Issue{ID: id},
+				Issue:        issue,
 				CommentDraft: body,
 				CommentError: errMsg,
 				User:         userFromContext(r.Context()),
 			})
-			return
-		}
-		issue, err := h.store.GetIssue(r.Context(), id)
-		if err != nil {
-			h.issueError(w, r, err)
 			return
 		}
 		comments, err := h.store.ListComments(r.Context(), id)
