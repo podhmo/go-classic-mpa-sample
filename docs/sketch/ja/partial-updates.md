@@ -145,6 +145,8 @@
     新規 textarea に掛からないので delegation 化要）。
 - OOB 更新（`updated_at` 表示・answer バッジ移動）は `moveBefore` で。ただし初回は
   コメント append のみに絞り、OOB は Phase 2（answer マーク部分更新）で使う。
+- `partial-submit.js` は最初の ES module として追加し、announcer を共有 module として
+  切り出す（ESM/バンドル方針は `js-modules.md`）。
 
 ## Datastar 補足（初回調査の記録）
 

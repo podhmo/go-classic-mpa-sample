@@ -308,3 +308,12 @@
 - **CSP に `connect-src 'self'` の追加が必須前提**: 現行 `default-src 'none'` では fetch が全ブロックされる。部分更新のどの案でも必要。
 - **htmx / Datastar は採用しない（再評価条件つき）**: ネイティブ API（`setHTML()` Sanitizer、`moveBefore()`、`ariaNotify()`、`<progress>`）が vendored 依存の売りを相当埋めたため。機構が増えて管理が面倒になった時点で htmx、push/SSE 需要が出た時点で Datastar を再評価する。JSON API 経由は「ページ内更新の道具としては」不採用のまま。
 - **volatile 機能は採用不可・ウォッチのみ**: `html-setters` / html-streaming-setters（宣言的部分更新）は単一エンジンの volatile 機能で opt-in ゲート付きのため選択肢から除外。
+
+## JS 資産の構成: ESM 採用・バンドル不採用（2026-11-15、`devin/1794743974-partial-updates-revisited` ブランチ）
+
+設計メモ `docs/sketch/ja/js-modules.md` の結論を決定として記録。
+
+- **`type="module"` への移行は `partial-submit.js` 実装と同時に開始**: 動機は polite announcer 等の共有コードを import で切り出せること。module は defer 相当なので読み込みセマンティクスは不変。classic/module の混在は許容し漸進移行。
+- **import map / bare specifier は使わない**: `<script type="importmap">` はインライン script で CSP `script-src 'self'` にブロックされる。全て自前ファイルなので相対パス import のみ。
+- **バンドル・minify・fingerprint は現時点不採用**: シングル Go バイナリ + embed.FS + node ツールチェーンなしの方針と、合計 ~12KB の規模では効果が小さいため。再評価トリガー（~50KB 超 / ページあたり 5 ファイル超 / 外部依存 vendored 化）をメモに記録。
+- **条件付き依存は `conditional-async-dependencies` の単一エントリパターン**: TLA + 兄弟 static import 回避（Safari 15–26.6 の TLA 同時 import bug 対策）。
