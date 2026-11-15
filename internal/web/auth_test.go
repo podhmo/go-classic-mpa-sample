@@ -38,7 +38,6 @@ func TestSessionLookupFailureIs500NotAnonymous(t *testing.T) {
 		t.Fatal("post was saved during session lookup failure")
 	}
 
-	// An unknown session still resolves anonymously.
 	f.sessionUserErr = nil
 	code, body := getWithCookie(t, srv, "/issues", &http.Cookie{Name: sessionCookieName, Value: "nope"})
 	if code != http.StatusOK || strings.Contains(body, "@alice") {
@@ -118,7 +117,6 @@ func TestRegisterValidationAndDuplicate(t *testing.T) {
 	srv, f := newTestServer(t)
 	f.addUser(t, "alice", "password123")
 
-	// Short password: 422 with a field error, no cookie.
 	resp := postForm(t, srv.Client(), srv.URL+"/register", url.Values{
 		"name": {"bob"}, "password": {"short"},
 	})
@@ -133,7 +131,6 @@ func TestRegisterValidationAndDuplicate(t *testing.T) {
 		t.Error("failed registration set a cookie")
 	}
 
-	// Duplicate name (case-insensitive): 422 name error.
 	resp = postForm(t, srv.Client(), srv.URL+"/register", url.Values{
 		"name": {"ALICE"}, "password": {"password123"},
 	})
@@ -150,7 +147,6 @@ func TestLoginLogoutFlow(t *testing.T) {
 	srv, f := newTestServer(t)
 	f.addUser(t, "alice", "password123")
 
-	// Wrong password: 422 + generic message, no cookie.
 	resp := postForm(t, srv.Client(), srv.URL+"/login", url.Values{
 		"name": {"alice"}, "password": {"wrong-pass"},
 	})
@@ -165,7 +161,6 @@ func TestLoginLogoutFlow(t *testing.T) {
 		t.Error("failed login set a cookie")
 	}
 
-	// Correct credentials: 303 + session cookie; header shows the user.
 	resp = postForm(t, noRedirectClient(), srv.URL+"/login", url.Values{
 		"name": {"alice"}, "password": {"password123"}, "next": {"/issues"},
 	})
@@ -175,7 +170,6 @@ func TestLoginLogoutFlow(t *testing.T) {
 	}
 	c := sessionCookie(t, resp)
 
-	// Unknown user is also the generic error (no oracle).
 	resp = postForm(t, srv.Client(), srv.URL+"/login", url.Values{
 		"name": {"mallory"}, "password": {"password123"},
 	})
@@ -184,7 +178,6 @@ func TestLoginLogoutFlow(t *testing.T) {
 		t.Error("unknown user did not get the generic error")
 	}
 
-	// Logout: 303, cookie cleared, session forgotten server-side.
 	req, err := http.NewRequest(http.MethodPost, srv.URL+"/logout", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -208,7 +201,6 @@ func TestLoginLogoutFlow(t *testing.T) {
 		t.Error("logout did not clear the session cookie")
 	}
 
-	// The old token no longer resolves: the request is anonymous again.
 	code, body := getWithCookie(t, srv, "/issues", c)
 	if code != http.StatusOK {
 		t.Fatalf("GET /issues = %d", code)

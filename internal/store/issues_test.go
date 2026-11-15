@@ -176,7 +176,6 @@ func TestIssueLabelsSkipUnknownAndDuplicates(t *testing.T) {
 		t.Fatalf("labels = %+v, want [Bug]", i.Labels)
 	}
 
-	// Replacing the label set with only unknown ids succeeds and clears it.
 	if err := s.UpdateIssue(ctx, id, IssueInput{Title: "x", LabelIDs: []int64{99999}}); err != nil {
 		t.Fatalf("UpdateIssue: %v", err)
 	}
@@ -239,7 +238,6 @@ func TestSetIssueStatusUpdatedAt(t *testing.T) {
 		t.Fatalf("GetIssue: %v", err)
 	}
 
-	// Re-posting the current status is a no-op: updated_at is unchanged.
 	if err := s.SetIssueStatus(ctx, id, StatusOpen); err != nil {
 		t.Fatalf("SetIssueStatus(same): %v", err)
 	}
@@ -251,7 +249,6 @@ func TestSetIssueStatusUpdatedAt(t *testing.T) {
 		t.Fatalf("no-op status bumped updated_at: %v -> %v", before.UpdatedAt, same.UpdatedAt)
 	}
 
-	// An actual change bumps updated_at.
 	if err := s.SetIssueStatus(ctx, id, StatusClosed); err != nil {
 		t.Fatalf("SetIssueStatus: %v", err)
 	}
@@ -263,7 +260,6 @@ func TestSetIssueStatusUpdatedAt(t *testing.T) {
 		t.Fatalf("updated_at not bumped: %v -> %v", before.UpdatedAt, changed.UpdatedAt)
 	}
 
-	// Missing issue still yields ErrNotFound (RowsAffected semantics kept).
 	if err := s.SetIssueStatus(ctx, 4242, StatusClosed); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("SetIssueStatus missing = %v, want ErrNotFound", err)
 	}
@@ -478,7 +474,6 @@ func TestListIssues(t *testing.T) {
 	if total != 4 || len(issues) != 0 {
 		t.Fatalf("page3: len=%d total=%d", len(issues), total)
 	}
-	// Page < 1 clamps to 1.
 	issues, _, err = s.ListIssues(ctx, ListFilter{Status: "all", PerPage: 2, Page: 0})
 	if err != nil {
 		t.Fatalf("page0: %v", err)
@@ -487,7 +482,6 @@ func TestListIssues(t *testing.T) {
 		t.Fatalf("page0: ids=%v", issueIDs(issues))
 	}
 
-	// Labels are populated on listed issues.
 	issues, _, err = s.ListIssues(ctx, ListFilter{LabelID: bug})
 	if err != nil {
 		t.Fatalf("label populated: %v", err)

@@ -120,16 +120,8 @@ func envOr(key, def string) string {
 
 // initDB implements the "init" subcommand / -init flag: create the database
 // file if missing, ensure the full schema (all tables and their indexes),
-// refresh query-planner statistics, print a report, and return.
-//
-// It deliberately does not seed demo data — seeding stays a startup
-// concern — but it does ensure the fixed discussion categories: they are
-// reference data with no other source, and without them a schema-only
-// database can never accept a discussion via the local CLI. Everything is
-// idempotent (schema DDL, empty-table category insert, ANALYZE) so init is
-// deterministic and safe to re-run.
-// log.Fatalf exits without running deferred calls, so the store is closed
-// explicitly on every path.
+// refresh query-planner statistics, print a report, and return. Everything
+// is idempotent, so init is deterministic and safe to re-run.
 func initDB(path string) {
 	// Stat before Open (which creates the file) to report whether the
 	// database is new. A stat failure other than "not exist" is reported
@@ -140,11 +132,16 @@ func initDB(path string) {
 		state = "already existed"
 	}
 
+	// log.Fatalf exits without running deferred calls, so the store is
+	// closed explicitly on every path.
 	st, err := store.Open(path)
 	if err != nil {
 		log.Fatalf("open database %q: %v", path, err)
 	}
 
+	// Demo data stays a startup concern, but the fixed discussion
+	// categories are reference data with no other source — without them a
+	// schema-only database can never accept a discussion via the local CLI.
 	ctx := context.Background()
 	if err := st.SeedCategories(ctx); err != nil {
 		st.Close()

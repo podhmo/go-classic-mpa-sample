@@ -7,6 +7,6 @@ document.addEventListener("keydown", (event) => {
   if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
   const textarea = event.target;
   if (!(textarea instanceof HTMLTextAreaElement) || !textarea.form) return;
-  event.preventDefault(); // don't insert a newline
-  textarea.form.requestSubmit(); // run the form's normal submit path
+  event.preventDefault();
+  textarea.form.requestSubmit();
 });

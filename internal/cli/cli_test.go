@@ -243,7 +243,6 @@ func TestAuthTokenListRevoke(t *testing.T) {
 
 	o := localOptions(t, db)
 
-	// Issue two tokens for the same user.
 	var tokens []string
 	for i := 0; i < 2; i++ {
 		code, out, _ := run(t, o, "auth", "token", "--user", "dave")
@@ -271,7 +270,6 @@ func TestAuthTokenListRevoke(t *testing.T) {
 		t.Fatalf("token list missing user:\n%s", out)
 	}
 
-	// --json shape: id (full hash) + user + created_at.
 	code, out, _ = run(t, o, "auth", "token", "list", "--json", "id,user")
 	if code != ExitOK || !strings.Contains(out, `"id"`) || !strings.Contains(out, `"dave"`) {
 		t.Fatalf("token list --json: exit %d\n%s", code, out)
@@ -298,8 +296,6 @@ func TestAuthTokenListRevoke(t *testing.T) {
 		t.Fatalf("after revoke: %d / %q", code, out)
 	}
 
-	// An unknown prefix is an error; revoking the other token by its
-	// explicit plaintext --token also works.
 	code, _, _ = run(t, o, "auth", "token", "revoke", "zzzz-nope")
 	if code != ExitError {
 		t.Fatalf("revoke unknown id: want %d got %d", ExitError, code)
@@ -313,7 +309,6 @@ func TestAuthTokenListRevoke(t *testing.T) {
 		t.Fatalf("after --token revoke: %d / %q", code, out)
 	}
 
-	// Token management is local-mode only.
 	for _, args := range [][]string{
 		{"auth", "token", "--server", "http://x", "--user", "dave"},
 		{"auth", "token", "list", "--server", "http://x"},
@@ -335,7 +330,6 @@ func TestReviewRegressions(t *testing.T) {
 	id := seedIssue(t, db, "target")
 	o := localOptions(t, db)
 
-	// issue create --web without --server must not create anything.
 	code, _, _ := run(t, o, "issue", "create", "--title", "no server", "-w")
 	if code != ExitUsage {
 		t.Fatalf("create -w: exit %d, want %d", code, ExitUsage)
@@ -345,7 +339,6 @@ func TestReviewRegressions(t *testing.T) {
 		t.Fatalf("create -w still wrote an issue:\n%s", out)
 	}
 
-	// Blank/oversized input is rejected like the web/API, not persisted.
 	code, _, _ = run(t, o, "issue", "edit", itoa(id), "--title", "   ")
 	if code != ExitError {
 		t.Fatalf("edit --title '   ': exit %d, want %d", code, ExitError)
@@ -360,7 +353,6 @@ func TestReviewRegressions(t *testing.T) {
 		t.Fatalf("oversized comment: exit %d, want %d", code, ExitError)
 	}
 
-	// view --comments --json keeps issue fields at the root.
 	code, out, _ = run(t, o, "issue", "view", itoa(id), "--comments",
 		"--json", "title,comments")
 	if code != ExitOK {
@@ -392,7 +384,6 @@ func TestTemplateAndNoColor(t *testing.T) {
 		t.Fatalf("non-TTY output must not contain ANSI escapes:\n%q", out)
 	}
 
-	// --json + --template is a usage error; a bad template is too.
 	if code, _, _ := run(t, o, "issue", "list", "--json", "id", "--template", "x"); code != ExitUsage {
 		t.Fatalf("--json + --template: want %d got %d", ExitUsage, code)
 	}

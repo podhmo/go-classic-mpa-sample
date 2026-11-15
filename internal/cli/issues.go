@@ -1,4 +1,3 @@
-// Issue, comment and label subcommands.
 package cli
 
 import (

@@ -45,7 +45,7 @@ func listWindow[E any](ctx context.Context, page, perPage int,
 		total = t
 		acc = append(acc, items...)
 		if len(items) < apiMaxPerPage {
-			break // last page
+			break
 		}
 	}
 	if skip >= len(acc) {

@@ -50,8 +50,7 @@ const (
 	maxBodyBytes = 1 << 20 // 1 MiB
 	// defaultPerPage matches the HTML list's fixed page size.
 	defaultPerPage = 20
-	// maxPerPage caps the ?per_page= query parameter.
-	maxPerPage = 100
+	maxPerPage     = 100
 )
 
 // New returns the /api/v1 handler; every request must carry
@@ -170,14 +169,10 @@ type handler struct {
 	store Store
 }
 
-// --- wire types (DTOs), kept separate from store's domain types ---
-
 type User struct {
 	ID   int64  `json:"id"`
 	Name string `json:"name"`
 }
-
-// --- store → DTO conversion ---
 
 func userDTO(u *store.User) *User {
 	if u == nil {
@@ -187,8 +182,6 @@ func userDTO(u *store.User) *User {
 }
 
 func fmtTime(t time.Time) string { return t.Format(time.RFC3339) }
-
-// --- request/response helpers ---
 
 // writeJSON answers with a JSON body. All API responses use the same
 // envelope style: resources under their plural name, errors under "error".

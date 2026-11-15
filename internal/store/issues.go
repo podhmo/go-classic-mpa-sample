@@ -9,7 +9,6 @@ import (
 	"time"
 )
 
-// Issue status values.
 const (
 	StatusOpen   = "open"
 	StatusClosed = "closed"

@@ -33,8 +33,6 @@ func authorName(u *store.User) string {
 	return u.Name
 }
 
-// --- store → api DTO views ---
-//
 // --json output uses the api package's wire field names so `issues issue
 // list --json` and `issues api /issues` speak the same JSON vocabulary.
 
@@ -226,8 +224,6 @@ func writeTemplate(w io.Writer, v any, tmpl string) error {
 	}
 	return t.Execute(w, generic)
 }
-
-// --- color output (NO_COLOR/TTY detection) ---
 
 // colorEnabled reports whether stdout wants ANSI color: it must be a
 // character device (terminal) and NO_COLOR must be unset

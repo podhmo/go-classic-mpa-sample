@@ -65,13 +65,10 @@ func TestSeedDemoData(t *testing.T) {
 		t.Fatal("no seeded comments")
 	}
 
-	// The demo account is seeded and can log in.
 	if _, err := s.AuthenticateUser(ctx, "demo", "demo"); err != nil {
 		t.Fatalf("demo login after seed: %v", err)
 	}
 
-	// Discussion categories and demo discussions are seeded too: all four
-	// seeded categories, some answered and some threaded.
 	cats, err := s.ListDiscussionCategories(ctx)
 	if err != nil {
 		t.Fatalf("ListDiscussionCategories: %v", err)
@@ -101,7 +98,6 @@ func TestSeedDemoData(t *testing.T) {
 		t.Fatalf("want an answered and a threaded seeded discussion: answered=%v threaded=%v", anyAnswered, anyThreaded)
 	}
 
-	// Idempotent: second call changes nothing.
 	if err := s.SeedDemoData(ctx); err != nil {
 		t.Fatalf("second SeedDemoData: %v", err)
 	}
@@ -127,7 +123,6 @@ func TestSeedDemoData(t *testing.T) {
 		t.Fatalf("discussion count changed after re-seed: %d -> %d", dtotal, dtotal2)
 	}
 
-	// Seed on a non-empty DB is a no-op even if it would duplicate labels.
 	s2 := newTestStore(t)
 	if _, err := s2.CreateIssue(ctx, IssueInput{Title: "existing"}, 0); err != nil {
 		t.Fatalf("CreateIssue: %v", err)
@@ -178,7 +173,6 @@ func TestSeedCategories(t *testing.T) {
 		t.Fatalf("seeded %d categories, want 4", len(cats))
 	}
 
-	// Reference data only — no demo discussions came along.
 	if _, total, err := s.ListDiscussions(ctx, DiscussionListFilter{}); err != nil {
 		t.Fatalf("ListDiscussions: %v", err)
 	} else if total != 0 {

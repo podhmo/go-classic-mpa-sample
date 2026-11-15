@@ -109,7 +109,6 @@ func TestMigrationFreshAndLegacyDB(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "mig.db")
 
-	// A fresh database walks every migration and lands on schemaVersion.
 	s, err := Open(path)
 	if err != nil {
 		t.Fatalf("Open fresh: %v", err)
@@ -167,7 +166,6 @@ func TestMigrationFromVersionZero(t *testing.T) {
 		t.Fatalf("close: %v", err)
 	}
 
-	// Open must replay every version and keep existing rows.
 	s, err := Open(path)
 	if err != nil {
 		t.Fatalf("Open legacy DB: %v", err)

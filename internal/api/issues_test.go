@@ -20,7 +20,6 @@ func createIssue(t *testing.T, srv *httptest.Server, body string) int64 {
 func TestIssueLifecycle(t *testing.T) {
 	srv, _ := newServer(t)
 
-	// create
 	code, out := do(t, srv, "POST", "/api/v1/issues", `{"title":"first","body":"hello"}`)
 	if code != http.StatusCreated {
 		t.Fatalf("create status = %d (%v)", code, out)
@@ -31,7 +30,6 @@ func TestIssueLifecycle(t *testing.T) {
 	}
 	id := int64(issue["id"].(float64))
 
-	// detail carries comments in one call
 	code, out = do(t, srv, "GET", fmt.Sprintf("/api/v1/issues/%d", id), "")
 	if code != http.StatusOK {
 		t.Fatalf("get status = %d", code)
@@ -40,13 +38,11 @@ func TestIssueLifecycle(t *testing.T) {
 		t.Fatalf("comments = %v, want empty array", out["comments"])
 	}
 
-	// list filter
 	code, out = do(t, srv, "GET", "/api/v1/issues?status=open&q=first", "")
 	if code != http.StatusOK || out["total"].(float64) != 1 {
 		t.Fatalf("list = %d %v", code, out)
 	}
 
-	// patch only title; body must be preserved
 	code, out = do(t, srv, "PATCH", fmt.Sprintf("/api/v1/issues/%d", id), `{"title":"renamed"}`)
 	if code != http.StatusOK {
 		t.Fatalf("patch status = %d (%v)", code, out)
@@ -55,7 +51,6 @@ func TestIssueLifecycle(t *testing.T) {
 		t.Fatalf("patch lost body: %v", got)
 	}
 
-	// status toggle
 	code, out = do(t, srv, "POST", fmt.Sprintf("/api/v1/issues/%d/status", id), `{"status":"closed"}`)
 	if code != http.StatusOK || out["issue"].(map[string]any)["status"] != "closed" {
 		t.Fatalf("status = %d %v", code, out)
@@ -65,7 +60,6 @@ func TestIssueLifecycle(t *testing.T) {
 		t.Fatalf("open list should be empty: %v", out)
 	}
 
-	// comment
 	code, out = do(t, srv, "POST", fmt.Sprintf("/api/v1/issues/%d/comments", id), `{"body":"me too"}`)
 	if code != http.StatusCreated || out["comment"].(map[string]any)["body"] != "me too" {
 		t.Fatalf("comment = %d %v", code, out)
@@ -75,7 +69,6 @@ func TestIssueLifecycle(t *testing.T) {
 		t.Fatalf("comments = %d, want 1", n)
 	}
 
-	// delete
 	code, _ = do(t, srv, "DELETE", fmt.Sprintf("/api/v1/issues/%d", id), "")
 	if code != http.StatusNoContent {
 		t.Fatalf("delete = %d, want 204", code)
@@ -89,7 +82,6 @@ func TestIssueLifecycle(t *testing.T) {
 func TestIssueValidation(t *testing.T) {
 	srv, _ := newServer(t)
 
-	// missing title → 422 with fields.title
 	code, out := do(t, srv, "POST", "/api/v1/issues", `{"title":"  ","body":"x"}`)
 	if code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d (%v)", code, out)
@@ -99,13 +91,11 @@ func TestIssueValidation(t *testing.T) {
 		t.Fatalf("fields = %v, want title error", fields)
 	}
 
-	// malformed JSON → 400
 	code, _ = do(t, srv, "POST", "/api/v1/issues", `{"title":`)
 	if code != http.StatusBadRequest {
 		t.Fatalf("bad json = %d, want 400", code)
 	}
 
-	// unknown label name → 422 fields.labels
 	code, out = do(t, srv, "POST", "/api/v1/issues", `{"title":"t","labels":["nope"]}`)
 	if code != http.StatusUnprocessableEntity {
 		t.Fatalf("unknown label = %d", code)
@@ -114,7 +104,6 @@ func TestIssueValidation(t *testing.T) {
 		t.Fatalf("fields = %v, want labels error", out)
 	}
 
-	// labels endpoint returns the array envelope
 	code, out = do(t, srv, "GET", "/api/v1/labels", "")
 	if code != http.StatusOK {
 		t.Fatalf("labels = %d", code)
@@ -123,7 +112,6 @@ func TestIssueValidation(t *testing.T) {
 		t.Fatalf("labels payload = %v", out)
 	}
 
-	// invalid status value → 422
 	id := createIssue(t, srv, `{"title":"t"}`)
 	code, out = do(t, srv, "POST", fmt.Sprintf("/api/v1/issues/%d/status", id), `{"status":"wip"}`)
 	if code != http.StatusUnprocessableEntity || out["error"].(map[string]any)["fields"].(map[string]any)["status"] == nil {

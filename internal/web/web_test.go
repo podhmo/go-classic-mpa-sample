@@ -302,8 +302,6 @@ func (f *fakeStore) ListLabels(_ context.Context) ([]*store.Label, error) {
 	return out, nil
 }
 
-/* ---------- fake discussions ---------- */
-
 // addDiscussion is a test helper that inserts a discussion directly.
 func (f *fakeStore) addDiscussion(title, body string, categoryID int64, created time.Time) *store.Discussion {
 	f.mu.Lock()
@@ -591,8 +589,6 @@ func (f *fakeStore) ListDiscussionCategories(_ context.Context) ([]*store.Discus
 	return out, nil
 }
 
-/* ---------- fake accounts ---------- */
-
 // fakeUser keeps the fake's users and the password they were created with.
 // CreateUser receives a hash, not a password, so tests seed users through
 // addUser below and the fake honors the real semantics of
@@ -692,10 +688,7 @@ func (f *fakeStore) APITokenUser(_ context.Context, token string) (*store.User, 
 	return nil, store.ErrNotFound
 }
 
-// compile-time check that the fake satisfies the consumer-side interface.
 var _ Store = (*fakeStore)(nil)
-
-/* ---------- test helpers ---------- */
 
 func newTestServer(t *testing.T) (*httptest.Server, *fakeStore) {
 	t.Helper()
@@ -740,8 +733,6 @@ func seedIssues(t *testing.T, f *fakeStore) {
 	f.addIssue("Write docs", "document the API surface", store.StatusClosed, now.Add(-48*time.Hour), 2)
 	f.addIssue("Add dark mode", "nice to have", store.StatusOpen, now.Add(-24*time.Hour), 3)
 }
-
-/* ---------- tests ---------- */
 
 func TestCSRFRejectsCrossSitePost(t *testing.T) {
 	srv, f := newTestServer(t)

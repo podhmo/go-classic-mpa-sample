@@ -36,13 +36,11 @@ func TestStories(t *testing.T) {
 		}
 		if s.IsHTTP() {
 			nHTTP++
-			// Handler stories stay ungrouped.
 			if s.Group != "" {
 				t.Errorf("%s: handler story must not group, got %q", s.Name, s.Group)
 			}
 		} else {
 			nPrint++
-			// Print stories group by the render function they drive.
 			if s.Group == "" {
 				t.Errorf("%s: print story has no group", s.Name)
 			}
@@ -85,7 +83,6 @@ func TestRender(t *testing.T) {
 				if page.Status != http.StatusOK {
 					sawNon200 = true
 				}
-				// A handler story replays the app's real headers.
 				if got := page.Header["Content-Security-Policy"]; len(got) == 0 || !strings.Contains(got[0], "script-src 'self'") {
 					t.Errorf("%s: CSP misses script-src 'self': %v", s.Name, got)
 				}
@@ -123,7 +120,6 @@ func TestHandler(t *testing.T) {
 		}
 		members[s.Group] = append(members[s.Group], s.Name)
 	}
-	// The largest group fills the grid the most.
 	var grid string
 	for g := range members {
 		if len(members[g]) > len(members[grid]) {
@@ -400,7 +396,6 @@ func TestAppMount(t *testing.T) {
 	srv := httptest.NewServer(newBook().Handler())
 	defer srv.Close()
 
-	// The storybook index still owns GET /.
 	resp, err := srv.Client().Get(srv.URL + "/")
 	if err != nil {
 		t.Fatal(err)
@@ -410,7 +405,6 @@ func TestAppMount(t *testing.T) {
 		t.Fatalf("index status %d, want 200", resp.StatusCode)
 	}
 
-	// An app path renders through the real mux with its real headers.
 	resp, err = srv.Client().Get(srv.URL + "/issues")
 	if err != nil {
 		t.Fatal(err)
@@ -430,7 +424,6 @@ func TestAppMount(t *testing.T) {
 		t.Errorf("app response should carry the app's CSP, got %q", csp)
 	}
 
-	// A partial comment POST answers the fragment; a plain POST the 303.
 	noRedirect := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error {
 		return http.ErrUseLastResponse
 	}}

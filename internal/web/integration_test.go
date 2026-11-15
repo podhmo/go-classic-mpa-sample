@@ -19,8 +19,6 @@ import (
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
-// The real *store.Store must satisfy the consumer-side Store interface,
-// same as the fake does.
 var _ Store = (*store.Store)(nil)
 
 // newRealServer boots the full application against a fresh, empty SQLite
@@ -136,8 +134,6 @@ func TestE2EIssueLifecycle(t *testing.T) {
 		}
 	}
 
-	// Close via the status form: 303, the badge flips to Closed, and the
-	// issue moves off the default list onto the closed tab.
 	resp = postForm(t, noRedirectClient(), srv.URL+loc+"/status", url.Values{
 		"status": {"closed"},
 	})
@@ -163,7 +159,6 @@ func TestE2EIssueLifecycle(t *testing.T) {
 		t.Error("closed issue should appear on the closed tab")
 	}
 
-	// The GET confirmation page renders without deleting anything.
 	status, _, body = e2eGet(t, srv, loc+"/delete")
 	if status != http.StatusOK {
 		t.Fatalf("GET %s/delete status = %d, want 200", loc, status)
@@ -175,8 +170,6 @@ func TestE2EIssueLifecycle(t *testing.T) {
 		t.Fatalf("GET delete confirm must not delete; detail status = %d", status)
 	}
 
-	// POST deletes, redirects to the list, and the detail page becomes the
-	// styled 404.
 	resp = postForm(t, noRedirectClient(), srv.URL+loc+"/delete", url.Values{})
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusSeeOther {
@@ -208,7 +201,6 @@ func TestE2ECommentsAndValidation(t *testing.T) {
 		"body":  {"issue body"},
 	})
 
-	// A valid comment is stored and rendered in the comments section.
 	resp := postForm(t, noRedirectClient(), srv.URL+loc+"/comments", url.Values{
 		"body": {"hello there"},
 	})
@@ -230,8 +222,6 @@ func TestE2ECommentsAndValidation(t *testing.T) {
 		t.Error("comment should render with a permalink anchor and link")
 	}
 
-	// Empty and whitespace-only comments are rejected with 422: the detail
-	// page re-renders with the error and the draft, and nothing persists.
 	for _, tc := range []struct {
 		name string
 		body string
@@ -262,13 +252,11 @@ func TestE2ECommentsAndValidation(t *testing.T) {
 			}
 		})
 	}
-	// The rejected comments never reached the database.
 	_, _, body = e2eGet(t, srv, loc)
 	if !strings.Contains(body, `data-comment-count>1<`) || strings.Contains(body, `data-comment-count>2<`) {
 		t.Error("invalid comments must not be persisted")
 	}
 
-	// Commenting on a missing issue 404s rather than 422s or 500s.
 	resp = postForm(t, srv.Client(), srv.URL+"/issues/999/comments", url.Values{
 		"body": {"valid comment"},
 	})
@@ -277,8 +265,6 @@ func TestE2ECommentsAndValidation(t *testing.T) {
 		t.Fatalf("status = %d, want 404", resp.StatusCode)
 	}
 
-	// Markup in a submitted title travels form → store → html/template and
-	// comes out escaped end to end.
 	xssLoc := e2eCreateIssue(t, srv, url.Values{
 		"title": {"<script>alert(1)</script>"},
 	})
@@ -293,8 +279,6 @@ func TestE2ECommentsAndValidation(t *testing.T) {
 		t.Error("detail page must not render a literal <script> tag")
 	}
 }
-
-/* ---------- second round: seeded fixtures, CSRF, pagination ---------- */
 
 // newSeededServer is newRealServer plus the demo fixture (SeedDemoData):
 // labels Bug, Documentation, Enhancement and Feature, and seven backdated
@@ -353,7 +337,6 @@ func TestE2EListInteractions(t *testing.T) {
 	// false-match the issue-row-main / issue-row-meta children.
 	countRows := func(body string) int { return strings.Count(body, `class="issue-row"`) }
 
-	// The default list is the open tab.
 	status, _, body := e2eGet(t, srv, "/issues")
 	if status != http.StatusOK {
 		t.Fatalf("GET /issues status = %d, want 200", status)
@@ -372,7 +355,6 @@ func TestE2EListInteractions(t *testing.T) {
 		}
 	}
 
-	// The closed tab shows the complement.
 	_, _, body = e2eGet(t, srv, "/issues?status=closed")
 	if n := countRows(body); n != len(closedSeedTitles) {
 		t.Errorf("closed list rendered %d rows, want %d", n, len(closedSeedTitles))
@@ -464,8 +446,6 @@ func TestE2EListInteractions(t *testing.T) {
 		e2eCreateIssue(t, srv, url.Values{"title": {"Filler issue " + strconv.Itoa(i)}})
 	}
 
-	// An out-of-range page clamps to the last page — the oldest rows, i.e.
-	// all seven seeds — instead of the misleading empty state.
 	status, _, body = e2eGet(t, srv, "/issues?status=all&page=999")
 	if status != http.StatusOK {
 		t.Fatalf("GET page=999 status = %d, want 200", status)
@@ -480,8 +460,6 @@ func TestE2EListInteractions(t *testing.T) {
 		t.Error("clamped last page should hold only the oldest rows")
 	}
 
-	// A non-numeric page falls back to page 1 — the twenty newest rows,
-	// which are all fillers (seeds are backdated by hours or days).
 	status, _, body = e2eGet(t, srv, "/issues?status=all&page=abc")
 	if status != http.StatusOK {
 		t.Fatalf("GET page=abc status = %d, want 200", status)
@@ -500,7 +478,6 @@ func TestE2EListInteractions(t *testing.T) {
 func TestE2ECSRF(t *testing.T) {
 	srv, _ := newRealServer(t) // empty store: any forged create would be visible
 
-	// A cross-site POST is rejected.
 	resp := postFormWithHeaders(t, srv.URL+"/issues", url.Values{
 		"title": {"Cross-site forged issue"},
 		"body":  {"forged"},
@@ -520,7 +497,6 @@ func TestE2ECSRF(t *testing.T) {
 		t.Fatalf("foreign-Origin POST status = %d, want 403", resp.StatusCode)
 	}
 
-	// Both rejections happened before the handler: the store is still empty.
 	_, _, body := e2eGet(t, srv, "/issues")
 	for _, forged := range []string{"Cross-site forged issue", "Origin forged issue"} {
 		if strings.Contains(body, forged) {
@@ -531,7 +507,6 @@ func TestE2ECSRF(t *testing.T) {
 		t.Error("list should still render the empty state after rejected POSTs")
 	}
 
-	// Same-origin fetch metadata passes through to the handler.
 	resp = postFormWithHeaders(t, srv.URL+"/issues", url.Values{
 		"title": {"Same-origin issue"},
 	}, map[string]string{"Sec-Fetch-Site": "same-origin"})
@@ -612,8 +587,6 @@ func TestE2ESeededDataRenders(t *testing.T) {
 	}
 }
 
-// --- /api/v1 mount (fail-closed) ---
-//
 // The JSON API only exists when a Bearer token is configured
 // (web.WithAPIToken); without one, /api/v1/* must fall through to the
 // app's ordinary 404 — there is no unauthenticated API surface at all.
@@ -639,7 +612,6 @@ func TestAPIMountedWithToken(t *testing.T) {
 	srv := httptest.NewServer(New(st, WithAPIToken("secret-token")))
 	t.Cleanup(srv.Close)
 
-	// No Authorization header → 401 JSON.
 	resp, err := srv.Client().Get(srv.URL + "/api/v1/issues")
 	if err != nil {
 		t.Fatal(err)
@@ -652,7 +624,6 @@ func TestAPIMountedWithToken(t *testing.T) {
 		t.Fatalf("401 Content-Type = %q, want application/json", ct)
 	}
 
-	// Correct Bearer token → 200 with the JSON envelope.
 	req, _ := http.NewRequest("GET", srv.URL+"/api/v1/issues", nil)
 	req.Header.Set("Authorization", "Bearer secret-token")
 	resp, err = srv.Client().Do(req)
