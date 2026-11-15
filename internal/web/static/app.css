@@ -1767,13 +1767,10 @@ html {
 
 /* Cross-document view transitions: a short cross-fade between pages in
    browsers that support them; everyone else gets a normal navigation.
-   Both pages opt in through this shared stylesheet. */
-@media (prefers-reduced-motion: no-preference) {
-  @view-transition {
-    navigation: auto;
-  }
-}
-
+   The @view-transition navigation:auto opt-in itself lives in an inline
+   <style> in layout.html: Chrome checks the opt-in at pagereveal without
+   reliably waiting for this (long) external stylesheet to load — a late
+   external opt-in silently skips the transition. */
 ::view-transition-group(root) {
   animation-duration: 0.18s;
   animation-timing-function: ease-out;

@@ -238,6 +238,12 @@ const contentSecurityPolicy = "default-src 'none'; " +
 	"script-src 'self'; " +
 	"connect-src 'self'; " +
 	"style-src 'self'; " +
+	// style-src-elem 'unsafe-inline' allows inline <style> elements: layout.html
+	// carries the @view-transition navigation:auto opt-in there because Chrome
+	// may check the opt-in before the external stylesheet finishes loading,
+	// and Chrome also materializes a transition's capture styles as <style>
+	// at runtime. Attribute styles stay governed by style-src-attr below.
+	"style-src-elem 'self' 'unsafe-inline'; " +
 	"style-src-attr 'unsafe-inline'; " +
 	"img-src 'self' data:; " +
 	"object-src 'none'; " +
