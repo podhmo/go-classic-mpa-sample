@@ -43,9 +43,12 @@ function showSubmitError(form, message) {
 }
 
 // A successful post clears the fields and any server error markings.
-// form.reset() would restore the rendered defaults — after a 422 swap
-// those ARE the rejected draft and its visible error.
+// form.reset() is required — nothing else clears the submission-attempted
+// flag behind :user-invalid — but it also restores the rendered defaults
+// (after a 422 swap that IS the rejected draft), so blank the fields
+// *after* resetting.
 function resetPostedForm(form) {
+  form.reset();
   for (const el of form.elements) {
     if (!(el instanceof HTMLTextAreaElement)) continue;
     el.value = "";
