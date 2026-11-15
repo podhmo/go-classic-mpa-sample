@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -33,6 +34,9 @@ type fakeStore struct {
 	labels      []*store.Label
 	users       map[int64]*fakeUser
 	sessions    map[string]int64 // hashed token → user ID
+	// sessionUserErr, when set, makes SessionUser fail — simulates a
+	// transient session-store error.
+	sessionUserErr error
 }
 
 func newFakeStore() *fakeStore {
@@ -353,9 +357,12 @@ func (f *fakeStore) CreateSession(_ context.Context, userID int64, ttl time.Dura
 	return token, nil
 }
 
-func (f *fakeStore) SessionUser(_ context.Context, token string) (*store.User, error) {
+func (f *fakeStore) SessionUser(_ context.Context, token string, _ time.Duration) (*store.User, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.sessionUserErr != nil {
+		return nil, f.sessionUserErr
+	}
 	uid, ok := f.sessions[auth.HashToken(token)]
 	if !ok {
 		return nil, store.ErrNotFound
@@ -1465,6 +1472,41 @@ func TestSpeculationRules(t *testing.T) {
 
 /* ---------- accounts ---------- */
 
+func TestSessionLookupFailureIs500NotAnonymous(t *testing.T) {
+	srv, f := newTestServer(t)
+	u := f.addUser(t, "alice", "password123")
+	f.sessions[auth.HashToken("tok")] = u.ID
+
+	// A transient lookup failure must fail the request — proceeding
+	// anonymously would save an authored post without its author.
+	f.sessionUserErr = errors.New("db gone")
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/issues",
+		strings.NewReader(url.Values{"title": {"x"}}.Encode()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "tok"})
+	resp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatalf("POST /issues: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", resp.StatusCode)
+	}
+	if len(f.issues) != 0 {
+		t.Fatal("post was saved during session lookup failure")
+	}
+
+	// An unknown session still resolves anonymously.
+	f.sessionUserErr = nil
+	code, body := getWithCookie(t, srv, "/issues", &http.Cookie{Name: sessionCookieName, Value: "nope"})
+	if code != http.StatusOK || strings.Contains(body, "@alice") {
+		t.Error("unknown session did not resolve anonymously")
+	}
+}
+
 // sessionCookie extracts the session cookie set by register/login, or fails.
 func sessionCookie(t *testing.T, resp *http.Response) *http.Cookie {
 	t.Helper()
@@ -1644,7 +1686,7 @@ func TestSafeNext(t *testing.T) {
 	for _, tc := range []struct{ in, want string }{
 		{"", "/issues"}, {"/issues/3", "/issues/3"},
 		{"//evil.example", "/issues"}, {"https://evil.example", "/issues"},
-		{"javascript:alert(1)", "/issues"},
+		{"javascript:alert(1)", "/issues"}, {"/\\evil.example", "/issues"},
 	} {
 		if got := safeNext(tc.in); got != tc.want {
 			t.Errorf("safeNext(%q) = %q, want %q", tc.in, got, tc.want)

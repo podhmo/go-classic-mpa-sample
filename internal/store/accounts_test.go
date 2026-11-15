@@ -99,7 +99,7 @@ func TestSessionLifecycle(t *testing.T) {
 		t.Error("expected the hashed token to be stored")
 	}
 
-	u, err := s.SessionUser(ctx, token)
+	u, err := s.SessionUser(ctx, token, 24*time.Hour)
 	if err != nil {
 		t.Fatalf("SessionUser: %v", err)
 	}
@@ -110,10 +110,10 @@ func TestSessionLifecycle(t *testing.T) {
 	if err := s.DeleteSession(ctx, token); err != nil {
 		t.Fatalf("DeleteSession: %v", err)
 	}
-	if _, err := s.SessionUser(ctx, token); !errors.Is(err, ErrNotFound) {
+	if _, err := s.SessionUser(ctx, token, time.Hour); !errors.Is(err, ErrNotFound) {
 		t.Errorf("deleted session: err = %v, want ErrNotFound", err)
 	}
-	if _, err := s.SessionUser(ctx, "no-such-token"); !errors.Is(err, ErrNotFound) {
+	if _, err := s.SessionUser(ctx, "no-such-token", time.Hour); !errors.Is(err, ErrNotFound) {
 		t.Errorf("unknown session: err = %v, want ErrNotFound", err)
 	}
 }
@@ -136,7 +136,7 @@ func TestSessionExpiryAndRenewal(t *testing.T) {
 
 	// Expired sessions do not resolve and are swept on lookup.
 	insert("expired", now.Add(-48*time.Hour), now.Add(-time.Hour))
-	if _, err := s.SessionUser(ctx, "expired"); !errors.Is(err, ErrNotFound) {
+	if _, err := s.SessionUser(ctx, "expired", 12*time.Hour); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("expired session: err = %v, want ErrNotFound", err)
 	}
 	var n int
@@ -149,11 +149,11 @@ func TestSessionExpiryAndRenewal(t *testing.T) {
 	// Sliding renewal: past the half-life point, expires_at is pushed out
 	// by the session's original lifetime (12h here).
 	insert("stale", now.Add(-12*time.Hour), now.Add(-2*time.Hour))
-	if _, err := s.SessionUser(ctx, "stale"); !errors.Is(err, ErrNotFound) {
+	if _, err := s.SessionUser(ctx, "stale", 12*time.Hour); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("setup assumption broken: stale session should be expired, got %v", err)
 	}
 	insert("renew", now.Add(-10*time.Hour), now.Add(2*time.Hour))
-	if _, err := s.SessionUser(ctx, "renew"); err != nil {
+	if _, err := s.SessionUser(ctx, "renew", 12*time.Hour); err != nil {
 		t.Fatalf("SessionUser: %v", err)
 	}
 	var expiresAt int64
@@ -166,10 +166,24 @@ func TestSessionExpiryAndRenewal(t *testing.T) {
 		t.Errorf("renewed expires_at drift = %ds, want ≈ +12h from now", dt)
 	}
 
+	// A second lookup does not renew again (remaining > half of ttl) and,
+	// crucially, does not inflate the idle window past the original ttl.
+	if _, err := s.SessionUser(ctx, "renew", 12*time.Hour); err != nil {
+		t.Fatalf("SessionUser second lookup: %v", err)
+	}
+	var expiresAt2 int64
+	if err := s.db.QueryRowContext(ctx,
+		"SELECT expires_at FROM sessions WHERE id = ?", auth.HashToken("renew")).Scan(&expiresAt2); err != nil {
+		t.Fatalf("read expires_at: %v", err)
+	}
+	if expiresAt2 != expiresAt {
+		t.Errorf("second lookup changed expires_at: %d -> %d", expiresAt, expiresAt2)
+	}
+
 	// Fresh sessions (more than half the lifetime left) are not renewed.
 	insert("fresh", now.Add(-time.Hour), now.Add(11*time.Hour))
 	before := now.Add(11 * time.Hour).Unix()
-	if _, err := s.SessionUser(ctx, "fresh"); err != nil {
+	if _, err := s.SessionUser(ctx, "fresh", 12*time.Hour); err != nil {
 		t.Fatalf("SessionUser: %v", err)
 	}
 	if err := s.db.QueryRowContext(ctx,

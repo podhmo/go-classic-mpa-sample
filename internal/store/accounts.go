@@ -106,17 +106,19 @@ func (s *Store) CreateSession(ctx context.Context, userID int64, ttl time.Durati
 
 // SessionUser resolves a plaintext session token to its user, or
 // ErrNotFound for unknown/expired/deleted sessions. Expired rows are
-// deleted on sight. Sessions renew slidingly: when less than half of the
-// original lifetime remains, expires_at extends by that same lifetime.
-func (s *Store) SessionUser(ctx context.Context, token string) (*User, error) {
+// deleted on sight. Sessions renew slidingly: when less than half of ttl
+// remains, expires_at extends to now+ttl. ttl must be the same lifetime
+// passed to CreateSession — deriving it from the row would inflate the
+// idle window after every renewal.
+func (s *Store) SessionUser(ctx context.Context, token string, ttl time.Duration) (*User, error) {
 	tokenHash := auth.HashToken(token)
 	var u User
-	var userCreated, sessionCreated, expiresAt int64
+	var userCreated, expiresAt int64
 	err := s.db.QueryRowContext(ctx,
-		`SELECT u.id, u.name, u.created_at, s.created_at, s.expires_at
+		`SELECT u.id, u.name, u.created_at, s.expires_at
 		 FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?`,
 		tokenHash).
-		Scan(&u.ID, &u.Name, &userCreated, &sessionCreated, &expiresAt)
+		Scan(&u.ID, &u.Name, &userCreated, &expiresAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -130,10 +132,10 @@ func (s *Store) SessionUser(ctx context.Context, token string) (*User, error) {
 		_, _ = s.db.ExecContext(ctx, "DELETE FROM sessions WHERE id = ?", tokenHash)
 		return nil, ErrNotFound
 	}
-	ttl := expiresAt - sessionCreated
-	if expiresAt-now < ttl/2 {
+	ttlSecs := int64(ttl.Seconds())
+	if expiresAt-now < ttlSecs/2 {
 		if _, err := s.db.ExecContext(ctx,
-			"UPDATE sessions SET expires_at = ? WHERE id = ?", now+ttl, tokenHash); err != nil {
+			"UPDATE sessions SET expires_at = ? WHERE id = ?", now+ttlSecs, tokenHash); err != nil {
 			return nil, err
 		}
 	}
