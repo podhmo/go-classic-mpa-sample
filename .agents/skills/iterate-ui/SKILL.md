@@ -16,7 +16,8 @@ independent of the backend loop.
 ## Start it
 
 ```sh
-make storybook    # serves internal/web stories on http://127.0.0.1:6006
+make storybook        # serves internal/web stories on http://127.0.0.1:6006
+make storybook-watch  # same + open pages auto-reload on file changes (-watch)
 ```
 
 It auto-runs `make setup-minigo` (clones `podhmo/minigo` into
@@ -28,6 +29,9 @@ per request, so:
 - editing `internal/web/story_pages.go` (fixtures, stories, `storyStore`) → reload, done
 - editing `internal/web/static/*` → served live under `/static/`, reload, done
 - editing any other `internal/web/*.go` (renderer, view-models) → reload, done
+
+With `-watch` even that browser reload is automatic — pages subscribe
+to `/_livereload` and refresh themselves on each save.
 
 A template parse error or a `{{.MissingField}}` shows up as the story
 rendering **500**, not silently — treat that as the failure signal.
