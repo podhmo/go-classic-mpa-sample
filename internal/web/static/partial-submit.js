@@ -30,12 +30,16 @@ const supportsScopedTransition =
 function runScopedTransition(scopeEl, updateDOM) {
   if (!supportsScopedTransition || !scopeEl) {
     updateDOM();
-    return;
+    return Promise.resolve();
   }
   const transition = scopeEl.startViewTransition(updateDOM);
   // A second submit reusing the same scope skips this transition and
   // rejects ready — swallow it so it doesn't surface as an error.
   transition.ready.catch(() => {});
+  // Callers await this before post-swap work (scroll/highlight/toast):
+  // the update callback runs ASYNC after the old state is captured, so
+  // without awaiting, code that follows reads the pre-swap DOM.
+  return transition.updateCallbackDone;
 }
 
 // Smallest element containing every affected node: for an append that
@@ -186,7 +190,7 @@ async function postPartial(form) {
       const targets = nodes
         .map((n) => (n.id ? document.getElementById(n.id) : null))
         .filter(Boolean);
-      runScopedTransition(commonScope(targets.length ? targets : [form]), () => {
+      await runScopedTransition(commonScope(targets.length ? targets : [form]), () => {
         swapTargets(form, nodes);
         // The submitted form went away with its host element: move focus to
         // its re-rendered counterpart (same action ⇒ same control). This is
@@ -211,7 +215,7 @@ async function postPartial(form) {
       .map((n) => (n.id ? document.getElementById(n.id) : null))
       .filter(Boolean);
     let appended = null;
-    runScopedTransition(commonScope([target, ...swapEls]), () => {
+    await runScopedTransition(commonScope([target, ...swapEls]), () => {
       for (const node of nodes) {
         // A node marked data-swap (e.g. the header meta re-rendered because
         // the post bumped updated_at) replaces its stale counterpart by id
