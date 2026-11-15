@@ -266,6 +266,34 @@ func TestSetCommentAnswer(t *testing.T) {
 	}
 }
 
+func TestUpdateDiscussionToOpenCategoryClearsAnswers(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	open := mustCategory(t, s, "General", "general", CategoryFormatOpen)
+	qa := mustCategory(t, s, "Q&A", "qa", CategoryFormatQA)
+	d := mustDiscussion(t, s, qa, "d")
+
+	cid, _ := s.CreateDiscussionComment(ctx, d, 0, "the fix", 0)
+	if err := s.SetCommentAnswer(ctx, d, cid, true); err != nil {
+		t.Fatalf("mark: %v", err)
+	}
+	if err := s.UpdateDiscussion(ctx, d, DiscussionInput{Title: "d", CategoryID: open}); err != nil {
+		t.Fatalf("UpdateDiscussion: %v", err)
+	}
+	got, err := s.GetDiscussion(ctx, d)
+	if err != nil {
+		t.Fatalf("GetDiscussion: %v", err)
+	}
+	if got.Answered {
+		t.Fatal("answer mark stranded after move to open category")
+	}
+	for _, c := range mustListDComments(t, s, d) {
+		if c.IsAnswer {
+			t.Fatalf("is_answer flag left on comment %d", c.ID)
+		}
+	}
+}
+
 func mustListDComments(t *testing.T, s *Store, discussionID int64) []*DiscussionComment {
 	t.Helper()
 	cs, err := s.ListDiscussionComments(context.Background(), discussionID)

@@ -216,7 +216,7 @@ func (s *Store) CreateDiscussion(ctx context.Context, in DiscussionInput, author
 	}
 	defer tx.Rollback()
 
-	if err := requireCategory(ctx, tx, in.CategoryID); err != nil {
+	if _, err := requireCategory(ctx, tx, in.CategoryID); err != nil {
 		return 0, err
 	}
 	now := time.Now().UTC().Unix()
@@ -235,7 +235,9 @@ func (s *Store) CreateDiscussion(ctx context.Context, in DiscussionInput, author
 
 // UpdateDiscussion replaces title/body/category and bumps UpdatedAt.
 // Returns ErrNotFound if the discussion does not exist, ErrInvalidCategory
-// for an unknown category.
+// for an unknown category. Moving a discussion to a non-qa category clears
+// any answer marks, since they are a qa-only concept and would otherwise
+// stay stranded (list shows Answered, detail can no longer unmark).
 func (s *Store) UpdateDiscussion(ctx context.Context, id int64, in DiscussionInput) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -243,7 +245,8 @@ func (s *Store) UpdateDiscussion(ctx context.Context, id int64, in DiscussionInp
 	}
 	defer tx.Rollback()
 
-	if err := requireCategory(ctx, tx, in.CategoryID); err != nil {
+	format, err := requireCategory(ctx, tx, in.CategoryID)
+	if err != nil {
 		return err
 	}
 	res, err := tx.ExecContext(ctx,
@@ -255,18 +258,26 @@ func (s *Store) UpdateDiscussion(ctx context.Context, id int64, in DiscussionInp
 	if err := checkAffected(res); err != nil {
 		return err
 	}
+	if format != CategoryFormatQA {
+		if _, err := tx.ExecContext(ctx,
+			"UPDATE discussion_comments SET is_answer = 0 WHERE discussion_id = ? AND is_answer = 1",
+			id); err != nil {
+			return err
+		}
+	}
 	return tx.Commit()
 }
 
-// requireCategory verifies the category exists inside tx.
-func requireCategory(ctx context.Context, tx *sql.Tx, categoryID int64) error {
-	var exists int
+// requireCategory verifies the category exists inside tx and returns its
+// format (open|qa).
+func requireCategory(ctx context.Context, tx *sql.Tx, categoryID int64) (string, error) {
+	var format string
 	err := tx.QueryRowContext(ctx,
-		"SELECT 1 FROM discussion_categories WHERE id = ?", categoryID).Scan(&exists)
+		"SELECT format FROM discussion_categories WHERE id = ?", categoryID).Scan(&format)
 	if errors.Is(err, sql.ErrNoRows) {
-		return ErrInvalidCategory
+		return "", ErrInvalidCategory
 	}
-	return err
+	return format, err
 }
 
 // DeleteDiscussion removes the discussion; its comments and replies go via
