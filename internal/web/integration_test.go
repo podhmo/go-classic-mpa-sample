@@ -7,6 +7,7 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -608,5 +609,65 @@ func TestE2ESeededDataRenders(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("seeded detail missing %q", want)
 		}
+	}
+}
+
+// --- /api/v1 mount (fail-closed) ---
+//
+// The JSON API only exists when a Bearer token is configured
+// (web.WithAPIToken); without one, /api/v1/* must fall through to the
+// app's ordinary 404 — there is no unauthenticated API surface at all.
+
+func TestAPINotMountedWithoutToken(t *testing.T) {
+	srv, _ := newRealServer(t) // New(st) — no WithAPIToken
+	status, _, body := e2eGet(t, srv, "/api/v1/issues")
+	if status != http.StatusNotFound {
+		t.Fatalf("GET /api/v1/issues without token = %d, want 404", status)
+	}
+	// The generic 404 page is HTML — the API must not leak a JSON handler.
+	if !strings.Contains(body, "<!DOCTYPE html>") {
+		t.Fatalf("expected HTML 404 page, got %q", body[:min(len(body), 120)])
+	}
+}
+
+func TestAPIMountedWithToken(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	t.Cleanup(func() { st.Close() })
+	srv := httptest.NewServer(New(st, WithAPIToken("secret-token")))
+	t.Cleanup(srv.Close)
+
+	// No Authorization header → 401 JSON.
+	resp, err := srv.Client().Get(srv.URL + "/api/v1/issues")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("unauthorized GET = %d, want 401", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("401 Content-Type = %q, want application/json", ct)
+	}
+
+	// Correct Bearer token → 200 with the JSON envelope.
+	req, _ := http.NewRequest("GET", srv.URL+"/api/v1/issues", nil)
+	req.Header.Set("Authorization", "Bearer secret-token")
+	resp, err = srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("authorized GET = %d, want 200", resp.StatusCode)
+	}
+	var out struct {
+		Issues []any `json:"issues"`
+		Total  int   `json:"total"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode: %v", err)
 	}
 }

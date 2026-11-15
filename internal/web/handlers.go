@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
@@ -385,13 +384,7 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request) {
 	body := strings.TrimSpace(r.PostFormValue("body"))
 	partial := wantsPartial(r)
 
-	var errMsg string
-	switch {
-	case body == "":
-		errMsg = "Comment is required."
-	case utf8.RuneCountInString(body) > maxBodyRunes:
-		errMsg = fmt.Sprintf("Comment must be %d characters or fewer.", maxBodyRunes)
-	}
+	errMsg := store.ValidateCommentBody(body)
 	if errMsg != "" {
 		issue, err := h.store.GetIssue(r.Context(), id)
 		if err != nil {
@@ -472,15 +465,6 @@ func validateIssueInput(r *http.Request) (store.IssueInput, issueFormErrors) {
 		}
 	}
 
-	var errs issueFormErrors
-	switch {
-	case in.Title == "":
-		errs.Title = "Title is required."
-	case utf8.RuneCountInString(in.Title) > maxTitleRunes:
-		errs.Title = fmt.Sprintf("Title must be %d characters or fewer.", maxTitleRunes)
-	}
-	if utf8.RuneCountInString(in.Body) > maxBodyRunes {
-		errs.Body = fmt.Sprintf("Body must be %d characters or fewer.", maxBodyRunes)
-	}
-	return in, errs
+	fe := store.ValidateIssueInput(in)
+	return in, issueFormErrors{Title: fe["title"], Body: fe["body"]}
 }

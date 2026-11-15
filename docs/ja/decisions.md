@@ -328,3 +328,17 @@
 - **件数表示と空ノートは data 属性駆動**: サーバー再描画なしで `data-comment-count` を +1、`data-empty-note` を hidden にする。常時描画の `ol`（空なら `hidden`）を挿入先にして「0件→1件」の DOM 構造差を消した。
 - **新 `<li>` のハイライトは `.comment-new` 一時クラス**: `:target` は挿入ノードに効かないため、`:target` と同じ見た目のクラスを4秒だけ付ける方式。
 - **submit 奪取は document への delegated listener**: 差し替えられたフォーム（422 後や今後の注入）にも自動で効く。`enter-submit.js` も同理由で document delegation 化。
+
+## JSON Web API（`/api/v1`）の実装決定（2026-11-16、`devin/1794764986-web-api` ブランチ）
+
+`docs/sketch/ja/cli-and-web-api.md` Phase 2 の実装で固めた細部。
+
+- **API credential は単一 env トークン（`ISSUES_API_TOKEN` / `-api-token`）を採用**: 設計メモの二択（env 単一 vs `api_tokens` テーブル）のうち最小構成側。`api.New` は Bearer 一致のみ見て書き込みは `author_id=0`（anonymous）扱い。`api_tokens`（token→user_id、author が立つ側）は TODO.md の別タスクとして残す。
+- **fail-closed は mount レベルで担保**: トークン未設定なら `/api/v1` を mux に登録しない（存在しない = HTML の汎用 404）。`web.WithAPIToken` option で mount、中の mux は `Authorization: Bearer` を `crypto/subtle` 定数時間比較で検証し不一致・欠落は 401 JSON。
+- **バリデーションは `internal/store` の `ValidateIssueInput`/`ValidateDiscussionInput`/`ValidateCommentBody` に集約**: 「`*Input` 値を検証する関数」を web/api 両方から呼ぶ形（メモの分解案どおり）。上限値 `MaxTitleRunes=200`/`MaxBodyRunes=10000` も store に移し web の同名定数は廃止。
+- **ステータス変更は PATCH でなく `POST /api/v1/issues/{id}/status` を維持**: HTML 側のアクションエンドポイントと線を揃え、JSON も `{status}` 明示。update 系は `PATCH /issues/{id}`（送ったフィールドだけ更新）、削除は `DELETE` → 204。
+- **`GET /api/v1/issues/{id}` は labels+comments を同梱**: 詳細取得を 1 call にする（HTML detail ページと同じ情報単位）。一覧は `{items, total, page, per_page}` エンベロープ、`per_page` 上限 100。
+- **label/category の参照は名前/スラグも受ける**: `label_ids`/`category_id`（数値）に加え `labels: ["Bug"]`/`category: "qa"` を許容し、store の List* で名前→id を解決。不明な名前は 422 `fields` エラー（gh CLI の `--label` が名前を取るのに揃えた）。
+- **`/api/v1` の mount はメソッド付き subtree パターン（GET/POST/PATCH/DELETE）**: Go ServeMux の制約で、メソッド無指定の `/api/v1/` は catch-all `GET /` と衝突（パスは狭いがメソッド集合は広い）するため。PUT 等は 405 に落ちる。
+- **タイムスタンプは RFC 3339 文字列**: DTO 側で `time.Time.Format` して出す（Unix 秒ではなく人間可読寄せ）。
+- **web のテストは fakeStore、api のテストは実 `*store.Store`** を使い分け: API は store 直上の薄い層なので、実 DB で wire contract（認証・エンベロープ・422 fields）を見る方が意味が大きい。

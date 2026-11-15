@@ -68,6 +68,7 @@ implementation (`internal/web/web_test.go`).
 | `-addr` | `ISSUES_ADDR` | `127.0.0.1:8080` | Listen address                                                         |
 | `-db`   | `ISSUES_DB`   | `issues.db`      | SQLite database file path                                              |
 | `-init` | —             | `false`          | Initialize the database and exit (same as the `init` subcommand)       |
+| `-api-token` | `ISSUES_API_TOKEN` | *(disabled)* | Bearer token for the JSON API (`/api/v1`); empty disables it        |
 
 Example: `go run . -addr :8080 -db /tmp/my-issues.db` or
 `ISSUES_ADDR=:8080 go run .`.
@@ -109,6 +110,40 @@ Notes:
   Raw HTML in the source is omitted and unsafe link schemes
   (`javascript:`, `data:`, …) are neutralized by the renderer, so
   stored-XSS is not possible.
+
+## JSON API (`/api/v1`)
+
+A machine-facing JSON API (design: `docs/sketch/ja/cli-and-web-api.md`) is
+mounted only when `-api-token`/`ISSUES_API_TOKEN` is set — no token, no
+endpoint. Every request then needs `Authorization: Bearer <token>`.
+
+| Method | Path                                          | Purpose                                             |
+| ------ | --------------------------------------------- | --------------------------------------------------- |
+| GET    | `/api/v1/issues`                              | List: `?status=&q=&label=<name>&sort=&page=&per_page=` (cap 100) |
+| POST   | `/api/v1/issues`                              | Create `{title, body, label_ids\|labels}` → 201     |
+| GET    | `/api/v1/issues/{id}`                         | Issue + labels + comments in one call               |
+| PATCH  | `/api/v1/issues/{id}`                         | Partial update (only provided fields change)        |
+| POST   | `/api/v1/issues/{id}/status`                  | `{status: "open"\|"closed"}`                      |
+| DELETE | `/api/v1/issues/{id}`                         | Delete → 204                                        |
+| POST   | `/api/v1/issues/{id}/comments`                | `{body}` → 201                                      |
+| GET    | `/api/v1/labels`                              | All labels                                          |
+| GET    | `/api/v1/discussions`                         | List: `?category=&answered=&q=&sort=&page=`         |
+| POST   | `/api/v1/discussions`                         | `{title, body, category_id\|category}` → 201        |
+| GET    | `/api/v1/discussions/{id}`                    | Discussion + comments (replies nested)              |
+| PATCH  | `/api/v1/discussions/{id}`                    | Partial update                                      |
+| DELETE | `/api/v1/discussions/{id}`                    | Delete → 204                                        |
+| POST   | `/api/v1/discussions/{id}/comments`           | `{body, parent_id?}` → 201                          |
+| POST   | `/api/v1/discussions/{id}/comments/{cid}/answer` | `{answer: bool}` mark/unmark the answer (qa)     |
+| GET    | `/api/v1/discussion-categories`               | All categories                                      |
+
+Notes:
+
+- Responses are `application/json`; errors use
+  `{"error":{"message": ..., "fields": {...}}}` (`fields` only for
+  per-field 422s). Writes made through the API are attributed to no user
+  (anonymous) — the single shared token carries no identity.
+- Timestamps are RFC 3339 strings. Status changes stay a `POST` action
+  endpoint, mirroring the HTML app's action routes.
 
 ## Data storage
 
