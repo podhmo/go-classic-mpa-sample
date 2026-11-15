@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/podhmo/go-classic-mpa-sample/internal/api"
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
@@ -59,20 +60,34 @@ type Store interface {
 const (
 	// maxFormBytes caps POST request bodies (forms only send a few fields).
 	maxFormBytes = 1 << 20 // 1 MiB
-	// maxTitleRunes is the issue title length limit.
-	maxTitleRunes = 200
-	// maxBodyRunes is the length limit for issue bodies and comments.
-	maxBodyRunes = 10000
 	// perPage is the fixed page size of the issue list.
 	perPage = 20
 )
+
+// Option configures New.
+type Option func(*config)
+
+type config struct {
+	apiToken string
+}
+
+// WithAPIToken mounts the JSON API (docs/sketch/ja/cli-and-web-api.md)
+// under /api/v1 guarded by the given Bearer token. An empty token keeps
+// /api/v1 unmounted — the API is fail-closed: no token, no endpoint.
+func WithAPIToken(token string) Option {
+	return func(c *config) { c.apiToken = token }
+}
 
 // New returns the root http.Handler for the application. The ServeMux uses
 // Go 1.22+ method+path patterns, is wrapped in withUser (session-cookie →
 // context auth resolution) and then the stdlib CrossOriginProtection
 // middleware, which rejects cross-site state-changing browser requests
 // (CSRF) via Sec-Fetch-Site / Origin headers.
-func New(st Store) http.Handler {
+func New(st Store, opts ...Option) http.Handler {
+	var cfg config
+	for _, o := range opts {
+		o(&cfg)
+	}
 	h := &handler{store: st, r: NewRenderer()}
 
 	mux := http.NewServeMux()
@@ -102,6 +117,15 @@ func New(st Store) http.Handler {
 	mux.HandleFunc("POST /discussions/{id}/delete", h.deleteDiscussion)
 	mux.HandleFunc("POST /discussions/{id}/comments", h.createDiscussionComment)
 	mux.HandleFunc("POST /discussions/{id}/comments/{cid}/answer", h.setCommentAnswer)
+	if cfg.apiToken != "" {
+		// Method-scoped subtree patterns: a method-less "/api/v1/" would
+		// conflict with the catch-all "GET /" (more general path, fewer
+		// methods). Other verbs (PUT, OPTIONS, ...) keep the mux's 405.
+		apiHandler := api.New(st, cfg.apiToken)
+		for _, method := range []string{"GET", "POST", "PATCH", "DELETE"} {
+			mux.Handle(method+" /api/v1/", apiHandler)
+		}
+	}
 	// Serve the single stylesheet explicitly: a bare "GET /static/" file
 	// server would expose a directory listing and unstyled plaintext 404s.
 	mux.HandleFunc("GET /static/app.css", func(w http.ResponseWriter, r *http.Request) {
@@ -299,7 +323,7 @@ var funcMap = template.FuncMap{
 	"dListURL":    dListURL,
 	"statusURL":   statusURL,
 	"labelURL":    labelURL,
-	"maxTitleLen": func() int { return maxTitleRunes },
+	"maxTitleLen": func() int { return store.MaxTitleRunes },
 	"dict":        dict,
 }
 

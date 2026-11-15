@@ -34,6 +34,9 @@ func main() {
 	initFlag := flag.Bool("init", false,
 		"initialize the database (create file, apply schema, ANALYZE) and exit; "+
 			"equivalent to the 'init' subcommand")
+	apiToken := flag.String("api-token", envOr("ISSUES_API_TOKEN", ""),
+		"Bearer token for the JSON API under /api/v1 (env ISSUES_API_TOKEN); "+
+			"empty disables the API entirely")
 	flag.Parse()
 
 	// An explicitly empty -db would open an unnamed ephemeral SQLite
@@ -69,7 +72,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:              *addr,
-		Handler:           web.New(st),
+		Handler:           web.New(st, web.WithAPIToken(*apiToken)),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,

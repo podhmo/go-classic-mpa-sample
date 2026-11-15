@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
@@ -350,12 +349,7 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 		}
 	}
 	if errMsg == "" {
-		switch {
-		case body == "":
-			errMsg = "Comment is required."
-		case utf8.RuneCountInString(body) > maxBodyRunes:
-			errMsg = fmt.Sprintf("Comment must be %d characters or fewer.", maxBodyRunes)
-		}
+		errMsg = store.ValidateCommentBody(body)
 	}
 
 	if errMsg == "" {
@@ -596,16 +590,6 @@ func (h *handler) validateDiscussionInput(_ http.ResponseWriter, r *http.Request
 		Title: strings.TrimSpace(r.PostFormValue("title")),
 		Body:  strings.TrimSpace(r.PostFormValue("body")),
 	}
-	var errs discussionFormErrors
-	switch {
-	case in.Title == "":
-		errs.Title = "Title is required."
-	case utf8.RuneCountInString(in.Title) > maxTitleRunes:
-		errs.Title = fmt.Sprintf("Title must be %d characters or fewer.", maxTitleRunes)
-	}
-	if utf8.RuneCountInString(in.Body) > maxBodyRunes {
-		errs.Body = fmt.Sprintf("Body must be %d characters or fewer.", maxBodyRunes)
-	}
 	if v := r.PostFormValue("category_id"); v != "" {
 		if id, err := strconv.ParseInt(v, 10, 64); err == nil && id > 0 {
 			in.CategoryID = id
@@ -614,11 +598,9 @@ func (h *handler) validateDiscussionInput(_ http.ResponseWriter, r *http.Request
 	// A discussion must belong to exactly one category — the select's
 	// first option is a disabled placeholder, so a missing/zero value is a
 	// validation failure, not a default.
-	if in.CategoryID == 0 {
-		errs.Category = "Category is required."
-	}
-	if errs.any() {
-		return &in, &errs
+	fe := store.ValidateDiscussionInput(in)
+	if fe.Any() {
+		return &in, &discussionFormErrors{Title: fe["title"], Body: fe["body"], Category: fe["category"]}
 	}
 	return &in, nil
 }

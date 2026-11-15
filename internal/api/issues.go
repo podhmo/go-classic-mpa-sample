@@ -1,0 +1,277 @@
+// Issue, comment and label endpoints.
+package api
+
+import (
+	"net/http"
+	"strings"
+
+	"github.com/podhmo/go-classic-mpa-sample/internal/store"
+)
+
+// GET /api/v1/issues?status=&q=&label=&sort=&page=&per_page=
+// Response: {"issues": [...], "total": N, "page": P, "per_page": PP}
+func (h *handler) listIssues(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	f := store.ListFilter{
+		Status:  q.Get("status"),
+		Query:   strings.TrimSpace(q.Get("q")),
+		Sort:    q.Get("sort"),
+		Page:    queryInt(r, "page", 1),
+		PerPage: min(queryInt(r, "per_page", defaultPerPage), maxPerPage),
+	}
+	if name := q.Get("label"); name != "" {
+		all, err := h.store.ListLabels(r.Context())
+		if err != nil {
+			h.storeError(w, err)
+			return
+		}
+		for _, l := range all {
+			if l.Name == name {
+				f.LabelID = l.ID
+				break
+			}
+		}
+		if f.LabelID == 0 {
+			writeError(w, http.StatusUnprocessableEntity, "Validation failed.", map[string]string{"label": "Unknown label: " + name})
+			return
+		}
+	}
+	issues, total, err := h.store.ListIssues(r.Context(), f)
+	if err != nil {
+		h.storeError(w, err)
+		return
+	}
+	out := []Issue{}
+	for _, i := range issues {
+		out = append(out, issueDTO(i))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"issues": out, "total": total, "page": f.Page, "per_page": f.PerPage,
+	})
+}
+
+// GET /api/v1/issues/{id} — one call returns the issue with labels plus
+// its comments, matching the HTML detail page's shape.
+func (h *handler) getIssue(w http.ResponseWriter, r *http.Request) {
+	id, ok := h.pathID(w, r, "id")
+	if !ok {
+		return
+	}
+	issue, err := h.store.GetIssue(r.Context(), id)
+	if err != nil {
+		h.storeError(w, err)
+		return
+	}
+	comments, err := h.store.ListComments(r.Context(), id)
+	if err != nil {
+		h.storeError(w, err)
+		return
+	}
+	out := []Comment{}
+	for _, c := range comments {
+		out = append(out, commentDTO(c))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"issue": issueDTO(issue), "comments": out})
+}
+
+type issueBody struct {
+	Title    *string  `json:"title"`
+	Body     *string  `json:"body"`
+	LabelIDs []int64  `json:"label_ids"`
+	Labels   []string `json:"labels"` // label names, resolved via ListLabels
+}
+
+// POST /api/v1/issues {"title", "body", "label_ids"|"labels"} → 201
+func (h *handler) createIssue(w http.ResponseWriter, r *http.Request) {
+	var in issueBody
+	if !decodeBody(w, r, &in) {
+		return
+	}
+	title := strings.TrimSpace(deref(in.Title))
+	body := strings.TrimSpace(deref(in.Body))
+	labelIDs, ferr, err := h.resolveLabelIDs(r, in.LabelIDs, in.Labels)
+	if err != nil {
+		h.storeError(w, err)
+		return
+	}
+	if ferr != nil {
+		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", ferr)
+		return
+	}
+	input := store.IssueInput{Title: title, Body: body, LabelIDs: labelIDs}
+	if fe := store.ValidateIssueInput(input); fe.Any() {
+		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", fields(fe))
+		return
+	}
+	id, err := h.store.CreateIssue(r.Context(), input, 0 /* anonymous: single shared token */)
+	if err != nil {
+		h.storeError(w, err)
+		return
+	}
+	issue, err := h.store.GetIssue(r.Context(), id)
+	if err != nil {
+		h.storeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"issue": issueDTO(issue)})
+}
+
+// PATCH /api/v1/issues/{id} — only fields present in the body are updated;
+// absent fields keep their current values.
+func (h *handler) updateIssue(w http.ResponseWriter, r *http.Request) {
+	id, ok := h.pathID(w, r, "id")
+	if !ok {
+		return
+	}
+	var in issueBody
+	if !decodeBody(w, r, &in) {
+		return
+	}
+	issue, err := h.store.GetIssue(r.Context(), id)
+	if err != nil {
+		h.storeError(w, err)
+		return
+	}
+	input := store.IssueInput{Title: issue.Title, Body: issue.Body}
+	for _, l := range issue.Labels {
+		input.LabelIDs = append(input.LabelIDs, l.ID)
+	}
+	if in.Title != nil {
+		input.Title = strings.TrimSpace(*in.Title)
+	}
+	if in.Body != nil {
+		input.Body = strings.TrimSpace(*in.Body)
+	}
+	if in.LabelIDs != nil || len(in.Labels) > 0 {
+		labelIDs, ferr, err := h.resolveLabelIDs(r, in.LabelIDs, in.Labels)
+		if err != nil {
+			h.storeError(w, err)
+			return
+		}
+		if ferr != nil {
+			writeError(w, http.StatusUnprocessableEntity, "Validation failed.", ferr)
+			return
+		}
+		input.LabelIDs = labelIDs
+	}
+	if fe := store.ValidateIssueInput(input); fe.Any() {
+		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", fields(fe))
+		return
+	}
+	if err := h.store.UpdateIssue(r.Context(), id, input); err != nil {
+		h.storeError(w, err)
+		return
+	}
+	issue, err = h.store.GetIssue(r.Context(), id)
+	if err != nil {
+		h.storeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"issue": issueDTO(issue)})
+}
+
+// POST /api/v1/issues/{id}/status {"status": "open"|"closed"} → 200.
+// Status change stays a POST (not PATCH) so the wire mirrors the HTML app's
+// explicit action endpoint.
+func (h *handler) setIssueStatus(w http.ResponseWriter, r *http.Request) {
+	id, ok := h.pathID(w, r, "id")
+	if !ok {
+		return
+	}
+	var in struct {
+		Status string `json:"status"`
+	}
+	if !decodeBody(w, r, &in) {
+		return
+	}
+	if in.Status != store.StatusOpen && in.Status != store.StatusClosed {
+		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", map[string]string{"status": "Status must be \"open\" or \"closed\"."})
+		return
+	}
+	if err := h.store.SetIssueStatus(r.Context(), id, in.Status); err != nil {
+		h.storeError(w, err)
+		return
+	}
+	issue, err := h.store.GetIssue(r.Context(), id)
+	if err != nil {
+		h.storeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"issue": issueDTO(issue)})
+}
+
+// DELETE /api/v1/issues/{id} → 204
+func (h *handler) deleteIssue(w http.ResponseWriter, r *http.Request) {
+	id, ok := h.pathID(w, r, "id")
+	if !ok {
+		return
+	}
+	if err := h.store.DeleteIssue(r.Context(), id); err != nil {
+		h.storeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// POST /api/v1/issues/{id}/comments {"body"} → 201
+func (h *handler) createComment(w http.ResponseWriter, r *http.Request) {
+	id, ok := h.pathID(w, r, "id")
+	if !ok {
+		return
+	}
+	var in struct {
+		Body string `json:"body"`
+	}
+	if !decodeBody(w, r, &in) {
+		return
+	}
+	body := strings.TrimSpace(in.Body)
+	if msg := store.ValidateCommentBody(body); msg != "" {
+		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", map[string]string{"body": msg})
+		return
+	}
+	// GetIssue keeps a missing issue a 404 rather than a dangling comment
+	// (the store also FK-guards, but the error would be generic).
+	if _, err := h.store.GetIssue(r.Context(), id); err != nil {
+		h.storeError(w, err)
+		return
+	}
+	cid, err := h.store.CreateComment(r.Context(), id, body, 0)
+	if err != nil {
+		h.storeError(w, err)
+		return
+	}
+	comments, err := h.store.ListComments(r.Context(), id)
+	if err != nil {
+		h.storeError(w, err)
+		return
+	}
+	for _, c := range comments {
+		if c.ID == cid {
+			writeJSON(w, http.StatusCreated, map[string]any{"comment": commentDTO(c)})
+			return
+		}
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"comment": map[string]any{"id": cid}})
+}
+
+// GET /api/v1/labels → {"labels": [...]}
+func (h *handler) listLabels(w http.ResponseWriter, r *http.Request) {
+	labels, err := h.store.ListLabels(r.Context())
+	if err != nil {
+		h.storeError(w, err)
+		return
+	}
+	out := []Label{}
+	for _, l := range labels {
+		out = append(out, labelDTO(*l))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"labels": out})
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
