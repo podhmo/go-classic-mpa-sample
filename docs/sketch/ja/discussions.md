@@ -101,9 +101,9 @@ CREATE INDEX IF NOT EXISTS idx_dcomments_discussion_created
   弾く。
 - **`parent_id` の深さは DB では制約できない**（self-FK は存在性だけ見る）。
   「parent は同一 discussion の top-level コメント」の検証は store 層のトランザクション
-  内で `SELECT` して行う。GitHub 同様、返信への返信は拒否せず親に畳む表示にするか、
-  そもそも投稿を 400 で弾くか — **投稿側で弾く**ほうがモデルが簡単（フォームは top-level
-  コメントにしか出さないので通常経路では発生しない）。
+  内で `SELECT` して行う。返信への返信の扱いは「投稿側で弾く」に決定済み
+  （2026-11-15 確認。フォームは top-level コメントにしか出さないので通常経路では
+  発生しない。UI も top-level にしか Reply を出さない方針で確定）。
 - **コメント個別削除は初回スコープ外**（issues のコメントと同じ）。それでも
   `parent_id` には `ON DELETE CASCADE` を付けておき、将来親削除を許したときに
   孤児が残らないようにする。
@@ -211,7 +211,8 @@ header:  Issues | Discussions        （aria-current 付きタブ）
 - **view model**: `issueListPage`/`issueDetailPage`/`issueFormPage`/`issueDeletePage` と
   対称な `discussionXxxPage` を用意し、layout 分岐用に `Section` を全ページモデルへ追加。
 - **`updated_at` の意味論**: コメント・返信・answer マークはいずれも activity として
-  bump する（issues の「コメント投稿で bump」と同じルールで統一）。
+  bump する（issues の「コメント投稿で bump」と同じルールで統一）。answer の
+  マーク/解除も bump 対象とすることは確認済み（2026-11-15）。
 - **既存機構の流用**: `search-highlight.js` は `.issue-list` 固定なので、discussion 一覧にも
   適用するなら selector の一般化（`.entry-list` のような共通クラス化）が要る — 小さいが
   JS 変更を含むので初回スコープでは外してもよい論点。`Speculation-Rules` ヘッダーは
@@ -243,10 +244,6 @@ header:  Issues | Discussions        （aria-current 付きタブ）
 
 ## 残課題・未決事項
 
-- **返信への返信の扱い**: 投稿を弾く（推奨）か、parent を畳んで受け付けるか。UI は
-  どのみち top-level にしか Reply を出さない方針。
-- **`updated_at` を answer マークで bump するか**: コメント bump との一貫性では
-  「する」。「mark だけで最終更新が変わる」ことが気になるなら例外にしてもよい。
 - **issue 一覧と discussion 一覧の URL パラメータ共有**: `q`/`sort`/`page` は同じ
   名前で問題ないが、`status`（issue）と `answered`（discussion）は別名のまま。
   タブ横断の統合検索はしない（GitHub でも別タブ）。
