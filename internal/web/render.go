@@ -28,7 +28,8 @@ func NewRenderer() *Renderer {
 // for the storybook preview): the bound template's ParseFS proxies a
 // script-side embed.FS through fs.FS.
 func parsePages() map[string]*template.Template {
-	names := []string{"issues", "issue_detail", "issue_form", "issue_delete", "error", "auth_form"}
+	names := []string{"issues", "issue_detail", "issue_form", "issue_delete", "error", "auth_form",
+		"discussions", "discussion_detail", "discussion_form", "discussion_delete"}
 	pages := make(map[string]*template.Template, len(names))
 	for _, name := range names {
 		pages[name] = template.Must(template.New(name).Funcs(funcMap).ParseFS(
@@ -80,11 +81,32 @@ func (r *Renderer) renderAuthForm(w http.ResponseWriter, status int, data authFo
 	r.execute(w, "auth_form", status, data)
 }
 
+// renderDiscussionList renders GET /discussions.
+func (r *Renderer) renderDiscussionList(w http.ResponseWriter, status int, data discussionListPage) {
+	r.execute(w, "discussions", status, data)
+}
+
+// renderDiscussionDetail renders GET /discussions/{id}.
+func (r *Renderer) renderDiscussionDetail(w http.ResponseWriter, status int, data discussionDetailPage) {
+	r.execute(w, "discussion_detail", status, data)
+}
+
+// renderDiscussionForm renders the new-discussion and edit-discussion forms.
+func (r *Renderer) renderDiscussionForm(w http.ResponseWriter, status int, data discussionFormPage) {
+	r.execute(w, "discussion_form", status, data)
+}
+
+// renderDiscussionDelete renders the delete confirmation page.
+func (r *Renderer) renderDiscussionDelete(w http.ResponseWriter, status int, data discussionDeletePage) {
+	r.execute(w, "discussion_delete", status, data)
+}
+
 type errorPageData struct {
 	Title   string
 	Code    int
 	Heading string
 	Message string
+	Section string
 	User    *store.User
 }
 

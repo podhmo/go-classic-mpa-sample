@@ -39,6 +39,15 @@ type Store interface {
 	ListComments(ctx context.Context, issueID int64) ([]*store.Comment, error)
 	CreateComment(ctx context.Context, issueID int64, body string, authorID int64) (int64, error)
 	ListLabels(ctx context.Context) ([]*store.Label, error)
+	ListDiscussions(ctx context.Context, f store.DiscussionListFilter) ([]*store.Discussion, int, error)
+	GetDiscussion(ctx context.Context, id int64) (*store.Discussion, error)
+	CreateDiscussion(ctx context.Context, in store.DiscussionInput, authorID int64) (int64, error)
+	UpdateDiscussion(ctx context.Context, id int64, in store.DiscussionInput) error
+	DeleteDiscussion(ctx context.Context, id int64) error
+	ListDiscussionComments(ctx context.Context, discussionID int64) ([]*store.DiscussionComment, error)
+	CreateDiscussionComment(ctx context.Context, discussionID, parentID int64, body string, authorID int64) (int64, error)
+	SetCommentAnswer(ctx context.Context, discussionID, commentID int64, answer bool) error
+	ListDiscussionCategories(ctx context.Context) ([]*store.DiscussionCategory, error)
 	CreateUser(ctx context.Context, name, passwordHash string) (int64, error)
 	AuthenticateUser(ctx context.Context, name, password string) (*store.User, error)
 	CreateSession(ctx context.Context, userID int64, ttl time.Duration) (string, error)
@@ -82,6 +91,16 @@ func New(st Store) http.Handler {
 	mux.HandleFunc("GET /issues/{id}/delete", h.confirmDelete)
 	mux.HandleFunc("POST /issues/{id}/delete", h.deleteIssue)
 	mux.HandleFunc("POST /issues/{id}/comments", h.createComment)
+	mux.HandleFunc("GET /discussions", h.listDiscussions)
+	mux.HandleFunc("GET /discussions/new", h.newDiscussion)
+	mux.HandleFunc("POST /discussions", h.createDiscussion)
+	mux.HandleFunc("GET /discussions/{id}", h.showDiscussion)
+	mux.HandleFunc("GET /discussions/{id}/edit", h.editDiscussion)
+	mux.HandleFunc("POST /discussions/{id}/edit", h.updateDiscussion)
+	mux.HandleFunc("GET /discussions/{id}/delete", h.confirmDeleteDiscussion)
+	mux.HandleFunc("POST /discussions/{id}/delete", h.deleteDiscussion)
+	mux.HandleFunc("POST /discussions/{id}/comments", h.createDiscussionComment)
+	mux.HandleFunc("POST /discussions/{id}/comments/{cid}/answer", h.setCommentAnswer)
 	// Serve the single stylesheet explicitly: a bare "GET /static/" file
 	// server would expose a directory listing and unstyled plaintext 404s.
 	mux.HandleFunc("GET /static/app.css", func(w http.ResponseWriter, r *http.Request) {
@@ -261,6 +280,7 @@ var funcMap = template.FuncMap{
 	"isChecked":   isChecked,
 	"authorName":  authorName,
 	"listURL":     listURL,
+	"dListURL":    dListURL,
 	"statusURL":   statusURL,
 	"labelURL":    labelURL,
 	"maxTitleLen": func() int { return maxTitleRunes },

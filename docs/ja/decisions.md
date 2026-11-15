@@ -284,3 +284,18 @@
 - **name は UNIQUE + COLLATE NOCASE**: `alice`/`ALICE` の取り合い・ログインを同一視。登録エラーは modernc `*sqlite.Error.Code() == SQLITE_CONSTRAINT_UNIQUE` を検出して 422 フィールドエラーに。
 - **author_id は NULL = anonymous**: issues/comments に `INTEGER REFERENCES users(id)` を追加。表示側は LEFT JOIN で `Author *User` を読み、nil は `anonymous` と描画。`CreateIssue`/`CreateComment` は authorID（0=anonymous）を取る署名に変更。
 - **demo ユーザーは issue シードと独立して投入**: `SeedDemoData` は issues が空のときだけ issue/label を入れるが、`demo`/`demo` ユーザーは「demo が存在しなければ」の条件で常時投入 — 既存 DB を v2 に上げた場合もログインを試せるように。ハッシュは起動時生成（ソースに認証情報リテラルを置かない）。
+
+## Discussions タブ実装（2026-11-15、`devin/1794741925-discussions` ブランチ）
+
+設計メモ `docs/sketch/ja/discussions.md` の案B（並列テーブル）で実装。issues とは別の `discussion_categories` / `discussions` / `discussion_comments` を追加し、既存テーブルへの ALTER はなし（マイグレーションは追加のみ）。
+
+- **discussion に status を持たせない**: discussions は close しないため status カラム自体を置かない。「回答あり」はカラムではなく `discussion_comments.is_answer` から EXISTS 副問合せで導出し、list/detail の両方と `?answered=yes|no` フィルタで同じ条件を使い回す。
+- **answer の一意性は部分 UNIQUE index**: `UNIQUE(discussion_id) WHERE is_answer=1` で「1 discussion に answer は高々1つ」を DB 制約で担保。mark 移動は「全コメント unmark → 対象 mark」の2更新を1 tx で行う（constraint を一時違反しない順序）。
+- **is_answer カラムを選んだ理由**: `discussions.answer_comment_id` 参照型は dangling pointer の心配（コメント削除・discussion 削除の cascade 順）があり、mark 移動も2箇所更新になるため却下。フラグ型ならコメント削除だけで整合する。
+- **返信は1段のみ・`parent_id IS NULL` 制約で表現**: 返信への返信は `CreateDiscussionComment` 側が `parent_id` 対象の `parent_id IS NULL` を検証して `ErrInvalidParent`。深さは保存モデルが担保するので表示側は2段を描くだけ。
+- **answer マークは top-level コメントかつ `format='qa'` カテゴリのみ**: reply を answer にすると親が残ると不自然なため reply は `ErrNotAnswerable`。`format` は `discussion_categories.format`（open|qa）で決め、open カテゴリでは UI 側もボタンを出さない。
+- **カテゴリは seed 固定 taxonomy**: announcements/general/ideas(open) + qa。管理 UI はスコープ外（メモ通り）。フィルタは `?category={slug}` で slug 指定なので URL から id 解決不要。
+- **nav タブは `Section` フィールド駆動**: 各ページ view-model に `Section string` を持たせ、layout が `aria-current="page"` + accent underline で現在地を示す。「New ○」ボタンも Section で切替。
+- **返信フォームは `<details>`**: JS なし宣言型（メモ通り）。エラー時は `ReplyDraftID` で該当 `<details>` を `open` にして下書きを保持。親がトップレベル以外（返信への返信・他 discussion のコメント）の場合はどの `<details>` にも置けないため、下段コメントフォームへドラフトをフォールバックさせて入力文を失わない。
+- **一覧は `.issue-list` / `.issue-title` クラスを再利用**: search-highlight.js が無修正で効く。`.discussion-list` を併記して今後の分岐余地を残す。speculation-rules のセレクタは `.discussion-list a.issue-title` も対象に追加。
+- **storyStore を現行 Store インターフェースへ追従**: auth 系メソッドと `authorID` 引数が抜けて `-tags story` が壊れていた既存 bug を修正し、discussion fixture/story（list/empty/detail/form/errors/delete）を追加。

@@ -111,7 +111,9 @@ Possible directions: an FTS5 virtual table, a trigram index, or simply capping t
 // SeedDemoData inserts the default labels plus demo issues/comments, but only
 // when the issues table is empty; the issue part is a no-op otherwise. The
 // demo account is seeded independently so a database that already has issues
-// (e.g. one upgraded to v2) still gets a way to log in.
+// (e.g. one upgraded to v2) still gets a way to log in. The discussion side
+// follows the same rule: categories are seeded when their table is empty,
+// demo discussions when theirs is.
 func (s *Store) SeedDemoData(ctx context.Context) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -125,6 +127,25 @@ func (s *Store) SeedDemoData(ctx context.Context) error {
 	}
 	if n == 0 {
 		if err := seedIssuesAndLabels(ctx, tx); err != nil {
+			return err
+		}
+	}
+
+	var cn int
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM discussion_categories").Scan(&cn); err != nil {
+		return err
+	}
+	if cn == 0 {
+		if err := seedCategories(ctx, tx); err != nil {
+			return err
+		}
+	}
+	var dn int
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM discussions").Scan(&dn); err != nil {
+		return err
+	}
+	if dn == 0 {
+		if err := seedDiscussions(ctx, tx); err != nil {
 			return err
 		}
 	}
@@ -192,6 +213,163 @@ func seedIssuesAndLabels(ctx context.Context, tx *sql.Tx) error {
 				id, c.body, now.Add(-c.age).Unix()); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+type seedDComment struct {
+	body     string
+	age      time.Duration
+	isAnswer bool
+	replies  []seedDComment
+}
+
+type seedDiscussion struct {
+	title    string
+	body     string
+	category string // slug
+	age      time.Duration
+	comments []seedDComment
+}
+
+var seedCategoryRows = []DiscussionCategory{
+	{Name: "Announcements", Slug: "announcements", Description: "Project news and updates.", Format: CategoryFormatOpen},
+	{Name: "General", Slug: "general", Description: "Anything about this tracker.", Format: CategoryFormatOpen},
+	{Name: "Ideas", Slug: "ideas", Description: "Share ideas for new features.", Format: CategoryFormatOpen},
+	{Name: "Q&A", Slug: "qa", Description: "Ask the community — one comment can be marked as the answer.", Format: CategoryFormatQA},
+}
+
+var seedDiscussionRows = []seedDiscussion{
+	{
+		title:    "Welcome to the issue tracker",
+		body:     "This project now has a **Discussions** tab alongside Issues.\n\nUse issues for trackable work and discussions for open-ended questions, ideas, and announcements.",
+		category: "announcements",
+		age:      7 * 24 * time.Hour,
+	},
+	{
+		title:    "How do you use labels versus milestones?",
+		body:     "We use labels for triage today. How do other teams separate \"what kind of work\" from \"when it ships\" in a tracker this small?",
+		category: "general",
+		age:      5 * 24 * time.Hour,
+		comments: []seedDComment{
+			{body: "Labels for *kind*, milestones for *when*. In this app labels already cover the kind side.", age: 4*24*time.Hour + 12*time.Hour},
+			{
+				body: "Agreed — I would not add milestones until release planning actually hurts.",
+				age:  4 * 24 * time.Hour,
+				replies: []seedDComment{
+					{body: "Seconded. The closed/open split plus labels has been enough so far.", age: 3*24*time.Hour + 18*time.Hour},
+				},
+			},
+		},
+	},
+	{
+		title:    "Keyboard shortcuts for moving between pages",
+		body:     "I keep reaching for `j`/`k` to move between rows. Worth adding, or is the tab order already good enough?",
+		category: "ideas",
+		age:      3 * 24 * time.Hour,
+		comments: []seedDComment{
+			{body: "The no-JS constraint makes this awkward, but a `<kbd>` friendly tab order would already help.", age: 2*24*time.Hour + 6*time.Hour},
+		},
+	},
+	{
+		title:    "Why is my CSV export empty?",
+		body:     "I filtered the issue list and hit export, but the file only contains the header row. What am I doing wrong?",
+		category: "qa",
+		age:      2 * 24 * time.Hour,
+		comments: []seedDComment{
+			{body: "Does the filter itself return rows? An empty export usually means the filter matched nothing.", age: 2*24*time.Hour - 4*time.Hour},
+			{
+				body:     "The export honors the `status` filter too — `status=open` drops closed rows. Try `status=all` in the URL before exporting.",
+				age:      24 * time.Hour,
+				isAnswer: true,
+				replies: []seedDComment{
+					{body: "That was it — thank you!", age: 20 * time.Hour},
+				},
+			},
+		},
+	},
+}
+
+// seedCategories inserts the fixed discussion categories inside tx (called
+// only when the categories table is empty).
+func seedCategories(ctx context.Context, tx *sql.Tx) error {
+	for _, c := range seedCategoryRows {
+		if _, err := tx.ExecContext(ctx,
+			"INSERT INTO discussion_categories(name, slug, description, format) VALUES(?, ?, ?, ?)",
+			c.Name, c.Slug, c.Description, c.Format); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// seedDiscussions inserts demo discussions with threaded comments inside tx
+// (called only when the discussions table is empty). Category rows are
+// resolved by slug so this also works on a database that already had
+// categories.
+func seedDiscussions(ctx context.Context, tx *sql.Tx) error {
+	rows, err := tx.QueryContext(ctx, "SELECT id, slug FROM discussion_categories")
+	if err != nil {
+		return err
+	}
+	catIDs := map[string]int64{}
+	for rows.Next() {
+		var id int64
+		var slug string
+		if err := rows.Scan(&id, &slug); err != nil {
+			rows.Close()
+			return err
+		}
+		catIDs[slug] = id
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	now := time.Now().UTC()
+	for _, sd := range seedDiscussionRows {
+		created := now.Add(-sd.age).Unix()
+		res, err := tx.ExecContext(ctx,
+			"INSERT INTO discussions(category_id, title, body, created_at, updated_at) VALUES(?, ?, ?, ?, ?)",
+			catIDs[sd.category], sd.title, sd.body, created, created)
+		if err != nil {
+			return err
+		}
+		did, err := res.LastInsertId()
+		if err != nil {
+			return err
+		}
+		updated := created
+		insertComment := func(c seedDComment, parentID int64) (int64, error) {
+			res, err := tx.ExecContext(ctx,
+				"INSERT INTO discussion_comments(discussion_id, parent_id, is_answer, body, created_at) VALUES(?, ?, ?, ?, ?)",
+				did, nullID(parentID), c.isAnswer, c.body, now.Add(-c.age).Unix())
+			if err != nil {
+				return 0, err
+			}
+			if ts := now.Add(-c.age).Unix(); ts > updated {
+				updated = ts
+			}
+			return res.LastInsertId()
+		}
+		for _, c := range sd.comments {
+			cid, err := insertComment(c, 0)
+			if err != nil {
+				return err
+			}
+			for _, rc := range c.replies {
+				if _, err := insertComment(rc, cid); err != nil {
+					return err
+				}
+			}
+		}
+		if _, err := tx.ExecContext(ctx,
+			"UPDATE discussions SET updated_at = ? WHERE id = ?", updated, did); err != nil {
+			return err
 		}
 	}
 	return nil

@@ -32,6 +32,11 @@ type fakeStore struct {
 	issues      map[int64]*store.Issue
 	comments    map[int64][]*store.Comment
 	labels      []*store.Label
+	discussions map[int64]*store.Discussion
+	dcomments   map[int64][]*store.DiscussionComment
+	dcategories []*store.DiscussionCategory
+	nextD       int64
+	nextDC      int64
 	users       map[int64]*fakeUser
 	sessions    map[string]int64 // hashed token → user ID
 	// sessionUserErr, when set, makes SessionUser fail — simulates a
@@ -45,13 +50,21 @@ func newFakeStore() *fakeStore {
 		nextComment: 1,
 		issues:      map[int64]*store.Issue{},
 		comments:    map[int64][]*store.Comment{},
+		discussions: map[int64]*store.Discussion{},
+		dcomments:   map[int64][]*store.DiscussionComment{},
 		users:       map[int64]*fakeUser{},
 		sessions:    map[string]int64{},
+		nextD:       1,
+		nextDC:      1,
 	}
 	f.labels = []*store.Label{
 		{ID: 1, Name: "Bug", Color: "#d73a4a"},
 		{ID: 2, Name: "Documentation", Color: "#0075ca"},
 		{ID: 3, Name: "Feature", Color: "#a2eeef"},
+	}
+	f.dcategories = []*store.DiscussionCategory{
+		{ID: 1, Name: "General", Slug: "general", Format: store.CategoryFormatOpen},
+		{ID: 2, Name: "Q&A", Slug: "qa", Format: store.CategoryFormatQA},
 	}
 	return f
 }
@@ -280,6 +293,293 @@ func (f *fakeStore) ListLabels(_ context.Context) ([]*store.Label, error) {
 	for i, l := range f.labels {
 		c := *l
 		out[i] = &c
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out, nil
+}
+
+/* ---------- fake discussions ---------- */
+
+// addDiscussion is a test helper that inserts a discussion directly.
+func (f *fakeStore) addDiscussion(title, body string, categoryID int64, created time.Time) *store.Discussion {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	d := &store.Discussion{
+		ID:        f.nextD,
+		Title:     title,
+		Body:      body,
+		CreatedAt: created,
+		UpdatedAt: created,
+	}
+	if c := f.dcategoryByID(categoryID); c != nil {
+		d.Category = *c
+	}
+	f.nextD++
+	f.discussions[d.ID] = d
+	return d
+}
+
+func (f *fakeStore) dcategoryByID(id int64) *store.DiscussionCategory {
+	for _, c := range f.dcategories {
+		if c.ID == id {
+			return c
+		}
+	}
+	return nil
+}
+
+func cloneDiscussion(d *store.Discussion) *store.Discussion {
+	c := *d
+	return &c
+}
+
+// answered reports whether any stored comment carries IsAnswer — the same
+// derivation the SQL EXISTS clause performs.
+func (f *fakeStore) answered(discussionID int64) bool {
+	for _, c := range f.dcomments[discussionID] {
+		if c.IsAnswer {
+			return true
+		}
+	}
+	return false
+}
+
+func (f *fakeStore) ListDiscussions(_ context.Context, fl store.DiscussionListFilter) ([]*store.Discussion, int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	var matched []*store.Discussion
+	for _, d := range f.discussions {
+		if fl.CategorySlug != "" && d.Category.Slug != fl.CategorySlug {
+			continue
+		}
+		if fl.Query != "" {
+			q := strings.ToLower(fl.Query)
+			if !strings.Contains(strings.ToLower(d.Title), q) &&
+				!strings.Contains(strings.ToLower(d.Body), q) {
+				continue
+			}
+		}
+		switch fl.Answered {
+		case "yes":
+			if !f.answered(d.ID) {
+				continue
+			}
+		case "no":
+			if f.answered(d.ID) {
+				continue
+			}
+		}
+		matched = append(matched, d)
+	}
+	sort.Slice(matched, func(i, j int) bool {
+		a, b := matched[i], matched[j]
+		if fl.Sort == "oldest" {
+			if a.CreatedAt.Equal(b.CreatedAt) {
+				return a.ID < b.ID
+			}
+			return a.CreatedAt.Before(b.CreatedAt)
+		}
+		if a.CreatedAt.Equal(b.CreatedAt) {
+			return a.ID > b.ID
+		}
+		return a.CreatedAt.After(b.CreatedAt)
+	})
+
+	total := len(matched)
+	page := max(fl.Page, 1)
+	per := fl.PerPage
+	if per <= 0 {
+		per = 20
+	}
+	start := (page - 1) * per
+	if start >= total {
+		return nil, total, nil
+	}
+	end := min(start+per, total)
+	out := make([]*store.Discussion, 0, end-start)
+	for _, d := range matched[start:end] {
+		c := cloneDiscussion(d)
+		c.Answered = f.answered(d.ID)
+		out = append(out, c)
+	}
+	return out, total, nil
+}
+
+func (f *fakeStore) GetDiscussion(_ context.Context, id int64) (*store.Discussion, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	d, ok := f.discussions[id]
+	if !ok {
+		return nil, store.ErrNotFound
+	}
+	c := cloneDiscussion(d)
+	c.Answered = f.answered(id)
+	return c, nil
+}
+
+func (f *fakeStore) CreateDiscussion(_ context.Context, in store.DiscussionInput, authorID int64) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	cat := f.dcategoryByID(in.CategoryID)
+	if cat == nil {
+		return 0, store.ErrInvalidCategory
+	}
+	now := time.Now()
+	d := &store.Discussion{
+		ID:        f.nextD,
+		Title:     in.Title,
+		Body:      in.Body,
+		Category:  *cat,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	f.nextD++
+	if fu := f.users[authorID]; fu != nil {
+		u := fu.user
+		d.Author = &u
+	}
+	f.discussions[d.ID] = d
+	return d.ID, nil
+}
+
+func (f *fakeStore) UpdateDiscussion(_ context.Context, id int64, in store.DiscussionInput) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	d, ok := f.discussions[id]
+	if !ok {
+		return store.ErrNotFound
+	}
+	cat := f.dcategoryByID(in.CategoryID)
+	if cat == nil {
+		return store.ErrInvalidCategory
+	}
+	d.Title = in.Title
+	d.Body = in.Body
+	d.Category = *cat
+	d.UpdatedAt = time.Now()
+	if cat.Format != store.CategoryFormatQA {
+		for _, c := range f.dcomments[id] {
+			c.IsAnswer = false
+		}
+	}
+	return nil
+}
+
+func (f *fakeStore) DeleteDiscussion(_ context.Context, id int64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, ok := f.discussions[id]; !ok {
+		return store.ErrNotFound
+	}
+	delete(f.discussions, id)
+	delete(f.dcomments, id)
+	return nil
+}
+
+func (f *fakeStore) ListDiscussionComments(_ context.Context, discussionID int64) ([]*store.DiscussionComment, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	src := f.dcomments[discussionID]
+	flat := make([]*store.DiscussionComment, len(src))
+	copy(flat, src)
+	sort.Slice(flat, func(i, j int) bool {
+		if flat[i].CreatedAt.Equal(flat[j].CreatedAt) {
+			return flat[i].ID < flat[j].ID
+		}
+		return flat[i].CreatedAt.Before(flat[j].CreatedAt)
+	})
+	byID := make(map[int64]*store.DiscussionComment, len(flat))
+	for _, c := range flat {
+		byID[c.ID] = c
+	}
+	var out []*store.DiscussionComment
+	for _, c := range flat {
+		if c.ParentID != 0 {
+			if parent := byID[c.ParentID]; parent != nil {
+				parent.Replies = append(parent.Replies, c)
+				continue
+			}
+		}
+		out = append(out, c)
+	}
+	return out, nil
+}
+
+func (f *fakeStore) CreateDiscussionComment(_ context.Context, discussionID, parentID int64, body string, authorID int64) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, ok := f.discussions[discussionID]; !ok {
+		return 0, store.ErrNotFound
+	}
+	if parentID != 0 {
+		ok := false
+		for _, c := range f.dcomments[discussionID] {
+			if c.ID == parentID && c.ParentID == 0 {
+				ok = true
+			}
+		}
+		if !ok {
+			return 0, store.ErrInvalidParent
+		}
+	}
+	c := &store.DiscussionComment{
+		ID:           f.nextDC,
+		DiscussionID: discussionID,
+		ParentID:     parentID,
+		Body:         body,
+		CreatedAt:    time.Now(),
+	}
+	f.nextDC++
+	if fu := f.users[authorID]; fu != nil {
+		u := fu.user
+		c.Author = &u
+	}
+	f.dcomments[discussionID] = append(f.dcomments[discussionID], c)
+	return c.ID, nil
+}
+
+func (f *fakeStore) SetCommentAnswer(_ context.Context, discussionID, commentID int64, answer bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	d, ok := f.discussions[discussionID]
+	if !ok {
+		return store.ErrNotFound
+	}
+	var target *store.DiscussionComment
+	for _, c := range f.dcomments[discussionID] {
+		if c.ID == commentID {
+			target = c
+		}
+	}
+	if target == nil {
+		return store.ErrNotFound
+	}
+	if target.ParentID != 0 {
+		return store.ErrNotAnswerable
+	}
+	if answer && d.Category.Format != store.CategoryFormatQA {
+		return store.ErrNotAnswerable
+	}
+	if answer {
+		for _, c := range f.dcomments[discussionID] {
+			c.IsAnswer = false
+		}
+		target.IsAnswer = true
+	} else {
+		target.IsAnswer = false
+	}
+	d.UpdatedAt = time.Now()
+	return nil
+}
+
+func (f *fakeStore) ListDiscussionCategories(_ context.Context) ([]*store.DiscussionCategory, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]*store.DiscussionCategory, len(f.dcategories))
+	for i, c := range f.dcategories {
+		cc := *c
+		out[i] = &cc
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
