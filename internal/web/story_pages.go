@@ -429,13 +429,29 @@ func StoryDiscussionDelete() {
 // mutations (e.g. answer marks) are visible inside that request but
 // never leak into the shared fixtures.
 type storyStore struct {
-	dcomments map[int64][]*store.DiscussionComment
+	issues      map[int64]*store.Issue
+	discussions map[int64]*store.Discussion
+	dcomments   map[int64][]*store.DiscussionComment
 }
 
 func newStoryStore() storyStore {
-	return storyStore{dcomments: map[int64][]*store.DiscussionComment{
-		storyDiscussion.ID: cloneDComments(storyDComments),
-	}}
+	issues := make(map[int64]*store.Issue, len(storyIssues))
+	for _, i := range storyIssues {
+		ii := *i
+		issues[i.ID] = &ii
+	}
+	discussions := make(map[int64]*store.Discussion, len(storyDiscussions))
+	for _, d := range storyDiscussions {
+		dd := *d
+		discussions[d.ID] = &dd
+	}
+	return storyStore{
+		issues:      issues,
+		discussions: discussions,
+		dcomments: map[int64][]*store.DiscussionComment{
+			storyDiscussion.ID: cloneDComments(storyDComments),
+		},
+	}
 }
 
 func cloneDComments(src []*store.DiscussionComment) []*store.DiscussionComment {
@@ -451,11 +467,9 @@ func cloneDComments(src []*store.DiscussionComment) []*store.DiscussionComment {
 func (storyStore) ListIssues(ctx context.Context, f store.ListFilter) ([]*store.Issue, int, error) {
 	return storyIssues, len(storyIssues), nil
 }
-func (storyStore) GetIssue(ctx context.Context, id int64) (*store.Issue, error) {
-	for _, is := range storyIssues {
-		if is.ID == id {
-			return is, nil
-		}
+func (s storyStore) GetIssue(ctx context.Context, id int64) (*store.Issue, error) {
+	if is, ok := s.issues[id]; ok {
+		return is, nil
 	}
 	return nil, store.ErrNotFound
 }
@@ -465,7 +479,16 @@ func (storyStore) CreateIssue(ctx context.Context, in store.IssueInput, authorID
 func (storyStore) UpdateIssue(ctx context.Context, id int64, in store.IssueInput) error {
 	return nil
 }
-func (storyStore) SetIssueStatus(ctx context.Context, id int64, status string) error {
+func (s storyStore) SetIssueStatus(ctx context.Context, id int64, status string) error {
+	is, ok := s.issues[id]
+	if !ok {
+		return store.ErrNotFound
+	}
+	// Same contract as the real store: updated_at bumps only on change.
+	if is.Status != status {
+		is.Status = status
+		is.UpdatedAt = time.Now()
+	}
 	return nil
 }
 func (storyStore) DeleteIssue(ctx context.Context, id int64) error {
@@ -486,11 +509,9 @@ func (storyStore) ListLabels(ctx context.Context) ([]*store.Label, error) {
 func (storyStore) ListDiscussions(ctx context.Context, f store.DiscussionListFilter) ([]*store.Discussion, int, error) {
 	return storyDiscussions, len(storyDiscussions), nil
 }
-func (storyStore) GetDiscussion(ctx context.Context, id int64) (*store.Discussion, error) {
-	for _, d := range storyDiscussions {
-		if d.ID == id {
-			return d, nil
-		}
+func (s storyStore) GetDiscussion(ctx context.Context, id int64) (*store.Discussion, error) {
+	if d, ok := s.discussions[id]; ok {
+		return d, nil
 	}
 	return nil, store.ErrNotFound
 }
@@ -532,6 +553,11 @@ func (s storyStore) SetCommentAnswer(ctx context.Context, discussionID, commentI
 		}
 	}
 	target.IsAnswer = answer
+	// Same contract as the real store: an answer mark bumps the
+	// discussion's updated_at, which the swap fragment reflects.
+	if d, ok := s.discussions[discussionID]; ok {
+		d.UpdatedAt = time.Now()
+	}
 	return nil
 }
 func (storyStore) ListDiscussionCategories(ctx context.Context) ([]*store.DiscussionCategory, error) {

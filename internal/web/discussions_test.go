@@ -155,11 +155,13 @@ func TestPartialSetCommentAnswerContract(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("partial answer POST status = %d, want 200", resp.StatusCode)
 	}
-	// The moved mark: c2's <li> is marked, c1's is re-rendered unmarked.
+	// The moved mark: c2's <li> is marked, c1's is re-rendered unmarked —
+	// and the header meta rides along since marking bumps updated_at.
 	for _, want := range []string{
 		`class="card comment" id="comment-` + itoa(c1) + `"`,
 		`class="card comment comment-answer" id="comment-` + itoa(c2) + `"`,
 		`aria-label="Unmark answer on comment ` + itoa(c2) + `"`,
+		`class="issue-meta" id="discussion-meta"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("swap fragment missing %q", want)

@@ -27,10 +27,7 @@
       <a class="category-badge" href="/discussions?category={{.Discussion.Category.Slug}}">{{.Discussion.Category.Name}}</a>
       <h1>{{.Discussion.Title}} <span class="issue-num">#{{.Discussion.ID}}</span></h1>
     </div>
-    <p class="issue-meta">
-      Opened by {{authorName .Discussion.Author}} <time datetime="{{.Discussion.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .Discussion.CreatedAt}}</time>
-      · Last updated <time datetime="{{.Discussion.UpdatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .Discussion.UpdatedAt}}</time>
-    </p>
+    {{template "discussion_meta" .Discussion}}
   </header>
 
   {{if .Discussion.Body}}

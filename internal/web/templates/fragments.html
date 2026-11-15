@@ -127,11 +127,23 @@
 </li>
 {{end}}
 
+{{define "discussion_meta"}}
+{{/* The discussion header meta line, carried as a swap node: marking an
+   answer bumps discussion.updated_at, so the fragment re-renders this
+   too. It self-targets by id in the client's replace mode. */}}
+<p class="issue-meta" id="discussion-meta">
+  Opened by {{authorName .Author}} <time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .CreatedAt}}</time>
+  · Last updated <time datetime="{{.UpdatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .UpdatedAt}}</time>
+</p>
+{{end}}
+
 {{define "discussion_comment_swap"}}
 {{/* Answer-mark swaps: marking a second comment moves the mark, so the
    response carries every changed <li> — the toggled comment and, when the
-   mark moved, the previously-marked one. Each <li> self-targets by its
-   id in the client's replace mode. */}}
+   mark moved, the previously-marked one — plus the header meta (the store
+   bumps discussion.updated_at). Each node self-targets by its id in the
+   client's replace mode. */}}
+{{template "discussion_meta" .Discussion}}
 {{range .Comments}}{{template "discussion_comment" (dict "Discussion" $.Discussion "C" .)}}{{end}}
 {{end}}
 
