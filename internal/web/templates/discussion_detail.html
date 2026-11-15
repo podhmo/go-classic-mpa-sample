@@ -15,7 +15,10 @@
    (docs/sketch/ja/partial-updates.md). */}}
 <script type="module" src="/static/partial-submit.js"></script>
 <nav class="breadcrumb" aria-label="Breadcrumb">
-  <a href="/discussions">Discussions</a> <span aria-hidden="true">/</span> <span aria-current="page">#{{.Discussion.ID}}</span>
+  <ol>
+    <li><a href="/discussions">Discussions</a></li>
+    <li><a href="#" aria-current="page">#{{.Discussion.ID}}</a></li>
+  </ol>
 </nav>
 
 <article class="card issue-detail">

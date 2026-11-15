@@ -1693,8 +1693,17 @@ func TestDetailA11ySemantics(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := getBody(t, resp)
-	if !strings.Contains(body, `<span aria-current="page">#1</span>`) {
-		t.Error("breadcrumb current item lacks aria-current")
+	// The trail is an ordered list; the current item is a self-referencing
+	// link carrying aria-current, and the separator is CSS-generated.
+	if !strings.Contains(body, `<nav class="breadcrumb" aria-label="Breadcrumb"><ol>`) &&
+		!strings.Contains(body, `class="breadcrumb" aria-label="Breadcrumb"`) {
+		t.Error("breadcrumb nav missing")
+	}
+	if !strings.Contains(body, `<a href="#" aria-current="page">#1</a>`) {
+		t.Error("breadcrumb current item lacks aria-current link")
+	}
+	if strings.Contains(body, `aria-hidden="true">/</span>`) {
+		t.Error("breadcrumb separator should be CSS-generated, not markup")
 	}
 	if !strings.Contains(body, `<ol class="comment-list" role="list">`) {
 		t.Error("comment-list lacks role=list")
