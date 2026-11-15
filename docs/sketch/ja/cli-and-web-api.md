@@ -158,6 +158,13 @@ issues api <path>            # 生 API への抜け道（gh api 相当）
   `crypto/subtle` で定数時間比較。**`ISSUES_API_TOKEN` 未設定なら `/api/v1` を
   mount しない**（fail-closed: 認証なし API を localhost 以外に出さない）。これで
   「認証なしローカルアプリ」の前提を壊さずに API は opt-in の deploy 判断にできる。
+- **API 認証だけでは公開時に足りない**: `/api/v1` にトークンを掛けても、同じ
+  リスナーの HTML ルート（`/issues` 等）は無認証のまま — 閲覧・更新・削除が
+  できる。サーバをリモート公開する場合の選択肢は、(a) アプリ本体は localhost bind
+  のままにして `/api/v1` だけを別リスナーかリバースプロキシで公開する、
+  (b) トークン設定時は HTML ルートにも同じ Bearer を要求する（ブラウザ UI まで
+  認証付きになる＝モデルが変わる）、(c) HTML に別の仕組み（セッション等）を足す。
+  (a) が「認証なしローカルアプリ」前提との整合が一番良い。
 - **CSRF**: `http.NewCrossOriginProtection` は `Sec-Fetch-Site`/`Origin` を送らない
   リクエストを通すので、CLI からの呼び出しは既存 middleware のままで動く想定
   （要実測）。Bearer 認証は ambient credential ではないので CSRF モデル自体も
