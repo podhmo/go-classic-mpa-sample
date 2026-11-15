@@ -338,6 +338,17 @@ a:hover {
   color: var(--text);
 }
 
+/* Current section tab (Issues/Discussions): underline, not color alone
+   (navbar guide — WCAG 1.4.1). The aria-current attribute is the hook. */
+.site-nav > a[aria-current="page"]:not(.btn) {
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+
 /* The logged-in name shown next to the Log out button. */
 .user-handle {
   color: var(--text-muted);
@@ -550,6 +561,51 @@ a.label-badge:hover {
   .label-badge {
     transition: max-inline-size 0.3s;
   }
+}
+
+/* Category badge (discussions): like a label badge but fixed accent
+   colors — categories carry no DB-driven color. */
+.category-badge {
+  display: inline-block;
+  max-inline-size: min(100%, 12rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  padding: 1px 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.6;
+  border-radius: 999px;
+  background-color: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--border-muted);
+}
+
+a.category-badge:is(:hover, :focus-visible) {
+  text-decoration: none;
+  filter: brightness(0.95);
+  max-inline-size: 100%;
+}
+
+/* Answered badge (discussion list + marked comment): same green family as
+   Open but a filled disc, like Closed, so it is distinct from "Open". */
+.badge-answered,
+.badge-answer {
+  color: var(--open);
+  background: var(--open-bg);
+  border-color: var(--open-border);
+}
+
+.badge-answered::before,
+.badge-answer::before {
+  background: var(--open);
+}
+
+/* The comment marked as the answer gets an emphasized frame. */
+.comment-answer {
+  border-color: var(--open-border);
+  box-shadow: 0 0 0 1px var(--open-border);
 }
 
 /* ---------- tabs ---------- */
@@ -1186,6 +1242,53 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
 
 .comment-body {
   overflow-wrap: anywhere;
+}
+
+/* Per-comment action row: the qa-only answer toggle and the <details>
+   disclosure wrapping the inline reply form (top-level comments only —
+   one level of nesting, like GitHub Discussions). */
+.comment-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  font-size: 0.82rem;
+}
+
+.reply-details > summary {
+  display: inline-block;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.reply-details > summary:hover {
+  color: var(--accent);
+}
+
+.reply-details[open] > summary {
+  margin-bottom: 8px;
+}
+
+.reply-form {
+  padding: 12px;
+  background: var(--bg);
+}
+
+/* One level of nested replies, indented under the parent comment. */
+.comment-replies {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0 0 0 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-inline-start: 2px solid var(--border-muted);
+}
+
+.comment-reply {
+  padding: 10px 14px;
+  background: var(--bg);
 }
 
 /* ---------- back to top ---------- */

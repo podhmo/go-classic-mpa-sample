@@ -627,6 +627,37 @@ func TestSeedDemoData(t *testing.T) {
 		t.Fatalf("demo login after seed: %v", err)
 	}
 
+	// Discussion categories and demo discussions are seeded too: all four
+	// seeded categories, some answered and some threaded.
+	cats, err := s.ListDiscussionCategories(ctx)
+	if err != nil {
+		t.Fatalf("ListDiscussionCategories: %v", err)
+	}
+	if len(cats) != 4 {
+		t.Fatalf("seeded %d categories, want 4", len(cats))
+	}
+	ds, dtotal, err := s.ListDiscussions(ctx, DiscussionListFilter{})
+	if err != nil {
+		t.Fatalf("ListDiscussions: %v", err)
+	}
+	if dtotal < 3 {
+		t.Fatalf("seeded %d discussions, want >= 3", dtotal)
+	}
+	var anyAnswered, anyThreaded bool
+	for _, d := range ds {
+		if d.Answered {
+			anyAnswered = true
+		}
+		for _, c := range mustListDComments(t, s, d.ID) {
+			if len(c.Replies) > 0 {
+				anyThreaded = true
+			}
+		}
+	}
+	if !anyAnswered || !anyThreaded {
+		t.Fatalf("want an answered and a threaded seeded discussion: answered=%v threaded=%v", anyAnswered, anyThreaded)
+	}
+
 	// Idempotent: second call changes nothing.
 	if err := s.SeedDemoData(ctx); err != nil {
 		t.Fatalf("second SeedDemoData: %v", err)
@@ -644,6 +675,13 @@ func TestSeedDemoData(t *testing.T) {
 	}
 	if len(labels2) != len(labels) {
 		t.Fatalf("label count changed: %d -> %d", len(labels), len(labels2))
+	}
+	_, dtotal2, err := s.ListDiscussions(ctx, DiscussionListFilter{})
+	if err != nil {
+		t.Fatalf("ListDiscussions: %v", err)
+	}
+	if dtotal2 != dtotal {
+		t.Fatalf("discussion count changed after re-seed: %d -> %d", dtotal, dtotal2)
 	}
 
 	// Seed on a non-empty DB is a no-op even if it would duplicate labels.
@@ -677,16 +715,16 @@ func TestSchemaObjects(t *testing.T) {
 		t.Fatalf("SchemaObjects: %v", err)
 	}
 
-	// All six application tables plus sqlite_sequence (AUTOINCREMENT
+	// All application tables plus sqlite_sequence (AUTOINCREMENT
 	// bookkeeping), sorted by name.
-	wantTables := []string{"comments", "issue_labels", "issues", "labels", "sessions", "sqlite_sequence", "users"}
+	wantTables := []string{"comments", "discussion_categories", "discussion_comments", "discussions", "issue_labels", "issues", "labels", "sessions", "sqlite_sequence", "users"}
 	if !slices.Equal(tables, wantTables) {
 		t.Errorf("tables = %v, want %v", tables, wantTables)
 	}
 
-	// Only the four named indexes from the schema; the UNIQUE/PK backing
+	// Only the named indexes from the schema; the UNIQUE/PK backing
 	// indexes (sqlite_autoindex%) must be filtered out.
-	wantIndexes := []string{"idx_comments_issue_created", "idx_issue_labels_label", "idx_issues_status_created", "idx_sessions_user"}
+	wantIndexes := []string{"idx_comments_issue_created", "idx_dcomments_answer", "idx_dcomments_discussion_created", "idx_discussions_category_created", "idx_issue_labels_label", "idx_issues_status_created", "idx_sessions_user"}
 	if !slices.Equal(indexes, wantIndexes) {
 		t.Errorf("indexes = %v, want %v", indexes, wantIndexes)
 	}
@@ -714,7 +752,7 @@ func TestAnalyze(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SchemaObjects after ANALYZE: %v", err)
 	}
-	wantTables := []string{"comments", "issue_labels", "issues", "labels", "sessions", "sqlite_sequence", "users"}
+	wantTables := []string{"comments", "discussion_categories", "discussion_comments", "discussions", "issue_labels", "issues", "labels", "sessions", "sqlite_sequence", "users"}
 	if !slices.Equal(tables, wantTables) {
 		t.Errorf("tables after ANALYZE = %v, want %v", tables, wantTables)
 	}

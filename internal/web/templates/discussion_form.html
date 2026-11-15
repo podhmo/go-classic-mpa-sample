@@ -1,0 +1,45 @@
+{{define "content"}}
+{{/* Ctrl/Cmd+Enter submits the form from the body textarea
+   (guide ime-safe-enter-submit). Deferred external file. */}}
+<script src="/static/enter-submit.js" defer></script>
+{{/* Syncs aria-invalid/aria-describedby with :user-invalid and announces
+   newly-shown errors via a polite live region (guide
+   accessible-error-announcement). Deferred external file. */}}
+<script src="/static/form-errors.js" defer></script>
+<div class="page-head">
+  <h1>{{.Heading}}</h1>
+</div>
+
+<form method="post" action="{{.Action}}" class="card issue-form" novalidate>
+  <p class="form-note">Fields marked <span class="req">*</span> are required.</p>
+
+  <div class="field">
+    <label for="f-title">Title <span class="req" aria-hidden="true">*</span></label>
+    <input type="text" id="f-title" name="title" value="{{.Input.Title}}" maxlength="{{maxTitleLen}}" pattern=".*\S.*" required data-error="f-title-error"{{if .Errors.Title}} aria-invalid="true" aria-describedby="f-title-error" autofocus{{else}} aria-invalid="false"{{end}}>
+    <p class="field-error{{if not .Errors.Title}} field-error-pending{{end}}" id="f-title-error">{{or .Errors.Title "Title is required."}}</p>
+  </div>
+
+  <div class="field">
+    <label for="f-category">Category <span class="req" aria-hidden="true">*</span></label>
+    <select id="f-category" name="category_id" required data-error="f-category-error"{{if .Errors.Category}} aria-invalid="true" aria-describedby="f-category-error"{{if not .Errors.Title}} autofocus{{end}}{{else}} aria-invalid="false"{{end}}>
+      <option value="" disabled{{if eq .Input.CategoryID 0}} selected{{end}}>Select a category</option>
+      {{range .Categories}}
+      <option value="{{.ID}}"{{if eq .ID $.Input.CategoryID}} selected{{end}}>{{.Name}}{{if .Description}} — {{.Description}}{{end}}</option>
+      {{end}}
+    </select>
+    <p class="field-error{{if not .Errors.Category}} field-error-pending{{end}}" id="f-category-error">{{or .Errors.Category "Category is required."}}</p>
+  </div>
+
+  <div class="field">
+    <label for="f-body">Body</label>
+    <textarea id="f-body" name="body" rows="10" aria-keyshortcuts="Control+Enter Meta+Enter"{{if .Errors.Body}} aria-invalid="true" aria-describedby="f-body-error f-body-hint"{{if and (not .Errors.Title) (not .Errors.Category)}} autofocus{{end}}{{else}} aria-invalid="false" aria-describedby="f-body-hint"{{end}}>{{.Input.Body}}</textarea>
+    {{if .Errors.Body}}<p class="field-error" id="f-body-error">{{.Errors.Body}}</p>{{end}}
+    <p class="field-hint" id="f-body-hint">Markdown (GFM) supported. Raw HTML is not rendered; line breaks are preserved. Ctrl+Enter (Cmd+Enter on macOS) submits.</p>
+  </div>
+
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary">{{.SubmitLabel}}</button>
+    <a class="btn btn-quiet" href="/discussions">Cancel</a>
+  </div>
+</form>
+{{end}}

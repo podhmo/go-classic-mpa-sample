@@ -23,6 +23,7 @@ type issueListPage struct {
 	RangeStart      int
 	RangeEnd        int
 	HasActiveFilter bool
+	Section         string
 	User            *store.User
 }
 
@@ -35,6 +36,7 @@ type issueDetailPage struct {
 	Comments     []*store.Comment
 	CommentDraft string
 	CommentError string
+	Section      string
 	User         *store.User
 }
 
@@ -48,6 +50,7 @@ type issueFormPage struct {
 	Input       store.IssueInput
 	Labels      []*store.Label
 	Errors      issueFormErrors
+	Section     string
 	User        *store.User
 }
 
@@ -61,9 +64,10 @@ func (e issueFormErrors) any() bool { return e.Title != "" || e.Body != "" }
 
 // issueDeletePage is the view model for the delete confirmation page.
 type issueDeletePage struct {
-	Title string
-	Issue *store.Issue
-	User  *store.User
+	Title   string
+	Issue   *store.Issue
+	Section string
+	User    *store.User
 }
 
 // home redirects the bare root to the issue list.
@@ -111,7 +115,8 @@ func (h *handler) listIssues(w http.ResponseWriter, r *http.Request) {
 		TotalPages: totalPages,
 		HasActiveFilter: f.Query != "" || f.LabelID != 0 ||
 			f.Status != store.StatusOpen || f.Sort != "",
-		User: userFromContext(r.Context()),
+		Section: "issues",
+		User:    userFromContext(r.Context()),
 	}
 	if total > 0 {
 		data.RangeStart = (f.Page-1)*perPage + 1
@@ -139,6 +144,7 @@ func (h *handler) newIssue(w http.ResponseWriter, r *http.Request) {
 		Action:      "/issues",
 		SubmitLabel: "Create issue",
 		Labels:      labels,
+		Section:     "issues",
 		User:        userFromContext(r.Context()),
 	})
 }
@@ -163,6 +169,7 @@ func (h *handler) createIssue(w http.ResponseWriter, r *http.Request) {
 			Input:       in,
 			Labels:      labels,
 			Errors:      errs,
+			Section:     "issues",
 			User:        userFromContext(r.Context()),
 		})
 		return
@@ -196,6 +203,7 @@ func (h *handler) showIssue(w http.ResponseWriter, r *http.Request) {
 		Title:    fmt.Sprintf("#%d %s", issue.ID, issue.Title),
 		Issue:    issue,
 		Comments: comments,
+		Section:  "issues",
 		User:     userFromContext(r.Context()),
 	})
 }
@@ -232,6 +240,7 @@ func (h *handler) editIssue(w http.ResponseWriter, r *http.Request) {
 		SubmitLabel: "Save changes",
 		Input:       in,
 		Labels:      labels,
+		Section:     "issues",
 		User:        userFromContext(r.Context()),
 	})
 }
@@ -267,6 +276,7 @@ func (h *handler) updateIssue(w http.ResponseWriter, r *http.Request) {
 			Input:       in,
 			Labels:      labels,
 			Errors:      errs,
+			Section:     "issues",
 			User:        userFromContext(r.Context()),
 		})
 		return
@@ -316,9 +326,10 @@ func (h *handler) confirmDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.r.renderIssueDelete(w, http.StatusOK, issueDeletePage{
-		Title: fmt.Sprintf("Delete issue #%d", issue.ID),
-		Issue: issue,
-		User:  userFromContext(r.Context()),
+		Title:   fmt.Sprintf("Delete issue #%d", issue.ID),
+		Issue:   issue,
+		Section: "issues",
+		User:    userFromContext(r.Context()),
 	})
 }
 
@@ -376,6 +387,7 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request) {
 			Comments:     comments,
 			CommentDraft: body,
 			CommentError: errMsg,
+			Section:      "issues",
 			User:         userFromContext(r.Context()),
 		})
 		return

@@ -65,6 +65,54 @@ var (
 		{ID: 1, IssueID: 2, Body: "Reproduced on Firefox at 360px.", CreatedAt: storyTime},
 		{ID: 2, IssueID: 2, Body: "The select keeps its intrinsic width; see `min-width` on `.filter-field`.", CreatedAt: storyTime2},
 	}
+
+	storyCategories = []*store.DiscussionCategory{
+		{ID: 1, Name: "Announcements", Slug: "announcements", Format: store.CategoryFormatOpen, Description: "Updates from the maintainers."},
+		{ID: 2, Name: "General", Slug: "general", Format: store.CategoryFormatOpen, Description: "Anything related to the project."},
+		{ID: 3, Name: "Ideas", Slug: "ideas", Format: store.CategoryFormatOpen, Description: "Share ideas for new features."},
+		{ID: 4, Name: "Q&A", Slug: "qa", Format: store.CategoryFormatQA, Description: "Ask the community for help."},
+	}
+
+	storyDiscussions = []*store.Discussion{
+		{
+			ID: 3, Title: "Release v0.3 is out",
+			Body:      "Small announcement.",
+			Category:  *storyCategories[0],
+			CreatedAt: storyTime2, UpdatedAt: storyTime2,
+		},
+		{
+			ID: 2, Title: "How do custom labels get their color?",
+			Body:      "I cannot find where the palette is defined.",
+			Category:  *storyCategories[3],
+			CreatedAt: storyTime, UpdatedAt: storyTime2,
+			Answered: true,
+		},
+		{
+			ID: 1, Title: "Idea: keyboard navigation for the filter bar",
+			Body:      "It would be nice to move between filters with arrow keys.",
+			Category:  *storyCategories[2],
+			CreatedAt: storyTime, UpdatedAt: storyTime,
+		},
+	}
+
+	storyDiscussion = &store.Discussion{
+		ID: 2, Title: "How do custom labels get their color?",
+		Body:      "I cannot find where the **palette** is defined.",
+		Category:  *storyCategories[3],
+		CreatedAt: storyTime, UpdatedAt: storyTime2,
+		Answered: true,
+	}
+
+	storyDComments = []*store.DiscussionComment{
+		{
+			ID: 1, DiscussionID: 2, Body: "Look at `label_color` in the seed data.", CreatedAt: storyTime,
+			IsAnswer: true,
+			Replies: []*store.DiscussionComment{
+				{ID: 3, DiscussionID: 2, ParentID: 1, Body: "That was it — thank you!", CreatedAt: storyTime2},
+			},
+		},
+		{ID: 2, DiscussionID: 2, Body: "Same question on Firefox.", CreatedAt: storyTime2},
+	}
 )
 
 func printRec(rec *httptest.ResponseRecorder) {
@@ -110,6 +158,30 @@ func renderError(status int, heading, message string) {
 	printRec(rec)
 }
 
+func renderDiscussionList(status int, data discussionListPage) {
+	rec := httptest.NewRecorder()
+	NewRenderer().renderDiscussionList(rec, status, data)
+	printRec(rec)
+}
+
+func renderDiscussionDetail(status int, data discussionDetailPage) {
+	rec := httptest.NewRecorder()
+	NewRenderer().renderDiscussionDetail(rec, status, data)
+	printRec(rec)
+}
+
+func renderDiscussionForm(status int, data discussionFormPage) {
+	rec := httptest.NewRecorder()
+	NewRenderer().renderDiscussionForm(rec, status, data)
+	printRec(rec)
+}
+
+func renderDiscussionDelete(status int, data discussionDeletePage) {
+	rec := httptest.NewRecorder()
+	NewRenderer().renderDiscussionDelete(rec, status, data)
+	printRec(rec)
+}
+
 // StoryIssueList renders the issue list with several issues.
 func StoryIssueList() {
 	renderIssueList(http.StatusOK, issueListPage{
@@ -122,6 +194,7 @@ func StoryIssueList() {
 		TotalPages: 1,
 		RangeStart: 1,
 		RangeEnd:   len(storyIssues),
+		Section:    "issues",
 	})
 }
 
@@ -134,6 +207,7 @@ func StoryIssueListEmpty() {
 		Page:            1,
 		TotalPages:      0,
 		HasActiveFilter: true,
+		Section:         "issues",
 	})
 }
 
@@ -150,6 +224,7 @@ func StoryIssueListPaged() {
 		RangeStart:      41,
 		RangeEnd:        60,
 		HasActiveFilter: true,
+		Section:         "issues",
 	})
 }
 
@@ -167,6 +242,7 @@ func StoryIssueListSearch() {
 		RangeStart:      1,
 		RangeEnd:        len(storyIssues),
 		HasActiveFilter: true,
+		Section:         "issues",
 	})
 }
 
@@ -176,6 +252,7 @@ func StoryIssueDetail() {
 		Title:    "#2 Improve responsive layout",
 		Issue:    storyIssue,
 		Comments: storyComments,
+		Section:  "issues",
 	})
 }
 
@@ -194,6 +271,7 @@ func StoryIssueDetailLong() {
 		Title:    "#2 Improve responsive layout",
 		Issue:    storyIssue,
 		Comments: comments,
+		Section:  "issues",
 	})
 }
 
@@ -206,6 +284,7 @@ func StoryIssueDetailCommentError() {
 		Comments:     storyComments,
 		CommentDraft: "   ",
 		CommentError: "Comment is required.",
+		Section:      "issues",
 	})
 }
 
@@ -217,6 +296,7 @@ func StoryIssueFormNew() {
 		Action:      "/issues",
 		SubmitLabel: "Create issue",
 		Labels:      storyLabels,
+		Section:     "issues",
 	})
 }
 
@@ -230,6 +310,7 @@ func StoryIssueFormErrors() {
 		Input:       store.IssueInput{Body: "title was empty"},
 		Labels:      storyLabels,
 		Errors:      issueFormErrors{Title: "Title is required."},
+		Section:     "issues",
 	})
 }
 
@@ -242,14 +323,16 @@ func StoryIssueFormEdit() {
 		SubmitLabel: "Save changes",
 		Input:       store.IssueInput{Title: storyIssue.Title, Body: storyIssue.Body, LabelIDs: []int64{1, 2}},
 		Labels:      storyLabels,
+		Section:     "issues",
 	})
 }
 
 // StoryIssueDelete renders the delete confirmation page.
 func StoryIssueDelete() {
 	renderIssueDelete(http.StatusOK, issueDeletePage{
-		Title: "Delete issue #2",
-		Issue: storyIssue,
+		Title:   "Delete issue #2",
+		Issue:   storyIssue,
+		Section: "issues",
 	})
 }
 
@@ -257,6 +340,83 @@ func StoryIssueDelete() {
 func StoryError404() {
 	renderError(http.StatusNotFound, "Not found",
 		"The page or issue you are looking for does not exist or may have been deleted.")
+}
+
+// StoryDiscussionList renders the discussion list with several entries,
+// one of them answered.
+func StoryDiscussionList() {
+	renderDiscussionList(http.StatusOK, discussionListPage{
+		Title:       "Discussions",
+		Discussions: storyDiscussions,
+		Categories:  storyCategories,
+		Filter:      store.DiscussionListFilter{Page: 1, PerPage: perPage},
+		Total:       len(storyDiscussions),
+		Page:        1,
+		TotalPages:  1,
+		RangeStart:  1,
+		RangeEnd:    len(storyDiscussions),
+		Section:     "discussions",
+	})
+}
+
+// StoryDiscussionListEmpty renders the filtered discussion list with no
+// results.
+func StoryDiscussionListEmpty() {
+	renderDiscussionList(http.StatusOK, discussionListPage{
+		Title:           "Discussions",
+		Categories:      storyCategories,
+		Filter:          store.DiscussionListFilter{CategorySlug: "qa", Answered: "yes", Query: "zzz", Page: 1, PerPage: perPage},
+		Page:            1,
+		HasActiveFilter: true,
+		Section:         "discussions",
+	})
+}
+
+// StoryDiscussionDetail renders the Q&A detail page: an answer-marked
+// top-level comment with a nested reply.
+func StoryDiscussionDetail() {
+	renderDiscussionDetail(http.StatusOK, discussionDetailPage{
+		Title:      "#2 How do custom labels get their color?",
+		Discussion: storyDiscussion,
+		Comments:   storyDComments,
+		Section:    "discussions",
+	})
+}
+
+// StoryDiscussionFormNew renders the empty create form with categories.
+func StoryDiscussionFormNew() {
+	renderDiscussionForm(http.StatusOK, discussionFormPage{
+		Title:       "New discussion",
+		Heading:     "New discussion",
+		Action:      "/discussions",
+		SubmitLabel: "Create discussion",
+		Categories:  storyCategories,
+		Section:     "discussions",
+	})
+}
+
+// StoryDiscussionFormErrors re-renders the create form with a missing
+// title and no category selected.
+func StoryDiscussionFormErrors() {
+	renderDiscussionForm(http.StatusUnprocessableEntity, discussionFormPage{
+		Title:       "New discussion",
+		Heading:     "New discussion",
+		Action:      "/discussions",
+		SubmitLabel: "Create discussion",
+		Input:       store.DiscussionInput{Body: "title was empty"},
+		Categories:  storyCategories,
+		Errors:      discussionFormErrors{Title: "Title is required.", Category: "Please pick a category."},
+		Section:     "discussions",
+	})
+}
+
+// StoryDiscussionDelete renders the delete confirmation page.
+func StoryDiscussionDelete() {
+	renderDiscussionDelete(http.StatusOK, discussionDeletePage{
+		Title:      "Delete discussion #2",
+		Discussion: storyDiscussion,
+		Section:    "discussions",
+	})
 }
 
 // storyStore implements the Store contract with story fixtures so
@@ -275,7 +435,7 @@ func (storyStore) GetIssue(ctx context.Context, id int64) (*store.Issue, error) 
 	}
 	return nil, store.ErrNotFound
 }
-func (storyStore) CreateIssue(ctx context.Context, in store.IssueInput) (int64, error) {
+func (storyStore) CreateIssue(ctx context.Context, in store.IssueInput, authorID int64) (int64, error) {
 	return 99, nil
 }
 func (storyStore) UpdateIssue(ctx context.Context, id int64, in store.IssueInput) error {
@@ -290,11 +450,59 @@ func (storyStore) DeleteIssue(ctx context.Context, id int64) error {
 func (storyStore) ListComments(ctx context.Context, issueID int64) ([]*store.Comment, error) {
 	return storyComments, nil
 }
-func (storyStore) CreateComment(ctx context.Context, issueID int64, body string) (int64, error) {
+func (storyStore) CreateComment(ctx context.Context, issueID int64, body string, authorID int64) (int64, error) {
 	return 1, nil
 }
 func (storyStore) ListLabels(ctx context.Context) ([]*store.Label, error) {
 	return storyLabels, nil
+}
+
+func (storyStore) ListDiscussions(ctx context.Context, f store.DiscussionListFilter) ([]*store.Discussion, int, error) {
+	return storyDiscussions, len(storyDiscussions), nil
+}
+func (storyStore) GetDiscussion(ctx context.Context, id int64) (*store.Discussion, error) {
+	for _, d := range storyDiscussions {
+		if d.ID == id {
+			return d, nil
+		}
+	}
+	return nil, store.ErrNotFound
+}
+func (storyStore) CreateDiscussion(ctx context.Context, in store.DiscussionInput, authorID int64) (int64, error) {
+	return 99, nil
+}
+func (storyStore) UpdateDiscussion(ctx context.Context, id int64, in store.DiscussionInput) error {
+	return nil
+}
+func (storyStore) DeleteDiscussion(ctx context.Context, id int64) error {
+	return nil
+}
+func (storyStore) ListDiscussionComments(ctx context.Context, discussionID int64) ([]*store.DiscussionComment, error) {
+	return storyDComments, nil
+}
+func (storyStore) CreateDiscussionComment(ctx context.Context, discussionID, parentID int64, body string, authorID int64) (int64, error) {
+	return 1, nil
+}
+func (storyStore) SetCommentAnswer(ctx context.Context, discussionID, commentID int64, answer bool) error {
+	return nil
+}
+func (storyStore) ListDiscussionCategories(ctx context.Context) ([]*store.DiscussionCategory, error) {
+	return storyCategories, nil
+}
+func (storyStore) CreateUser(ctx context.Context, name, passwordHash string) (int64, error) {
+	return 1, nil
+}
+func (storyStore) AuthenticateUser(ctx context.Context, name, password string) (*store.User, error) {
+	return &store.User{ID: 1, Name: name}, nil
+}
+func (storyStore) CreateSession(ctx context.Context, userID int64, ttl time.Duration) (string, error) {
+	return "story-token", nil
+}
+func (storyStore) SessionUser(ctx context.Context, token string, ttl time.Duration) (*store.User, error) {
+	return &store.User{ID: 1, Name: "demo"}, nil
+}
+func (storyStore) DeleteSession(ctx context.Context, token string) error {
+	return nil
 }
 
 // StoryHttpIssueList drives the real mux for GET /issues, so the

@@ -115,6 +115,7 @@ CREATE INDEX IF NOT EXISTS idx_issue_labels_label ON issue_labels(label_id);
 var migrations = []func(ctx context.Context, tx *sql.Tx) error{
 	migrateV1, // base schema (issues, comments, labels, issue_labels)
 	migrateV2, // accounts: users/sessions + author_id on issues/comments
+	migrateV3, // discussions: categories, discussions, discussion_comments
 }
 
 // schemaVersion is the user_version a fully migrated database reports.
@@ -147,6 +148,49 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 ALTER TABLE issues ADD COLUMN author_id INTEGER REFERENCES users(id);
 ALTER TABLE comments ADD COLUMN author_id INTEGER REFERENCES users(id);
+`)
+	return err
+}
+
+// migrateV3 adds the discussions schema (docs/sketch/ja/discussions.md,
+// 案B: 並列テーブル). Discussions have no status column — they never close;
+// a qa-category discussion derives "answered" from a comment's is_answer.
+// The partial unique index on discussion_comments keeps at most one answer
+// per discussion at the database level. parent_id is a self-FK limited to
+// top-level parents by store validation (existence is all a FK can check).
+func migrateV3(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, `
+CREATE TABLE IF NOT EXISTS discussion_categories (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	name TEXT NOT NULL UNIQUE,
+	slug TEXT NOT NULL UNIQUE,
+	description TEXT NOT NULL DEFAULT '',
+	format TEXT NOT NULL DEFAULT 'open' CHECK(format IN ('open', 'qa'))
+);
+CREATE TABLE IF NOT EXISTS discussions (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	category_id INTEGER NOT NULL REFERENCES discussion_categories(id),
+	author_id INTEGER REFERENCES users(id),
+	title TEXT NOT NULL,
+	body TEXT NOT NULL DEFAULT '',
+	created_at INTEGER NOT NULL,
+	updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS discussion_comments (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	discussion_id INTEGER NOT NULL REFERENCES discussions(id) ON DELETE CASCADE,
+	parent_id INTEGER REFERENCES discussion_comments(id) ON DELETE CASCADE,
+	author_id INTEGER REFERENCES users(id),
+	is_answer INTEGER NOT NULL DEFAULT 0,
+	body TEXT NOT NULL,
+	created_at INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_dcomments_answer
+	ON discussion_comments(discussion_id) WHERE is_answer = 1;
+CREATE INDEX IF NOT EXISTS idx_discussions_category_created
+	ON discussions(category_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_dcomments_discussion_created
+	ON discussion_comments(discussion_id, created_at);
 `)
 	return err
 }

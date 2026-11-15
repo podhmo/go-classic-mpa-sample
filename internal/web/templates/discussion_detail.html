@@ -1,0 +1,131 @@
+{{define "content"}}
+{{/* Copies each comment's #comment-N permalink via Invoker Commands + the
+   Async Clipboard API. Deferred external file (CSP script-src 'self'). */}}
+<script src="/static/copy-permalink.js" defer></script>
+{{/* Ctrl/Cmd+Enter submits the comment form from the textarea — IME-safe by
+   construction (guide ime-safe-enter-submit). Deferred external file. */}}
+<script src="/static/enter-submit.js" defer></script>
+{{/* Syncs aria-invalid/aria-describedby with :user-invalid and announces
+   newly-shown errors via a polite live region (guide
+   accessible-error-announcement). Deferred external file. */}}
+<script src="/static/form-errors.js" defer></script>
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="/discussions">Discussions</a> <span aria-hidden="true">/</span> <span aria-current="page">#{{.Discussion.ID}}</span>
+</nav>
+
+<article class="card issue-detail">
+  <header class="issue-detail-head">
+    <div class="issue-title-row">
+      <a class="category-badge" href="/discussions?category={{.Discussion.Category.Slug}}">{{.Discussion.Category.Name}}</a>
+      <h1>{{.Discussion.Title}} <span class="issue-num">#{{.Discussion.ID}}</span></h1>
+    </div>
+    <p class="issue-meta">
+      Opened by {{authorName .Discussion.Author}} <time datetime="{{.Discussion.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .Discussion.CreatedAt}}</time>
+      · Last updated <time datetime="{{.Discussion.UpdatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .Discussion.UpdatedAt}}</time>
+    </p>
+  </header>
+
+  {{if .Discussion.Body}}
+  <div class="issue-body markdown-body">{{markdown .Discussion.Body}}</div>
+  {{else}}
+  <div class="issue-body issue-body-empty"><em>No description provided.</em></div>
+  {{end}}
+
+  <div class="issue-actions">
+    <a class="btn" href="/discussions/{{.Discussion.ID}}/edit">Edit</a>
+    <button type="button" class="btn btn-danger delete-open" commandfor="delete-dialog" command="show-modal">Delete</button>
+    <a class="btn btn-danger delete-fallback" href="/discussions/{{.Discussion.ID}}/delete">Delete</a>
+  </div>
+
+  <dialog id="delete-dialog" class="confirm-dialog" closedby="any" aria-labelledby="delete-dialog-title" aria-describedby="delete-dialog-desc">
+    <h2 id="delete-dialog-title">Delete discussion #{{.Discussion.ID}}?</h2>
+    <p id="delete-dialog-desc">This permanently removes <strong>{{.Discussion.Title}}</strong> and all of its comments. This action cannot be undone.</p>
+    <form method="post" action="/discussions/{{.Discussion.ID}}/delete" class="form-actions">
+      <button type="button" class="btn" commandfor="delete-dialog" command="close" autofocus>Cancel</button>
+      <button type="submit" class="btn btn-danger">Delete discussion</button>
+    </form>
+  </dialog>
+</article>
+
+<section id="comments" class="comments">
+  <h2>Comments{{if .Comments}} ({{len .Comments}}){{end}}</h2>
+
+  {{if .Comments}}
+  <ol class="comment-list" role="list">
+    {{range .Comments}}
+    <li class="card comment{{if .IsAnswer}} comment-answer{{end}}" id="comment-{{.ID}}">
+      <header class="comment-meta">
+        {{if .IsAnswer}}<span class="badge badge-answer">Answer</span>{{end}}
+        <span class="comment-author">{{authorName .Author}} commented</span>
+        <a class="comment-permalink" href="#comment-{{.ID}}"><time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .CreatedAt}}</time> <span class="visually-hidden">(comment {{.ID}})</span></a>
+        <span class="copy-wrap">
+          <button type="button" class="copy-btn" command="--copy-permalink" commandfor="comment-{{.ID}}" data-url="/discussions/{{$.Discussion.ID}}#comment-{{.ID}}" aria-label="Copy link to comment {{.ID}}">copy link</button>
+          <span class="copy-tip" role="status"></span>
+        </span>
+      </header>
+      <div class="comment-body markdown-body">{{markdown .Body}}</div>
+      <div class="comment-actions">
+        {{if eq $.Discussion.Category.Format "qa"}}
+        <form method="post" action="/discussions/{{$.Discussion.ID}}/comments/{{.ID}}/answer" class="inline-form">
+          {{if .IsAnswer}}
+          <input type="hidden" name="answer" value="0">
+          <button type="submit" class="btn btn-quiet">Unmark answer</button>
+          {{else}}
+          <input type="hidden" name="answer" value="1">
+          <button type="submit" class="btn btn-quiet">Mark as answer</button>
+          {{end}}
+        </form>
+        {{end}}
+        <details class="reply-details"{{if and $.ReplyDraftID (eq $.ReplyDraftID .ID) $.CommentError}} open{{end}}>
+          <summary>Reply</summary>
+          <form method="post" action="/discussions/{{$.Discussion.ID}}/comments" class="comment-form reply-form" novalidate>
+            <input type="hidden" name="parent_id" value="{{.ID}}">
+            <div class="field">
+              <label for="reply-body-{{.ID}}">Reply to {{authorName .Author}}</label>
+              <textarea id="reply-body-{{.ID}}" name="body" rows="3" required data-error="reply-error-{{.ID}}" aria-keyshortcuts="Control+Enter Meta+Enter"{{if and $.ReplyDraftID (eq $.ReplyDraftID .ID) $.CommentError}} aria-invalid="true" aria-describedby="reply-error-{{.ID}} reply-hint-{{.ID}}" autofocus{{else}} aria-invalid="false" aria-describedby="reply-hint-{{.ID}}"{{end}}>{{if eq $.ReplyDraftID .ID}}{{$.CommentDraft}}{{end}}</textarea>
+              <p class="field-error{{if not (and $.ReplyDraftID (eq $.ReplyDraftID .ID) $.CommentError)}} field-error-pending{{end}}" id="reply-error-{{.ID}}">{{if eq $.ReplyDraftID .ID}}{{or $.CommentError "Comment is required."}}{{else}}Comment is required.{{end}}</p>
+              <p class="field-hint" id="reply-hint-{{.ID}}">Markdown (GFM) supported. Ctrl+Enter (Cmd+Enter on macOS) submits.</p>
+            </div>
+            <button type="submit" class="btn btn-primary">Reply</button>
+          </form>
+        </details>
+      </div>
+      {{if .Replies}}
+      <ol class="comment-replies" role="list">
+        {{range .Replies}}
+        <li class="card comment comment-reply" id="comment-{{.ID}}">
+          <header class="comment-meta">
+            <span class="comment-author">{{authorName .Author}} replied</span>
+            <a class="comment-permalink" href="#comment-{{.ID}}"><time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .CreatedAt}}</time> <span class="visually-hidden">(comment {{.ID}})</span></a>
+            <span class="copy-wrap">
+              <button type="button" class="copy-btn" command="--copy-permalink" commandfor="comment-{{.ID}}" data-url="/discussions/{{$.Discussion.ID}}#comment-{{.ID}}" aria-label="Copy link to comment {{.ID}}">copy link</button>
+              <span class="copy-tip" role="status"></span>
+            </span>
+          </header>
+          <div class="comment-body markdown-body">{{markdown .Body}}</div>
+        </li>
+        {{end}}
+      </ol>
+      {{end}}
+    </li>
+    {{end}}
+  </ol>
+  {{else}}
+  <p class="muted">No comments yet.</p>
+  {{end}}
+
+  <form method="post" action="/discussions/{{.Discussion.ID}}/comments" class="comment-form card" novalidate>
+    <div class="field">
+      <label for="comment-body">Add a comment</label>
+      <textarea id="comment-body" name="body" rows="4" required data-error="comment-error" aria-keyshortcuts="Control+Enter Meta+Enter"{{if and .CommentError (not .ReplyDraftID)}} aria-invalid="true" aria-describedby="comment-error comment-hint" autofocus{{else}} aria-invalid="false" aria-describedby="comment-hint"{{end}}>{{if not .ReplyDraftID}}{{.CommentDraft}}{{end}}</textarea>
+      <p class="field-error{{if or (not .CommentError) .ReplyDraftID}} field-error-pending{{end}}" id="comment-error">{{or .CommentError "Comment is required."}}</p>
+      <p class="field-hint" id="comment-hint">Markdown (GFM) supported. Raw HTML is not rendered. Ctrl+Enter (Cmd+Enter on macOS) submits.{{if .User}} Posting as @{{.User.Name}}.{{else}} Posting as anonymous — <a href="/login?next=/discussions/{{$.Discussion.ID}}">log in</a> to attach your name.{{end}}</p>
+    </div>
+    <button type="submit" class="btn btn-primary">Comment</button>
+  </form>
+</section>
+
+{{/* Back to top: shown only once the page is scrolled down, via a
+   scroll-state container query on the root scroller — no JS needed. */}}
+<a class="back-to-top" href="#main-content" aria-label="Back to top">↑ Top</a>
+{{end}}
