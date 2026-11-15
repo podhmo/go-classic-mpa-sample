@@ -1,8 +1,10 @@
 # no-comments スキル適用の記録
 
 [cursor/plugins の pstack](https://github.com/cursor/plugins/tree/main/pstack) にある
-`no-comments` スキル（番犬: `comment-sicko` エージェント定義）を `.agents/skills/no-comments/` に
-インストールし、ファーストパーティのコード全量（`main.go`, `cmd/`, `internal/`, `tools/` の
+`no-comments` スキルを `.agents/skills/no-comments/` にインストール（このリポジトリ向けに
+改変: Cursor のサブエージェント spawn 系の記述を落とし、実行者自身が `agents/comment-sicko.md`
+の判定規則を適用する形にした。参照先の `why` スキルも `.agents/skills/why/` に vendored）し、
+ファーストパーティのコード全量（`main.go`, `cmd/`, `internal/`, `tools/` の
 Go ファイル、および `internal/web/static/` の JS/CSS、templates の HTML コメント）に適用した結果の記録。
 `third_party/` は対象外（vendored なので our-code ではない）。
 
@@ -95,7 +97,8 @@ keep-list に該当するか、コードが言えない情報を運ぶものは�
 - MUST KILL 相当: fake/storyStore の store 契約の手動複写 → 共有 contract test 化が望ましい。
 - CSS セクション見出しの扱い（上記）。
 - comment-sicko 本来の「サブエージェントを spawn して審査させる」フローは、クォータの
-  関係で今回は自分自身が sicko 役を兼ねた。独立視点の審査は受けていない。
+  関係で今回は自分自身が sicko 役を兼ねた。独立視点の審査は受けていない。SKILL.md 自体も
+  この運用に合わせて改変済み（spawn 指示・poteto-mode・/architect 参照を除去）。
 
 ## 検証
 
