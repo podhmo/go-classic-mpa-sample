@@ -1157,8 +1157,12 @@ func TestPartialSetStatusContract(t *testing.T) {
 	if resp2.StatusCode != http.StatusOK {
 		t.Fatalf("no-op partial status POST status = %d, want 200", resp2.StatusCode)
 	}
-	stamp := got.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z07:00")
-	if !strings.Contains(body2, `datetime="`+stamp+`"`) {
+	// Format the stored value the way the template does — in the time's
+	// own zone, not forced to UTC. A non-UTC zone renders "+09:00", which
+	// html/template escapes to &#43; in the attribute, so normalize the
+	// body before comparing (works in any local zone).
+	stamp := got.UpdatedAt.Format("2006-01-02T15:04:05Z07:00")
+	if !strings.Contains(strings.ReplaceAll(body2, "&#43;", "+"), `datetime="`+stamp+`"`) {
 		t.Errorf("no-op toggle fragment must keep stored updated_at %q", stamp)
 	}
 }
