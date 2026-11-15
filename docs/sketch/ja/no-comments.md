@@ -87,6 +87,21 @@ keep-list に該当するか、コードが言えない情報を運ぶものは�
   MUST KILL の匂いがある: fakeStore/storyStore が実装契約を手で書き写している
   （契約ドリフトのリスク）。根治は fake と実 store の共有 contract-test 化で、
   コメント掃除の範囲外なので open として残す。
+  → **追検証（why 相当: 履歴+意味突き合わせ）の結果**:
+  - シグネチャの乖離は構造的に起きえない（`var _ Store = (*fakeStore)(nil)`、
+    `New(newStoryStore())` でコンパイル時強制）。メソッド集合は web.Store 24 本と完全一致。
+  - 履歴の乖離も確認できず: 契約変更（#43 セッション、#44/#49 answer マーク、
+    #62 updated_at bump）は全て同一コミットで fake も更新されている。
+  - 一方で**未宣言の意味論乖離を現行コードに発見**:
+    1. `storyStore.SetCommentAnswer` — 本物は reply へのマークで `ErrNotAnswerable`
+       を返すが storyStore は `ErrNotFound`。qa 以外カテゴリへのマーク拒否チェックも無い
+    2. `storyStore.ListIssues` は `ListFilter` を完全無視（fixture をそのまま返す）
+    3. `fakeStore.SessionUser` は ttl を無視（失効・スライド更新なし）、
+       `APITokenUser` は常に `ErrNotFound` のスタブ
+    いずれも storybook/テスト用途の意図的簡略化だが、storyStore の
+    「implements the Store contract」という記述がやや過大で、乖離は各メソッドに
+    宣言されていない。「コメントの複写が正しいか」ではなく「複写の裏の実装が
+    すでに緩く乖離している」のが実態 —— 共有 contract-test 化の動機が補強された。
 - **`// Regression: Devin Review findings — ...`** は issue リンク相当として keep。
 - `//go:embed`, `//go:build` などディレクティブはコメントではないので無対象。
 - HTML テンプレートの `{{/* ... */}}` コメントは「なぜこの script タグがここにあるか」の
