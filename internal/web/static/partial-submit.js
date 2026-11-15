@@ -14,6 +14,46 @@
 // this script itself swapped in (and future injected forms).
 import { toast } from "./toast.js";
 
+// Scoped view transitions (guide scoped-component-transitions): each
+// DOM swap runs inside element.startViewTransition() on the smallest
+// element containing every affected node, so the component cross-fades
+// without blocking pointer events on the rest of the page or obscuring
+// toasts/popovers in the top layer (a document-scoped transition
+// would). Element-scoped transitions are Chrome 147+; elsewhere the
+// update runs immediately with no animation — same DOM, same behavior.
+// Reduced motion skips the transition too (the CSS kill-switch below
+// covers other callers).
+const supportsScopedTransition =
+  "startViewTransition" in Element.prototype &&
+  !matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function runScopedTransition(scopeEl, updateDOM) {
+  if (!supportsScopedTransition || !scopeEl) {
+    updateDOM();
+    return;
+  }
+  const transition = scopeEl.startViewTransition(updateDOM);
+  // A second submit reusing the same scope skips this transition and
+  // rejects ready — swallow it so it doesn't surface as an error.
+  transition.ready.catch(() => {});
+}
+
+// Smallest element containing every affected node: for an append that
+// also carries data-swap meta nodes (which live outside the list), or a
+// replace touching several spots at once, the scope is their common
+// ancestor — containing both old and new states of everything that
+// changes.
+function commonScope(elements) {
+  let scope = elements[0];
+  while (
+    scope &&
+    !elements.every((el) => scope === el || scope.contains(el))
+  ) {
+    scope = scope.parentElement;
+  }
+  return scope ?? document.documentElement;
+}
+
 // Server-rendered same-origin fragment, parsed via <template> so the
 // markup stays inert (<script> never executes) until insertion. Note:
 // Document.parseHTML is NOT used — it runs the default Sanitizer, which
@@ -132,52 +172,69 @@ async function postPartial(form) {
       // redirection (guide persistent-toast-notifications).
       const replacement = nodes[0];
       if (!(replacement instanceof HTMLFormElement)) throw new Error("unexpected 422 fragment");
-      form.replaceWith(replacement);
-      (replacement.querySelector("[autofocus]") ?? replacement.querySelector("textarea"))?.focus();
+      // The scope must be the form's parent: the form itself is
+      // replaced, and the scope has to persist through the swap.
+      runScopedTransition(form.parentElement, () => {
+        form.replaceWith(replacement);
+        (replacement.querySelector("[autofocus]") ?? replacement.querySelector("textarea"))?.focus();
+      });
       return;
     }
     if (!res.ok || nodes.length === 0) throw new Error(`post failed: ${res.status}`);
 
     if (form.dataset.partialMode === "replace") {
-      swapTargets(form, nodes);
-      // The submitted form went away with its host element: move focus to
-      // its re-rendered counterpart (same action ⇒ same control). This is
-      // focus continuity, not a jump — no announcement conflicts.
-      const action = form.getAttribute("action");
-      if (action) {
-        document
-          .querySelector(`form[action="${CSS.escape(action)}"] button[type="submit"]`)
-          ?.focus();
-      }
+      const targets = nodes
+        .map((n) => (n.id ? document.getElementById(n.id) : null))
+        .filter(Boolean);
+      runScopedTransition(commonScope(targets.length ? targets : [form]), () => {
+        swapTargets(form, nodes);
+        // The submitted form went away with its host element: move focus to
+        // its re-rendered counterpart (same action ⇒ same control). This is
+        // focus continuity, not a jump — no announcement conflicts.
+        const action = form.getAttribute("action");
+        if (action) {
+          document
+            .querySelector(`form[action="${CSS.escape(action)}"] button[type="submit"]`)
+            ?.focus();
+        }
+      });
       toast(form.dataset.partialAnnounce || "Updated.");
       return;
     }
 
     const target = document.querySelector(form.dataset.partialTarget);
     if (!target) throw new Error(`no insertion target: ${form.dataset.partialTarget}`);
+    // The data-swap nodes (e.g. the bumped header meta) live outside the
+    // insertion target, so the scope is their common ancestor.
+    const swapEls = nodes
+      .filter((n) => n.hasAttribute("data-swap"))
+      .map((n) => (n.id ? document.getElementById(n.id) : null))
+      .filter(Boolean);
     let appended = null;
-    for (const node of nodes) {
-      // A node marked data-swap (e.g. the header meta re-rendered because
-      // the post bumped updated_at) replaces its stale counterpart by id
-      // instead of appending to the list. A swap node whose id is already
-      // gone is skipped rather than appended in the wrong place.
-      if (node.hasAttribute("data-swap")) {
-        const existing = node.id ? document.getElementById(node.id) : null;
-        existing?.replaceWith(node);
-        continue;
+    runScopedTransition(commonScope([target, ...swapEls]), () => {
+      for (const node of nodes) {
+        // A node marked data-swap (e.g. the header meta re-rendered because
+        // the post bumped updated_at) replaces its stale counterpart by id
+        // instead of appending to the list. A swap node whose id is already
+        // gone is skipped rather than appended in the wrong place.
+        if (node.hasAttribute("data-swap")) {
+          const existing = node.id ? document.getElementById(node.id) : null;
+          existing?.replaceWith(node);
+          continue;
+        }
+        target.append(node);
+        appended = node;
       }
-      target.append(node);
-      appended = node;
-    }
-    if (target.hidden) target.hidden = false;
-    // The "No comments yet." note lives next to the top-level list.
-    const note = target.parentElement?.querySelector("[data-empty-note]");
-    if (note) note.hidden = true;
-    const count = document.querySelector("[data-comment-count]");
-    if (count) {
-      count.textContent = String(Number.parseInt(count.textContent, 10) + 1);
-      count.parentElement.hidden = false; // unwrap "Comments (N)"
-    }
+      if (target.hidden) target.hidden = false;
+      // The "No comments yet." note lives next to the top-level list.
+      const note = target.parentElement?.querySelector("[data-empty-note]");
+      if (note) note.hidden = true;
+      const count = document.querySelector("[data-comment-count]");
+      if (count) {
+        count.textContent = String(Number.parseInt(count.textContent, 10) + 1);
+        count.parentElement.hidden = false; // unwrap "Comments (N)"
+      }
+    });
 
     const added = appended;
     resetPostedForm(form);

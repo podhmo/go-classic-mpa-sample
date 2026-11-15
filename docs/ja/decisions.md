@@ -411,3 +411,12 @@
 - **入退場アニメーション**: `@starting-style` + `transition-behavior: allow-discrete`（shorthand に入れず別プロパティ宣言 — guide の DO）。display/overlay も transition 対象にして top layer 退場を拾う。`prefers-reduced-motion` で全無効。
 - **partial-submit.js の成功 announce() を toast() に置換**: 422 差し替え・エラー経路は従来どおり（role="alert" インライン表示 + フォーカス遷移 — toast を出さない、guide の DON'T）。
 - **検証**: `go test ./...`（`TestStaticToastJS` 追加 — module import なので `<script>` タグ検査では漏れる）。実ブラウザでコメント投稿 → 右下に "Comment posted. [Close]" が popover-open で出る、Close で消える、8s 自動消去、コンソールエラー 0 を確認。
+
+## 部分更新の scoped view transition（2026-11-16、`devin/1794771565-partial-vt` ブランチ）
+
+- **`element.startViewTransition()`（scoped）で swap を包む**: guide scoped-component-transitions の MANDATORY — document スコープだとページ全体のポインタイベントを止め、top layer の toast/popover を隠す。スコープは「影響を受ける全ノードの最小共通祖先」を動的に計算（`commonScope`）：append は挿入リスト＋ `data-swap` メタ行、replace は全 swap 対象、422 はフォームの親（フォーム自身は差し替えられるのでスコープにできない）。
+- **feature detect は `Element.prototype.startViewTransition`**: document 版ではなく element 版の有無で判定（Chrome 147+）。非対応・`prefers-reduced-motion` はコールバック即実行の素の swap にフォールバック。`document.startViewTransition` への fallback は guide 非推奨（top layer を隠す・並行不可）なので採用しない。
+- **`transition.ready.catch(() => {})`**: 同一スコープ上の連続 submit は遷移をスキップし ready を reject するので握りつぶす（guide DO）。DOM 更新自体は必ず走る。
+- **子要素に view-transition-name を付けない**: `match-element` を各 `<li>` に付けると cross-document ナビ遷移にも per-item morph が漏れる。スコープ要素は UA により `view-transition-name: root` が付き自身が group として参加するので、コンポーネント単位の cross-fade は名前なしで得られる。
+- **reduced-motion の CSS 保険**: `::view-transition-group(*)/old(*)/new(*) { animation: none !important }` を `@media (prefers-reduced-motion: reduce)` に追加（guide MANDATORY）。JS 側でもスキップする二重化。
+- **検証**: Chromium 156 で `Element.prototype.startViewTransition` を計装して append（コメント投稿）・replace（status toggle）・422（空投稿）の 3 経路すべてで scoped VT が 1 回走り、DOM 差し替え・toast・エラー表示が正常、コンソールエラー 0 を確認。
