@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/podhmo/go-classic-mpa-sample/internal/api"
@@ -128,6 +130,21 @@ func userView(u *store.User) *api.User {
 	return &api.User{ID: u.ID, Name: u.Name}
 }
 
+// apiTokenViews is the --json shape of `auth token list`. The id is the
+// stored hash — the plaintext is never persisted, so there is nothing
+// more sensitive to emit.
+func apiTokenViews(tokens []*store.APIToken) []map[string]any {
+	out := make([]map[string]any, 0, len(tokens))
+	for _, t := range tokens {
+		out = append(out, map[string]any{
+			"id":         t.ID,
+			"user":       userView(t.User),
+			"created_at": t.CreatedAt.Format(time.RFC3339),
+		})
+	}
+	return out
+}
+
 // writeJSONFields writes v as JSON restricted to the comma-separated top-
 // level field names, like gh's `--json field1,field2`. For a slice input
 // the selection applies to each element.
@@ -179,6 +196,81 @@ func writeJSONFields(w io.Writer, v any, fields string) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(out)
+}
+
+// decodeJSON re-marshals v through JSON so --template sees the same key
+// names as --json output (api DTO field names, snake_case).
+func decodeJSON(v any) (any, error) {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	var generic any
+	if err := json.Unmarshal(raw, &generic); err != nil {
+		return nil, err
+	}
+	return generic, nil
+}
+
+// writeTemplate renders v through a Go text/template, like gh's
+// --template. The template sees the decoded JSON shape (maps and slices),
+// so `{{.title}}` and `{{range .}}{{.id}} {{end}}` both work.
+func writeTemplate(w io.Writer, v any, tmpl string) error {
+	generic, err := decodeJSON(v)
+	if err != nil {
+		return err
+	}
+	t, err := template.New("output").Parse(tmpl)
+	if err != nil {
+		return usageError{msg: fmt.Sprintf("invalid --template: %v", err)}
+	}
+	return t.Execute(w, generic)
+}
+
+// --- color output (NO_COLOR/TTY detection) ---
+
+// colorEnabled reports whether stdout wants ANSI color: it must be a
+// character device (terminal) and NO_COLOR must be unset
+// (https://no-color.org). Non-TTY consumers (pipes, files, tests) always
+// get plain output.
+func (o Options) colorEnabled() bool {
+	if o.Getenv("NO_COLOR") != "" {
+		return false
+	}
+	f, ok := o.Stdout.(*os.File)
+	if !ok {
+		return false
+	}
+	fi, err := f.Stat()
+	return err == nil && fi.Mode()&os.ModeCharDevice != 0
+}
+
+// paint wraps s in an ANSI color when color output is enabled.
+func (o Options) paint(code, s string) string {
+	if s == "" || !o.colorEnabled() {
+		return s
+	}
+	return "\x1b[" + code + "m" + s + "\x1b[0m"
+}
+
+// statusText renders an issue status with gh-ish color hints: open
+// green, closed red.
+func (o Options) statusText(status string) string {
+	switch status {
+	case store.StatusOpen:
+		return o.paint("32", status)
+	case store.StatusClosed:
+		return o.paint("31", status)
+	}
+	return status
+}
+
+// answeredMark renders the discussion answer marker, green when colored.
+func (o Options) answeredMark(answered bool) string {
+	if !answered {
+		return ""
+	}
+	return o.paint("32", "answered")
 }
 
 func closeQuietly(c io.Closer) {

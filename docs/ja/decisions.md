@@ -383,3 +383,12 @@
 - **`discussion answer N --comment C [--unmark]`**: qa カテゴリの answer マークを `SetCommentAnswer` に直通。API が `{"answer": bool}` を取るので unmark も同じサブコマンドのフラグで表現（`unanswer` 別コマンドは増やさない）。
 - **view の comments はネスト出力**: top-level コメントの下に reply を一段深く表示し、answer コメントは `[answer]` を付記。`--comments --json` は issue 側と同じく comments をルートキーに添える。
 - **init は固定カテゴリもシードする（Devin Review 指摘対応）**: 「デモデータを蒔かない」方針は維持しつつ、discussion_categories は参照データ（作成経路が他に存在しない）として `store.SeedCategories`（テーブル空のときのみ挿入、冪等）を `init` でも呼ぶ。これがないと init 直後のスキーマのみ DB でローカルモード `discussion create` が必ず失敗する。
+
+## CLI Phase 4 仕上げの実装決定（2026-11-16、`devin/1794769881-cli-phase4` ブランチ）
+
+- **`api` のフィールドは `-f`（文字列）と `-F`（型付き）の 2 系統**: gh api 準拠。`-F` は `null|true|false|整数|浮動小数` を JSON 型に変換し、それ以外は文字列（gh の `@file` 展開は実装しない）。GET/HEAD ではクエリパラメータ、その他では JSON body（Content-Type: application/json）。`-X/--method` は大文字正規化。
+- **`--template` は Go text/template**: `--jq`（jq 言語の再実装）は持たず Go 標準のテンプレート出力とした。対象は `--json` を持つ全コマンド（issue/discussion/label の list・view、`auth token list`、`api`）。テンプレートが見るのはデコード後の JSON 語彙（`--json` と同じキー名）。`--json` とは排他（同時指定は usage エラー）。`api` ではレスポンス body を JSON デコードしてテンプレートに渡す。
+- **色付けは NO_COLOR/TTY 判定**: stdout がキャラクタデバイス かつ `NO_COLOR` 未設定のときだけ ANSI 色を付ける（https://no-color.org）。対象は issue の status（open=緑/closed=赤）、discussion の `answered` マークと `[answer]` タグ（緑）に限定 — 他の出力はプレーンのまま。パイプ・リダイレクト・テストでは常に無色。
+- **`auth token` の管理は `list`/`revoke` サブコマンド**: `list` はハッシュ先頭 8 文字の id + ユーザー + 発行時刻を出す（平文は永続化されていないので出しようもない）。`revoke` は位置引数の id（list が出すハッシュ prefix。曖昧ならエラー、該当なしもエラー）か、コマンドライン明示の `--token` 平文（`fs.Visit` で明示判定 — `ISSUES_TOKEN` env 既定値では誤 revoke させない。未知の平文は無害な no-op）。
+- **`issues completion` は静的スクリプト**: コマンド文法が固定なので生成器は持たず bash/zsh/fish のスクリプトを定数として埋め込んだ（`issues completion bash` 等で標準出力）。
+- **init は固定カテゴリもシード（PR #59 レビュー対応、前ブランチ）**: `store.SeedCategories` を公開して init から呼ぶ — 参照データ（他の作成経路なし）とデモデータを分け、init 直後のスキーマのみ DB でもローカル `discussion create` が動くようにした。

@@ -45,8 +45,12 @@ func issueList(ctx context.Context, o Options, args []string) error {
 	limit := fs.Int("limit", 30, "maximum issues to list")
 	page := fs.Int("page", 1, "page number")
 	jsonFields := fs.String("json", "", "output JSON with the named fields (comma-separated)")
+	tmpl := fs.String("template", "", "render output through a Go text/template")
 	if _, err := parseLeaf(fs, args, 0); err != nil {
 		return err
+	}
+	if *jsonFields != "" && *tmpl != "" {
+		return usageError{msg: "--json and --template are mutually exclusive"}
 	}
 	switch *state {
 	case "open", "closed", "all":
@@ -81,9 +85,12 @@ func issueList(ctx context.Context, o Options, args []string) error {
 	if *jsonFields != "" {
 		return writeJSONFields(o.Stdout, issueViews(issues), *jsonFields)
 	}
+	if *tmpl != "" {
+		return writeTemplate(o.Stdout, issueViews(issues), *tmpl)
+	}
 	for _, i := range issues {
 		fmt.Fprintf(o.Stdout, "%d\t%s\t%s\t%s\t%s\n",
-			i.ID, i.Status, i.Title, labelNames(i.Labels), fmtTimeShort(i.UpdatedAt))
+			i.ID, o.statusText(i.Status), i.Title, labelNames(i.Labels), fmtTimeShort(i.UpdatedAt))
 	}
 	return nil
 }
@@ -94,11 +101,15 @@ func issueView(ctx context.Context, o Options, args []string) error {
 	bf := o.addBackendFlags(fs)
 	comments := fs.Bool("comments", false, "include comments")
 	jsonFields := fs.String("json", "", "output JSON with the named fields (comma-separated)")
+	tmpl := fs.String("template", "", "render output through a Go text/template")
 	web := fs.Bool("web", false, "open the issue page in a browser (requires --server)")
 	fs.BoolVar(web, "w", false, "shorthand for --web")
 	rest, err := parseLeaf(fs, args, 1)
 	if err != nil {
 		return err
+	}
+	if *jsonFields != "" && *tmpl != "" {
+		return usageError{msg: "--json and --template are mutually exclusive"}
 	}
 	id, err := issueNumber(rest, 0)
 	if err != nil {
@@ -125,7 +136,13 @@ func issueView(ctx context.Context, o Options, args []string) error {
 			return err
 		}
 	}
-	if *jsonFields != "" {
+	out := func(v any) error {
+		if *tmpl != "" {
+			return writeTemplate(o.Stdout, v, *tmpl)
+		}
+		return writeJSONFields(o.Stdout, v, *jsonFields)
+	}
+	if *jsonFields != "" || *tmpl != "" {
 		if *comments {
 			// Issue fields stay at the root with "comments" added —
 			// nesting them under "issue" would make --json title
@@ -135,13 +152,13 @@ func issueView(ctx context.Context, o Options, args []string) error {
 				return err
 			}
 			m["comments"] = commentViews(cs)
-			return writeJSONFields(o.Stdout, m, *jsonFields)
+			return out(m)
 		}
-		return writeJSONFields(o.Stdout, issueViewJSON(issue), *jsonFields)
+		return out(issueViewJSON(issue))
 	}
 
 	fmt.Fprintf(o.Stdout, "title:\t%s\n", issue.Title)
-	fmt.Fprintf(o.Stdout, "status:\t%s\n", issue.Status)
+	fmt.Fprintf(o.Stdout, "status:\t%s\n", o.statusText(issue.Status))
 	fmt.Fprintf(o.Stdout, "author:\t%s\n", authorName(issue.Author))
 	fmt.Fprintf(o.Stdout, "labels:\t%s\n", labelNames(issue.Labels))
 	fmt.Fprintf(o.Stdout, "updated:\t%s\n", fmtTimeShort(issue.UpdatedAt))
@@ -363,8 +380,12 @@ func labelCmd(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("label list", flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
 	jsonFields := fs.String("json", "", "output JSON with the named fields (comma-separated)")
+	tmpl := fs.String("template", "", "render output through a Go text/template")
 	if _, err := parseLeaf(fs, args[1:], 0); err != nil {
 		return err
+	}
+	if *jsonFields != "" && *tmpl != "" {
+		return usageError{msg: "--json and --template are mutually exclusive"}
 	}
 	b, closer, err := o.backend(bf)
 	if err != nil {
@@ -378,6 +399,9 @@ func labelCmd(ctx context.Context, o Options, args []string) error {
 	}
 	if *jsonFields != "" {
 		return writeJSONFields(o.Stdout, labelViews(labels), *jsonFields)
+	}
+	if *tmpl != "" {
+		return writeTemplate(o.Stdout, labelViews(labels), *tmpl)
 	}
 	for _, l := range labels {
 		fmt.Fprintf(o.Stdout, "%s\t%s\n", l.Name, l.Color)

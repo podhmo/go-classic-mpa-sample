@@ -11,8 +11,9 @@
 //	issues discussion list|view|create|edit|delete
 //	issues discussion comment create N --body B [--parent C]
 //	issues discussion answer N --comment C [--unmark]
-//	issues auth token --user NAME     (local mode only)
-//	issues api <path>                 (remote mode only)
+//	issues auth token --user NAME | token list | token revoke  (local mode only)
+//	issues api <path> [-X METHOD] [-f k=v]... [-F k=v]...       (remote mode only)
+//	issues completion bash|zsh|fish
 //
 // Exit codes: 0 success / 1 runtime error / 2 usage error.
 package cli
@@ -58,12 +59,16 @@ type Backend interface {
 	ListDiscussionCategories(ctx context.Context) ([]*store.DiscussionCategory, error)
 }
 
-// TokenStore is the extra contract "auth token" needs. Issuance is a
-// local-mode operation: it writes the api_tokens row directly instead of
-// going through HTTP, so it needs the concrete store, not just Backend.
+// TokenStore is the extra contract "auth token" needs. Token management
+// is a local-mode operation: it reads and writes the api_tokens table
+// directly instead of going through HTTP, so it needs the concrete
+// store, not just Backend.
 type TokenStore interface {
 	UserByName(ctx context.Context, name string) (*store.User, error)
 	CreateAPIToken(ctx context.Context, userID int64) (string, error)
+	ListAPITokens(ctx context.Context) ([]*store.APIToken, error)
+	DeleteAPIToken(ctx context.Context, token string) error
+	DeleteAPITokenByID(ctx context.Context, hash string) error
 	Close() error
 }
 
@@ -112,6 +117,8 @@ func Run(ctx context.Context, o Options) int {
 		err = authCmd(ctx, o, args[1:])
 	case "api":
 		err = apiCmd(ctx, o, args[1:])
+	case "completion":
+		err = completionCmd(ctx, o, args[1:])
 	case "discussion":
 		err = discussionCmd(ctx, o, args[1:])
 	default:
@@ -184,7 +191,11 @@ Commands:
   discussion comment create N --body B [--parent C]
   discussion answer N --comment C [--unmark]
   auth token --user NAME     issue a per-user API token (local mode only)
-  api <path>                 raw GET against /api/v1 (remote mode only)
+  auth token list [--user NAME]      list issued tokens (local mode only)
+  auth token revoke (ID|--token T)   revoke a token (local mode only)
+  api <path>                 raw call to /api/v1 (remote mode only)
+                             [-X METHOD] [-f name=value]... [-F name=value]...
+  completion bash|zsh|fish   print a shell completion script
   help
 
 Backend selection:
