@@ -1,14 +1,20 @@
 # go-classic-mpa-sample
 
-A small issue tracker built as a **classic multi-page application (MPA)** in
-Go — server-rendered HTML, plain HTML forms for every state change, and
-**no JavaScript** so far (allowed once its behavior is verifiable in the
-homemade storybook; see `docs/ja/decisions.md`).
+A small issue tracker + discussions app built as a **classic multi-page
+application (MPA)** in Go — server-rendered HTML, plain HTML forms for
+every state change, and the POST → Redirect → GET (PRG) pattern
+everywhere. Two themes drive it:
 
-It demonstrates that a modern-looking, usable web UI can be built with only
-the request/response model: page navigation, forms, redirects, and URLs that
-carry state in query parameters. Everything follows the
-POST → Redirect → GET (PRG) pattern.
+- **Trying every modern web feature on an old design.** The
+  request/response model stays untouched, but the UI is a testbed for new
+  platform features: cross-document view transitions, anchor positioning,
+  Invoker Commands, Speculation Rules, the Custom Highlight API,
+  `field-sizing`, `light-dark()` / `contrast-color()` — plus a little
+  hand-written JavaScript where declarative features don't reach.
+- **Experiencing legacy-style web app development.** No SPA framework, no
+  ORM, no build step, no Node toolchain — just `net/http`,
+  `html/template` and SQLite, grown like a real codebase (accounts,
+  discussions, a JSON API, a gh-style CLI) instead of a toy.
 
 ## Tech stack
 
@@ -16,8 +22,10 @@ POST → Redirect → GET (PRG) pattern.
 - `http.ServeMux` with Go 1.22+ method+path patterns (`GET /issues/{id}`)
 - `database/sql` + SQLite via `modernc.org/sqlite` (no CGO)
 - `yuin/goldmark` for Markdown (GFM + GitHub-style `> [!NOTE]` alerts)
-  rendering of issue bodies/comments
-- Hand-written HTML/CSS — no frameworks, no ORM, no build step
+  rendering of issue/discussion bodies and comments
+- `x/crypto/argon2` (argon2id, PHC string form) for account passwords
+- Hand-written HTML/CSS and a few one-purpose ES modules under `/static/` —
+  no frameworks, no ORM, no build step
 
 ## Run
 
@@ -26,12 +34,13 @@ go run .
 ```
 
 Then open <http://localhost:8080> — `GET /` redirects to `/issues`.
-On first start the app creates the schema and seeds demo issues, labels and
-comments (only when the issues table is empty).
+On first start the app creates the schema and seeds demo issues, labels,
+discussion categories and comments (only when the tables are empty).
 
-> The server binds to `127.0.0.1` by default because there is **no
-> authentication**. Only bind to a public interface inside a trusted
-> network.
+> The server binds to `127.0.0.1` by default. Accounts exist for author
+> attribution, but there is **no authorization** — signed in or not,
+> anyone can do anything. Only bind to a public interface inside a
+> trusted network.
 
 ### `init` subcommand
 
@@ -52,14 +61,54 @@ Flags must come **before** the `init` argument — Go's `flag` package stops
 parsing at the first positional argument, so write `go run . -db x.db
 init`, not `go run . init -db x.db`. `-addr` has no effect in init mode.
 
+## Accounts
+
+`GET/POST /register`, `GET/POST /login`, `POST /logout`. Phase 1 is
+authentication only: posts and comments carry the author's name when
+signed in, anonymous use still works, and nothing is permission-gated.
+Passwords are argon2id hashes in PHC string form (parameters embedded, so
+re-tuning needs no migration); sessions are opaque tokens and only their
+SHA-256 is stored, so reading the table can't steal a live session.
+
+## CLI
+
+`cmd/issues` is a separate gh-style binary — distributing the client must
+not require shipping the server, so it is its own command:
+
+```sh
+go run ./cmd/issues issue list
+go run ./cmd/issues issue view 3
+go run ./cmd/issues comment create 3 --body "nice catch"
+go run ./cmd/issues discussion list
+go run ./cmd/issues auth token --user alice          # mint a per-user API token
+go run ./cmd/issues api /api/v1/issues -f q=bug      # raw escape hatch (gh-style -f/-F/-X)
+go run ./cmd/issues completion zsh                   # bash|zsh|fish
+```
+
+Two backends, selected automatically:
+
+- **local** (default): opens the SQLite file directly via `-db`/`ISSUES_DB`
+  — no server needed. `auth token …` is local-only.
+- **remote**: `--server`/`--token` or `ISSUES_SERVER`/`ISSUES_TOKEN` talks
+  to `/api/v1`. The raw `api` command is remote-only.
+
 ## Test
 
 ```sh
-go test ./...
+go test ./...                                   # unit + store + web + api + cli
+go test -tags=e2e -v ./internal/e2etests/       # CLI end-to-end against a live server
 ```
 
-The web layer is tested with `httptest` against an in-memory `Store`
-implementation (`internal/web/web_test.go`).
+The web and API layers are tested with `httptest` against in-memory
+`Store` implementations; the CLI is tested against both backends.
+
+## Storybook
+
+`make storybook` serves every page at <http://localhost:6006> with fake
+data and replayed production headers (CSP included) — UI work needs no
+database. It runs on `podhmo/minigo`, fetched once by `make setup-minigo`
+into `third_party/minigo`. `make storybook-watch` adds live reload.
+See `docs/ja/for-ui-designer.md`.
 
 ## Configuration
 
@@ -68,7 +117,7 @@ implementation (`internal/web/web_test.go`).
 | `-addr` | `ISSUES_ADDR` | `127.0.0.1:8080` | Listen address                                                         |
 | `-db`   | `ISSUES_DB`   | `issues.db`      | SQLite database file path                                              |
 | `-init` | —             | `false`          | Initialize the database and exit (same as the `init` subcommand)       |
-| `-api-token` | `ISSUES_API_TOKEN` | *(disabled)* | Bearer token for the JSON API (`/api/v1`); empty disables it        |
+| `-api-token` | `ISSUES_API_TOKEN` | *(unset)*   | Shared Bearer token for `/api/v1`; the API also mounts when per-user `api_tokens` exist |
 
 Example: `go run . -addr :8080 -db /tmp/my-issues.db` or
 `ISSUES_ADDR=:8080 go run .`.
@@ -77,35 +126,50 @@ Use `-db :memory:` for a throwaway database. `go run . -db PATH init` (or
 `-init`) prepares the database without serving — see the `init` subcommand
 above; flags must precede the `init` argument.
 
+The CLI reads its own variables: `ISSUES_DB` for local mode,
+`ISSUES_SERVER` + `ISSUES_TOKEN` for remote mode.
+
 ## Routes
 
-| Method | Path                       | Purpose                                          |
-| ------ | -------------------------- | ------------------------------------------------ |
-| GET    | `/`                        | 303 redirect to `/issues`                        |
-| GET    | `/issues`                  | Issue list: open/closed/all tabs, `?q=` search, `?label=` filter, `?sort=newest\|oldest`, `?page=` |
-| GET    | `/issues/new`              | Create form                                      |
-| POST   | `/issues`                  | Create issue → 303 to `/issues/{id}`             |
-| GET    | `/issues/{id}`             | Detail: body, labels, comments, comment form, actions |
-| GET    | `/issues/{id}/edit`        | Edit form                                        |
-| POST   | `/issues/{id}/edit`        | Update issue → 303 to detail                     |
-| POST   | `/issues/{id}/status`      | Toggle open/closed (hidden `status` field) → 303 |
-| GET    | `/issues/{id}/delete`      | Delete confirmation page (safe — never deletes)  |
-| POST   | `/issues/{id}/delete`      | Delete issue → 303 to `/issues`                  |
-| POST   | `/issues/{id}/comments`    | Add comment → 303 to `/issues/{id}#comments`     |
-| GET    | `/static/app.css`          | Embedded stylesheet                              |
+| Method | Path                                  | Purpose                                          |
+| ------ | ------------------------------------- | ------------------------------------------------ |
+| GET    | `/`                                   | 303 redirect to `/issues`                        |
+| GET/POST | `/register`                         | Create an account (session cookie on success)    |
+| GET/POST | `/login`                            | Sign in                                          |
+| POST   | `/logout`                             | Sign out → 303                                   |
+| GET    | `/issues`                             | Issue list: open/closed/all tabs, `?q=` search, `?label=` filter, `?sort=newest\|oldest`, `?page=` |
+| GET    | `/issues/new`                         | Create form                                      |
+| POST   | `/issues`                             | Create issue → 303 to `/issues/{id}`             |
+| GET    | `/issues/{id}`                        | Detail: body, labels, comments, comment form, actions |
+| GET/POST | `/issues/{id}/edit`                 | Edit form → 303 to detail                        |
+| POST   | `/issues/{id}/status`                 | Toggle open/closed (hidden `status` field) → 303 |
+| GET/POST | `/issues/{id}/delete`               | GET confirm page (safe) / POST delete → 303 to `/issues` |
+| POST   | `/issues/{id}/comments`               | Add comment → 303 to `/issues/{id}#comment-N`    |
+| GET    | `/discussions`                        | Discussion list: `?category=<slug>`, `?answered=`, `?q=`, `?sort=`, `?page=` |
+| GET/POST | `/discussions/new` + `/discussions` | Create form → create → 303 to detail             |
+| GET    | `/discussions/{id}`                   | Detail: category, comments with one-level replies |
+| GET/POST | `/discussions/{id}/edit`            | Edit form → 303 to detail                        |
+| GET/POST | `/discussions/{id}/delete`          | GET confirm page / POST delete → 303 to list     |
+| POST   | `/discussions/{id}/comments`          | Comment or reply (`parent_id`) → 303 to `#comment-N` |
+| POST   | `/discussions/{id}/comments/{cid}/answer` | Mark/unmark the Q&A answer (qa only) → 303  |
+| GET    | `/static/*`                           | Embedded CSS/JS assets (explicitly registered)   |
 
 Notes:
 
-- Successful mutations always answer `303 See Other` (PRG).
+- Successful mutations always answer `303 See Other` (PRG). Comment,
+  answer and status forms additionally carry `data-partial`, so with JS
+  enabled `partial-submit.js` posts them via `fetch` and swaps the
+  returned HTML fragment instead of reloading (`X-Partial` request
+  header); without JS the same forms do the classic round-trip.
 - Validation failures re-render the same form with `422`, preserving input
-  and showing field errors wired via `aria-describedby`.
+  and showing field errors wired via `aria-invalid`/`aria-describedby`.
 - Missing issues return a styled 404 page; method mismatches return 405
   automatically via ServeMux patterns.
 - CSRF protection uses the stdlib `http.NewCrossOriginProtection()`
   middleware (rejects cross-site non-GET requests via `Sec-Fetch-Site` /
   `Origin`), and POST bodies are capped at 1 MiB with `http.MaxBytesReader`.
-- Issue bodies and comments are stored as raw text and rendered as
-  Markdown (GFM via `goldmark`, including GitHub-style
+- Issue/discussion bodies and comments are stored as raw text and rendered
+  as Markdown (GFM via `goldmark`, including GitHub-style
   `> [!NOTE|TIP|IMPORTANT|WARNING|CAUTION]` alerts) at display time.
   Raw HTML in the source is omitted and unsafe link schemes
   (`javascript:`, `data:`, …) are neutralized by the renderer, so
@@ -113,9 +177,16 @@ Notes:
 
 ## JSON API (`/api/v1`)
 
-A machine-facing JSON API (design: `docs/sketch/ja/cli-and-web-api.md`) is
-mounted only when `-api-token`/`ISSUES_API_TOKEN` is set — no token, no
-endpoint. Every request then needs `Authorization: Bearer <token>`.
+A machine-facing JSON API (design: `docs/sketch/ja/cli-and-web-api.md`),
+mounted only when a credential exists — `-api-token`/`ISSUES_API_TOKEN`
+set **or** at least one per-user token minted via `issues auth token`.
+With neither, `/api/v1` is not mounted at all (fail-closed). Every
+request then needs `Authorization: Bearer <token>`.
+
+Two credential kinds:
+
+- the shared env token — constant-time compared; its writes stay anonymous
+- per-user `api_tokens` rows — writes carry that user's `author_id`
 
 | Method | Path                                          | Purpose                                             |
 | ------ | --------------------------------------------- | --------------------------------------------------- |
@@ -140,51 +211,100 @@ Notes:
 
 - Responses are `application/json`; errors use
   `{"error":{"message": ..., "fields": {...}}}` (`fields` only for
-  per-field 422s). Writes made through the API are attributed to no user
-  (anonymous) — the single shared token carries no identity.
+  per-field 422s).
 - Timestamps are RFC 3339 strings. Status changes stay a `POST` action
   endpoint, mirroring the HTML app's action routes.
 
 ## Data storage
 
-All data lives in a single SQLite file, `issues.db` by default (path from
-`-db`/`ISSUES_DB`), created in the working directory. `*.db` files are
-git-ignored. Deleting the file resets the app; the next start re-seeds demo
-data.
+All data — issues, comments, labels, discussions, users, sessions,
+`api_tokens` — lives in a single SQLite file, `issues.db` by default
+(path from `-db`/`ISSUES_DB`), created in the working directory. `*.db`
+files are git-ignored. Deleting the file resets the app; the next start
+re-seeds demo data.
+
+## Modern web features in use
+
+Declarative HTML/CSS first; JavaScript only where declarative features
+don't reach, always as external `/static/` files (inline scripts stay
+CSP-blocked), and always progressive enhancement — the same forms do a
+full PRG round-trip without it.
+
+- **Cross-document view transitions** — `@view-transition` opt-in; a fade
+  on plain navigation and directional back/forward slides keyed to the
+  document's own VT types
+- **Anchor positioning** — the moving tab underline is a named
+  view-transition element driven by `position-anchor`, no JS
+- **`::details-content`** — animated open/close for reply `<details>`
+- **Invoker Commands** — `command`/`commandfor` opens and closes the
+  `<dialog>` delete confirmation (browsers without support still get the
+  GET confirmation page); a custom `--copy-permalink` command backs each
+  comment's copy-link button
+- **Speculation Rules** — `Speculation-Rules` header + external
+  `application/speculationrules+json` ruleset prefetches likely next pages
+- **Custom Highlight API** — `?q=` hits marked in list titles
+  (`search-highlight.js`, the project's first JS)
+- **`field-sizing: content`** — textareas grow with input, capped in `lh`
+- **`content-visibility: auto`** — cheap rendering for long comment lists
+- **Dark mode** — `color-scheme` + `light-dark()` design tokens;
+  `contrast-color()`/Relative Color Syntax computes label-badge text
+- **Partial updates** — `partial-submit.js` posts eligible forms via
+  `fetch` and swaps returned fragments inside an element-scoped
+  `startViewTransition()`; success lands as a `popover` toast plus an
+  `aria-live` announcement
+- **Form UX / a11y** — `:user-invalid` styling, skip link, landmarks,
+  breadcrumbs with `aria-current`, per-link accessible names
 
 ## Architecture
 
 ```
 main.go            entry point: flags/env, store.Open, SeedDemoData,
-                   http.Server with timeouts, graceful shutdown (SIGINT/SIGTERM)
+                   http.Server with timeouts, graceful shutdown
+cmd/issues/        gh-style CLI binary (issue/comment/label/discussion/auth/api/completion)
+cmd/storybook/     UI preview server (separate module, runs on minigo)
 internal/store/    persistence: sqlite schema, queries, ErrNotFound contract.
                    Exposes *store.Store; no HTTP knowledge.
-internal/web/      HTTP layer: consumer-side `Store` interface (satisfied by
-                   *store.Store), handlers, html/template pages + shared
-                   layout, embedded static assets. No SQL knowledge.
-internal/web/templates/  layout.html + one file per page ({{define "content"}})
-internal/web/static/     app.css
+internal/web/      HTML layer: consumer-side Store interface, handlers,
+                   html/template pages, embedded static assets. No SQL.
+internal/api/      /api/v1 JSON surface: wire DTOs, Bearer auth, method dispatch
+internal/cli/      command grammar over a Backend interface (store or HTTP)
+internal/client/   HTTP Backend implementation for remote-mode CLI
+internal/auth/     argon2id password hashes + opaque session tokens
+internal/e2etests/ CLI end-to-end tests (build tag `e2e`)
+internal/web/templates/  layout.html + one file per page ({{define "content"}}) + fragments.html
+internal/web/static/     app.css + one-purpose ES modules
+tools/todo-gc/     TODO.md garbage collector
 ```
 
 Key design choices:
 
 - **PRG everywhere**: forms POST, handlers mutate, then 303-redirect so
   reloads never resubmit and history stays clean.
-- **State lives in URLs**: list filters (`status`, `q`, `label`, `sort`,
-  `page`) are query parameters — every filtered view is linkable, and
-  pagination/tab links preserve the active filters.
-- **Consumer-side interface**: `internal/web` declares the narrow `Store`
-  interface it needs; `*store.Store` satisfies it, tests substitute a fake.
+- **State lives in URLs**: list filters (`status`, `q`, `label`,
+  `category`, `answered`, `sort`, `page`) are query parameters — every
+  filtered view is linkable, and pagination/tab links preserve the active
+  filters.
+- **One contract, three consumers**: `internal/web`, `internal/api` and
+  `internal/cli` each declare the narrow `Store`-shaped interface they
+  need; `*store.Store` satisfies all of them, tests substitute fakes, and
+  the CLI swaps in `internal/client`'s HTTP implementation for remote
+  mode — commands never learn which backend they are talking to.
 - **Per-page template sets**: each page file defines `{{define "content"}}`
-  and is parsed together with `layout.html`, keeping pages independent.
+  and is parsed together with `layout.html`, keeping pages independent;
+  `fragments.html` shares comment/partial markup between full pages and
+  `X-Partial` responses.
 
 ## Intentionally not implemented
 
-- **Authentication / authorization** — single local user; bind stays on
-  localhost by default.
-- **JavaScript** — none today. Not banned: it was avoided because behavior
-  verification was costly, and is allowed now that the storybook can verify
-  interactions (see `docs/ja/decisions.md`). Declarative HTML/CSS stays
-  preferred — toggles and deletes are ordinary forms.
-- **Label admin UI** — labels are seeded; issue↔label assignment is supported.
+- **Authorization** — authentication exists for author attribution;
+  permissions do not. The bind stays on localhost by default.
+- **SPA-style JavaScript** — JS is allowed when the storybook can verify
+  its behavior (external files only), but declarative HTML/CSS stays
+  preferred; no HTMX/Turbo/frameworks (see `docs/ja/decisions.md`
+  「JavaScript 方針」).
+- **Label admin UI** — labels are seeded; issue↔label assignment is
+  supported.
+- **Discussion extras** — reactions, polls, pinning, category admin,
+  issue→discussion conversion are v3 candidates (see `docs/ja/roadmap.md`).
 - **i18n** — UI strings are English.
+- **Docker** — a single binary is the deploy story.
