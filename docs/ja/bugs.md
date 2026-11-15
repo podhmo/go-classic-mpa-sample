@@ -6,7 +6,9 @@
 
 ## 未修正
 
-（なし）
+| # | 重要度 | 状態 | 概要 | 詳細 |
+|---|--------|------|------|------|
+| 25 | nit | 未修正 | 部分更新の append パスで "Last updated" メタ行が stale | PR #49 の Devin Review 指摘から発覚した同種問題: コメント/返信の部分投稿（`createComment`/`createDiscussionComment` の `X-Partial` 応答）は store の `updated_at` を進めるが、fragment は新 `<li>` のみを返すためヘッダの "Last updated" がリロードまで古いまま。answer swap 側は `discussion_meta` ノード同梱で解決済み（PR #49）。append モードは全ノードを挿入先へ追加する設計なので、自己ターゲットする swap ノードを混ぜるにはプロトコル拡張（例: `data-swap` 印付きノードは `replaceWith`）が要る → TODO.md にタスク記録済 |
 
 ## 修正済み
 
