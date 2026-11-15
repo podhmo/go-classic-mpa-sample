@@ -671,3 +671,45 @@ func TestAPIMountedWithToken(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 }
+
+// With only per-user api_tokens as credentials (no shared env token) the
+// API is still reachable via WithAPIEnabled, and requests resolve to the
+// token's user. Without it, /api/v1 stays unmounted even when tokens
+// exist in the database.
+func TestAPIMountedWithUserTokensOnly(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	t.Cleanup(func() { st.Close() })
+
+	uid, err := st.CreateUser(t.Context(), "erin", "irrelevant-hash")
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	token, err := st.CreateAPIToken(t.Context(), uid)
+	if err != nil {
+		t.Fatalf("CreateAPIToken: %v", err)
+	}
+
+	// Mount gated only on the env token would leave the API unreachable.
+	srv := httptest.NewServer(New(st))
+	t.Cleanup(srv.Close)
+	status, _, _ := e2eGet(t, srv, "/api/v1/labels")
+	if status != http.StatusNotFound {
+		t.Fatalf("GET /api/v1/labels unmounted = %d, want 404", status)
+	}
+
+	srv2 := httptest.NewServer(New(st, WithAPIEnabled(true)))
+	t.Cleanup(srv2.Close)
+	req, _ := http.NewRequest("GET", srv2.URL+"/api/v1/labels", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := srv2.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("user-token GET = %d, want 200", resp.StatusCode)
+	}
+}

@@ -63,6 +63,7 @@ var migrations = []func(ctx context.Context, tx *sql.Tx) error{
 	migrateV1, // base schema (issues, comments, labels, issue_labels)
 	migrateV2, // accounts: users/sessions + author_id on issues/comments
 	migrateV3, // discussions: categories, discussions, discussion_comments
+	migrateV4, // api_tokens: per-user Bearer tokens for /api/v1
 }
 
 // schemaVersion is the user_version a fully migrated database reports.
@@ -138,6 +139,24 @@ CREATE INDEX IF NOT EXISTS idx_discussions_category_created
 	ON discussions(category_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_dcomments_discussion_created
 	ON discussion_comments(discussion_id, created_at);
+`)
+	return err
+}
+
+// migrateV4 adds the api_tokens table (docs/sketch/ja/cli-and-web-api.md
+// 「認証」節): per-user Bearer tokens for the JSON API. Like sessions, the
+// primary key is the token's SHA-256 hex — plaintext is never stored —
+// and revocation is a row delete. Unlike sessions there is no expires_at:
+// API tokens are long-lived deploy credentials, managed by issuance
+// (`issues auth token`) and deletion rather than idle expiry.
+func migrateV4(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, `
+CREATE TABLE IF NOT EXISTS api_tokens (
+	id TEXT PRIMARY KEY,
+	user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_api_tokens_user ON api_tokens(user_id);
 `)
 	return err
 }

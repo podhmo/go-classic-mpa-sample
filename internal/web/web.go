@@ -52,6 +52,7 @@ type Store interface {
 	CreateSession(ctx context.Context, userID int64, ttl time.Duration) (string, error)
 	SessionUser(ctx context.Context, token string, ttl time.Duration) (*store.User, error)
 	DeleteSession(ctx context.Context, token string) error
+	APITokenUser(ctx context.Context, token string) (*store.User, error)
 }
 
 const (
@@ -65,14 +66,30 @@ const (
 type Option func(*config)
 
 type config struct {
-	apiToken string
+	apiToken   string
+	apiEnabled bool
 }
 
 // WithAPIToken mounts the JSON API (docs/sketch/ja/cli-and-web-api.md)
-// under /api/v1 guarded by the given Bearer token. An empty token keeps
-// /api/v1 unmounted — the API is fail-closed: no token, no endpoint.
+// under /api/v1 guarded by the given shared Bearer token. A non-empty
+// token also enables the API; per-user api_tokens credentials work
+// alongside it. An empty token alone keeps /api/v1 unmounted — the API is
+// fail-closed: no usable credential, no endpoint.
 func WithAPIToken(token string) Option {
-	return func(c *config) { c.apiToken = token }
+	return func(c *config) {
+		c.apiToken = token
+		if token != "" {
+			c.apiEnabled = true
+		}
+	}
+}
+
+// WithAPIEnabled mounts /api/v1 even without a shared token, for the case
+// where per-user api_tokens rows are the only credential. Callers decide
+// this once at startup (e.g. store.HasAPITokens); a token issued later
+// while the server runs does not remount the API.
+func WithAPIEnabled(on bool) Option {
+	return func(c *config) { c.apiEnabled = on }
 }
 
 // New returns the root http.Handler for the application. The ServeMux uses
@@ -114,7 +131,7 @@ func New(st Store, opts ...Option) http.Handler {
 	mux.HandleFunc("POST /discussions/{id}/delete", h.deleteDiscussion)
 	mux.HandleFunc("POST /discussions/{id}/comments", h.createDiscussionComment)
 	mux.HandleFunc("POST /discussions/{id}/comments/{cid}/answer", h.setCommentAnswer)
-	if cfg.apiToken != "" {
+	if cfg.apiEnabled {
 		// Method-scoped subtree patterns: a method-less "/api/v1/" would
 		// conflict with the catch-all "GET /" (more general path, fewer
 		// methods). Other verbs (PUT, OPTIONS, ...) keep the mux's 405.

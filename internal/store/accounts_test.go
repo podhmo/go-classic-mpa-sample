@@ -194,3 +194,83 @@ func TestSessionExpiryAndRenewal(t *testing.T) {
 		t.Errorf("fresh session was renewed: expires_at = %d, want %d", expiresAt, before)
 	}
 }
+
+func TestUserByName(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	hash, _ := auth.HashPassword("pw")
+	if _, err := s.CreateUser(ctx, "dave", hash); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	u, err := s.UserByName(ctx, "dave")
+	if err != nil {
+		t.Fatalf("UserByName: %v", err)
+	}
+	if u.Name != "dave" {
+		t.Errorf("name = %q, want dave", u.Name)
+	}
+	// Lookup is case-insensitive like login (COLLATE NOCASE).
+	if _, err := s.UserByName(ctx, "DAVE"); err != nil {
+		t.Errorf("case-insensitive lookup failed: %v", err)
+	}
+	if _, err := s.UserByName(ctx, "nobody"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("missing user: err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestAPITokenLifecycle(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	hash, _ := auth.HashPassword("pw")
+	uid, err := s.CreateUser(ctx, "erin", hash)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	if has, err := s.HasAPITokens(ctx); err != nil || has {
+		t.Fatalf("HasAPITokens on empty table = %v, %v; want false, nil", has, err)
+	}
+
+	token, err := s.CreateAPIToken(ctx, uid)
+	if err != nil {
+		t.Fatalf("CreateAPIToken: %v", err)
+	}
+	// The database must hold only the token's hash, never the token itself.
+	var rowCount int
+	if err := s.db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM api_tokens WHERE id = ?", token).Scan(&rowCount); err != nil {
+		t.Fatalf("count api_tokens: %v", err)
+	}
+	if rowCount != 0 {
+		t.Error("plaintext token must not be stored")
+	}
+	if err := s.db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM api_tokens WHERE id = ?", auth.HashToken(token)).Scan(&rowCount); err != nil {
+		t.Fatalf("count api_tokens: %v", err)
+	}
+	if rowCount != 1 {
+		t.Error("expected the hashed token to be stored")
+	}
+
+	u, err := s.APITokenUser(ctx, token)
+	if err != nil {
+		t.Fatalf("APITokenUser: %v", err)
+	}
+	if u.ID != uid {
+		t.Errorf("token user ID = %d, want %d", u.ID, uid)
+	}
+	if has, err := s.HasAPITokens(ctx); err != nil || !has {
+		t.Errorf("HasAPITokens after issue = %v, %v; want true, nil", has, err)
+	}
+
+	if err := s.DeleteAPIToken(ctx, token); err != nil {
+		t.Fatalf("DeleteAPIToken: %v", err)
+	}
+	if _, err := s.APITokenUser(ctx, token); !errors.Is(err, ErrNotFound) {
+		t.Errorf("revoked token: err = %v, want ErrNotFound", err)
+	}
+	if _, err := s.APITokenUser(ctx, "no-such-token"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown token: err = %v, want ErrNotFound", err)
+	}
+}

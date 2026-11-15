@@ -90,7 +90,7 @@ func (h *handler) createDiscussion(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", fields(fe))
 		return
 	}
-	id, err := h.store.CreateDiscussion(r.Context(), input, 0)
+	id, err := h.store.CreateDiscussion(r.Context(), input, actorID(r))
 	if err != nil {
 		h.storeError(w, err)
 		return
@@ -190,7 +190,7 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 		h.storeError(w, err)
 		return
 	}
-	cid, err := h.store.CreateDiscussionComment(r.Context(), id, in.ParentID, body, 0)
+	cid, err := h.store.CreateDiscussionComment(r.Context(), id, in.ParentID, body, actorID(r))
 	if err != nil {
 		h.storeError(w, err)
 		return

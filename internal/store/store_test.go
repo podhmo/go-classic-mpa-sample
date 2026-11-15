@@ -64,14 +64,14 @@ func TestSchemaObjects(t *testing.T) {
 
 	// All application tables plus sqlite_sequence (AUTOINCREMENT
 	// bookkeeping), sorted by name.
-	wantTables := []string{"comments", "discussion_categories", "discussion_comments", "discussions", "issue_labels", "issues", "labels", "sessions", "sqlite_sequence", "users"}
+	wantTables := []string{"api_tokens", "comments", "discussion_categories", "discussion_comments", "discussions", "issue_labels", "issues", "labels", "sessions", "sqlite_sequence", "users"}
 	if !slices.Equal(tables, wantTables) {
 		t.Errorf("tables = %v, want %v", tables, wantTables)
 	}
 
 	// Only the named indexes from the schema; the UNIQUE/PK backing
 	// indexes (sqlite_autoindex%) must be filtered out.
-	wantIndexes := []string{"idx_comments_issue_created", "idx_dcomments_answer", "idx_dcomments_discussion_created", "idx_discussions_category_created", "idx_issue_labels_label", "idx_issues_status_created", "idx_sessions_user"}
+	wantIndexes := []string{"idx_api_tokens_user", "idx_comments_issue_created", "idx_dcomments_answer", "idx_dcomments_discussion_created", "idx_discussions_category_created", "idx_issue_labels_label", "idx_issues_status_created", "idx_sessions_user"}
 	if !slices.Equal(indexes, wantIndexes) {
 		t.Errorf("indexes = %v, want %v", indexes, wantIndexes)
 	}
@@ -99,7 +99,7 @@ func TestAnalyze(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SchemaObjects after ANALYZE: %v", err)
 	}
-	wantTables := []string{"comments", "discussion_categories", "discussion_comments", "discussions", "issue_labels", "issues", "labels", "sessions", "sqlite_sequence", "users"}
+	wantTables := []string{"api_tokens", "comments", "discussion_categories", "discussion_comments", "discussions", "issue_labels", "issues", "labels", "sessions", "sqlite_sequence", "users"}
 	if !slices.Equal(tables, wantTables) {
 		t.Errorf("tables after ANALYZE = %v, want %v", tables, wantTables)
 	}
@@ -126,9 +126,10 @@ func TestMigrationFreshAndLegacyDB(t *testing.T) {
 		"SELECT author_id FROM comments LIMIT 0",
 		"SELECT id FROM users LIMIT 0",
 		"SELECT id, expires_at FROM sessions LIMIT 0",
+		"SELECT id, user_id, created_at FROM api_tokens LIMIT 0",
 	} {
 		if _, err := s.db.ExecContext(ctx, q); err != nil {
-			t.Errorf("v2 column check %q: %v", q, err)
+			t.Errorf("schema check %q: %v", q, err)
 		}
 	}
 	if err := s.Close(); err != nil {

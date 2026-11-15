@@ -104,7 +104,7 @@ func (h *handler) createIssue(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", fields(fe))
 		return
 	}
-	id, err := h.store.CreateIssue(r.Context(), input, 0 /* anonymous: single shared token */)
+	id, err := h.store.CreateIssue(r.Context(), input, actorID(r))
 	if err != nil {
 		h.storeError(w, err)
 		return
@@ -237,7 +237,7 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request) {
 		h.storeError(w, err)
 		return
 	}
-	cid, err := h.store.CreateComment(r.Context(), id, body, 0)
+	cid, err := h.store.CreateComment(r.Context(), id, body, actorID(r))
 	if err != nil {
 		h.storeError(w, err)
 		return

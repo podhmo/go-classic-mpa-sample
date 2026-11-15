@@ -48,6 +48,24 @@ func (s *Store) CreateUser(ctx context.Context, name, passwordHash string) (int6
 	return res.LastInsertId()
 }
 
+// UserByName returns one user by login name, or ErrNotFound. Name lookup
+// is case-insensitive via the users.name COLLATE NOCASE unique index.
+func (s *Store) UserByName(ctx context.Context, name string) (*User, error) {
+	var u User
+	var created int64
+	err := s.db.QueryRowContext(ctx,
+		"SELECT id, name, created_at FROM users WHERE name = ?", name).
+		Scan(&u.ID, &u.Name, &created)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	u.CreatedAt = time.Unix(created, 0).UTC()
+	return &u, nil
+}
+
 // UserByID returns one user, or ErrNotFound.
 func (s *Store) UserByID(ctx context.Context, id int64) (*User, error) {
 	var u User
@@ -155,4 +173,65 @@ func (s *Store) DeleteExpiredSessions(ctx context.Context) error {
 	_, err := s.db.ExecContext(ctx,
 		"DELETE FROM sessions WHERE expires_at <= ?", time.Now().UTC().Unix())
 	return err
+}
+
+// --- API tokens (api_tokens, schema version 4) ---
+//
+// Per-user Bearer tokens for /api/v1. They reuse the sessions primitives
+// (auth.NewToken/HashToken: only the SHA-256 is stored) but have no
+// expiry — an API token lives until its row is deleted (revoked).
+
+// CreateAPIToken issues an opaque API token for userID and returns its
+// plaintext. The plaintext is shown to the caller exactly once, like a
+// session token.
+func (s *Store) CreateAPIToken(ctx context.Context, userID int64) (string, error) {
+	token, err := auth.NewToken()
+	if err != nil {
+		return "", err
+	}
+	if _, err := s.db.ExecContext(ctx,
+		"INSERT INTO api_tokens(id, user_id, created_at) VALUES(?, ?, ?)",
+		auth.HashToken(token), userID, time.Now().UTC().Unix()); err != nil {
+		return "", err
+	}
+	return token, nil
+}
+
+// APITokenUser resolves a plaintext API token to its user, or ErrNotFound
+// for an unknown or revoked token.
+func (s *Store) APITokenUser(ctx context.Context, token string) (*User, error) {
+	var u User
+	var created int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT u.id, u.name, u.created_at
+		 FROM api_tokens t JOIN users u ON u.id = t.user_id WHERE t.id = ?`,
+		auth.HashToken(token)).
+		Scan(&u.ID, &u.Name, &created)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	u.CreatedAt = time.Unix(created, 0).UTC()
+	return &u, nil
+}
+
+// DeleteAPIToken revokes one API token by its plaintext value. Missing
+// tokens are a no-op.
+func (s *Store) DeleteAPIToken(ctx context.Context, token string) error {
+	_, err := s.db.ExecContext(ctx,
+		"DELETE FROM api_tokens WHERE id = ?", auth.HashToken(token))
+	return err
+}
+
+// HasAPITokens reports whether any API token exists. Startup uses it to
+// decide whether /api/v1 is mounted when no shared env token is set —
+// the API is fail-closed, so with neither credential it is not exposed.
+func (s *Store) HasAPITokens(ctx context.Context) (bool, error) {
+	var n int
+	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM api_tokens").Scan(&n); err != nil {
+		return false, err
+	}
+	return n > 0, nil
 }

@@ -684,6 +684,10 @@ func (f *fakeStore) DeleteSession(_ context.Context, token string) error {
 	return nil
 }
 
+func (f *fakeStore) APITokenUser(_ context.Context, token string) (*store.User, error) {
+	return nil, store.ErrNotFound
+}
+
 // compile-time check that the fake satisfies the consumer-side interface.
 var _ Store = (*fakeStore)(nil)
 

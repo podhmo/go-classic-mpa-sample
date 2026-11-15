@@ -352,3 +352,13 @@
 - **store パッケージ**: `store.go` = `Store`・スキーマ/migration・`Open` 等の DB 管理のみ。`Issue`/`Comment`/`Label` 型と CRUD は `issues.go`、共有 scan/null helper は `store.go` に残す。
 - **api パッケージ**: `api.go` = ルーティング・認証・JSON helper・`User` DTO のみ。DTO は所有者のファイルへ（`Issue`/`Comment`/`Label` → `issues.go`、`Discussion*` → `discussions.go`）。
 - **テストも同規則**: `*_test.go` は対象ファイル名に合わせる（`issues_test.go`/`auth_test.go`/`seed_test.go`）。パッケージ共有の fake/harness（`fakeStore`, `newTestStore`, `newServer`）は親玉ファイル（`web_test.go`/`store_test.go`/`api_test.go`）に残す。
+
+## ユーザー別 API トークン（api_tokens）の実装決定（2026-11-16、`devin/1794767572-api-tokens` ブランチ）
+
+`docs/sketch/ja/cli-and-web-api.md`「認証」節の後者案（actor を立てる側）を実装したときの細部。
+
+- **credential は env 単一トークン + api_tokens の併用**: env token（`ISSUES_API_TOKEN`）は従来どおり anonymous（author_id=0）扱い。一致しなかった Bearer は `api_tokens` テーブルを引き、行があればその user_id が actor になる — API 書き込みに author_id が立ち gh parity の投稿者識別に届く。両者は排他でなく共存する。
+- **api_tokens は平文を保存しない・期限なし**: PK は `auth.HashToken`（SHA-256 hex、auth.NewToken も再利用 — sessions と同じプリミティブ）。expires_at は持たせず revoke は行削除のみ。寿命管理が要る段階で列を足す（TODO の「Phase 4 仕上げ」に管理導線として残す）。
+- **mount 判定は起動時の1回**: `env token 非空 OR api_tokens 非空` で `/api/v1` を mount（`web.WithAPIEnabled` を追加。WithAPIToken は非空で enabled を兼ねるので既存呼び出しはそのまま）。稼働中に初めて token を発行しても remount はされないため再起動が要る — 一度 mount されれば発行/revoke の反映はリクエスト毎の解決で即効く（fail-closed と即時 revoke の折衷点としてここに置いた）。
+- **actor は request context 経由で渡す**: bearerAuth が解決した user_id（0=anonymous）を context に入れ、4つの create ハンドラ（issue/comment/discussion/discussion_comment）が authorID に使う。ハンドラ内の anonymous 直値は残さない。
+- **発行はローカルモード CLI（`issues auth token --user NAME`）**: パスワード検証を HTTP に出さないため、発行は DB 直結のサブコマンドに限定（メモどおり）。user 解決は `store.UserByName`（COLLATE NOCASE の unique index で大文字小文字無視）。
