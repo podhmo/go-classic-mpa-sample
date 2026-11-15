@@ -9,7 +9,6 @@
 | # | 重要度 | 状態 | 概要 | 詳細 |
 |---|--------|------|------|------|
 | 25 | nit | 未修正 | 部分更新の append パスで "Last updated" メタ行が stale | PR #49 の Devin Review 指摘から発覚した同種問題: コメント/返信の部分投稿（`createComment`/`createDiscussionComment` の `X-Partial` 応答）は store の `updated_at` を進めるが、fragment は新 `<li>` のみを返すためヘッダの "Last updated" がリロードまで古いまま。answer swap 側は `discussion_meta` ノード同梱で解決済み（PR #49）。append モードは全ノードを挿入先へ追加する設計なので、自己ターゲットする swap ノードを混ぜるにはプロトコル拡張（例: `data-swap` 印付きノードは `replaceWith`）が要る → TODO.md にタスク記録済 |
-| 26 | minor | 未修正 | storyStore が store 契約から緩く乖離 | no-comments パスの追検証で発見（`docs/sketch/ja/no-comments.md`）: `storyStore.SetCommentAnswer` は reply へのマークで `ErrNotFound`（本物は `ErrNotAnswerable`）を返し、非 qa カテゴリへのマーク拒否チェックも無い。`storyStore.ListIssues` は `ListFilter` を完全無視して fixture をそのまま返す。storybook 用途の意図的簡略化だが「implements the Store contract」の宣言に対して未記述の乖離。併せて `fakeStore.SessionUser` の ttl 無視・両 fake の `APITokenUser` スタブも同種（テストへの実害なし）→ TODO.md にタスク記録済（探索手順つき） |
 | 27 | info | 未修正 | remote CLI（`*client.Client`）が store sentinel エラーに写像しない | 同じ追検証で発見: `cli.Backend` の HTTP 実装は `*client.Error{Status,Message,Fields}` を返し `store.ErrNotFound`/`ErrNotAnswerable` に写像しないため、remote モードでは `errors.Is(err, store.ErrNotFound)` が成立しない。現状 sentinel を判定する消費者は local 限定の TokenStore のみで実害なし（潜在乖離）。根治候補: 404→ErrNotFound 写像 or API の機械可読エラーコード化 → TODO.md にタスク記録済 |
 
 ## 修正済み
@@ -37,6 +36,8 @@
 | 21 | minor | 修正済 | サーバー側エラーが読み上げ・フォーカスともに不確実 / Firefox・Safari で未操作の必須欄が invalid 扱い | フォームフィードバック整備時にガイド照合で発見: (1) 422 再表示のエラー文が `role="alert"` だったが、ページロード時から存在する live region は確実には読み上げられず、フォーカスも先頭のまま（エラー欄へ移動しない）。(2) エラーなしの欄は `aria-invalid` 未指定で、Firefox/Safari は空の `required` 欄をロード直後から invalid として公開する。対応: `role="alert"` を外し、最初のエラー欄に `autofocus`（読み上げは `aria-describedby` 経由）。エラーなしの欄は `aria-invalid="false"` を明示。テスト追加済 |
 | 22 | minor | 修正済 | 文字サイズが px 固定でブラウザ/OS の文字サイズ設定に追従しない / 640px 以下で本文を 14px に縮小 / 一覧の長いタイトルが無制限に伸びる | Responsive & typography pass の監査で発見: `body { font-size: 15px }` と各所の px 指定のため、ブラウザの既定文字サイズを変えても本文が大きくならなかった。さらに狭幅で本文を 14px に縮めていた。長いタイトル・ラベル名は一覧の行を何行にも伸ばしていた。対応: rem 化 + `<meta name="text-scale">`、狭幅での縮小を廃止、一覧タイトル 2 行 clamp・ラベル ellipsis。px font-size が無いことをテストで固定 |
 | 24 | info | 修正済 | CSP 未設定（#13' の CSP 部分を解消） | `securityHeaders` middleware に `default-src 'none'` ベースの CSP を付与。ラベル色の inline `style=` は `style-src-attr 'unsafe-inline'` でのみ許可し `<style>` 要素は遮断、外部画像は `img-src 'self' data:` で遮断。COOP/CORP/Permissions-Policy/Vary も追加（decisions.md「CSP・セキュリティヘッダ」）。実ブラウザで違反なし・注入 `<style>`/外部 `<img>` がブロックされることを確認 |
+| 26 | minor | 修正済 | storyStore が store 契約から緩く乖離 | no-comments パスの追検証で発見（記録は PR #71）: `storyStore.SetCommentAnswer` は reply へのマークで `ErrNotFound`（本物は `ErrNotAnswerable`）を返し、非 qa カテゴリへのマーク拒否チェックも無い。`storyStore.ListIssues` は `ListFilter` を完全無視して fixture をそのまま返す。対応（PR #71）: `SetCommentAnswer` を本物と同じ検証順序に揃え、`Answered` をコメント fixture から再計算。フィルタ無視・no-op・auth スタブは意図的簡略化として doc コメントで宣言。`fakeStore.SessionUser` の ttl 無視・両 fake の `APITokenUser` スタブも同様に宣言済み |
+| 28 | minor | 修正済 | fakeStore/storyStore のその他契約乖離（全コード sweep で発見） | 同 sweep 発見の実バグ寄り: `fakeStore.SetIssueStatus` の値検証欠落、`fakeStore.ListIssues` の `LabelID != 0`（本物は `> 0`）、LabelIDs の dedup・name 順ソート欠落、`fakeStore.UpdateDiscussion` のチェック順序逆転、storyStore の `SetIssueStatus` 値検証欠落。対応（PR #71）: 全て本物と同じ契約に揃え（ラベル解決は `resolveLabels` ヘルパ化）。fakeStore の FK 非実装と Query の Unicode 大小文字は意図的/許容として宣言 |
 
 ## 修正しない（記録のみ）
 

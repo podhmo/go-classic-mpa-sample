@@ -20,7 +20,7 @@
 - `.agents/skills/modern-web-guidance/` — HTML/CSS・クライアント側UIの実装・更新前に `npx -y modern-web-guidance@latest search "<query>"` でモダンなベストプラクティスを検索するスキル。テンプレートや app.css を触る作業では先に実行する
 - `.agents/skills/iterate-ui/` — UI を変更すると決めたときのスキル。デザイン部分(templates/static/story_pages.go)の試行錯誤をアプリ本体の環境構築なしで行う。自作 storybook(`make storybook` → :6006)を使う。UI を触る作業では必ず参照する
 - `.agents/skills/verify-ui/` — UI 変更後に動作確認をアプリ全体へ広げるときのスキル。実サーバ(`go run .` → :8080、demo データ自動シード)と playwright-cli で実ブラウザ検証を行う
-- `.agents/skills/no-comments/` — コメント整理スキル(cursor/plugins pstack をこのリポジトリ向けに改変して vendored)。ナレーション・バナー・実装詳細の doc 混入を消し、外部制約の why は残す。サブエージェントは spawn せず実行者自身が comment-sicko 役を兼ねる。適用記録は `docs/sketch/ja/no-comments.md`
+- `.agents/skills/no-comments/` — コメント整理スキル(cursor/plugins pstack をこのリポジトリ向けに改変して vendored)
 - `.agents/skills/why/` — 設計判断・経緯をコードではなく記録(コミット・PR 議論)から答えるスキル(cursor/plugins pstack から vendored)。no-comments の制約コメント検証などから参照される
 
 ## 主要コマンド

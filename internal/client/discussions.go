@@ -65,7 +65,9 @@ func (c *Client) GetDiscussion(ctx context.Context, id int64) (*store.Discussion
 }
 
 // ListDiscussionComments reads comments off the detail endpoint — like
-// ListComments there is no dedicated comments GET.
+// ListComments there is no dedicated comments GET. A missing discussion
+// surfaces as *Error{Status:404} where the local backend returns an
+// empty list and no error.
 func (c *Client) ListDiscussionComments(ctx context.Context, discussionID int64) ([]*store.DiscussionComment, error) {
 	var res struct {
 		Comments []api.DiscussionComment `json:"comments"`
