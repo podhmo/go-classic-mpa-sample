@@ -18,9 +18,9 @@
 - 自作 storybook — `make storybook` → http://localhost:6006 — `docs/ja/for-ui-designer.md`
 - DB 初期化コマンド — `go run . -db app.db init` — `docs/ja/decisions.md`「今後の予定」
 
-## v2: アカウント + Discussions（計画中・設計メモ済み）
+## v2: アカウント + Discussions（accounts Phase 1 実装済み・Discussions 計画中）
 
-- アカウント（ログイン + 投稿者識別） — `/register` `/login` `/logout`（予定）。未ログインでも全機能は使え、投稿に投稿者名が付く — `docs/sketch/ja/accounts.md`
+- アカウント（ログイン + 投稿者識別） — `/register` `/login` `/logout`。**Phase 1 実装済み**（ログイン + 投稿者識別、authorization は未導入）。未ログインでも全機能は使え、投稿に投稿者名が付く — `docs/sketch/ja/accounts.md`
 - Discussions タブ — `/discussions` 系（予定）。カテゴリ・1段スレッド返信・Q&A の answer マーク — `docs/sketch/ja/discussions.md`
 
 ## v3 候補（検討メモあり・未着手）
