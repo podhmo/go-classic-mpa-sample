@@ -4,6 +4,10 @@
 test:
 	go test ./...
 
+# CLI の E2E: init → register → auth token → serve → issues/リモート動作確認
+test-e2e:
+	go test -tags=e2e -v -run 'TestCLIE2E' ./internal/e2etests/
+
 ## setup-minigo: clone minigo (unstable, not yet published) into third_party/
 setup-minigo:
 	@if [ ! -d third_party/minigo ]; then \

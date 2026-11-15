@@ -578,6 +578,9 @@ func (storyStore) SessionUser(ctx context.Context, token string, ttl time.Durati
 func (storyStore) DeleteSession(ctx context.Context, token string) error {
 	return nil
 }
+func (storyStore) APITokenUser(ctx context.Context, token string) (*store.User, error) {
+	return nil, store.ErrNotFound
+}
 
 // StoryHttpIssueList drives the real mux for GET /issues, so the
 // preview replays the handler's status and security headers too.

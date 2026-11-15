@@ -7,6 +7,9 @@
 // The "init" subcommand (or the -init flag) prepares the database file and
 // schema, refreshes planner statistics, prints a report, and exits without
 // starting the server.
+//
+// The gh-like CLI is a separate binary, cmd/issues — clients of the web
+// API should not have the server embedded in their tool.
 package main
 
 import (
@@ -70,9 +73,18 @@ func main() {
 		log.Fatalf("seed demo data: %v", err)
 	}
 
+	// /api/v1 mounts when either credential exists: the shared env token,
+	// or at least one per-user api_tokens row. With neither it stays
+	// fail-closed. A token issued while the server runs does not remount
+	// it — restarting re-evaluates.
+	hasAPITokens, err := st.HasAPITokens(context.Background())
+	if err != nil {
+		log.Fatalf("check api tokens: %v", err)
+	}
+
 	srv := &http.Server{
 		Addr:              *addr,
-		Handler:           web.New(st, web.WithAPIToken(*apiToken)),
+		Handler:           web.New(st, web.WithAPIToken(*apiToken), web.WithAPIEnabled(*apiToken != "" || hasAPITokens)),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,

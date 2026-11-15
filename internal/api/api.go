@@ -1,8 +1,10 @@
 // Package api implements the JSON Web API under /api/v1
 // (docs/sketch/ja/cli-and-web-api.md, Phase 2). It is a thin machine-facing
 // surface over the same store the HTML app uses: DTOs are wire types kept
-// separate from the store's domain types, and authentication is a single
-// Bearer token mounted fail-closed (no token, no /api/v1).
+// separate from the store's domain types, and authentication is Bearer
+// tokens mounted fail-closed (no usable token, no /api/v1). Two credential
+// kinds are accepted: a single shared env token (writes stay anonymous)
+// and per-user api_tokens rows (writes carry the user's author_id).
 package api
 
 import (
@@ -40,6 +42,7 @@ type Store interface {
 	CreateDiscussionComment(ctx context.Context, discussionID, parentID int64, body string, authorID int64) (int64, error)
 	SetCommentAnswer(ctx context.Context, discussionID, commentID int64, answer bool) error
 	ListDiscussionCategories(ctx context.Context) ([]*store.DiscussionCategory, error)
+	APITokenUser(ctx context.Context, token string) (*store.User, error)
 }
 
 const (
@@ -52,8 +55,11 @@ const (
 )
 
 // New returns the /api/v1 handler; every request must carry
-// "Authorization: Bearer <token>". The token is compared in constant time.
-func New(st Store, token string) http.Handler {
+// "Authorization: Bearer <token>". envToken is the optional shared
+// credential (constant-time compared; its requests are anonymous); any
+// other token is resolved through the store's api_tokens table and its
+// requests run as that user.
+func New(st Store, envToken string) http.Handler {
 	h := &handler{store: st}
 	mux := http.NewServeMux()
 
@@ -85,7 +91,7 @@ func New(st Store, token string) http.Handler {
 		writeError(w, http.StatusNotFound, "Not found.", nil)
 	})
 
-	return bearerAuth(token, mux)
+	return bearerAuth(envToken, st, mux)
 }
 
 // methodDispatch runs the handler registered for r.Method, or answers 405
@@ -119,17 +125,45 @@ func methodDispatch(methods map[string]http.HandlerFunc) http.HandlerFunc {
 }
 
 // bearerAuth rejects requests whose Authorization header is not
-// "Bearer <token>". Compared in constant time; the header check is
-// case-insensitive per RFC 9110 field-name and auth-scheme rules.
-func bearerAuth(token string, next http.Handler) http.Handler {
+// "Bearer <token>". The shared env token is compared in constant time and
+// authenticates as anonymous (actor id 0); anything else is looked up in
+// api_tokens, where the row's user becomes the request's actor. The header
+// check is case-insensitive per RFC 9110 field-name and auth-scheme rules.
+func bearerAuth(envToken string, st Store, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if !ok || subtle.ConstantTimeCompare([]byte(got), []byte(token)) != 1 {
+		if !ok || got == "" {
 			writeError(w, http.StatusUnauthorized, "Unauthorized.", nil)
 			return
 		}
-		next.ServeHTTP(w, r)
+		var actorID int64
+		if envToken != "" && subtle.ConstantTimeCompare([]byte(got), []byte(envToken)) == 1 {
+			actorID = 0 // shared token: no user identity, writes stay anonymous
+		} else {
+			u, err := st.APITokenUser(r.Context(), got)
+			if err != nil {
+				if errors.Is(err, store.ErrNotFound) {
+					writeError(w, http.StatusUnauthorized, "Unauthorized.", nil)
+				} else {
+					writeError(w, http.StatusInternalServerError, "Internal server error.", nil)
+				}
+				return
+			}
+			actorID = u.ID
+		}
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), actorKey{}, actorID)))
 	})
+}
+
+// actorKey is the context key under which bearerAuth stores the resolved
+// user id (0 = anonymous).
+type actorKey struct{}
+
+// actorID returns the authenticated user id for the request, or 0 when the
+// request used the shared env token (anonymous writes).
+func actorID(r *http.Request) int64 {
+	id, _ := r.Context().Value(actorKey{}).(int64)
+	return id
 }
 
 type handler struct {

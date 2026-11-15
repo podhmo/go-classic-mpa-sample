@@ -157,3 +157,83 @@ func TestNotFoundAndUnknownRoutes(t *testing.T) {
 		}
 	}
 }
+
+// Per-user api_tokens resolve the Bearer token to a user: writes carry
+// that user's author_id, while the shared env token stays anonymous.
+func TestPerUserTokenActor(t *testing.T) {
+	srv, st := newServer(t)
+	ctx := t.Context()
+
+	uid, err := st.CreateUser(ctx, "erin", "irrelevant-hash")
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	userToken, err := st.CreateAPIToken(ctx, uid)
+	if err != nil {
+		t.Fatalf("CreateAPIToken: %v", err)
+	}
+
+	post := func(token string) map[string]any {
+		t.Helper()
+		req, err := http.NewRequest("POST", srv.URL+"/api/v1/issues",
+			bytes.NewReader([]byte(`{"title":"actor test"}`)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := srv.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var out map[string]any
+		json.NewDecoder(resp.Body).Decode(&out)
+		if resp.StatusCode != http.StatusCreated {
+			t.Fatalf("POST with user token → %d, want 201: %v", resp.StatusCode, out)
+		}
+		return out
+	}
+
+	// The shared env token still works but writes stay anonymous.
+	out := post(testToken)
+	if issue, _ := out["issue"].(map[string]any); issue["author"] != nil {
+		t.Errorf("env-token issue author = %v, want anonymous", issue["author"])
+	}
+
+	// A per-user token makes the user the author.
+	out = post(userToken)
+	issue, _ := out["issue"].(map[string]any)
+	author, _ := issue["author"].(map[string]any)
+	if author["name"] != "erin" {
+		t.Errorf("user-token issue author = %v, want erin", author)
+	}
+
+	// Unknown and revoked tokens are 401, and revoking takes effect at
+	// request time (no restart needed once the API is mounted).
+	for _, token := range []string{"no-such-token", "wrong"} {
+		req, _ := http.NewRequest("GET", srv.URL+"/api/v1/issues", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := srv.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("Bearer %q → %d, want 401", token, resp.StatusCode)
+		}
+	}
+	if err := st.DeleteAPIToken(ctx, userToken); err != nil {
+		t.Fatalf("DeleteAPIToken: %v", err)
+	}
+	req, _ := http.NewRequest("GET", srv.URL+"/api/v1/issues", nil)
+	req.Header.Set("Authorization", "Bearer "+userToken)
+	resp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("revoked token → %d, want 401", resp.StatusCode)
+	}
+}
