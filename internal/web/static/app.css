@@ -996,6 +996,41 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   margin-bottom: 10px;
 }
 
+/* Structured trail: the ordered list carries the hierarchy and the
+   separator is generated, never in the markup — the empty alt string
+   keeps it out of the accessibility tree (guide breadcrumbs). */
+.breadcrumb > ol {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+}
+
+.breadcrumb > ol > li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.breadcrumb > ol > li + li::before {
+  content: "/" / "";
+}
+
+/* The current page is a link like its ancestors, but reads differently:
+   weight is the non-color cue on top of the accent underline (the same
+   treatment the site nav gives its aria-current). */
+.breadcrumb a[aria-current="page"] {
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
 .issue-detail {
   margin-bottom: 28px;
 }

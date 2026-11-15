@@ -15,7 +15,10 @@
    the form posts normally — progressive enhancement. */}}
 <script type="module" src="/static/partial-submit.js"></script>
 <nav class="breadcrumb" aria-label="Breadcrumb">
-  <a href="/issues">Issues</a> <span aria-hidden="true">/</span> <span aria-current="page">#{{.Issue.ID}}</span>
+  <ol>
+    <li><a href="/issues">Issues</a></li>
+    <li><a href="#" aria-current="page">#{{.Issue.ID}}</a></li>
+  </ol>
 </nav>
 
 <article class="card issue-detail">
