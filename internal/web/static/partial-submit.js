@@ -27,12 +27,47 @@ document.addEventListener("submit", (event) => {
   postPartial(form);
 });
 
+// A failed POST gets a visible note, not just a live-region announcement
+// — sighted users must see that nothing was saved. role="alert" makes it
+// its own live region, so announce() is not needed for this path.
+function showSubmitError(form, message) {
+  let el = form.querySelector("[data-submit-error]");
+  if (!el) {
+    el = document.createElement("p");
+    el.className = "field-error";
+    el.setAttribute("role", "alert");
+    el.dataset.submitError = "";
+    (form.querySelector('button[type="submit"]') ?? form.lastElementChild).before(el);
+  }
+  el.textContent = message;
+}
+
+// A successful post clears the fields and any server error markings.
+// form.reset() would restore the rendered defaults — after a 422 swap
+// those ARE the rejected draft and its visible error.
+function resetPostedForm(form) {
+  for (const el of form.elements) {
+    if (!(el instanceof HTMLTextAreaElement)) continue;
+    el.value = "";
+    el.setAttribute("aria-invalid", "false");
+    el.removeAttribute("autofocus");
+    const err = el.dataset.error && document.getElementById(el.dataset.error);
+    if (err) err.classList.add("field-error-pending");
+    const keep = (el.getAttribute("aria-describedby") || "")
+      .split(/\s+/)
+      .filter((id) => id && id !== el.dataset.error);
+    if (keep.length) el.setAttribute("aria-describedby", keep.join(" "));
+    else el.removeAttribute("aria-describedby");
+  }
+}
+
 async function postPartial(form) {
   form.dataset.busy = "1";
   form.setAttribute("aria-busy", "true");
   for (const btn of form.querySelectorAll('button[type="submit"]')) {
     btn.disabled = true;
   }
+  form.querySelector("[data-submit-error]")?.remove();
   // Indeterminate <progress>: correct AT semantics for free (guide
   // spinner) and no value attribute needed.
   const progress = document.createElement("progress");
@@ -77,7 +112,7 @@ async function postPartial(form) {
     }
 
     const added = target.lastElementChild;
-    form.reset();
+    resetPostedForm(form);
     form.querySelector("textarea")?.focus();
     if (added) {
       // Same highlight a #comment-N anchor would give via :target —
@@ -88,7 +123,7 @@ async function postPartial(form) {
     }
     announce("Comment posted.");
   } catch {
-    announce("Comment could not be posted. Please try again.");
+    showSubmitError(form, "Comment could not be posted. Please try again.");
   } finally {
     progress.remove();
     delete form.dataset.busy;
