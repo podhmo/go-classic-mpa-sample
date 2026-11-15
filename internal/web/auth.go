@@ -51,9 +51,10 @@ func (p authFormPage) anyError() bool {
 }
 
 // safeNext limits the post-login redirect to same-site paths; anything
-// else falls back to /issues.
+// else falls back to /issues. Backslashes are rejected because browsers
+// normalize "/\host" to "//host", which again resolves off-site.
 func safeNext(raw string) string {
-	if raw != "" && strings.HasPrefix(raw, "/") && !strings.HasPrefix(raw, "//") {
+	if raw != "" && strings.HasPrefix(raw, "/") && !strings.HasPrefix(raw, "//") && !strings.ContainsRune(raw, '\\') {
 		return raw
 	}
 	return "/issues"
