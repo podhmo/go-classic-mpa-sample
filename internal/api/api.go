@@ -97,7 +97,13 @@ func methodDispatch(methods map[string]http.HandlerFunc) http.HandlerFunc {
 	}
 	allow := strings.Join(names, ", ")
 	return func(w http.ResponseWriter, r *http.Request) {
-		if fn, ok := methods[r.Method]; ok {
+		// HEAD rides on GET, like the std mux's method-scoped patterns;
+		// the server strips the body on the way out.
+		m := r.Method
+		if m == http.MethodHead {
+			m = http.MethodGet
+		}
+		if fn, ok := methods[m]; ok {
 			fn(w, r)
 			return
 		}

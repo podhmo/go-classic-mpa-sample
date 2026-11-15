@@ -241,6 +241,18 @@ func TestWrongMethodAndTrailingJSON(t *testing.T) {
 		t.Fatalf("405 Content-Type = %q", ct)
 	}
 
+	// HEAD rides on GET like the std mux's method-scoped patterns.
+	req, _ = http.NewRequest("HEAD", srv.URL+"/api/v1/issues", nil)
+	req.Header.Set("Authorization", "Bearer "+testToken)
+	resp, err = srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("HEAD = %d, want 200", resp.StatusCode)
+	}
+
 	// Trailing bytes after a complete JSON object → 400.
 	code, _ := do(t, srv, "POST", "/api/v1/issues", `{"title":"x"} {"title":"y"}`)
 	if code != http.StatusBadRequest {
