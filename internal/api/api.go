@@ -57,23 +57,27 @@ func New(st Store, token string) http.Handler {
 	h := &handler{store: st}
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /api/v1/issues", h.listIssues)
-	mux.HandleFunc("POST /api/v1/issues", h.createIssue)
-	mux.HandleFunc("GET /api/v1/issues/{id}", h.getIssue)
-	mux.HandleFunc("PATCH /api/v1/issues/{id}", h.updateIssue)
-	mux.HandleFunc("DELETE /api/v1/issues/{id}", h.deleteIssue)
-	mux.HandleFunc("POST /api/v1/issues/{id}/status", h.setIssueStatus)
-	mux.HandleFunc("POST /api/v1/issues/{id}/comments", h.createComment)
-	mux.HandleFunc("GET /api/v1/labels", h.listLabels)
+	// Routes are registered methodless per path and dispatched on
+	// r.Method: method-scoped patterns would only 405 when no catch-all
+	// matches, while a methodless catch-all would eat them into a 404.
+	// Dispatching here gives both — known path + wrong method → 405,
+	// unknown path → JSON 404 via the "/api/v1/" subtree below.
+	routes := map[string]map[string]http.HandlerFunc{
+		"/api/v1/issues":               {"GET": h.listIssues, "POST": h.createIssue},
+		"/api/v1/issues/{id}":          {"GET": h.getIssue, "PATCH": h.updateIssue, "DELETE": h.deleteIssue},
+		"/api/v1/issues/{id}/status":   {"POST": h.setIssueStatus},
+		"/api/v1/issues/{id}/comments": {"POST": h.createComment},
+		"/api/v1/labels":               {"GET": h.listLabels},
 
-	mux.HandleFunc("GET /api/v1/discussions", h.listDiscussions)
-	mux.HandleFunc("POST /api/v1/discussions", h.createDiscussion)
-	mux.HandleFunc("GET /api/v1/discussions/{id}", h.getDiscussion)
-	mux.HandleFunc("PATCH /api/v1/discussions/{id}", h.updateDiscussion)
-	mux.HandleFunc("DELETE /api/v1/discussions/{id}", h.deleteDiscussion)
-	mux.HandleFunc("POST /api/v1/discussions/{id}/comments", h.createDiscussionComment)
-	mux.HandleFunc("POST /api/v1/discussions/{id}/comments/{cid}/answer", h.setCommentAnswer)
-	mux.HandleFunc("GET /api/v1/discussion-categories", h.listDiscussionCategories)
+		"/api/v1/discussions":                            {"GET": h.listDiscussions, "POST": h.createDiscussion},
+		"/api/v1/discussions/{id}":                       {"GET": h.getDiscussion, "PATCH": h.updateDiscussion, "DELETE": h.deleteDiscussion},
+		"/api/v1/discussions/{id}/comments":              {"POST": h.createDiscussionComment},
+		"/api/v1/discussions/{id}/comments/{cid}/answer": {"POST": h.setCommentAnswer},
+		"/api/v1/discussion-categories":                  {"GET": h.listDiscussionCategories},
+	}
+	for path, methods := range routes {
+		mux.HandleFunc(path, methodDispatch(methods))
+	}
 
 	// Anything else under /api/v1 is a JSON 404 (HTML 404s would confuse
 	// non-browser clients).
@@ -82,6 +86,24 @@ func New(st Store, token string) http.Handler {
 	})
 
 	return bearerAuth(token, mux)
+}
+
+// methodDispatch runs the handler registered for r.Method, or answers 405
+// with an Allow header when the path exists but not the method.
+func methodDispatch(methods map[string]http.HandlerFunc) http.HandlerFunc {
+	var names []string
+	for m := range methods {
+		names = append(names, m)
+	}
+	allow := strings.Join(names, ", ")
+	return func(w http.ResponseWriter, r *http.Request) {
+		if fn, ok := methods[r.Method]; ok {
+			fn(w, r)
+			return
+		}
+		w.Header().Set("Allow", allow)
+		writeError(w, http.StatusMethodNotAllowed, "Method not allowed.", nil)
+	}
 }
 
 // bearerAuth rejects requests whose Authorization header is not
@@ -244,6 +266,12 @@ func decodeBody(w http.ResponseWriter, r *http.Request, v any) bool {
 		writeError(w, http.StatusBadRequest, "Invalid JSON body.", nil)
 		return false
 	}
+	// A valid first object must be the whole body — extra JSON or garbage
+	// after it is rejected rather than silently dropped.
+	if dec.More() {
+		writeError(w, http.StatusBadRequest, "Invalid JSON body.", nil)
+		return false
+	}
 	return true
 }
 
@@ -291,14 +319,16 @@ func fields(fe store.FieldErrors) map[string]string {
 }
 
 // resolveLabelIDs resolves label names ("labels") into ids, merged with
-// explicit "label_ids". Unknown names are a 422 field error.
-func (h *handler) resolveLabelIDs(r *http.Request, ids []int64, names []string) ([]int64, map[string]string) {
+// explicit "label_ids". Unknown names are a 422 field error; a store
+// failure is an error — silently dropping names would lose labels the
+// client asked for.
+func (h *handler) resolveLabelIDs(r *http.Request, ids []int64, names []string) ([]int64, map[string]string, error) {
 	if len(names) == 0 {
-		return ids, nil
+		return ids, nil, nil
 	}
 	all, err := h.store.ListLabels(r.Context())
 	if err != nil {
-		return nil, nil
+		return nil, nil, err
 	}
 	byName := map[string]int64{}
 	for _, l := range all {
@@ -307,11 +337,11 @@ func (h *handler) resolveLabelIDs(r *http.Request, ids []int64, names []string) 
 	for _, n := range names {
 		id, ok := byName[n]
 		if !ok {
-			return nil, map[string]string{"labels": fmt.Sprintf("Unknown label: %s", n)}
+			return nil, map[string]string{"labels": fmt.Sprintf("Unknown label: %s", n)}, nil
 		}
 		ids = append(ids, id)
 	}
-	return ids, nil
+	return ids, nil, nil
 }
 
 // resolveCategoryID accepts either category_id or a category slug and

@@ -89,7 +89,11 @@ func (h *handler) createIssue(w http.ResponseWriter, r *http.Request) {
 	}
 	title := strings.TrimSpace(deref(in.Title))
 	body := strings.TrimSpace(deref(in.Body))
-	labelIDs, ferr := h.resolveLabelIDs(r, in.LabelIDs, in.Labels)
+	labelIDs, ferr, err := h.resolveLabelIDs(r, in.LabelIDs, in.Labels)
+	if err != nil {
+		h.storeError(w, err)
+		return
+	}
 	if ferr != nil {
 		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", ferr)
 		return
@@ -139,7 +143,11 @@ func (h *handler) updateIssue(w http.ResponseWriter, r *http.Request) {
 		input.Body = strings.TrimSpace(*in.Body)
 	}
 	if in.LabelIDs != nil || len(in.Labels) > 0 {
-		labelIDs, ferr := h.resolveLabelIDs(r, in.LabelIDs, in.Labels)
+		labelIDs, ferr, err := h.resolveLabelIDs(r, in.LabelIDs, in.Labels)
+		if err != nil {
+			h.storeError(w, err)
+			return
+		}
 		if ferr != nil {
 			writeError(w, http.StatusUnprocessableEntity, "Validation failed.", ferr)
 			return

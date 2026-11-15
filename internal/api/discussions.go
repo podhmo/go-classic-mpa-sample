@@ -221,7 +221,9 @@ func findDiscussionComment(comments []*store.DiscussionComment, id int64) *store
 	return nil
 }
 
-// POST /api/v1/discussions/{id}/comments/{cid}/answer {"answer": bool} → 204
+// POST /api/v1/discussions/{id}/comments/{cid}/answer {"answer": bool} → 204.
+// answer is required: an omitted field would decode as false and silently
+// clear the mark.
 func (h *handler) setCommentAnswer(w http.ResponseWriter, r *http.Request) {
 	id, ok := h.pathID(w, r, "id")
 	if !ok {
@@ -232,12 +234,16 @@ func (h *handler) setCommentAnswer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Answer bool `json:"answer"`
+		Answer *bool `json:"answer"`
 	}
 	if !decodeBody(w, r, &in) {
 		return
 	}
-	if err := h.store.SetCommentAnswer(r.Context(), id, cid, in.Answer); err != nil {
+	if in.Answer == nil {
+		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", map[string]string{"answer": "Answer is required."})
+		return
+	}
+	if err := h.store.SetCommentAnswer(r.Context(), id, cid, *in.Answer); err != nil {
 		h.storeError(w, err)
 		return
 	}

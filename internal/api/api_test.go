@@ -220,6 +220,38 @@ func TestIssueValidation(t *testing.T) {
 	}
 }
 
+func TestWrongMethodAndTrailingJSON(t *testing.T) {
+	srv, _ := newServer(t)
+
+	// Known path + wrong method → 405 JSON with Allow header.
+	req, _ := http.NewRequest("PATCH", srv.URL+"/api/v1/issues/1/status", nil)
+	req.Header.Set("Authorization", "Bearer "+testToken)
+	resp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("PATCH status route = %d, want 405", resp.StatusCode)
+	}
+	if resp.Header.Get("Allow") != "POST" {
+		t.Fatalf("Allow = %q, want POST", resp.Header.Get("Allow"))
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("405 Content-Type = %q", ct)
+	}
+
+	// Trailing bytes after a complete JSON object → 400.
+	code, _ := do(t, srv, "POST", "/api/v1/issues", `{"title":"x"} {"title":"y"}`)
+	if code != http.StatusBadRequest {
+		t.Fatalf("trailing payload = %d, want 400", code)
+	}
+	code, _ = do(t, srv, "POST", "/api/v1/issues", `{"title":"x"}garbage`)
+	if code != http.StatusBadRequest {
+		t.Fatalf("trailing garbage = %d, want 400", code)
+	}
+}
+
 func TestDiscussionLifecycle(t *testing.T) {
 	srv, st := newServer(t)
 
@@ -276,6 +308,11 @@ func TestDiscussionLifecycle(t *testing.T) {
 		t.Fatalf("nested reply = %d, want 422", code)
 	}
 
+	// missing "answer" field → 422 (a false default must not clear the mark)
+	code, out = do(t, srv, "POST", fmt.Sprintf("/api/v1/discussions/%d/comments/%d/answer", did, cid), `{}`)
+	if code != http.StatusUnprocessableEntity || out["error"].(map[string]any)["fields"].(map[string]any)["answer"] == nil {
+		t.Fatalf("empty answer body = %d %v", code, out)
+	}
 	code, _ = do(t, srv, "POST", fmt.Sprintf("/api/v1/discussions/%d/comments/%d/answer", did, cid), `{"answer":true}`)
 	if code != http.StatusNoContent {
 		t.Fatalf("answer = %d, want 204", code)
