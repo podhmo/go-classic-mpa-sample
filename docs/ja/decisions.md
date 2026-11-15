@@ -267,3 +267,7 @@
 - **bind は plain Go 値 + `minigo.BindAs`**: `WrapFunc` の明示呼出しは不要になった（plain func は自動変換）。`goldmark-alert` の declared name 問題は `BoundOf().Name` 修正から `BindAs("alert")` へ。
 - **story に renderXxx helper を噛ませて `Story.Group` を活用**: storybook の group 判定は「story 本体が最後に呼ぶ無修飾関数」を見る。従来は全 story が `printRec` で終わり 1 グループに潰れたため、`renderIssueList`/`renderIssueDetail`/… の薄い helper を story 側ファイルに追加し、index の variants grid（`/grid/<name>`）が render メソッド単位で出るようにした。アプリ側コードは不変。
 - **internal/store は引き続き source 解釈**: `minigo.HostTypeOf` で bind に移す道はできたが、現状の source 解釈がゼロコストで supported のままなので移行しない（必要になれば gen-intrinsics で生成）。
+
+## storybook: CSP 緩和を upstream (minigo#1081) に移譲（2026-11-15）
+
+- **`cmd/storybook` 側の `connect-src 'self'` 追記ワークアラウンドを撤去**: `-watch` 時、`StoryHttp*` が replay する実 CSP（`default-src 'none'`、connect-src 無し）が reload script の EventSource を塞ぐため、consumer 側で `; connect-src 'self'` を足していた。minigo#1081 で `AppendLiveReload` 自身が CSP を緩めるようになった（`relaxConnectSrc` — `default-src` のソースリストを引き継いだ上で `'self'` を足し、default-src 無しの policy は無制限としてそのまま残す）ため、下流側の対応は不要になった。`page.go` は upstream の `examples/storybook/cmd/storybook/page.go` と再び同一内容に戻した。
