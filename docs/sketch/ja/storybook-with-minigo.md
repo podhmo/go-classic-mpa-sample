@@ -159,6 +159,61 @@ print 型と使い分け: **見た目（マークアップ）の確認は print 
 
 `?w=` のビューポート切替で全 10 story を 360px / 320px で目視確認した。フィルタバーの縦積み・ラベル折返し・ボタン全幅化・長いタイトルのクランプは先行の responsive 対応で済んでおり、WCAG 1.4.10 の 320px 基準でも横スクロール・はみ出しは検出されなかった。モバイル向けの試行錯誤自体はこの環境で十分回る — 残る課題は viewport やテーマの一括比較（下記 future work）。
 
+## 部分更新・JS 挙動の検証経路（2026-11-15）
+
+`partial-updates.md` の部分更新案（手書き fetch + HTML fragment）に向けて、
+「どの層の確認が storybook で回るか」を整理した。
+
+### 現状のまま回るもの
+
+- **fragment の見た目**: `{{define "comment"}}` 等の部品テンプレートを print 型
+  story で出せば、新 `<li>`・エラー時フォームの見た目は従来どおり回る。
+- **POST ハンドラの意味論**: `StoryHttp*` story は `func(w, r)` 型だが、**渡される
+  `r`（minigo storybook が合成する `GET /`）を無視して、story 内で
+  `httptest.NewRequest(POST, "/issues/1/comments", strings.NewReader(form))` を自前で
+  組み立てればよい**。これで POST → fragment / 303 / 422 の応答・ヘッダ（CSP 含む）
+  が storybook で確認できる。`partial-updates.md` 初回版の「StoryHttp story は POST
+  ハンドラを呼べない」は不正確だった — 呼べるのは外側のリクエストではなく story 自身が
+  組み立てた request であり、handler の意味論検証にはそれで足りる。
+
+### 現状では回らないもの（= 改善対象）
+
+「ブラウザが submit を奪って fetch を飛ばし、返ってきた fragment で DOM を差し替える」
+という一連の JS 挙動は storybook では確認できない:
+
+- storybook の HTTP mux は `GET /story/<name>`・`/grid/`・`/static/` しか持たず、
+  ページ内 JS が `fetch("/issues/1/comments", {method: "POST"})` しても宛先ルートが無い。
+- `storybook.Book.Render` は story に渡す request を `httptest.NewRequest(GET /)` で
+  **固定合成**するので、外側の実リクエスト（メソッド・パス・ボディ）を story に
+  届ける経路が無い。
+- storyStore は script 側 fake で、**Render が毎リクエスト session を fork するため
+  script 状態はリクエストごとにリセットされる**。POST → GET の跨いだ状態遷移は
+  script 内の fake では再現できない。
+
+### 改善案
+
+1. **Tier 2 の活用（コード変更不要・すぐできる）**: POST を受ける handler story を
+   「story 内で POST request を組み立てる」形で追加する。部分更新実装時の最初の
+   story として `StoryHttpCreateComment`（POST → fragment or 303）・
+   `StoryHttpCreateCommentError`（POST → 422 fragment）を置く。これで
+   「サーバが正しい fragment を返す」は storybook で固定できる。
+2. **upstream に request パススルーを足す（真の解消）**: minigo/storybook に
+   「外側の `*http.Request` を story に渡す」経路（例: `RenderRequest(ctx, name, w, r)`
+   や `Render` の request 注入オプション）を追加し、cmd/storybook の mux に
+   catch-all を足して `web.New(storyStore)` を実パスに mount する。すると storybook が
+   **「DB なしの実アプリ」として丸ごと動き**、ページ内 JS の fetch → fragment →
+   DOM swap まで実ブラウザで検証できるようになる。page.go の薄い差分方針と
+   整合するので upstream PR としてフィードバックする想定（いつもの経路）。
+3. **状態を跨ぐ検証には host 側 fake が要る**: パススルーを入れても script 側
+   storyStore はリクエストごとにリセットされる。POST で追加したコメントが続く GET で
+   見えることを検証するなら、`Setup` hook（bindApp）で **host 側の stateful な
+   in-memory fake store** を bind する必要がある（`minigo.HostTypeOf` で型ごと
+   bind する道は既にある — story_pages.go の storyStore を host Go 側に移す設計論点）。
+   単発の fragment 応答確認なら stateless fake のままで足りる。
+4. **分担は変えない**: end-to-end（実 SQLite・実 PRG・view transition 横断）は
+   引き続き verify-ui（`go run .` + playwright-cli）。storybook app-mount は
+   「fake で速く決定的に JS 挙動を回す」層として補完する。
+
 ## 実測メモ（2026-11-15 更新）
 
 - 12 story 全て HTML 出力 OK（一覧・空・ページング・詳細・コメントエラー・フォーム new/errors/edit・削除・404 + handler 型 2 本）。

@@ -18,13 +18,13 @@
 - 自作 storybook — `make storybook` → http://localhost:6006 — `docs/ja/for-ui-designer.md`
 - DB 初期化コマンド — `go run . -db app.db init` — `docs/ja/decisions.md`「今後の予定」
 
-## v2: アカウント + Discussions（accounts Phase 1・Discussions 実装済み）
+## v2: アカウント + Discussions + 部分更新（accounts Phase 1・Discussions 実装済み、部分更新は計画確定・未着手）
 
 - アカウント（ログイン + 投稿者識別） — `/register` `/login` `/logout`。**Phase 1 実装済み**（ログイン + 投稿者識別、authorization は未導入）。未ログインでも全機能は使え、投稿に投稿者名が付く — `docs/sketch/ja/accounts.md`
 - Discussions タブ — `/discussions` 系。カテゴリ（seed 固定 taxonomy）・1段スレッド返信・Q&A の answer マーク — `docs/sketch/ja/discussions.md`。reactions・poll・issue→discussion 変換・pin・カテゴリ管理 UI は未実装（v3 候補）
+- コメント/返信の部分更新 — 手書き fetch + HTML fragment（`X-Partial` 判定ヘッダ）で全体再描画を回避。`partial-submit.js` は最初の ES module とし共有コード（announcer 等）を module 化。answer マーク・status toggle は Phase 2 — `docs/sketch/ja/partial-updates.md` `docs/sketch/ja/js-modules.md`
 
 ## v3 候補（検討メモあり・未着手）
 
 - JSON Web API + gh 風 CLI — `/api/v1` + `issues issue list` 風サブコマンド — `docs/sketch/ja/cli-and-web-api.md`
-- コメントの部分更新 — htmx or 手書き fetch の HTML fragment 方式 — `docs/sketch/ja/partial-updates.md`
 - reactions・権限制御・issue→discussion 変換・pin・カテゴリ管理 UI — 各設計メモの「見送り」節を参照
