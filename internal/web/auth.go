@@ -4,6 +4,7 @@
 package web
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -253,4 +254,60 @@ func (h *handler) logout(w http.ResponseWriter, r *http.Request) {
 	}
 	clearSessionCookie(w)
 	http.Redirect(w, r, "/issues", http.StatusSeeOther)
+}
+
+// sessionCookieName is the cookie carrying the opaque session token.
+const sessionCookieName = "session"
+
+// sessionTTL is the server-side session lifetime. The cookie itself is a
+// browser-session cookie (no Max-Age): the cap lives in the sessions table
+// and renews slidingly while the browser stays open, so closing the
+// browser still drops the session.
+const sessionTTL = 30 * 24 * time.Hour
+
+// contextKey is the private key type for request-scoped values.
+type contextKey int
+
+const userContextKey contextKey = iota
+
+// userFromContext returns the logged-in user resolved by withUser, or nil
+// for an anonymous request.
+func userFromContext(ctx context.Context) *store.User {
+	u, _ := ctx.Value(userContextKey).(*store.User)
+	return u
+}
+
+// authorIDFromContext maps the logged-in user to the author_id recorded on
+// new posts; 0 means anonymous.
+func authorIDFromContext(ctx context.Context) int64 {
+	if u := userFromContext(ctx); u != nil {
+		return u.ID
+	}
+	return 0
+}
+
+// withUser is the authentication middleware: it resolves the session
+// cookie to a *store.User on the request context. Anonymous access is
+// fully supported — a nil user simply means "not logged in", and only an
+// unknown/expired session resolves that way. A lookup that fails for any
+// other reason (e.g. a transient DB error) is a 500 instead: proceeding
+// anonymously there would silently record an authored post with no
+// author.
+func withUser(h *handler, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if c, err := r.Cookie(sessionCookieName); err == nil {
+			u, err := h.store.SessionUser(r.Context(), c.Value, sessionTTL)
+			switch {
+			case err == nil:
+				r = r.WithContext(context.WithValue(r.Context(), userContextKey, u))
+			case errors.Is(err, store.ErrNotFound):
+				// Unknown/expired session: continue anonymously.
+			default:
+				h.renderError(w, r, http.StatusInternalServerError,
+					"Internal server error", "The session could not be verified. Please try again.")
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }

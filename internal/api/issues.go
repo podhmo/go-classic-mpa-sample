@@ -2,6 +2,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -274,4 +275,74 @@ func deref(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+type Label struct {
+	ID    int64  `json:"id"`
+	Name  string `json:"name"`
+	Color string `json:"color"`
+}
+
+type Issue struct {
+	ID        int64   `json:"id"`
+	Title     string  `json:"title"`
+	Body      string  `json:"body"`
+	Status    string  `json:"status"`
+	Labels    []Label `json:"labels"`
+	Author    *User   `json:"author"`
+	CreatedAt string  `json:"created_at"`
+	UpdatedAt string  `json:"updated_at"`
+}
+
+type Comment struct {
+	ID        int64  `json:"id"`
+	Body      string `json:"body"`
+	Author    *User  `json:"author"`
+	CreatedAt string `json:"created_at"`
+}
+
+func labelDTO(l store.Label) Label {
+	return Label{ID: l.ID, Name: l.Name, Color: l.Color}
+}
+
+func issueDTO(i *store.Issue) Issue {
+	out := Issue{
+		ID: i.ID, Title: i.Title, Body: i.Body, Status: i.Status,
+		Author: userDTO(i.Author), CreatedAt: fmtTime(i.CreatedAt), UpdatedAt: fmtTime(i.UpdatedAt),
+		Labels: []Label{},
+	}
+	for _, l := range i.Labels {
+		out.Labels = append(out.Labels, labelDTO(l))
+	}
+	return out
+}
+
+func commentDTO(c *store.Comment) Comment {
+	return Comment{ID: c.ID, Body: c.Body, Author: userDTO(c.Author), CreatedAt: fmtTime(c.CreatedAt)}
+}
+
+// resolveLabelIDs resolves label names ("labels") into ids, merged with
+// explicit "label_ids". Unknown names are a 422 field error; a store
+// failure is an error — silently dropping names would lose labels the
+// client asked for.
+func (h *handler) resolveLabelIDs(r *http.Request, ids []int64, names []string) ([]int64, map[string]string, error) {
+	if len(names) == 0 {
+		return ids, nil, nil
+	}
+	all, err := h.store.ListLabels(r.Context())
+	if err != nil {
+		return nil, nil, err
+	}
+	byName := map[string]int64{}
+	for _, l := range all {
+		byName[l.Name] = l.ID
+	}
+	for _, n := range names {
+		id, ok := byName[n]
+		if !ok {
+			return nil, map[string]string{"labels": fmt.Sprintf("Unknown label: %s", n)}, nil
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil, nil
 }

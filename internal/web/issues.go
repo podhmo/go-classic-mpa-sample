@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -68,11 +70,6 @@ type issueDeletePage struct {
 	Issue   *store.Issue
 	Section string
 	User    *store.User
-}
-
-// home redirects the bare root to the issue list.
-func (h *handler) home(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, "/issues", http.StatusSeeOther)
 }
 
 // listIssues handles GET /issues: status tabs, keyword search, label
@@ -467,4 +464,87 @@ func validateIssueInput(r *http.Request) (store.IssueInput, issueFormErrors) {
 
 	fe := store.ValidateIssueInput(in)
 	return in, issueFormErrors{Title: fe["title"], Body: fe["body"]}
+}
+
+// isChecked reports whether id is among the selected label IDs.
+func isChecked(id int64, ids []int64) bool {
+	return slices.Contains(ids, id)
+}
+
+// issuesURL builds /issues URLs carrying the current filter state, so
+// pagination, tabs and label links preserve active filters.
+func issuesURL(f store.ListFilter) string {
+	v := url.Values{}
+	// "open" is the default filter, so keep URLs clean by omitting it.
+	if f.Status != "" && f.Status != store.StatusOpen {
+		v.Set("status", f.Status)
+	}
+	if f.Query != "" {
+		v.Set("q", f.Query)
+	}
+	if f.LabelID != 0 {
+		v.Set("label", strconv.FormatInt(f.LabelID, 10))
+	}
+	if f.Sort != "" {
+		v.Set("sort", f.Sort)
+	}
+	if f.Page > 1 {
+		v.Set("page", strconv.Itoa(f.Page))
+	}
+	if enc := v.Encode(); enc != "" {
+		return "/issues?" + enc
+	}
+	return "/issues"
+}
+
+// listURL keeps the filter but moves to another page.
+func listURL(f store.ListFilter, page int) string {
+	f.Page = page
+	return issuesURL(f)
+}
+
+// statusURL keeps the filter but switches the status tab and resets paging.
+func statusURL(f store.ListFilter, status string) string {
+	f.Status = status
+	f.Page = 1
+	return issuesURL(f)
+}
+
+// labelURL keeps the filter but selects a label and resets paging.
+func labelURL(f store.ListFilter, labelID int64) string {
+	f.LabelID = labelID
+	f.Page = 1
+	return issuesURL(f)
+}
+
+// parseListFilter reads and normalizes the list query parameters.
+func parseListFilter(r *http.Request) store.ListFilter {
+	q := r.URL.Query()
+	f := store.ListFilter{
+		Status:  q.Get("status"),
+		Query:   strings.TrimSpace(q.Get("q")),
+		Sort:    q.Get("sort"),
+		Page:    1,
+		PerPage: perPage,
+	}
+	switch f.Status {
+	case store.StatusOpen, store.StatusClosed, "all":
+	default:
+		f.Status = store.StatusOpen
+	}
+	if f.Sort != "oldest" {
+		f.Sort = ""
+	}
+
+	// Reject absurd page numbers: huge values can overflow the store's
+	// (page-1)*perPage offset arithmetic and are never meaningful anyway.
+	if n, err := strconv.Atoi(q.Get("page")); err == nil && n > 0 && n <= 1_000_000 {
+		f.Page = n
+	}
+	if v := q.Get("label"); v != "" {
+		if id, err := strconv.ParseInt(v, 10, 64); err == nil && id > 0 {
+			f.LabelID = id
+		}
+	}
+	return f
 }

@@ -10,7 +10,6 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"slices"
 	"strconv"
@@ -144,59 +143,6 @@ type User struct {
 	Name string `json:"name"`
 }
 
-type Label struct {
-	ID    int64  `json:"id"`
-	Name  string `json:"name"`
-	Color string `json:"color"`
-}
-
-type Issue struct {
-	ID        int64   `json:"id"`
-	Title     string  `json:"title"`
-	Body      string  `json:"body"`
-	Status    string  `json:"status"`
-	Labels    []Label `json:"labels"`
-	Author    *User   `json:"author"`
-	CreatedAt string  `json:"created_at"`
-	UpdatedAt string  `json:"updated_at"`
-}
-
-type Comment struct {
-	ID        int64  `json:"id"`
-	Body      string `json:"body"`
-	Author    *User  `json:"author"`
-	CreatedAt string `json:"created_at"`
-}
-
-type DiscussionCategory struct {
-	ID          int64  `json:"id"`
-	Name        string `json:"name"`
-	Slug        string `json:"slug"`
-	Description string `json:"description"`
-	Format      string `json:"format"`
-}
-
-type Discussion struct {
-	ID        int64              `json:"id"`
-	Title     string             `json:"title"`
-	Body      string             `json:"body"`
-	Category  DiscussionCategory `json:"category"`
-	Author    *User              `json:"author"`
-	Answered  bool               `json:"answered"`
-	CreatedAt string             `json:"created_at"`
-	UpdatedAt string             `json:"updated_at"`
-}
-
-type DiscussionComment struct {
-	ID        int64               `json:"id"`
-	ParentID  int64               `json:"parent_id"`
-	IsAnswer  bool                `json:"is_answer"`
-	Body      string              `json:"body"`
-	Author    *User               `json:"author"`
-	CreatedAt string              `json:"created_at"`
-	Replies   []DiscussionComment `json:"replies,omitempty"`
-}
-
 // --- store → DTO conversion ---
 
 func userDTO(u *store.User) *User {
@@ -206,50 +152,7 @@ func userDTO(u *store.User) *User {
 	return &User{ID: u.ID, Name: u.Name}
 }
 
-func labelDTO(l store.Label) Label {
-	return Label{ID: l.ID, Name: l.Name, Color: l.Color}
-}
-
 func fmtTime(t time.Time) string { return t.Format(time.RFC3339) }
-
-func issueDTO(i *store.Issue) Issue {
-	out := Issue{
-		ID: i.ID, Title: i.Title, Body: i.Body, Status: i.Status,
-		Author: userDTO(i.Author), CreatedAt: fmtTime(i.CreatedAt), UpdatedAt: fmtTime(i.UpdatedAt),
-		Labels: []Label{},
-	}
-	for _, l := range i.Labels {
-		out.Labels = append(out.Labels, labelDTO(l))
-	}
-	return out
-}
-
-func commentDTO(c *store.Comment) Comment {
-	return Comment{ID: c.ID, Body: c.Body, Author: userDTO(c.Author), CreatedAt: fmtTime(c.CreatedAt)}
-}
-
-func categoryDTO(c store.DiscussionCategory) DiscussionCategory {
-	return DiscussionCategory{ID: c.ID, Name: c.Name, Slug: c.Slug, Description: c.Description, Format: c.Format}
-}
-
-func discussionDTO(d *store.Discussion) Discussion {
-	return Discussion{
-		ID: d.ID, Title: d.Title, Body: d.Body, Category: categoryDTO(d.Category),
-		Author: userDTO(d.Author), Answered: d.Answered,
-		CreatedAt: fmtTime(d.CreatedAt), UpdatedAt: fmtTime(d.UpdatedAt),
-	}
-}
-
-func discussionCommentDTO(c *store.DiscussionComment) DiscussionComment {
-	out := DiscussionComment{
-		ID: c.ID, ParentID: c.ParentID, IsAnswer: c.IsAnswer, Body: c.Body,
-		Author: userDTO(c.Author), CreatedAt: fmtTime(c.CreatedAt),
-	}
-	for _, rep := range c.Replies {
-		out.Replies = append(out.Replies, discussionCommentDTO(rep))
-	}
-	return out
-}
 
 // --- request/response helpers ---
 
@@ -329,48 +232,4 @@ func fields(fe store.FieldErrors) map[string]string {
 		return nil
 	}
 	return map[string]string(fe)
-}
-
-// resolveLabelIDs resolves label names ("labels") into ids, merged with
-// explicit "label_ids". Unknown names are a 422 field error; a store
-// failure is an error — silently dropping names would lose labels the
-// client asked for.
-func (h *handler) resolveLabelIDs(r *http.Request, ids []int64, names []string) ([]int64, map[string]string, error) {
-	if len(names) == 0 {
-		return ids, nil, nil
-	}
-	all, err := h.store.ListLabels(r.Context())
-	if err != nil {
-		return nil, nil, err
-	}
-	byName := map[string]int64{}
-	for _, l := range all {
-		byName[l.Name] = l.ID
-	}
-	for _, n := range names {
-		id, ok := byName[n]
-		if !ok {
-			return nil, map[string]string{"labels": fmt.Sprintf("Unknown label: %s", n)}, nil
-		}
-		ids = append(ids, id)
-	}
-	return ids, nil, nil
-}
-
-// resolveCategoryID accepts either category_id or a category slug and
-// returns the id; an unknown slug is a field error.
-func (h *handler) resolveCategoryID(r *http.Request, id int64, slug string) (int64, map[string]string, error) {
-	if slug == "" {
-		return id, nil, nil
-	}
-	cats, err := h.store.ListDiscussionCategories(r.Context())
-	if err != nil {
-		return 0, nil, err
-	}
-	for _, c := range cats {
-		if c.Slug == slug {
-			return c.ID, nil, nil
-		}
-	}
-	return 0, map[string]string{"category": fmt.Sprintf("Unknown category: %s", slug)}, nil
 }

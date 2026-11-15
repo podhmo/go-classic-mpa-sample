@@ -3,6 +3,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -269,4 +270,74 @@ func derefInt(v *int64) int64 {
 		return 0
 	}
 	return *v
+}
+
+type DiscussionCategory struct {
+	ID          int64  `json:"id"`
+	Name        string `json:"name"`
+	Slug        string `json:"slug"`
+	Description string `json:"description"`
+	Format      string `json:"format"`
+}
+
+type Discussion struct {
+	ID        int64              `json:"id"`
+	Title     string             `json:"title"`
+	Body      string             `json:"body"`
+	Category  DiscussionCategory `json:"category"`
+	Author    *User              `json:"author"`
+	Answered  bool               `json:"answered"`
+	CreatedAt string             `json:"created_at"`
+	UpdatedAt string             `json:"updated_at"`
+}
+
+type DiscussionComment struct {
+	ID        int64               `json:"id"`
+	ParentID  int64               `json:"parent_id"`
+	IsAnswer  bool                `json:"is_answer"`
+	Body      string              `json:"body"`
+	Author    *User               `json:"author"`
+	CreatedAt string              `json:"created_at"`
+	Replies   []DiscussionComment `json:"replies,omitempty"`
+}
+
+func categoryDTO(c store.DiscussionCategory) DiscussionCategory {
+	return DiscussionCategory{ID: c.ID, Name: c.Name, Slug: c.Slug, Description: c.Description, Format: c.Format}
+}
+
+func discussionDTO(d *store.Discussion) Discussion {
+	return Discussion{
+		ID: d.ID, Title: d.Title, Body: d.Body, Category: categoryDTO(d.Category),
+		Author: userDTO(d.Author), Answered: d.Answered,
+		CreatedAt: fmtTime(d.CreatedAt), UpdatedAt: fmtTime(d.UpdatedAt),
+	}
+}
+
+func discussionCommentDTO(c *store.DiscussionComment) DiscussionComment {
+	out := DiscussionComment{
+		ID: c.ID, ParentID: c.ParentID, IsAnswer: c.IsAnswer, Body: c.Body,
+		Author: userDTO(c.Author), CreatedAt: fmtTime(c.CreatedAt),
+	}
+	for _, rep := range c.Replies {
+		out.Replies = append(out.Replies, discussionCommentDTO(rep))
+	}
+	return out
+}
+
+// resolveCategoryID accepts either category_id or a category slug and
+// returns the id; an unknown slug is a field error.
+func (h *handler) resolveCategoryID(r *http.Request, id int64, slug string) (int64, map[string]string, error) {
+	if slug == "" {
+		return id, nil, nil
+	}
+	cats, err := h.store.ListDiscussionCategories(r.Context())
+	if err != nil {
+		return 0, nil, err
+	}
+	for _, c := range cats {
+		if c.Slug == slug {
+			return c.ID, nil, nil
+		}
+	}
+	return 0, map[string]string{"category": fmt.Sprintf("Unknown category: %s", slug)}, nil
 }
