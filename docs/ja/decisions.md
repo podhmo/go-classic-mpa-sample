@@ -427,3 +427,10 @@
 - **`::details-content` 疑似要素に transition**: `<summary>` 以外の内容を包むブラウザ生成ラッパー。`block-size: 0; overflow: clip` + `transition: block-size, content-visibility` — content-visibility を遷移対象に入れないと閉じる途中で内容が先に消えて高さだけが動く。`transition-behavior: allow-discrete` は shorthand に入れず別プロパティ宣言（guide DO）。
 - **非対応はルールごと落ちるだけ**: `::details-content` / `interpolate-size` 非対応ブラウザ（Firefox・Safari 現行）はセレクタ/プロパティを無視して従来どおり瞬時表示 — 別の fallback は書かない（guide の graceful 方針どおり）。`prefers-reduced-motion` で `transition: none`。
 - **検証**: Chromium 156 で `details.open` 切替時に `offsetHeight` を rAF サンプリング → 195px→20px が ~15 フレームかけて滑らかに縮むことを確認（瞬時ではない）。
+
+## タブの移動アンダーライン（2026-11-16、`devin/…-tab-anchor-underline` ブランチ）
+
+- **`.tabs::before` + anchor positioning**: guide anchor-positioning-tab-underline の推奨パターン — `.tab-active` に `anchor-name: --active-tab`、疑似要素に `position-anchor` + `anchor(left/right/bottom)` でインジケータを係留。装飾用の DOM 追加なし。
+- **MPA ゆえ遷移は cross-document VT 側に載せる**: タブは通常リンク → ページ遷移。guide の「ページ遷移では動かない」制約は、疑似要素に `view-transition-name: tab-underline` を付けて既存の `@view-transition navigation: auto` に乗せることで解消 — 旧ページの下線が新ページの位置へ morph する（TODO の「view-transition 中の要素追従に注意」の対応）。同一ドキュメント内の scoped VT（partial-submit）とは無関係なので衝突なし。
+- **fallback は既存の `.tab-active` border-bottom**: `@supports not (position-anchor)` 側は従来のスタイルのまま。対応ブラウザでは `.tab-active` の border を透明化して ::before に一本化（二本下線を防ぐ）。ARIA 側は既存の `aria-current="page"` を維持（guide MANDATORY、変更不要）。
+- **検証**: Chromium 156 で `anchorName`/`view-transition-name`/`inset-*` の computed を確認、Open→Closed 遷移で下線が新タブ位置に配置されることをスクリーンショット確認。

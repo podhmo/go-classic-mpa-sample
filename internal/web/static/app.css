@@ -636,6 +636,37 @@ a.category-badge:is(:hover, :focus-visible) {
   font-weight: 600;
 }
 
+/* Moving tab underline (guide anchor-positioning-tab-underline): a
+   ::before on .tabs tethered to the active tab via anchor positioning.
+   Tabs are real links, so the slide happens inside the cross-document
+   view transition — the pseudo carries view-transition-name so the old
+   page's underline morphs to the new page's position. The .tab-active
+   border-bottom stays as the fallback for engines without anchor
+   positioning (guide's @supports fallback). */
+@supports (position-anchor: --x) {
+  .tab-active {
+    anchor-name: --active-tab;
+    border-bottom-color: transparent;
+  }
+
+  .tabs::before {
+    content: '';
+    position: absolute;
+    position-anchor: --active-tab;
+    inset-block-start: calc(anchor(bottom) - 2px);
+    inset-inline-start: anchor(left);
+    inset-inline-end: anchor(right);
+    border-block-end: 2px solid var(--accent);
+    view-transition-name: tab-underline;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .tabs::before {
+      transition: inset 0.2s;
+    }
+  }
+}
+
 /* ---------- filter bar ---------- */
 
 /* Reflowing columns instead of a breakpoint: four in a row when they fit,
