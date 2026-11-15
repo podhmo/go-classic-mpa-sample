@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -95,6 +96,12 @@ func methodDispatch(methods map[string]http.HandlerFunc) http.HandlerFunc {
 	for m := range methods {
 		names = append(names, m)
 	}
+	// HEAD is accepted wherever GET is (mapped below) — list it like the
+	// std mux does so the Allow header tells the truth.
+	if _, ok := methods[http.MethodGet]; ok {
+		names = append(names, http.MethodHead)
+	}
+	slices.Sort(names)
 	allow := strings.Join(names, ", ")
 	return func(w http.ResponseWriter, r *http.Request) {
 		// HEAD rides on GET, like the std mux's method-scoped patterns;
