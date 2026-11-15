@@ -348,20 +348,28 @@ func TestPartialCommentContract(t *testing.T) {
 	}
 	partial := map[string]string{"X-Partial": "1"}
 
-	// A successful partial post returns only the new comment's <li>.
+	// A successful partial post returns the new comment's <li> plus the
+	// header meta as a data-swap node — posting bumped updated_at, so the
+	// client replaces the stale "Last updated" line instead of appending.
 	resp := postFormWithHeaders(t, srv.URL+"/issues/"+itoa(issue.ID)+"/comments",
 		url.Values{"body": {"fragment body"}}, partial)
 	body := getBody(t, resp)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("partial POST status = %d, want 200", resp.StatusCode)
 	}
-	for _, want := range []string{`class="card comment"`, "fragment body"} {
+	for _, want := range []string{`class="card comment"`, "fragment body", `id="issue-meta" data-swap`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("comment fragment missing %q", want)
 		}
 	}
 	if strings.Contains(body, "<!DOCTYPE") {
 		t.Error("partial response must be a fragment, not a full page")
+	}
+	// The meta node must echo the post-bump updated_at, not the stale one.
+	got, _ := f.GetIssue(t.Context(), issue.ID)
+	stamp := got.UpdatedAt.Format("2006-01-02T15:04:05Z07:00")
+	if !strings.Contains(strings.ReplaceAll(body, "&#43;", "+"), `datetime="`+stamp+`"`) {
+		t.Errorf("meta swap node must carry bumped updated_at %q", stamp)
 	}
 
 	// A validation failure returns only the error-marked form at 422.
@@ -380,15 +388,30 @@ func TestPartialCommentContract(t *testing.T) {
 		t.Error("partial 422 must be a fragment, not a full page")
 	}
 
-	// A reply's fragment carries comment-reply markup.
+	// A reply's fragment carries comment-reply markup plus the header meta
+	// swap node (posting bumped the discussion's updated_at).
 	resp = postFormWithHeaders(t, srv.URL+"/discussions/"+itoa(qa.ID)+"/comments",
 		url.Values{"body": {"a reply"}, "parent_id": {itoa(parent)}}, partial)
 	body = getBody(t, resp)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("partial reply status = %d, want 200", resp.StatusCode)
 	}
-	if !strings.Contains(body, "comment-reply") {
-		t.Error("reply fragment should carry the comment-reply class")
+	for _, want := range []string{"comment-reply", `id="discussion-meta" data-swap`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("reply fragment missing %q", want)
+		}
+	}
+	// A top-level discussion comment POST also rides the meta node.
+	resp = postFormWithHeaders(t, srv.URL+"/discussions/"+itoa(qa.ID)+"/comments",
+		url.Values{"body": {"top level"}}, partial)
+	body = getBody(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("partial comment status = %d, want 200", resp.StatusCode)
+	}
+	for _, want := range []string{`class="card comment"`, "top level", `id="discussion-meta" data-swap`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("comment fragment missing %q", want)
+		}
 	}
 
 	// Without the header the same endpoints keep the 303 PRG redirect.
