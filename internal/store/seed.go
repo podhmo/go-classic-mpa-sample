@@ -131,14 +131,8 @@ func (s *Store) SeedDemoData(ctx context.Context) error {
 		}
 	}
 
-	var cn int
-	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM discussion_categories").Scan(&cn); err != nil {
+	if err := ensureCategories(ctx, tx); err != nil {
 		return err
-	}
-	if cn == 0 {
-		if err := seedCategories(ctx, tx); err != nil {
-			return err
-		}
 	}
 	var dn int
 	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM discussions").Scan(&dn); err != nil {
@@ -289,6 +283,34 @@ var seedDiscussionRows = []seedDiscussion{
 			},
 		},
 	},
+}
+
+// SeedCategories inserts the fixed discussion categories when the table is
+// empty. Categories are reference data with no other source (there is no
+// category-create flow), so `init` calls this too — otherwise a schema-only
+// database could never accept a discussion. Idempotent.
+func (s *Store) SeedCategories(ctx context.Context) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := ensureCategories(ctx, tx); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// ensureCategories seeds categories inside tx when the table is empty.
+func ensureCategories(ctx context.Context, tx *sql.Tx) error {
+	var cn int
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM discussion_categories").Scan(&cn); err != nil {
+		return err
+	}
+	if cn == 0 {
+		return seedCategories(ctx, tx)
+	}
+	return nil
 }
 
 // seedCategories inserts the fixed discussion categories inside tx (called

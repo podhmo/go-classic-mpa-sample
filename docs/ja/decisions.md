@@ -382,3 +382,4 @@
 - **`--category` は slug 指定**: `?category=` URL フィルタと同じ語彙。`--label`（name → id 解決）と同じパターンで `ListDiscussionCategories` 経由で CategoryID に解決し、未知の slug は有効値を列挙した実行エラーにする。
 - **`discussion answer N --comment C [--unmark]`**: qa カテゴリの answer マークを `SetCommentAnswer` に直通。API が `{"answer": bool}` を取るので unmark も同じサブコマンドのフラグで表現（`unanswer` 別コマンドは増やさない）。
 - **view の comments はネスト出力**: top-level コメントの下に reply を一段深く表示し、answer コメントは `[answer]` を付記。`--comments --json` は issue 側と同じく comments をルートキーに添える。
+- **init は固定カテゴリもシードする（Devin Review 指摘対応）**: 「デモデータを蒔かない」方針は維持しつつ、discussion_categories は参照データ（作成経路が他に存在しない）として `store.SeedCategories`（テーブル空のときのみ挿入、冪等）を `init` でも呼ぶ。これがないと init 直後のスキーマのみ DB でローカルモード `discussion create` が必ず失敗する。

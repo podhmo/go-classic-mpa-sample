@@ -117,6 +117,15 @@ func TestCLIE2E(t *testing.T) {
 	// init creates the schema without serving.
 	mustRun(t, serverBin, nil, "-db", db, "init")
 
+	// The fixed discussion categories are reference data: init seeds them,
+	// so local-mode discussion create works on a schema-only database
+	// (before the server ever runs).
+	lout := mustRun(t, cliBin, nil, "discussion", "create", "--db", db,
+		"--title", "local q", "--category", "qa", "--body", "pre-server")
+	if !strings.Contains(lout, "created discussion #") {
+		t.Fatalf("local discussion create on init db: %q", lout)
+	}
+
 	// Serve with the env token so /api/v1 is mounted from the start;
 	// startup also seeds the demo data.
 	serve(t, serverBin, db, addr, "envtok")
