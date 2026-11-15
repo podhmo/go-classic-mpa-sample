@@ -612,6 +612,7 @@ func StoryHttpApp(w http.ResponseWriter, r *http.Request) {
 	// allocated inside the script — rebuild it, carrying method, URL,
 	// body, headers and context over.
 	req := httptest.NewRequest(r.Method, r.URL.RequestURI(), nil)
+	req.Host = r.Host // NewRequest stamps example.com; keep the real host so the Origin check compares correctly.
 	req.Body = r.Body
 	req.ContentLength = r.ContentLength
 	req.Header = r.Header.Clone()
