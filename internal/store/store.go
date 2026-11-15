@@ -214,7 +214,12 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	return &Store{db: db}, nil
+	s := &Store{db: db}
+	if err := s.DeleteExpiredSessions(context.Background()); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("store: sweep expired sessions: %w", err)
+	}
+	return s, nil
 }
 
 // Close closes the underlying database.
