@@ -76,6 +76,51 @@ func labelViews(labels []*store.Label) []api.Label {
 	return out
 }
 
+func categoryView(c store.DiscussionCategory) api.DiscussionCategory {
+	return api.DiscussionCategory{
+		ID: c.ID, Name: c.Name, Slug: c.Slug,
+		Description: c.Description, Format: c.Format,
+	}
+}
+
+func discussionViewJSON(d *store.Discussion) api.Discussion {
+	return api.Discussion{
+		ID: d.ID, Title: d.Title, Body: d.Body,
+		Category:  categoryView(d.Category),
+		Author:    userView(d.Author),
+		Answered:  d.Answered,
+		CreatedAt: d.CreatedAt.Format(time.RFC3339), UpdatedAt: d.UpdatedAt.Format(time.RFC3339),
+	}
+}
+
+func discussionViews(ds []*store.Discussion) []api.Discussion {
+	out := make([]api.Discussion, 0, len(ds))
+	for _, d := range ds {
+		out = append(out, discussionViewJSON(d))
+	}
+	return out
+}
+
+func discussionCommentViews(cs []*store.DiscussionComment) []api.DiscussionComment {
+	out := make([]api.DiscussionComment, 0, len(cs))
+	for _, c := range cs {
+		out = append(out, discussionCommentView(c))
+	}
+	return out
+}
+
+func discussionCommentView(c *store.DiscussionComment) api.DiscussionComment {
+	out := api.DiscussionComment{
+		ID: c.ID, ParentID: c.ParentID, IsAnswer: c.IsAnswer, Body: c.Body,
+		Author:    userView(c.Author),
+		CreatedAt: c.CreatedAt.Format(time.RFC3339),
+	}
+	for _, rep := range c.Replies {
+		out.Replies = append(out.Replies, discussionCommentView(rep))
+	}
+	return out
+}
+
 func userView(u *store.User) *api.User {
 	if u == nil {
 		return nil

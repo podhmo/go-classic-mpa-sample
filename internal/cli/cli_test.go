@@ -170,7 +170,8 @@ func TestUsageErrors(t *testing.T) {
 		{"issue", "view", "1", "-w"}, // -w without --server
 		{"api", "/issues"},           // remote-only
 		{"auth", "token"},            // missing --user
-		{"discussion", "list"},       // not implemented
+		{"discussion"},               // missing action
+		{"discussion", "bogus"},      // unknown action
 		{"wat"},                      // unknown command
 	} {
 		code, _, errOut := run(t, o, args...)

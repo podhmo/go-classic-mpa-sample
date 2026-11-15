@@ -148,3 +148,40 @@ func TestSeedDemoData(t *testing.T) {
 		t.Fatalf("demo login on pre-existing DB: %v", err)
 	}
 }
+
+// TestSeedCategories covers `init`'s reference-data seed: a schema-only
+// store gets the fixed categories (and nothing else), idempotently.
+func TestSeedCategories(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	cats, err := s.ListDiscussionCategories(ctx)
+	if err != nil {
+		t.Fatalf("ListDiscussionCategories: %v", err)
+	}
+	if len(cats) != 0 {
+		t.Fatalf("fresh db has %d categories, want 0", len(cats))
+	}
+
+	if err := s.SeedCategories(ctx); err != nil {
+		t.Fatalf("SeedCategories: %v", err)
+	}
+	if err := s.SeedCategories(ctx); err != nil {
+		t.Fatalf("SeedCategories (idempotent): %v", err)
+	}
+
+	cats, err = s.ListDiscussionCategories(ctx)
+	if err != nil {
+		t.Fatalf("ListDiscussionCategories: %v", err)
+	}
+	if len(cats) != 4 {
+		t.Fatalf("seeded %d categories, want 4", len(cats))
+	}
+
+	// Reference data only — no demo discussions came along.
+	if _, total, err := s.ListDiscussions(ctx, DiscussionListFilter{}); err != nil {
+		t.Fatalf("ListDiscussions: %v", err)
+	} else if total != 0 {
+		t.Fatalf("SeedCategories also created %d discussions", total)
+	}
+}

@@ -7,6 +7,9 @@
 //	issues issue list|view|create|edit|close|reopen|delete
 //	issues comment create N --body B
 //	issues label list
+//	issues discussion list|view|create|edit|delete
+//	issues discussion comment create N --body B [--parent C]
+//	issues discussion answer N --comment C [--unmark]
 //	issues auth token --user NAME     (local mode only)
 //	issues api <path>                 (remote mode only)
 //

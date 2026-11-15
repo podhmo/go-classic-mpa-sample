@@ -32,7 +32,7 @@ Guides referenced below are in the `modern-web-guidance` catalog (`.agents/skill
   - [x] **Phase 1: ローカル CLI**: `issue list|view|create|edit|close|reopen|delete`、`comment create`、`label list`。`--json FIELD,...`（フィールド選択、API の DTO キー名に揃える）。exit code 0 成功 / 1 実行エラー / 2 使い方エラー。
   - [x] **Phase 3: リモートモード**: `internal/client` で `Backend` の HTTP 実装。`-w/--web`（サーバ URL + ページパスをブラウザで開く、要 --server、`issue view|create`）、`issues api <path>`（生 API 抜け道・リモート専用、非 2xx は stderr + exit 1）。
   - [x] **`auth token`**: `issues auth token --user NAME` で api_tokens を発行（ローカルモード限定: `UserByName` + `CreateAPIToken`、平文は一度だけ表示）。
-  - [ ] **discussion サブコマンド群**: `discussion list|view|create|edit|delete`、`discussion comment create [--parent]`、`discussion answer`（メモの未決項「まず issues のみに絞るか」は絞る方で実装。`/api/v1/discussions*` は済みなので追加は機械的）。
+  - [x] **discussion サブコマンド群**: `discussion list|view|create|edit|delete`、`discussion comment create [--parent]`、`discussion answer`（メモの未決項「まず issues のみに絞るか」は絞る方で実装。`/api/v1/discussions*` は済みなので追加は機械的）。
   - [ ] **Phase 4 仕上げ**: `api` の `--method/--field`、shell completion、`--template` 出力、NO_COLOR/TTY 判定、api_tokens の revoke/一覧導線（`auth token --revoke` / `auth token list` 等、期限なし方針のままなら管理面が要る）。
 - [x] **JSON Web API (`/api/v1`)** — `docs/sketch/ja/cli-and-web-api.md` の Phase 2。`internal/api` に consumer 側 Store interface + DTO + ハンドラ。Bearer は単一 env トークン（`ISSUES_API_TOKEN`）またはユーザー別 `api_tokens`（行があれば actor が立つ）。認証情報が 1 つも無ければ mount しない fail-closed。エラー形式 `{"error":{"message","fields"}}`、ステータスは HTML 側と同じ意味論。
   - [x] **骨格 + Bearer fail-closed**: `internal/api` 新設、mux に `/api/v1` サブツリー mount（token 未設定時は mount 自体しない）。`Authorization: Bearer` を `crypto/subtle` 定数時間比較で検証、不一致・欠落は 401 JSON。

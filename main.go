@@ -123,8 +123,11 @@ func envOr(key, def string) string {
 // refresh query-planner statistics, print a report, and return.
 //
 // It deliberately does not seed demo data — seeding stays a startup
-// concern — so the operation is deterministic and safe to re-run: the
-// schema DDL is idempotent and ANALYZE merely refreshes statistics.
+// concern — but it does ensure the fixed discussion categories: they are
+// reference data with no other source, and without them a schema-only
+// database can never accept a discussion via the local CLI. Everything is
+// idempotent (schema DDL, empty-table category insert, ANALYZE) so init is
+// deterministic and safe to re-run.
 // log.Fatalf exits without running deferred calls, so the store is closed
 // explicitly on every path.
 func initDB(path string) {
@@ -143,6 +146,10 @@ func initDB(path string) {
 	}
 
 	ctx := context.Background()
+	if err := st.SeedCategories(ctx); err != nil {
+		st.Close()
+		log.Fatalf("seed categories in %q: %v", path, err)
+	}
 	if err := st.Analyze(ctx); err != nil {
 		st.Close()
 		log.Fatalf("analyze database %q: %v", path, err)

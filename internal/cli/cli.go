@@ -8,6 +8,9 @@
 //	issues issue list|view|create|edit|close|reopen|delete
 //	issues comment create N --body B
 //	issues label list
+//	issues discussion list|view|create|edit|delete
+//	issues discussion comment create N --body B [--parent C]
+//	issues discussion answer N --comment C [--unmark]
 //	issues auth token --user NAME     (local mode only)
 //	issues api <path>                 (remote mode only)
 //
@@ -43,6 +46,16 @@ type Backend interface {
 	ListComments(ctx context.Context, issueID int64) ([]*store.Comment, error)
 	CreateComment(ctx context.Context, issueID int64, body string, authorID int64) (int64, error)
 	ListLabels(ctx context.Context) ([]*store.Label, error)
+
+	ListDiscussions(ctx context.Context, f store.DiscussionListFilter) ([]*store.Discussion, int, error)
+	GetDiscussion(ctx context.Context, id int64) (*store.Discussion, error)
+	CreateDiscussion(ctx context.Context, in store.DiscussionInput, authorID int64) (int64, error)
+	UpdateDiscussion(ctx context.Context, id int64, in store.DiscussionInput) error
+	DeleteDiscussion(ctx context.Context, id int64) error
+	ListDiscussionComments(ctx context.Context, discussionID int64) ([]*store.DiscussionComment, error)
+	CreateDiscussionComment(ctx context.Context, discussionID, parentID int64, body string, authorID int64) (int64, error)
+	SetCommentAnswer(ctx context.Context, discussionID, commentID int64, answer bool) error
+	ListDiscussionCategories(ctx context.Context) ([]*store.DiscussionCategory, error)
 }
 
 // TokenStore is the extra contract "auth token" needs. Issuance is a
@@ -100,9 +113,7 @@ func Run(ctx context.Context, o Options) int {
 	case "api":
 		err = apiCmd(ctx, o, args[1:])
 	case "discussion":
-		err = usageError{
-			msg: "discussion commands are not implemented yet (tracked in TODO.md)",
-		}
+		err = discussionCmd(ctx, o, args[1:])
 	default:
 		err = usageError{msg: fmt.Sprintf("unknown command %q", args[0])}
 	}
@@ -169,6 +180,9 @@ Commands:
   issue list|view|create|edit|close|reopen|delete
   comment create N --body B
   label list
+  discussion list|view|create|edit|delete
+  discussion comment create N --body B [--parent C]
+  discussion answer N --comment C [--unmark]
   auth token --user NAME     issue a per-user API token (local mode only)
   api <path>                 raw GET against /api/v1 (remote mode only)
   help
@@ -251,12 +265,18 @@ func (n *nameFlag) Set(v string) error {
 
 // issueNumber parses a positional issue/comment id argument.
 func issueNumber(args []string, i int) (int64, error) {
+	return argNumber(args, i, "issue")
+}
+
+// argNumber parses a positional id argument; noun names the resource in
+// error messages ("issue", "discussion").
+func argNumber(args []string, i int, noun string) (int64, error) {
 	if len(args) <= i {
-		return 0, usageError{msg: "missing issue number"}
+		return 0, usageError{msg: "missing " + noun + " number"}
 	}
 	n, err := strconv.ParseInt(args[i], 10, 64)
 	if err != nil || n < 1 {
-		return 0, usageError{msg: fmt.Sprintf("invalid issue number %q", args[i])}
+		return 0, usageError{msg: fmt.Sprintf("invalid %s number %q", noun, args[i])}
 	}
 	return n, nil
 }

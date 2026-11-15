@@ -117,6 +117,15 @@ func TestCLIE2E(t *testing.T) {
 	// init creates the schema without serving.
 	mustRun(t, serverBin, nil, "-db", db, "init")
 
+	// The fixed discussion categories are reference data: init seeds them,
+	// so local-mode discussion create works on a schema-only database
+	// (before the server ever runs).
+	lout := mustRun(t, cliBin, nil, "discussion", "create", "--db", db,
+		"--title", "local q", "--category", "qa", "--body", "pre-server")
+	if !strings.Contains(lout, "created discussion #") {
+		t.Fatalf("local discussion create on init db: %q", lout)
+	}
+
 	// Serve with the env token so /api/v1 is mounted from the start;
 	// startup also seeds the demo data.
 	serve(t, serverBin, db, addr, "envtok")
@@ -180,6 +189,31 @@ func TestCLIE2E(t *testing.T) {
 	out = mustRun(t, cliBin, nil, remote("issue", "close", strconv.FormatInt(id, 10))...)
 	if !strings.Contains(out, "closed issue #") {
 		t.Fatalf("issue close: %q", out)
+	}
+
+	// Discussion commands take the same remote path over /api/v1/discussions.
+	out = mustRun(t, cliBin, nil, remote("discussion", "create",
+		"--title", "remote qa", "--category", "qa", "--body", "how?")...)
+	var did int64
+	if _, err := fmt.Sscanf(out, "created discussion #%d", &did); err != nil || did == 0 {
+		t.Fatalf("discussion create: %q", out)
+	}
+	dlist := mustRun(t, cliBin, nil, remote("discussion", "list", "--search", "remote qa")...)
+	if !strings.Contains(dlist, "remote qa") {
+		t.Fatalf("discussion list:\n%s", dlist)
+	}
+	out = mustRun(t, cliBin, nil, remote("discussion", "comment", "create",
+		strconv.FormatInt(did, 10), "--body", "the answer")...)
+	var cid int64
+	if _, err := fmt.Sscanf(out, "created comment #%d", &cid); err != nil || cid == 0 {
+		t.Fatalf("discussion comment: %q", out)
+	}
+	mustRun(t, cliBin, nil, remote("discussion", "answer",
+		strconv.FormatInt(did, 10), "--comment", strconv.FormatInt(cid, 10))...)
+	dview := mustRun(t, cliBin, nil, remote("discussion", "view",
+		strconv.FormatInt(did, 10), "--json", "title,answered")...)
+	if !strings.Contains(dview, `"answered": true`) {
+		t.Fatalf("discussion view after answer:\n%s", dview)
 	}
 
 	// issues api returns raw JSON; a bad token fails with exit 1.
