@@ -420,3 +420,10 @@
 - **子要素に view-transition-name を付けない**: `match-element` を各 `<li>` に付けると cross-document ナビ遷移にも per-item morph が漏れる。スコープ要素は UA により `view-transition-name: root` が付き自身が group として参加するので、コンポーネント単位の cross-fade は名前なしで得られる。
 - **reduced-motion の CSS 保険**: `::view-transition-group(*)/old(*)/new(*) { animation: none !important }` を `@media (prefers-reduced-motion: reduce)` に追加（guide MANDATORY）。JS 側でもスキップする二重化。
 - **検証**: Chromium 156 で `Element.prototype.startViewTransition` を計装して append（コメント投稿）・replace（status toggle）・422（空投稿）の 3 経路すべてで scoped VT が 1 回走り、DOM 差し替え・toast・エラー表示が正常、コンソールエラー 0 を確認。
+
+## `<details>` 開閉アニメーション（2026-11-16、`devin/…-details-anim` ブランチ）
+
+- **`interpolate-size: allow-keywords` を :root に opt-in**: guide animate-to-intrinsic-sizes の MANDATORY。`block-size: 0 ↔ auto` の遷移を有効化する。対象は現状 `.reply-details`（discussion の返信フォーム）のみ。
+- **`::details-content` 疑似要素に transition**: `<summary>` 以外の内容を包むブラウザ生成ラッパー。`block-size: 0; overflow: clip` + `transition: block-size, content-visibility` — content-visibility を遷移対象に入れないと閉じる途中で内容が先に消えて高さだけが動く。`transition-behavior: allow-discrete` は shorthand に入れず別プロパティ宣言（guide DO）。
+- **非対応はルールごと落ちるだけ**: `::details-content` / `interpolate-size` 非対応ブラウザ（Firefox・Safari 現行）はセレクタ/プロパティを無視して従来どおり瞬時表示 — 別の fallback は書かない（guide の graceful 方針どおり）。`prefers-reduced-motion` で `transition: none`。
+- **検証**: Chromium 156 で `details.open` 切替時に `offsetHeight` を rAF サンプリング → 195px→20px が ~15 フレームかけて滑らかに縮むことを確認（瞬時ではない）。
