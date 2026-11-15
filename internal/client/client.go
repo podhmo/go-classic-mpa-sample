@@ -22,13 +22,31 @@ type Client struct {
 	hc    *http.Client
 }
 
+// HTTPClient is the http.Client every remote call shares (the CLI's
+// `issues api` included). It refuses https→http redirects: Go forwards
+// Authorization on same-host redirects even when the scheme downgrades,
+// which would send the token unencrypted.
+var HTTPClient = &http.Client{
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return fmt.Errorf("stopped after 10 redirects")
+		}
+		for _, prev := range via {
+			if prev.URL.Scheme == "https" && req.URL.Scheme == "http" {
+				return fmt.Errorf("refusing https→http redirect to %s", req.URL)
+			}
+		}
+		return nil
+	},
+}
+
 // New returns a Client for the server's /api/v1. token is the Bearer
 // credential — a shared env token or a per-user api_tokens value.
 func New(server, token string) *Client {
 	return &Client{
 		base:  strings.TrimSuffix(server, "/") + "/api/v1",
 		token: token,
-		hc:    http.DefaultClient,
+		hc:    HTTPClient,
 	}
 }
 

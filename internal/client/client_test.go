@@ -2,7 +2,9 @@ package client
 
 import (
 	"context"
+	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/podhmo/go-classic-mpa-sample/internal/api"
@@ -210,5 +212,39 @@ func TestClientPaginationAboveCap(t *testing.T) {
 			first, last = got[0].ID, got[len(got)-1].ID
 		}
 		t.Fatalf("want issues 151..250 (100 items), got len=%d [%d..%d]", len(got), first, last)
+	}
+}
+
+// Regression: https→http redirects must be refused — Go would forward
+// the Authorization header on a same-host redirect across the downgrade.
+func TestHTTPClientRefusesDowngrade(t *testing.T) {
+	plain := httptest.NewServer(http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			t.Error("request reached the plaintext redirect target")
+		}))
+	defer plain.Close()
+	tls := httptest.NewTLSServer(http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, plain.URL+"/x", http.StatusFound)
+		}))
+	defer tls.Close()
+
+	req, err := http.NewRequestWithContext(context.Background(),
+		"GET", tls.URL+"/y", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// TLS transport from the test server, redirect policy from HTTPClient.
+	c := &http.Client{
+		Transport:     tls.Client().Transport,
+		CheckRedirect: HTTPClient.CheckRedirect,
+	}
+	resp, err := c.Do(req)
+	if err == nil {
+		resp.Body.Close()
+		t.Fatal("downgrade redirect was followed")
+	}
+	if !strings.Contains(err.Error(), "refusing https") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

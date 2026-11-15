@@ -9,6 +9,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/podhmo/go-classic-mpa-sample/internal/client"
 )
 
 // issues api <path> — GET the path against the configured server and print
@@ -40,7 +42,9 @@ func apiCmd(ctx context.Context, o Options, args []string) error {
 	if bf.token != "" {
 		req.Header.Set("Authorization", "Bearer "+bf.token)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	// client.HTTPClient refuses https→http redirects, which would leak
+	// the Bearer token (Go forwards Authorization on same-host redirects).
+	resp, err := client.HTTPClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("request %s: %w", req.URL, err)
 	}
