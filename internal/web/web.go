@@ -39,6 +39,11 @@ type Store interface {
 	ListComments(ctx context.Context, issueID int64) ([]*store.Comment, error)
 	CreateComment(ctx context.Context, issueID int64, body string) (int64, error)
 	ListLabels(ctx context.Context) ([]*store.Label, error)
+	CreateUser(ctx context.Context, name, passwordHash string) (int64, error)
+	AuthenticateUser(ctx context.Context, name, password string) (*store.User, error)
+	CreateSession(ctx context.Context, userID int64, ttl time.Duration) (string, error)
+	SessionUser(ctx context.Context, token string) (*store.User, error)
+	DeleteSession(ctx context.Context, token string) error
 }
 
 const (
@@ -53,14 +58,20 @@ const (
 )
 
 // New returns the root http.Handler for the application. The ServeMux uses
-// Go 1.22+ method+path patterns and is wrapped in the stdlib
-// CrossOriginProtection middleware, which rejects cross-site state-changing
-// browser requests (CSRF) via Sec-Fetch-Site / Origin headers.
+// Go 1.22+ method+path patterns, is wrapped in withUser (session-cookie →
+// context auth resolution) and then the stdlib CrossOriginProtection
+// middleware, which rejects cross-site state-changing browser requests
+// (CSRF) via Sec-Fetch-Site / Origin headers.
 func New(st Store) http.Handler {
 	h := &handler{store: st, r: NewRenderer()}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", h.home)
+	mux.HandleFunc("GET /register", h.registerForm)
+	mux.HandleFunc("POST /register", h.register)
+	mux.HandleFunc("GET /login", h.loginForm)
+	mux.HandleFunc("POST /login", h.login)
+	mux.HandleFunc("POST /logout", h.logout)
 	mux.HandleFunc("GET /issues", h.listIssues)
 	mux.HandleFunc("GET /issues/new", h.newIssue)
 	mux.HandleFunc("POST /issues", h.createIssue)
@@ -112,7 +123,43 @@ func New(st Store) http.Handler {
 	mux.HandleFunc("GET /", h.notFound)
 	mux.HandleFunc("POST /", h.notFound)
 
-	return securityHeaders(http.NewCrossOriginProtection().Handler(mux))
+	return securityHeaders(http.NewCrossOriginProtection().Handler(withUser(st, mux)))
+}
+
+// sessionCookieName is the cookie carrying the opaque session token.
+const sessionCookieName = "session"
+
+// sessionTTL is the server-side session lifetime. The cookie itself is a
+// browser-session cookie (no Max-Age): the cap lives in the sessions table
+// and renews slidingly while the browser stays open, so closing the
+// browser still drops the session.
+const sessionTTL = 30 * 24 * time.Hour
+
+// contextKey is the private key type for request-scoped values.
+type contextKey int
+
+const userContextKey contextKey = iota
+
+// userFromContext returns the logged-in user resolved by withUser, or nil
+// for an anonymous request.
+func userFromContext(ctx context.Context) *store.User {
+	u, _ := ctx.Value(userContextKey).(*store.User)
+	return u
+}
+
+// withUser is the authentication middleware: it resolves the session
+// cookie to a *store.User on the request context. It never rejects a
+// request — anonymous access is fully supported; a nil user simply means
+// "not logged in".
+func withUser(st Store, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if c, err := r.Cookie(sessionCookieName); err == nil {
+			if u, err := st.SessionUser(r.Context(), c.Value); err == nil {
+				r = r.WithContext(context.WithValue(r.Context(), userContextKey, u))
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // contentSecurityPolicy is the enforced CSP for every response. The app
@@ -257,18 +304,25 @@ func labelURL(f store.ListFilter, labelID int64) string {
 	return issuesURL(f)
 }
 
+// renderError renders the styled error page carrying the request's user so
+// the header keeps the logged-in state.
+func (h *handler) renderError(w http.ResponseWriter, r *http.Request, status int, heading, message string) {
+	h.r.renderErrorFor(w, status, heading, message, userFromContext(r.Context()))
+}
+
 // notFound serves the styled 404 page. It is registered as a route handler for
 // the catch-all patterns, so it keeps the http.HandlerFunc signature; the
-// request itself is unused.
-func (h *handler) notFound(w http.ResponseWriter, _ *http.Request) {
-	h.r.notFound(w)
+// request itself is only used to resolve the current user.
+func (h *handler) notFound(w http.ResponseWriter, r *http.Request) {
+	h.renderError(w, r, http.StatusNotFound, "Not found",
+		"The page or issue you are looking for does not exist or may have been deleted.")
 }
 
 // internalError logs the underlying error but renders a generic page so no
 // internals leak to the client.
 func (h *handler) internalError(w http.ResponseWriter, r *http.Request, err error) {
 	log.Printf("web: %s %s: %v", r.Method, r.URL.Path, err)
-	h.r.renderError(w, http.StatusInternalServerError, "Internal server error",
+	h.renderError(w, r, http.StatusInternalServerError, "Internal server error",
 		"Something went wrong on our side. Please try again.")
 }
 
@@ -278,11 +332,11 @@ func (h *handler) parseForm(w http.ResponseWriter, r *http.Request) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, maxFormBytes)
 	if err := r.ParseForm(); err != nil {
 		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-			h.r.renderError(w, http.StatusRequestEntityTooLarge, "Form too large",
+			h.renderError(w, r, http.StatusRequestEntityTooLarge, "Form too large",
 				"The submitted form exceeded the size limit.")
 			return false
 		}
-		h.r.renderError(w, http.StatusBadRequest, "Bad request",
+		h.renderError(w, r, http.StatusBadRequest, "Bad request",
 			"The submitted form could not be read.")
 		return false
 	}
@@ -317,6 +371,7 @@ func parseListFilter(r *http.Request) store.ListFilter {
 	if f.Sort != "oldest" {
 		f.Sort = ""
 	}
+
 	// Reject absurd page numbers: huge values can overflow the store's
 	// (page-1)*perPage offset arithmetic and are never meaningful anyway.
 	if n, err := strconv.Atoi(q.Get("page")); err == nil && n > 0 && n <= 1_000_000 {

@@ -23,6 +23,7 @@ type issueListPage struct {
 	RangeStart      int
 	RangeEnd        int
 	HasActiveFilter bool
+	User            *store.User
 }
 
 // issueDetailPage is the view model for GET /issues/{id}. CommentDraft and
@@ -34,6 +35,7 @@ type issueDetailPage struct {
 	Comments     []*store.Comment
 	CommentDraft string
 	CommentError string
+	User         *store.User
 }
 
 // issueFormPage is the view model for both the new-issue and edit-issue
@@ -46,6 +48,7 @@ type issueFormPage struct {
 	Input       store.IssueInput
 	Labels      []*store.Label
 	Errors      issueFormErrors
+	User        *store.User
 }
 
 // issueFormErrors carries per-field validation messages for the issue form.
@@ -60,6 +63,7 @@ func (e issueFormErrors) any() bool { return e.Title != "" || e.Body != "" }
 type issueDeletePage struct {
 	Title string
 	Issue *store.Issue
+	User  *store.User
 }
 
 // home redirects the bare root to the issue list.
@@ -107,6 +111,7 @@ func (h *handler) listIssues(w http.ResponseWriter, r *http.Request) {
 		TotalPages: totalPages,
 		HasActiveFilter: f.Query != "" || f.LabelID != 0 ||
 			f.Status != store.StatusOpen || f.Sort != "",
+		User: userFromContext(r.Context()),
 	}
 	if total > 0 {
 		data.RangeStart = (f.Page-1)*perPage + 1
@@ -134,6 +139,7 @@ func (h *handler) newIssue(w http.ResponseWriter, r *http.Request) {
 		Action:      "/issues",
 		SubmitLabel: "Create issue",
 		Labels:      labels,
+		User:        userFromContext(r.Context()),
 	})
 }
 
@@ -157,6 +163,7 @@ func (h *handler) createIssue(w http.ResponseWriter, r *http.Request) {
 			Input:       in,
 			Labels:      labels,
 			Errors:      errs,
+			User:        userFromContext(r.Context()),
 		})
 		return
 	}
@@ -189,6 +196,7 @@ func (h *handler) showIssue(w http.ResponseWriter, r *http.Request) {
 		Title:    fmt.Sprintf("#%d %s", issue.ID, issue.Title),
 		Issue:    issue,
 		Comments: comments,
+		User:     userFromContext(r.Context()),
 	})
 }
 
@@ -224,6 +232,7 @@ func (h *handler) editIssue(w http.ResponseWriter, r *http.Request) {
 		SubmitLabel: "Save changes",
 		Input:       in,
 		Labels:      labels,
+		User:        userFromContext(r.Context()),
 	})
 }
 
@@ -258,6 +267,7 @@ func (h *handler) updateIssue(w http.ResponseWriter, r *http.Request) {
 			Input:       in,
 			Labels:      labels,
 			Errors:      errs,
+			User:        userFromContext(r.Context()),
 		})
 		return
 	}
@@ -282,7 +292,7 @@ func (h *handler) setStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	status := r.PostFormValue("status")
 	if status != store.StatusOpen && status != store.StatusClosed {
-		h.r.renderError(w, http.StatusBadRequest, "Bad request", "Invalid status value.")
+		h.renderError(w, r, http.StatusBadRequest, "Bad request", "Invalid status value.")
 		return
 	}
 	if err := h.store.SetIssueStatus(r.Context(), id, status); err != nil {
@@ -308,6 +318,7 @@ func (h *handler) confirmDelete(w http.ResponseWriter, r *http.Request) {
 	h.r.renderIssueDelete(w, http.StatusOK, issueDeletePage{
 		Title: fmt.Sprintf("Delete issue #%d", issue.ID),
 		Issue: issue,
+		User:  userFromContext(r.Context()),
 	})
 }
 
@@ -365,6 +376,7 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request) {
 			Comments:     comments,
 			CommentDraft: body,
 			CommentError: errMsg,
+			User:         userFromContext(r.Context()),
 		})
 		return
 	}

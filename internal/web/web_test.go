@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/podhmo/go-classic-mpa-sample/internal/auth"
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
@@ -26,9 +27,12 @@ type fakeStore struct {
 	mu          sync.Mutex
 	nextIssue   int64
 	nextComment int64
+	nextUser    int64
 	issues      map[int64]*store.Issue
 	comments    map[int64][]*store.Comment
 	labels      []*store.Label
+	users       map[int64]*fakeUser
+	sessions    map[string]int64 // hashed token → user ID
 }
 
 func newFakeStore() *fakeStore {
@@ -37,6 +41,8 @@ func newFakeStore() *fakeStore {
 		nextComment: 1,
 		issues:      map[int64]*store.Issue{},
 		comments:    map[int64][]*store.Comment{},
+		users:       map[int64]*fakeUser{},
+		sessions:    map[string]int64{},
 	}
 	f.labels = []*store.Label{
 		{ID: 1, Name: "Bug", Color: "#d73a4a"},
@@ -265,6 +271,100 @@ func (f *fakeStore) ListLabels(_ context.Context) ([]*store.Label, error) {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
+}
+
+/* ---------- fake accounts ---------- */
+
+// fakeUser keeps the fake's users and the password they were created with.
+// CreateUser receives a hash, not a password, so tests seed users through
+// addUser below and the fake honors the real semantics of
+// AuthenticateUser via internal/auth.
+type fakeUser struct {
+	user         store.User
+	passwordHash string
+}
+
+func (f *fakeStore) userByName(name string) *fakeUser {
+	for _, fu := range f.users {
+		if strings.EqualFold(fu.user.Name, name) {
+			return fu
+		}
+	}
+	return nil
+}
+
+// addUser is a test helper that registers a user with a real password.
+func (f *fakeStore) addUser(t *testing.T, name, password string) *store.User {
+	t.Helper()
+	hash, err := auth.HashPassword(password)
+	if err != nil {
+		t.Fatalf("auth.HashPassword: %v", err)
+	}
+	id, err := f.CreateUser(context.Background(), name, hash)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	fu := f.users[id]
+	return &fu.user
+}
+
+func (f *fakeStore) CreateUser(_ context.Context, name, passwordHash string) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.userByName(name) != nil {
+		return 0, store.ErrDuplicateName
+	}
+	if f.nextUser == 0 {
+		f.nextUser = 1
+	}
+	u := &fakeUser{user: store.User{ID: f.nextUser, Name: name, CreatedAt: time.Now()}, passwordHash: passwordHash}
+	f.nextUser++
+	f.users[u.user.ID] = u
+	return u.user.ID, nil
+}
+
+func (f *fakeStore) AuthenticateUser(_ context.Context, name, password string) (*store.User, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	fu := f.userByName(name)
+	if fu == nil || !auth.VerifyPassword(password, fu.passwordHash) {
+		return nil, store.ErrInvalidCredentials
+	}
+	u := fu.user
+	return &u, nil
+}
+
+func (f *fakeStore) CreateSession(_ context.Context, userID int64, ttl time.Duration) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	token, err := auth.NewToken()
+	if err != nil {
+		return "", err
+	}
+	f.sessions[auth.HashToken(token)] = userID
+	return token, nil
+}
+
+func (f *fakeStore) SessionUser(_ context.Context, token string) (*store.User, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	uid, ok := f.sessions[auth.HashToken(token)]
+	if !ok {
+		return nil, store.ErrNotFound
+	}
+	fu, ok := f.users[uid]
+	if !ok {
+		return nil, store.ErrNotFound
+	}
+	u := fu.user
+	return &u, nil
+}
+
+func (f *fakeStore) DeleteSession(_ context.Context, token string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.sessions, auth.HashToken(token))
+	return nil
 }
 
 // compile-time check that the fake satisfies the consumer-side interface.
