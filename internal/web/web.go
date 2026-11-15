@@ -32,13 +32,18 @@ var staticFS embed.FS
 type Store interface {
 	ListIssues(ctx context.Context, f store.ListFilter) ([]*store.Issue, int, error)
 	GetIssue(ctx context.Context, id int64) (*store.Issue, error)
-	CreateIssue(ctx context.Context, in store.IssueInput) (int64, error)
+	CreateIssue(ctx context.Context, in store.IssueInput, authorID int64) (int64, error)
 	UpdateIssue(ctx context.Context, id int64, in store.IssueInput) error
 	SetIssueStatus(ctx context.Context, id int64, status string) error
 	DeleteIssue(ctx context.Context, id int64) error
 	ListComments(ctx context.Context, issueID int64) ([]*store.Comment, error)
-	CreateComment(ctx context.Context, issueID int64, body string) (int64, error)
+	CreateComment(ctx context.Context, issueID int64, body string, authorID int64) (int64, error)
 	ListLabels(ctx context.Context) ([]*store.Label, error)
+	CreateUser(ctx context.Context, name, passwordHash string) (int64, error)
+	AuthenticateUser(ctx context.Context, name, password string) (*store.User, error)
+	CreateSession(ctx context.Context, userID int64, ttl time.Duration) (string, error)
+	SessionUser(ctx context.Context, token string, ttl time.Duration) (*store.User, error)
+	DeleteSession(ctx context.Context, token string) error
 }
 
 const (
@@ -53,14 +58,20 @@ const (
 )
 
 // New returns the root http.Handler for the application. The ServeMux uses
-// Go 1.22+ method+path patterns and is wrapped in the stdlib
-// CrossOriginProtection middleware, which rejects cross-site state-changing
-// browser requests (CSRF) via Sec-Fetch-Site / Origin headers.
+// Go 1.22+ method+path patterns, is wrapped in withUser (session-cookie →
+// context auth resolution) and then the stdlib CrossOriginProtection
+// middleware, which rejects cross-site state-changing browser requests
+// (CSRF) via Sec-Fetch-Site / Origin headers.
 func New(st Store) http.Handler {
 	h := &handler{store: st, r: NewRenderer()}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", h.home)
+	mux.HandleFunc("GET /register", h.registerForm)
+	mux.HandleFunc("POST /register", h.register)
+	mux.HandleFunc("GET /login", h.loginForm)
+	mux.HandleFunc("POST /login", h.login)
+	mux.HandleFunc("POST /logout", h.logout)
 	mux.HandleFunc("GET /issues", h.listIssues)
 	mux.HandleFunc("GET /issues/new", h.newIssue)
 	mux.HandleFunc("POST /issues", h.createIssue)
@@ -112,7 +123,63 @@ func New(st Store) http.Handler {
 	mux.HandleFunc("GET /", h.notFound)
 	mux.HandleFunc("POST /", h.notFound)
 
-	return securityHeaders(http.NewCrossOriginProtection().Handler(mux))
+	return securityHeaders(http.NewCrossOriginProtection().Handler(withUser(h, mux)))
+}
+
+// sessionCookieName is the cookie carrying the opaque session token.
+const sessionCookieName = "session"
+
+// sessionTTL is the server-side session lifetime. The cookie itself is a
+// browser-session cookie (no Max-Age): the cap lives in the sessions table
+// and renews slidingly while the browser stays open, so closing the
+// browser still drops the session.
+const sessionTTL = 30 * 24 * time.Hour
+
+// contextKey is the private key type for request-scoped values.
+type contextKey int
+
+const userContextKey contextKey = iota
+
+// userFromContext returns the logged-in user resolved by withUser, or nil
+// for an anonymous request.
+func userFromContext(ctx context.Context) *store.User {
+	u, _ := ctx.Value(userContextKey).(*store.User)
+	return u
+}
+
+// authorIDFromContext maps the logged-in user to the author_id recorded on
+// new posts; 0 means anonymous.
+func authorIDFromContext(ctx context.Context) int64 {
+	if u := userFromContext(ctx); u != nil {
+		return u.ID
+	}
+	return 0
+}
+
+// withUser is the authentication middleware: it resolves the session
+// cookie to a *store.User on the request context. Anonymous access is
+// fully supported — a nil user simply means "not logged in", and only an
+// unknown/expired session resolves that way. A lookup that fails for any
+// other reason (e.g. a transient DB error) is a 500 instead: proceeding
+// anonymously there would silently record an authored post with no
+// author.
+func withUser(h *handler, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if c, err := r.Cookie(sessionCookieName); err == nil {
+			u, err := h.store.SessionUser(r.Context(), c.Value, sessionTTL)
+			switch {
+			case err == nil:
+				r = r.WithContext(context.WithValue(r.Context(), userContextKey, u))
+			case errors.Is(err, store.ErrNotFound):
+				// Unknown/expired session: continue anonymously.
+			default:
+				h.renderError(w, r, http.StatusInternalServerError,
+					"Internal server error", "The session could not be verified. Please try again.")
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // contentSecurityPolicy is the enforced CSP for every response. The app
@@ -192,6 +259,7 @@ var funcMap = template.FuncMap{
 	"add":         func(a, b int) int { return a + b },
 	"sub":         func(a, b int) int { return a - b },
 	"isChecked":   isChecked,
+	"authorName":  authorName,
 	"listURL":     listURL,
 	"statusURL":   statusURL,
 	"labelURL":    labelURL,
@@ -209,6 +277,14 @@ func fmtTime(t time.Time) string {
 // isChecked reports whether id is among the selected label IDs.
 func isChecked(id int64, ids []int64) bool {
 	return slices.Contains(ids, id)
+}
+
+// authorName renders a post's author; a nil author is an anonymous post.
+func authorName(u *store.User) string {
+	if u == nil {
+		return "anonymous"
+	}
+	return u.Name
 }
 
 // issuesURL builds /issues URLs carrying the current filter state, so
@@ -257,18 +333,25 @@ func labelURL(f store.ListFilter, labelID int64) string {
 	return issuesURL(f)
 }
 
+// renderError renders the styled error page carrying the request's user so
+// the header keeps the logged-in state.
+func (h *handler) renderError(w http.ResponseWriter, r *http.Request, status int, heading, message string) {
+	h.r.renderErrorFor(w, status, heading, message, userFromContext(r.Context()))
+}
+
 // notFound serves the styled 404 page. It is registered as a route handler for
 // the catch-all patterns, so it keeps the http.HandlerFunc signature; the
-// request itself is unused.
-func (h *handler) notFound(w http.ResponseWriter, _ *http.Request) {
-	h.r.notFound(w)
+// request itself is only used to resolve the current user.
+func (h *handler) notFound(w http.ResponseWriter, r *http.Request) {
+	h.renderError(w, r, http.StatusNotFound, "Not found",
+		"The page or issue you are looking for does not exist or may have been deleted.")
 }
 
 // internalError logs the underlying error but renders a generic page so no
 // internals leak to the client.
 func (h *handler) internalError(w http.ResponseWriter, r *http.Request, err error) {
 	log.Printf("web: %s %s: %v", r.Method, r.URL.Path, err)
-	h.r.renderError(w, http.StatusInternalServerError, "Internal server error",
+	h.renderError(w, r, http.StatusInternalServerError, "Internal server error",
 		"Something went wrong on our side. Please try again.")
 }
 
@@ -278,11 +361,11 @@ func (h *handler) parseForm(w http.ResponseWriter, r *http.Request) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, maxFormBytes)
 	if err := r.ParseForm(); err != nil {
 		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-			h.r.renderError(w, http.StatusRequestEntityTooLarge, "Form too large",
+			h.renderError(w, r, http.StatusRequestEntityTooLarge, "Form too large",
 				"The submitted form exceeded the size limit.")
 			return false
 		}
-		h.r.renderError(w, http.StatusBadRequest, "Bad request",
+		h.renderError(w, r, http.StatusBadRequest, "Bad request",
 			"The submitted form could not be read.")
 		return false
 	}
@@ -317,6 +400,7 @@ func parseListFilter(r *http.Request) store.ListFilter {
 	if f.Sort != "oldest" {
 		f.Sort = ""
 	}
+
 	// Reject absurd page numbers: huge values can overflow the store's
 	// (page-1)*perPage offset arithmetic and are never meaningful anyway.
 	if n, err := strconv.Atoi(q.Get("page")); err == nil && n > 0 && n <= 1_000_000 {

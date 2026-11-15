@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"path/filepath"
 	"slices"
@@ -79,7 +80,7 @@ func TestCreateAndGetIssue(t *testing.T) {
 
 	id, err := s.CreateIssue(ctx, IssueInput{
 		Title: "first issue", Body: "hello body", LabelIDs: []int64{feat, bug},
-	})
+	}, 0)
 	if err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
@@ -116,14 +117,14 @@ func TestIssueIDsNotReused(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	id1, err := s.CreateIssue(ctx, IssueInput{Title: "one"})
+	id1, err := s.CreateIssue(ctx, IssueInput{Title: "one"}, 0)
 	if err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
 	if err := s.DeleteIssue(ctx, id1); err != nil {
 		t.Fatalf("DeleteIssue: %v", err)
 	}
-	id2, err := s.CreateIssue(ctx, IssueInput{Title: "two"})
+	id2, err := s.CreateIssue(ctx, IssueInput{Title: "two"}, 0)
 	if err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
@@ -140,7 +141,7 @@ func TestUpdateIssue(t *testing.T) {
 	feat := mustLabel(t, s, "Feature", "#0075ca")
 	doc := mustLabel(t, s, "Docs", "#1f6feb")
 
-	id, err := s.CreateIssue(ctx, IssueInput{Title: "old", Body: "old body", LabelIDs: []int64{bug, feat}})
+	id, err := s.CreateIssue(ctx, IssueInput{Title: "old", Body: "old body", LabelIDs: []int64{bug, feat}}, 0)
 	if err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
@@ -177,7 +178,7 @@ func TestIssueLabelsSkipUnknownAndDuplicates(t *testing.T) {
 
 	id, err := s.CreateIssue(ctx, IssueInput{
 		Title: "x", LabelIDs: []int64{bug, bug, 99999},
-	})
+	}, 0)
 	if err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
@@ -206,7 +207,7 @@ func TestSetIssueStatus(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	id, err := s.CreateIssue(ctx, IssueInput{Title: "x"})
+	id, err := s.CreateIssue(ctx, IssueInput{Title: "x"}, 0)
 	if err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
@@ -242,7 +243,7 @@ func TestSetIssueStatusUpdatedAt(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	id, err := s.CreateIssue(ctx, IssueInput{Title: "x"})
+	id, err := s.CreateIssue(ctx, IssueInput{Title: "x"}, 0)
 	if err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
@@ -287,11 +288,11 @@ func TestDeleteIssue(t *testing.T) {
 	ctx := context.Background()
 
 	bug := mustLabel(t, s, "Bug", "#d73a4a")
-	id, err := s.CreateIssue(ctx, IssueInput{Title: "gone", LabelIDs: []int64{bug}})
+	id, err := s.CreateIssue(ctx, IssueInput{Title: "gone", LabelIDs: []int64{bug}}, 0)
 	if err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
-	if _, err := s.CreateComment(ctx, id, "a comment"); err != nil {
+	if _, err := s.CreateComment(ctx, id, "a comment", 0); err != nil {
 		t.Fatalf("CreateComment: %v", err)
 	}
 
@@ -324,12 +325,12 @@ func TestComments(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	id, err := s.CreateIssue(ctx, IssueInput{Title: "threaded"})
+	id, err := s.CreateIssue(ctx, IssueInput{Title: "threaded"}, 0)
 	if err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
 	for _, b := range []string{"first", "second", "third"} {
-		if _, err := s.CreateComment(ctx, id, b); err != nil {
+		if _, err := s.CreateComment(ctx, id, b, 0); err != nil {
 			t.Fatalf("CreateComment(%q): %v", b, err)
 		}
 	}
@@ -362,7 +363,7 @@ func TestCreateCommentBumpsIssueUpdatedAt(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	id, err := s.CreateIssue(ctx, IssueInput{Title: "x"})
+	id, err := s.CreateIssue(ctx, IssueInput{Title: "x"}, 0)
 	if err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
@@ -372,7 +373,7 @@ func TestCreateCommentBumpsIssueUpdatedAt(t *testing.T) {
 		t.Fatalf("GetIssue: %v", err)
 	}
 
-	cid, err := s.CreateComment(ctx, id, "ping")
+	cid, err := s.CreateComment(ctx, id, "ping", 0)
 	if err != nil {
 		t.Fatalf("CreateComment: %v", err)
 	}
@@ -397,7 +398,7 @@ func TestCreateCommentBumpsIssueUpdatedAt(t *testing.T) {
 
 func TestCreateCommentMissingIssue(t *testing.T) {
 	s := newTestStore(t)
-	if _, err := s.CreateComment(context.Background(), 9999, "hi"); !errors.Is(err, ErrNotFound) {
+	if _, err := s.CreateComment(context.Background(), 9999, "hi", 0); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("CreateComment = %v, want ErrNotFound", err)
 	}
 }
@@ -428,7 +429,7 @@ func TestListIssues(t *testing.T) {
 	feat := mustLabel(t, s, "Feature", "#0075ca")
 
 	mk := func(title, body string, age time.Duration, labels ...int64) int64 {
-		id, err := s.CreateIssue(ctx, IssueInput{Title: title, Body: body, LabelIDs: labels})
+		id, err := s.CreateIssue(ctx, IssueInput{Title: title, Body: body, LabelIDs: labels}, 0)
 		if err != nil {
 			t.Fatalf("CreateIssue(%q): %v", title, err)
 		}
@@ -621,6 +622,11 @@ func TestSeedDemoData(t *testing.T) {
 		t.Fatal("no seeded comments")
 	}
 
+	// The demo account is seeded and can log in.
+	if _, err := s.AuthenticateUser(ctx, "demo", "demo"); err != nil {
+		t.Fatalf("demo login after seed: %v", err)
+	}
+
 	// Idempotent: second call changes nothing.
 	if err := s.SeedDemoData(ctx); err != nil {
 		t.Fatalf("second SeedDemoData: %v", err)
@@ -642,7 +648,7 @@ func TestSeedDemoData(t *testing.T) {
 
 	// Seed on a non-empty DB is a no-op even if it would duplicate labels.
 	s2 := newTestStore(t)
-	if _, err := s2.CreateIssue(ctx, IssueInput{Title: "existing"}); err != nil {
+	if _, err := s2.CreateIssue(ctx, IssueInput{Title: "existing"}, 0); err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
 	if err := s2.SeedDemoData(ctx); err != nil {
@@ -655,6 +661,11 @@ func TestSeedDemoData(t *testing.T) {
 	if n != 1 {
 		t.Fatalf("expected 1 issue, got %d", n)
 	}
+
+	// ...but the demo user is still created on an upgraded database.
+	if _, err := s2.AuthenticateUser(ctx, "demo", "demo"); err != nil {
+		t.Fatalf("demo login on pre-existing DB: %v", err)
+	}
 }
 
 func TestSchemaObjects(t *testing.T) {
@@ -666,16 +677,16 @@ func TestSchemaObjects(t *testing.T) {
 		t.Fatalf("SchemaObjects: %v", err)
 	}
 
-	// All four application tables plus sqlite_sequence (AUTOINCREMENT
+	// All six application tables plus sqlite_sequence (AUTOINCREMENT
 	// bookkeeping), sorted by name.
-	wantTables := []string{"comments", "issue_labels", "issues", "labels", "sqlite_sequence"}
+	wantTables := []string{"comments", "issue_labels", "issues", "labels", "sessions", "sqlite_sequence", "users"}
 	if !slices.Equal(tables, wantTables) {
 		t.Errorf("tables = %v, want %v", tables, wantTables)
 	}
 
-	// Only the three named indexes from schemaDDL; the UNIQUE/PK backing
+	// Only the four named indexes from the schema; the UNIQUE/PK backing
 	// indexes (sqlite_autoindex%) must be filtered out.
-	wantIndexes := []string{"idx_comments_issue_created", "idx_issue_labels_label", "idx_issues_status_created"}
+	wantIndexes := []string{"idx_comments_issue_created", "idx_issue_labels_label", "idx_issues_status_created", "idx_sessions_user"}
 	if !slices.Equal(indexes, wantIndexes) {
 		t.Errorf("indexes = %v, want %v", indexes, wantIndexes)
 	}
@@ -703,8 +714,98 @@ func TestAnalyze(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SchemaObjects after ANALYZE: %v", err)
 	}
-	wantTables := []string{"comments", "issue_labels", "issues", "labels", "sqlite_sequence"}
+	wantTables := []string{"comments", "issue_labels", "issues", "labels", "sessions", "sqlite_sequence", "users"}
 	if !slices.Equal(tables, wantTables) {
 		t.Errorf("tables after ANALYZE = %v, want %v", tables, wantTables)
+	}
+}
+
+func TestMigrationFreshAndLegacyDB(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "mig.db")
+
+	// A fresh database walks every migration and lands on schemaVersion.
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open fresh: %v", err)
+	}
+	var version int
+	if err := s.db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
+		t.Fatalf("read user_version: %v", err)
+	}
+	if version != schemaVersion {
+		t.Errorf("fresh DB user_version = %d, want %d", version, schemaVersion)
+	}
+	for _, q := range []string{
+		"SELECT author_id FROM issues LIMIT 0",
+		"SELECT author_id FROM comments LIMIT 0",
+		"SELECT id FROM users LIMIT 0",
+		"SELECT id, expires_at FROM sessions LIMIT 0",
+	} {
+		if _, err := s.db.ExecContext(ctx, q); err != nil {
+			t.Errorf("v2 column check %q: %v", q, err)
+		}
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	// Reopening is a no-op, not a re-run of the ALTERs (which would fail).
+	s, err = Open(path)
+	if err != nil {
+		t.Fatalf("reopen migrated DB: %v", err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+}
+
+func TestMigrationFromVersionZero(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "legacy.db")
+
+	// Simulate a database created before migrations existed: the v1 schema
+	// applied, user_version still 0. Raw driver access, not Open.
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(1)")
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, schemaDDL); err != nil {
+		t.Fatalf("apply legacy schema: %v", err)
+	}
+	if _, err := db.ExecContext(ctx,
+		"INSERT INTO issues(title, body, status, created_at, updated_at) VALUES('keep me', '', 'open', 1, 1)"); err != nil {
+		t.Fatalf("seed legacy row: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	// Open must replay every version and keep existing rows.
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open legacy DB: %v", err)
+	}
+	defer s.Close()
+	var version int
+	if err := s.db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
+		t.Fatalf("read user_version: %v", err)
+	}
+	if version != schemaVersion {
+		t.Errorf("migrated DB user_version = %d, want %d", version, schemaVersion)
+	}
+	is, err := s.GetIssue(ctx, 1)
+	if err != nil {
+		t.Fatalf("GetIssue after migration: %v", err)
+	}
+	if is.Title != "keep me" {
+		t.Errorf("existing row lost: title = %q", is.Title)
+	}
+	var authorID any
+	if err := s.db.QueryRowContext(ctx, "SELECT author_id FROM issues WHERE id = 1").Scan(&authorID); err != nil {
+		t.Fatalf("author_id column: %v", err)
+	}
+	if authorID != nil {
+		t.Errorf("pre-migration row should keep author_id NULL, got %v", authorID)
 	}
 }

@@ -271,3 +271,16 @@
 ## storybook: CSP 緩和を upstream (minigo#1081) に移譲（2026-11-15）
 
 - **`cmd/storybook` 側の `connect-src 'self'` 追記ワークアラウンドを撤去**: `-watch` 時、`StoryHttp*` が replay する実 CSP（`default-src 'none'`、connect-src 無し）が reload script の EventSource を塞ぐため、consumer 側で `; connect-src 'self'` を足していた。minigo#1081 で `AppendLiveReload` 自身が CSP を緩めるようになった（`relaxConnectSrc` — `default-src` のソースリストを引き継いだ上で `'self'` を足し、default-src 無しの policy は無制限としてそのまま残す）ため、下流側の対応は不要になった。`page.go` は upstream の `examples/storybook/cmd/storybook/page.go` と再び同一内容に戻した。
+
+## Accounts Phase 1: ログイン + 投稿者識別（2026-11-15、`devin/1794740040-accounts-phase1` ブランチ）
+
+設計メモ `docs/sketch/ja/accounts.md` の Phase 1 を実装。authentication のみで authorization は入れず、anonymous 投稿は引き続き全機能で有効。
+
+- **マイグレーションは `PRAGMA user_version`（案B・決定済み）**: `migrations` スライスの i 番目が v i → i+1 を担当し、各マイグレーションは自身の tx で適用後 `user_version = i+1` を刻む。新規 DB は全リストを走査するので init と upgrade が同じ経路。DB の version がコード側より新しい場合は起動エラーにする（サイレント降格を防ぐ）。`ALTER TABLE ADD COLUMN` のような非冪等 DDL を素直に書けるのが利点。
+- **パスワードは argon2id PHC 文字列**: `golang.org/x/crypto/argon2`（m=64MiB, t=3, p=2, salt 16B, key 32B）で `$argon2id$v=19$m=...,t=...,p=...$...` 形式を保存。検証は PHC パース後 `subtle.ConstantTimeCompare`。パラメータ変更時も旧ハッシュは埋め込みパラメータで検証できる。
+- **セッションは opaque token + DB 保存**: cookie は 32B `crypto/rand` の base64url、DB には SHA-256 hex のみ保存（DB 流出時にトークンを再生できない）。`HttpOnly; Path=/; SameSite=Lax`。**`Secure` は付けない** — plain-HTTP localhost で動かす用途のため。`MaxAge` も付けずブラウザセッション cookie とし、30日の有効期限はサーバー側 `expires_at` で担保（残り半分未満でスライド更新）。
+- **middleware 構成**: `securityHeaders` → `http.NewCrossOriginProtection`（CSRF）→ `withUser` → mux。`withUser` は cookie → `SessionUser` → context へ載せるだけでリクエストを拒否しない（anonymous 許可）。POST は CrossOriginProtection が Sec-Fetch-Site/Origin で弾く。
+- **ログイン失敗は汎用メッセージ + 固定遅延**: 「Name or password is incorrect.」で 422 再表示（ユーザー存在の oracle 化を避ける）+ 200ms sleep。`next` は `/` 始まりかつ `//` 不可に制限（open redirect 対策）。セッション fixation は「匿名セッションを発行しない・ログイン時に新 token」をもって回避。
+- **name は UNIQUE + COLLATE NOCASE**: `alice`/`ALICE` の取り合い・ログインを同一視。登録エラーは modernc `*sqlite.Error.Code() == SQLITE_CONSTRAINT_UNIQUE` を検出して 422 フィールドエラーに。
+- **author_id は NULL = anonymous**: issues/comments に `INTEGER REFERENCES users(id)` を追加。表示側は LEFT JOIN で `Author *User` を読み、nil は `anonymous` と描画。`CreateIssue`/`CreateComment` は authorID（0=anonymous）を取る署名に変更。
+- **demo ユーザーは issue シードと独立して投入**: `SeedDemoData` は issues が空のときだけ issue/label を入れるが、`demo`/`demo` ユーザーは「demo が存在しなければ」の条件で常時投入 — 既存 DB を v2 に上げた場合もログインを試せるように。ハッシュは起動時生成（ソースに認証情報リテラルを置かない）。

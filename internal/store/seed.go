@@ -2,7 +2,10 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"time"
+
+	"github.com/podhmo/go-classic-mpa-sample/internal/auth"
 )
 
 type seedComment struct {
@@ -106,7 +109,9 @@ Possible directions: an FTS5 virtual table, a trigram index, or simply capping t
 }
 
 // SeedDemoData inserts the default labels plus demo issues/comments, but only
-// when the issues table is empty. It is a no-op otherwise.
+// when the issues table is empty; the issue part is a no-op otherwise. The
+// demo account is seeded independently so a database that already has issues
+// (e.g. one upgraded to v2) still gets a way to log in.
 func (s *Store) SeedDemoData(ctx context.Context) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -118,10 +123,33 @@ func (s *Store) SeedDemoData(ctx context.Context) error {
 	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM issues").Scan(&n); err != nil {
 		return err
 	}
-	if n > 0 {
-		return nil
+	if n == 0 {
+		if err := seedIssuesAndLabels(ctx, tx); err != nil {
+			return err
+		}
 	}
 
+	// The demo account lets people try the login flow out of the box. The
+	// argon2id hash is computed at runtime; no credential literal is stored
+	// in the source.
+	demoHash, err := auth.HashPassword("demo")
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO users(name, password_hash, created_at)
+			SELECT 'demo', ?, ?
+			WHERE NOT EXISTS (SELECT 1 FROM users WHERE name = 'demo')`,
+		demoHash, time.Now().UTC().Unix()); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// seedIssuesAndLabels inserts the default labels and demo issues/comments
+// inside tx.
+func seedIssuesAndLabels(ctx context.Context, tx *sql.Tx) error {
 	labelIDs := make(map[string]int64, len(seedLabels))
 	for _, l := range seedLabels {
 		res, err := tx.ExecContext(ctx, "INSERT INTO labels(name, color) VALUES(?, ?)", l.Name, l.Color)
@@ -166,5 +194,5 @@ func (s *Store) SeedDemoData(ctx context.Context) error {
 			}
 		}
 	}
-	return tx.Commit()
+	return nil
 }

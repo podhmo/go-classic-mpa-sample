@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/podhmo/go-classic-mpa-sample/internal/auth"
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
@@ -26,9 +28,15 @@ type fakeStore struct {
 	mu          sync.Mutex
 	nextIssue   int64
 	nextComment int64
+	nextUser    int64
 	issues      map[int64]*store.Issue
 	comments    map[int64][]*store.Comment
 	labels      []*store.Label
+	users       map[int64]*fakeUser
+	sessions    map[string]int64 // hashed token → user ID
+	// sessionUserErr, when set, makes SessionUser fail — simulates a
+	// transient session-store error.
+	sessionUserErr error
 }
 
 func newFakeStore() *fakeStore {
@@ -37,6 +45,8 @@ func newFakeStore() *fakeStore {
 		nextComment: 1,
 		issues:      map[int64]*store.Issue{},
 		comments:    map[int64][]*store.Comment{},
+		users:       map[int64]*fakeUser{},
+		sessions:    map[string]int64{},
 	}
 	f.labels = []*store.Label{
 		{ID: 1, Name: "Bug", Color: "#d73a4a"},
@@ -159,7 +169,7 @@ func (f *fakeStore) GetIssue(_ context.Context, id int64) (*store.Issue, error) 
 	return cloneIssue(is), nil
 }
 
-func (f *fakeStore) CreateIssue(_ context.Context, in store.IssueInput) (int64, error) {
+func (f *fakeStore) CreateIssue(_ context.Context, in store.IssueInput, authorID int64) (int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	now := time.Now()
@@ -172,6 +182,10 @@ func (f *fakeStore) CreateIssue(_ context.Context, in store.IssueInput) (int64, 
 		UpdatedAt: now,
 	}
 	f.nextIssue++
+	if fu := f.users[authorID]; fu != nil {
+		u := fu.user
+		is.Author = &u
+	}
 	for _, id := range in.LabelIDs {
 		if l := f.labelByID(id); l != nil {
 			is.Labels = append(is.Labels, *l)
@@ -238,7 +252,7 @@ func (f *fakeStore) ListComments(_ context.Context, issueID int64) ([]*store.Com
 	return out, nil
 }
 
-func (f *fakeStore) CreateComment(_ context.Context, issueID int64, body string) (int64, error) {
+func (f *fakeStore) CreateComment(_ context.Context, issueID int64, body string, authorID int64) (int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if _, ok := f.issues[issueID]; !ok {
@@ -251,6 +265,10 @@ func (f *fakeStore) CreateComment(_ context.Context, issueID int64, body string)
 		CreatedAt: time.Now(),
 	}
 	f.nextComment++
+	if fu := f.users[authorID]; fu != nil {
+		u := fu.user
+		c.Author = &u
+	}
 	f.comments[issueID] = append(f.comments[issueID], c)
 	return c.ID, nil
 }
@@ -265,6 +283,103 @@ func (f *fakeStore) ListLabels(_ context.Context) ([]*store.Label, error) {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
+}
+
+/* ---------- fake accounts ---------- */
+
+// fakeUser keeps the fake's users and the password they were created with.
+// CreateUser receives a hash, not a password, so tests seed users through
+// addUser below and the fake honors the real semantics of
+// AuthenticateUser via internal/auth.
+type fakeUser struct {
+	user         store.User
+	passwordHash string
+}
+
+func (f *fakeStore) userByName(name string) *fakeUser {
+	for _, fu := range f.users {
+		if strings.EqualFold(fu.user.Name, name) {
+			return fu
+		}
+	}
+	return nil
+}
+
+// addUser is a test helper that registers a user with a real password.
+func (f *fakeStore) addUser(t *testing.T, name, password string) *store.User {
+	t.Helper()
+	hash, err := auth.HashPassword(password)
+	if err != nil {
+		t.Fatalf("auth.HashPassword: %v", err)
+	}
+	id, err := f.CreateUser(context.Background(), name, hash)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	fu := f.users[id]
+	return &fu.user
+}
+
+func (f *fakeStore) CreateUser(_ context.Context, name, passwordHash string) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.userByName(name) != nil {
+		return 0, store.ErrDuplicateName
+	}
+	if f.nextUser == 0 {
+		f.nextUser = 1
+	}
+	u := &fakeUser{user: store.User{ID: f.nextUser, Name: name, CreatedAt: time.Now()}, passwordHash: passwordHash}
+	f.nextUser++
+	f.users[u.user.ID] = u
+	return u.user.ID, nil
+}
+
+func (f *fakeStore) AuthenticateUser(_ context.Context, name, password string) (*store.User, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	fu := f.userByName(name)
+	if fu == nil || !auth.VerifyPassword(password, fu.passwordHash) {
+		return nil, store.ErrInvalidCredentials
+	}
+	u := fu.user
+	return &u, nil
+}
+
+func (f *fakeStore) CreateSession(_ context.Context, userID int64, ttl time.Duration) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	token, err := auth.NewToken()
+	if err != nil {
+		return "", err
+	}
+	f.sessions[auth.HashToken(token)] = userID
+	return token, nil
+}
+
+func (f *fakeStore) SessionUser(_ context.Context, token string, _ time.Duration) (*store.User, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.sessionUserErr != nil {
+		return nil, f.sessionUserErr
+	}
+	uid, ok := f.sessions[auth.HashToken(token)]
+	if !ok {
+		return nil, store.ErrNotFound
+	}
+	fu, ok := f.users[uid]
+	if !ok {
+		return nil, store.ErrNotFound
+	}
+	u := fu.user
+	return &u, nil
+}
+
+func (f *fakeStore) DeleteSession(_ context.Context, token string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.sessions, auth.HashToken(token))
+	return nil
 }
 
 // compile-time check that the fake satisfies the consumer-side interface.
@@ -1269,7 +1384,7 @@ func TestListA11ySemantics(t *testing.T) {
 func TestDetailA11ySemantics(t *testing.T) {
 	srv, f := newTestServer(t)
 	is := f.addIssue("Detail target", "body", store.StatusOpen, time.Now(), 1)
-	if _, err := f.CreateComment(context.Background(), is.ID, "first comment"); err != nil {
+	if _, err := f.CreateComment(context.Background(), is.ID, "first comment", 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1352,5 +1467,290 @@ func TestSpeculationRules(t *testing.T) {
 		if !strings.Contains(rules.Prefetch[0].Where.SelectorMatches, sel) {
 			t.Errorf("selector_matches %q lacks %q", rules.Prefetch[0].Where.SelectorMatches, sel)
 		}
+	}
+}
+
+/* ---------- accounts ---------- */
+
+func TestSessionLookupFailureIs500NotAnonymous(t *testing.T) {
+	srv, f := newTestServer(t)
+	u := f.addUser(t, "alice", "password123")
+	f.sessions[auth.HashToken("tok")] = u.ID
+
+	// A transient lookup failure must fail the request — proceeding
+	// anonymously would save an authored post without its author.
+	f.sessionUserErr = errors.New("db gone")
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/issues",
+		strings.NewReader(url.Values{"title": {"x"}}.Encode()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "tok"})
+	resp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatalf("POST /issues: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", resp.StatusCode)
+	}
+	if len(f.issues) != 0 {
+		t.Fatal("post was saved during session lookup failure")
+	}
+
+	// An unknown session still resolves anonymously.
+	f.sessionUserErr = nil
+	code, body := getWithCookie(t, srv, "/issues", &http.Cookie{Name: sessionCookieName, Value: "nope"})
+	if code != http.StatusOK || strings.Contains(body, "@alice") {
+		t.Error("unknown session did not resolve anonymously")
+	}
+}
+
+// sessionCookie extracts the session cookie set by register/login, or fails.
+func sessionCookie(t *testing.T, resp *http.Response) *http.Cookie {
+	t.Helper()
+	for _, c := range resp.Cookies() {
+		if c.Name == sessionCookieName {
+			return c
+		}
+	}
+	t.Fatalf("no %q cookie in response", sessionCookieName)
+	return nil
+}
+
+// getWithCookie issues a GET carrying the given cookie.
+func getWithCookie(t *testing.T, srv *httptest.Server, path string, c *http.Cookie) (int, string) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, srv.URL+path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c != nil {
+		req.AddCookie(c)
+	}
+	resp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatalf("GET %s: %v", path, err)
+	}
+	return resp.StatusCode, getBody(t, resp)
+}
+
+func TestRegisterFlowSetsSessionCookie(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	resp := postForm(t, noRedirectClient(), srv.URL+"/register", url.Values{
+		"name": {"alice"}, "password": {"password123"}, "next": {"/issues"},
+	})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", resp.StatusCode)
+	}
+	if loc := resp.Header.Get("Location"); loc != "/issues" {
+		t.Fatalf("Location = %q, want /issues", loc)
+	}
+	c := sessionCookie(t, resp)
+	if !c.HttpOnly {
+		t.Error("session cookie is not HttpOnly")
+	}
+	if c.Secure {
+		t.Error("session cookie must not be Secure on plain-HTTP localhost")
+	}
+	if c.SameSite != http.SameSiteLaxMode {
+		t.Errorf("SameSite = %v, want Lax", c.SameSite)
+	}
+	if c.MaxAge != 0 {
+		t.Errorf("MaxAge = %d, want browser-session cookie (no MaxAge)", c.MaxAge)
+	}
+
+	code, body := getWithCookie(t, srv, "/issues", c)
+	if code != http.StatusOK {
+		t.Fatalf("GET /issues = %d", code)
+	}
+	if !strings.Contains(body, "@alice") {
+		t.Error("logged-in header missing @alice")
+	}
+	if !strings.Contains(body, `action="/logout"`) {
+		t.Error("logged-in header missing logout form")
+	}
+}
+
+func TestRegisterValidationAndDuplicate(t *testing.T) {
+	srv, f := newTestServer(t)
+	f.addUser(t, "alice", "password123")
+
+	// Short password: 422 with a field error, no cookie.
+	resp := postForm(t, srv.Client(), srv.URL+"/register", url.Values{
+		"name": {"bob"}, "password": {"short"},
+	})
+	body := getBody(t, resp)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422", resp.StatusCode)
+	}
+	if !strings.Contains(body, "Password must be 8 characters or more.") {
+		t.Error("missing password length error")
+	}
+	if len(resp.Cookies()) != 0 {
+		t.Error("failed registration set a cookie")
+	}
+
+	// Duplicate name (case-insensitive): 422 name error.
+	resp = postForm(t, srv.Client(), srv.URL+"/register", url.Values{
+		"name": {"ALICE"}, "password": {"password123"},
+	})
+	body = getBody(t, resp)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422", resp.StatusCode)
+	}
+	if !strings.Contains(body, "That name is already taken.") {
+		t.Error("missing duplicate-name error")
+	}
+}
+
+func TestLoginLogoutFlow(t *testing.T) {
+	srv, f := newTestServer(t)
+	f.addUser(t, "alice", "password123")
+
+	// Wrong password: 422 + generic message, no cookie.
+	resp := postForm(t, srv.Client(), srv.URL+"/login", url.Values{
+		"name": {"alice"}, "password": {"wrong-pass"},
+	})
+	body := getBody(t, resp)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422", resp.StatusCode)
+	}
+	if !strings.Contains(body, "Name or password is incorrect.") {
+		t.Error("missing generic login error")
+	}
+	if len(resp.Cookies()) != 0 {
+		t.Error("failed login set a cookie")
+	}
+
+	// Correct credentials: 303 + session cookie; header shows the user.
+	resp = postForm(t, noRedirectClient(), srv.URL+"/login", url.Values{
+		"name": {"alice"}, "password": {"password123"}, "next": {"/issues"},
+	})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", resp.StatusCode)
+	}
+	c := sessionCookie(t, resp)
+
+	// Unknown user is also the generic error (no oracle).
+	resp = postForm(t, srv.Client(), srv.URL+"/login", url.Values{
+		"name": {"mallory"}, "password": {"password123"},
+	})
+	body = getBody(t, resp)
+	if resp.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(body, "Name or password is incorrect.") {
+		t.Error("unknown user did not get the generic error")
+	}
+
+	// Logout: 303, cookie cleared, session forgotten server-side.
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/logout", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.AddCookie(c)
+	resp, err = noRedirectClient().Do(req)
+	if err != nil {
+		t.Fatalf("POST /logout: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("logout status = %d, want 303", resp.StatusCode)
+	}
+	var cleared bool
+	for _, rc := range resp.Cookies() {
+		if rc.Name == sessionCookieName && rc.MaxAge < 0 {
+			cleared = true
+		}
+	}
+	if !cleared {
+		t.Error("logout did not clear the session cookie")
+	}
+
+	// The old token no longer resolves: the request is anonymous again.
+	code, body := getWithCookie(t, srv, "/issues", c)
+	if code != http.StatusOK {
+		t.Fatalf("GET /issues = %d", code)
+	}
+	if strings.Contains(body, "@alice") {
+		t.Error("stale cookie still resolves the user after logout")
+	}
+	if !strings.Contains(body, "Log in") {
+		t.Error("anonymous header missing Log in link")
+	}
+}
+
+func TestSafeNext(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"", "/issues"}, {"/issues/3", "/issues/3"},
+		{"//evil.example", "/issues"}, {"https://evil.example", "/issues"},
+		{"javascript:alert(1)", "/issues"}, {"/\\evil.example", "/issues"},
+	} {
+		if got := safeNext(tc.in); got != tc.want {
+			t.Errorf("safeNext(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestAuthorRecordedAndDisplayed(t *testing.T) {
+	srv, f := newTestServer(t)
+	f.addUser(t, "alice", "password123")
+
+	// Log in and capture the cookie.
+	resp := postForm(t, noRedirectClient(), srv.URL+"/login", url.Values{
+		"name": {"alice"}, "password": {"password123"},
+	})
+	resp.Body.Close()
+	c := sessionCookie(t, resp)
+
+	// Logged-in post: the store records the author and the page names them.
+	form := url.Values{"title": {"authored issue"}, "body": {"with a name"}}
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/issues", strings.NewReader(form.Encode()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(c)
+	resp, err = noRedirectClient().Do(req)
+	if err != nil {
+		t.Fatalf("POST /issues: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", resp.StatusCode)
+	}
+	if f.issues[1].Author == nil || f.issues[1].Author.Name != "alice" {
+		t.Fatal("issue author not recorded")
+	}
+
+	// Anonymous post: NULL author renders as anonymous.
+	f.addIssue("anon issue", "", store.StatusOpen, time.Now(), 2)
+	code, body := getWithCookie(t, srv, "/issues/2", nil)
+	if code != http.StatusOK || !strings.Contains(body, "Opened by anonymous") {
+		t.Error("anonymous post not rendered as anonymous")
+	}
+	code, body = getWithCookie(t, srv, "/issues/1", nil)
+	if code != http.StatusOK || !strings.Contains(body, "Opened by alice") {
+		t.Error("authored issue missing author name")
+	}
+
+	// Logged-in comment names its author.
+	form = url.Values{"body": {"signed comment"}}
+	req, err = http.NewRequest(http.MethodPost, srv.URL+"/issues/1/comments", strings.NewReader(form.Encode()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(c)
+	resp, err = noRedirectClient().Do(req)
+	if err != nil {
+		t.Fatalf("POST comment: %v", err)
+	}
+	resp.Body.Close()
+	_, body = getWithCookie(t, srv, "/issues/1", nil)
+	if !strings.Contains(body, "alice commented") {
+		t.Error("comment missing author name")
 	}
 }

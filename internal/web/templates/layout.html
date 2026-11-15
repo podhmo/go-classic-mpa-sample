@@ -18,6 +18,15 @@
         <nav class="site-nav" aria-label="Main">
           <a href="/issues">Issues</a>
           <a class="btn btn-primary" href="/issues/new">New issue</a>
+          {{if .User}}
+          <span class="user-handle">@{{.User.Name}}</span>
+          <form method="post" action="/logout" class="inline-form">
+            <button type="submit" class="btn btn-quiet">Log out</button>
+          </form>
+          {{else}}
+          <a href="/login">Log in</a>
+          <a href="/register">Register</a>
+          {{end}}
         </nav>
       </div>
     </div>

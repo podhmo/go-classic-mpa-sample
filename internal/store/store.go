@@ -25,6 +25,7 @@ const (
 )
 
 // Issue is a single tracker entry. Labels is populated by read methods.
+// Author is the posting account, or nil for an anonymous post.
 type Issue struct {
 	ID        int64
 	Title     string
@@ -33,6 +34,7 @@ type Issue struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	Labels    []Label
+	Author    *User
 }
 
 // Comment is a plaintext comment on an issue, shown in chronological order.
@@ -41,6 +43,7 @@ type Comment struct {
 	IssueID   int64
 	Body      string
 	CreatedAt time.Time
+	Author    *User
 }
 
 // Label is a named, colored tag that can be attached to issues.
@@ -104,10 +107,88 @@ CREATE INDEX IF NOT EXISTS idx_comments_issue_created ON comments(issue_id, crea
 CREATE INDEX IF NOT EXISTS idx_issue_labels_label ON issue_labels(label_id);
 `
 
+// migrations is the ordered list of schema upgrades: migrations[i] moves a
+// database from PRAGMA user_version i to i+1. A brand-new database walks
+// the whole list, so initialization and upgrading share a single path; an
+// existing database runs only the versions it is missing. New schema
+// changes always append here — never edit entries already released.
+var migrations = []func(ctx context.Context, tx *sql.Tx) error{
+	migrateV1, // base schema (issues, comments, labels, issue_labels)
+	migrateV2, // accounts: users/sessions + author_id on issues/comments
+}
+
+// schemaVersion is the user_version a fully migrated database reports.
+var schemaVersion = len(migrations)
+
+func migrateV1(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, schemaDDL)
+	return err
+}
+
+// migrateV2 adds the accounts schema: users/sessions tables and the
+// nullable author_id column on issues and comments. A NULL author_id means
+// an anonymous post; anonymous users never get a users row
+// (docs/sketch/ja/accounts.md). The ALTERs cannot be re-run, which is
+// exactly what the user_version gate guarantees.
+func migrateV2(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, `
+CREATE TABLE IF NOT EXISTS users (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+	password_hash TEXT NOT NULL,
+	created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sessions (
+	id TEXT PRIMARY KEY,
+	user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	created_at INTEGER NOT NULL,
+	expires_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+ALTER TABLE issues ADD COLUMN author_id INTEGER REFERENCES users(id);
+ALTER TABLE comments ADD COLUMN author_id INTEGER REFERENCES users(id);
+`)
+	return err
+}
+
+// migrate applies every schema version the database is missing, stamping
+// PRAGMA user_version after each. Each version runs in its own
+// transaction, so a failed migration leaves the database at the last good
+// version and can be retried on the next Open. A database newer than
+// schemaVersion is rejected rather than silently downgraded.
+func migrate(ctx context.Context, db *sql.DB) error {
+	var version int
+	if err := db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
+		return fmt.Errorf("store: read schema version: %w", err)
+	}
+	if version > schemaVersion {
+		return fmt.Errorf("store: database schema version %d is newer than supported %d", version, schemaVersion)
+	}
+	for ; version < schemaVersion; version++ {
+		tx, err := db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		if err := migrations[version](ctx, tx); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("store: migrate schema to version %d: %w", version+1, err)
+		}
+		// PRAGMA does not accept bound parameters.
+		if _, err := tx.ExecContext(ctx, fmt.Sprintf("PRAGMA user_version = %d", version+1)); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("store: stamp schema version %d: %w", version+1, err)
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Open opens (or creates) the SQLite database at path, enables foreign keys,
-// and initializes the schema. It does NOT insert demo data; callers invoke
-// SeedDemoData for that. Use ":memory:" (or a shared-cache memory DSN) for
-// tests.
+// and migrates the schema to the latest version. It does NOT insert demo
+// data; callers invoke SeedDemoData for that. Use ":memory:" (or a
+// shared-cache memory DSN) for tests.
 func Open(path string) (*Store, error) {
 	dsn := path
 	switch {
@@ -132,11 +213,16 @@ func Open(path string) (*Store, error) {
 		db.SetMaxOpenConns(1)
 		db.SetMaxIdleConns(1)
 	}
-	if _, err := db.Exec(schemaDDL); err != nil {
+	if err := migrate(context.Background(), db); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("store: init schema: %w", err)
+		return nil, err
 	}
-	return &Store{db: db}, nil
+	s := &Store{db: db}
+	if err := s.DeleteExpiredSessions(context.Background()); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("store: sweep expired sessions: %w", err)
+	}
+	return s, nil
 }
 
 // Close closes the underlying database.
@@ -203,15 +289,15 @@ func (s *Store) ListIssues(ctx context.Context, f ListFilter) ([]*Issue, int, er
 		status = StatusOpen
 	}
 	if status != "all" {
-		conds = append(conds, "status = ?")
+		conds = append(conds, "i.status = ?")
 		args = append(args, status)
 	}
 	if f.Query != "" {
-		conds = append(conds, "(instr(lower(title), lower(?)) > 0 OR instr(lower(body), lower(?)) > 0)")
+		conds = append(conds, "(instr(lower(i.title), lower(?)) > 0 OR instr(lower(i.body), lower(?)) > 0)")
 		args = append(args, f.Query, f.Query)
 	}
 	if f.LabelID > 0 {
-		conds = append(conds, "EXISTS (SELECT 1 FROM issue_labels il WHERE il.issue_id = issues.id AND il.label_id = ?)")
+		conds = append(conds, "EXISTS (SELECT 1 FROM issue_labels il WHERE il.issue_id = i.id AND il.label_id = ?)")
 		args = append(args, f.LabelID)
 	}
 
@@ -221,7 +307,7 @@ func (s *Store) ListIssues(ctx context.Context, f ListFilter) ([]*Issue, int, er
 	}
 
 	var total int
-	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM issues"+where, args...).Scan(&total); err != nil {
+	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM issues i"+where, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
@@ -235,8 +321,10 @@ func (s *Store) ListIssues(ctx context.Context, f ListFilter) ([]*Issue, int, er
 		perPage = 20
 	}
 
-	q := "SELECT id, title, body, status, created_at, updated_at FROM issues" + where +
-		" ORDER BY created_at " + dir + ", id " + dir + " LIMIT ? OFFSET ?"
+	q := `SELECT i.id, i.title, i.body, i.status, i.created_at, i.updated_at,
+		u.id, u.name, u.created_at
+		FROM issues i LEFT JOIN users u ON u.id = i.author_id` + where +
+		" ORDER BY i.created_at " + dir + ", i.id " + dir + " LIMIT ? OFFSET ?"
 	rows, err := s.db.QueryContext(ctx, q, append(args, perPage, (page-1)*perPage)...)
 	if err != nil {
 		return nil, 0, err
@@ -265,7 +353,9 @@ func (s *Store) ListIssues(ctx context.Context, f ListFilter) ([]*Issue, int, er
 // GetIssue returns one issue with Labels, or ErrNotFound.
 func (s *Store) GetIssue(ctx context.Context, id int64) (*Issue, error) {
 	i, err := scanIssue(s.db.QueryRowContext(ctx,
-		"SELECT id, title, body, status, created_at, updated_at FROM issues WHERE id = ?", id))
+		`SELECT i.id, i.title, i.body, i.status, i.created_at, i.updated_at,
+			u.id, u.name, u.created_at
+			FROM issues i LEFT JOIN users u ON u.id = i.author_id WHERE i.id = ?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -279,8 +369,9 @@ func (s *Store) GetIssue(ctx context.Context, id int64) (*Issue, error) {
 }
 
 // CreateIssue inserts an open issue and returns its new ID (also the issue
-// number; IDs are never reused).
-func (s *Store) CreateIssue(ctx context.Context, in IssueInput) (int64, error) {
+// number; IDs are never reused). authorID is the posting user's ID, or 0
+// for an anonymous post.
+func (s *Store) CreateIssue(ctx context.Context, in IssueInput, authorID int64) (int64, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
@@ -289,8 +380,8 @@ func (s *Store) CreateIssue(ctx context.Context, in IssueInput) (int64, error) {
 
 	now := time.Now().UTC().Unix()
 	res, err := tx.ExecContext(ctx,
-		"INSERT INTO issues(title, body, status, created_at, updated_at) VALUES(?, ?, ?, ?, ?)",
-		in.Title, in.Body, StatusOpen, now, now)
+		"INSERT INTO issues(title, body, status, created_at, updated_at, author_id) VALUES(?, ?, ?, ?, ?, ?)",
+		in.Title, in.Body, StatusOpen, now, now, nullID(authorID))
 	if err != nil {
 		return 0, err
 	}
@@ -361,7 +452,9 @@ func (s *Store) DeleteIssue(ctx context.Context, id int64) error {
 // ListComments returns comments for an issue in chronological order.
 func (s *Store) ListComments(ctx context.Context, issueID int64) ([]*Comment, error) {
 	rows, err := s.db.QueryContext(ctx,
-		"SELECT id, issue_id, body, created_at FROM comments WHERE issue_id = ? ORDER BY created_at ASC, id ASC",
+		`SELECT c.id, c.issue_id, c.body, c.created_at, u.id, u.name, u.created_at
+			FROM comments c LEFT JOIN users u ON u.id = c.author_id
+			WHERE c.issue_id = ? ORDER BY c.created_at ASC, c.id ASC`,
 		issueID)
 	if err != nil {
 		return nil, err
@@ -370,20 +463,18 @@ func (s *Store) ListComments(ctx context.Context, issueID int64) ([]*Comment, er
 
 	var out []*Comment
 	for rows.Next() {
-		var c Comment
-		var ts int64
-		if err := rows.Scan(&c.ID, &c.IssueID, &c.Body, &ts); err != nil {
+		c, err := scanComment(rows)
+		if err != nil {
 			return nil, err
 		}
-		c.CreatedAt = time.Unix(ts, 0).UTC()
-		out = append(out, &c)
+		out = append(out, c)
 	}
 	return out, rows.Err()
 }
 
 // CreateComment appends a comment. Returns ErrNotFound if the issue is
-// missing.
-func (s *Store) CreateComment(ctx context.Context, issueID int64, body string) (int64, error) {
+// missing. authorID is the posting user's ID, or 0 for an anonymous post.
+func (s *Store) CreateComment(ctx context.Context, issueID int64, body string, authorID int64) (int64, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
@@ -400,8 +491,8 @@ func (s *Store) CreateComment(ctx context.Context, issueID int64, body string) (
 	}
 	now := time.Now().UTC().Unix()
 	res, err := tx.ExecContext(ctx,
-		"INSERT INTO comments(issue_id, body, created_at) VALUES(?, ?, ?)",
-		issueID, body, now)
+		"INSERT INTO comments(issue_id, body, created_at, author_id) VALUES(?, ?, ?, ?)",
+		issueID, body, now, nullID(authorID))
 	if err != nil {
 		return 0, err
 	}
@@ -495,12 +586,47 @@ type scanner interface{ Scan(...any) error }
 func scanIssue(s scanner) (*Issue, error) {
 	var i Issue
 	var c, u int64
-	if err := s.Scan(&i.ID, &i.Title, &i.Body, &i.Status, &c, &u); err != nil {
+	var aid sql.NullInt64
+	var aname sql.NullString
+	var acreated sql.NullInt64
+	if err := s.Scan(&i.ID, &i.Title, &i.Body, &i.Status, &c, &u, &aid, &aname, &acreated); err != nil {
 		return nil, err
 	}
 	i.CreatedAt = time.Unix(c, 0).UTC()
 	i.UpdatedAt = time.Unix(u, 0).UTC()
+	i.Author = scanUser(aid, aname, acreated)
 	return &i, nil
+}
+
+func scanComment(s scanner) (*Comment, error) {
+	var c Comment
+	var ts int64
+	var aid sql.NullInt64
+	var aname sql.NullString
+	var acreated sql.NullInt64
+	if err := s.Scan(&c.ID, &c.IssueID, &c.Body, &ts, &aid, &aname, &acreated); err != nil {
+		return nil, err
+	}
+	c.CreatedAt = time.Unix(ts, 0).UTC()
+	c.Author = scanUser(aid, aname, acreated)
+	return &c, nil
+}
+
+// scanUser builds the author from a LEFT JOIN's nullable user columns; a
+// NULL id means an anonymous post.
+func scanUser(id sql.NullInt64, name sql.NullString, created sql.NullInt64) *User {
+	if !id.Valid {
+		return nil
+	}
+	return &User{ID: id.Int64, Name: name.String, CreatedAt: time.Unix(created.Int64, 0).UTC()}
+}
+
+// nullID maps a 0 author ID (anonymous) to SQL NULL.
+func nullID(id int64) any {
+	if id == 0 {
+		return nil
+	}
+	return id
 }
 
 func checkAffected(res sql.Result) error {

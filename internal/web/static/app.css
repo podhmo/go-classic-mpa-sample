@@ -338,6 +338,12 @@ a:hover {
   color: var(--text);
 }
 
+/* The logged-in name shown next to the Log out button. */
+.user-handle {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
 .main-content {
   container: main / inline-size;
   padding-top: 24px;
