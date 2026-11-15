@@ -104,10 +104,88 @@ CREATE INDEX IF NOT EXISTS idx_comments_issue_created ON comments(issue_id, crea
 CREATE INDEX IF NOT EXISTS idx_issue_labels_label ON issue_labels(label_id);
 `
 
+// migrations is the ordered list of schema upgrades: migrations[i] moves a
+// database from PRAGMA user_version i to i+1. A brand-new database walks
+// the whole list, so initialization and upgrading share a single path; an
+// existing database runs only the versions it is missing. New schema
+// changes always append here — never edit entries already released.
+var migrations = []func(ctx context.Context, tx *sql.Tx) error{
+	migrateV1, // base schema (issues, comments, labels, issue_labels)
+	migrateV2, // accounts: users/sessions + author_id on issues/comments
+}
+
+// schemaVersion is the user_version a fully migrated database reports.
+var schemaVersion = len(migrations)
+
+func migrateV1(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, schemaDDL)
+	return err
+}
+
+// migrateV2 adds the accounts schema: users/sessions tables and the
+// nullable author_id column on issues and comments. A NULL author_id means
+// an anonymous post; anonymous users never get a users row
+// (docs/sketch/ja/accounts.md). The ALTERs cannot be re-run, which is
+// exactly what the user_version gate guarantees.
+func migrateV2(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, `
+CREATE TABLE IF NOT EXISTS users (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+	password_hash TEXT NOT NULL,
+	created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sessions (
+	id TEXT PRIMARY KEY,
+	user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	created_at INTEGER NOT NULL,
+	expires_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+ALTER TABLE issues ADD COLUMN author_id INTEGER REFERENCES users(id);
+ALTER TABLE comments ADD COLUMN author_id INTEGER REFERENCES users(id);
+`)
+	return err
+}
+
+// migrate applies every schema version the database is missing, stamping
+// PRAGMA user_version after each. Each version runs in its own
+// transaction, so a failed migration leaves the database at the last good
+// version and can be retried on the next Open. A database newer than
+// schemaVersion is rejected rather than silently downgraded.
+func migrate(ctx context.Context, db *sql.DB) error {
+	var version int
+	if err := db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
+		return fmt.Errorf("store: read schema version: %w", err)
+	}
+	if version > schemaVersion {
+		return fmt.Errorf("store: database schema version %d is newer than supported %d", version, schemaVersion)
+	}
+	for ; version < schemaVersion; version++ {
+		tx, err := db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		if err := migrations[version](ctx, tx); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("store: migrate schema to version %d: %w", version+1, err)
+		}
+		// PRAGMA does not accept bound parameters.
+		if _, err := tx.ExecContext(ctx, fmt.Sprintf("PRAGMA user_version = %d", version+1)); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("store: stamp schema version %d: %w", version+1, err)
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Open opens (or creates) the SQLite database at path, enables foreign keys,
-// and initializes the schema. It does NOT insert demo data; callers invoke
-// SeedDemoData for that. Use ":memory:" (or a shared-cache memory DSN) for
-// tests.
+// and migrates the schema to the latest version. It does NOT insert demo
+// data; callers invoke SeedDemoData for that. Use ":memory:" (or a
+// shared-cache memory DSN) for tests.
 func Open(path string) (*Store, error) {
 	dsn := path
 	switch {
@@ -132,9 +210,9 @@ func Open(path string) (*Store, error) {
 		db.SetMaxOpenConns(1)
 		db.SetMaxIdleConns(1)
 	}
-	if _, err := db.Exec(schemaDDL); err != nil {
+	if err := migrate(context.Background(), db); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("store: init schema: %w", err)
+		return nil, err
 	}
 	return &Store{db: db}, nil
 }
