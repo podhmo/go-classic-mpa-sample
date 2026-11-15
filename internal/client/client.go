@@ -14,6 +14,50 @@ import (
 	"strings"
 )
 
+// apiMaxPerPage mirrors the server's cap on ?per_page= (api.maxPerPage);
+// requests above it are stitched from multiple API pages by listWindow.
+const apiMaxPerPage = 100
+
+// listWindow serves a (page, perPage) window from a paged list endpoint.
+// perPage <= apiMaxPerPage fetches a single API page (perPage <= 0 means
+// "server default"); above the cap the server would silently clamp
+// per_page and shift every later offset, so enough 100-item pages are
+// fetched and the caller's window sliced out client-side. fetch performs
+// one API request for the given API page and returns (items, total).
+func listWindow[E any](ctx context.Context, page, perPage int,
+	fetch func(apiPage, apiPerPage int) ([]*E, int, error)) ([]*E, int, error) {
+	if page < 1 {
+		page = 1
+	}
+	if perPage <= apiMaxPerPage {
+		return fetch(page, perPage)
+	}
+	start := (page - 1) * perPage
+	skip := start % apiMaxPerPage
+	need := skip + perPage // items required counting from the first fetched page
+	var acc []*E
+	total := 0
+	for apiPage := start/apiMaxPerPage + 1; len(acc) < need; apiPage++ {
+		items, t, err := fetch(apiPage, apiMaxPerPage)
+		if err != nil {
+			return nil, 0, err
+		}
+		total = t
+		acc = append(acc, items...)
+		if len(items) < apiMaxPerPage {
+			break // last page
+		}
+	}
+	if skip >= len(acc) {
+		return []*E{}, total, nil
+	}
+	acc = acc[skip:]
+	if len(acc) > perPage {
+		acc = acc[:perPage]
+	}
+	return acc, total, nil
+}
+
 // Client calls the JSON API on a remote issues server. The zero-ish use is
 // New(server, token); every method takes a context.
 type Client struct {

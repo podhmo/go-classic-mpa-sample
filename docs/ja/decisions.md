@@ -373,3 +373,12 @@
 - **--json のキー名は api DTO 準拠**: `issue list --json id,title` と `issues api /issues` が同じ JSON 語彙を話すよう、cli 側で store 型→api DTO 変換してからフィールド選択する。
 - **未実装は明示**: `discussion` は `IsSubcommand` に含めるが Run では「未実装（TODO.md 管理）」の usage エラー。discussion コマンド群と Phase 4（completion、--method/--field、NO_COLOR/TTY、token revoke/list）は TODO.md のオープン項目として残す。
 - **E2E は実バイナリで**: `internal/e2etests`（`-tags=e2e`、`make test-e2e`）で `go build` → `init` → serve(`-api-token` 付き) → `/register` POST → `auth token` → `--server/--token` と `ISSUES_SERVER/ISSUES_TOKEN` の両経路で issue CRUD + `api` + author がユーザー別トークン名になることまで確認した。
+
+## CLI discussion サブコマンドの実装決定（2026-11-16、`devin/1794769701-discussion-cmds` ブランチ）
+
+設計メモの未決項「まず issues のみに絞るか」は「絞る」（含める）方で実装。issue 側と同じ構造の写し。
+
+- **Backend interface を discussion 9 メソッドで拡張**: `*store.Store` がそのまま満たし、`internal/client/discussions.go` が `/api/v1/discussions*` に写す。上限超えのページング縫合は issues 側にあったロジックをジェネリックな `listWindow`（client.go）に抽出して共用 — listWindow 以外の既存動作は変更なし。
+- **`--category` は slug 指定**: `?category=` URL フィルタと同じ語彙。`--label`（name → id 解決）と同じパターンで `ListDiscussionCategories` 経由で CategoryID に解決し、未知の slug は有効値を列挙した実行エラーにする。
+- **`discussion answer N --comment C [--unmark]`**: qa カテゴリの answer マークを `SetCommentAnswer` に直通。API が `{"answer": bool}` を取るので unmark も同じサブコマンドのフラグで表現（`unanswer` 別コマンドは増やさない）。
+- **view の comments はネスト出力**: top-level コメントの下に reply を一段深く表示し、answer コメントは `[answer]` を付記。`--comments --json` は issue 側と同じく comments をルートキーに添える。

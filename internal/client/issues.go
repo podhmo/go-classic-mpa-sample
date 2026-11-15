@@ -12,10 +12,6 @@ import (
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
-// apiMaxPerPage mirrors the server's cap on ?per_page= (api.maxPerPage);
-// requests above it are stitched from multiple API pages below.
-const apiMaxPerPage = 100
-
 // ListIssues maps the filter onto the list endpoint's query parameters.
 // The API filters labels by name, so a LabelID filter resolves through
 // ListLabels.
@@ -52,50 +48,16 @@ func (c *Client) ListIssues(ctx context.Context, f store.ListFilter) ([]*store.I
 		}
 	}
 
-	page := f.Page
-	if page < 1 {
-		page = 1
-	}
-	want := f.PerPage
-	if want <= apiMaxPerPage {
-		// Fast path: a single API page covers the request (want <= 0
-		// means "server default", which the CLI never sends).
-		q.Set("page", strconv.Itoa(page))
-		if want > 0 {
-			q.Set("per_page", strconv.Itoa(want))
-		}
-		return c.listIssuesPage(ctx, q)
-	}
-
-	// want > the API cap: the server would silently clamp per_page and
-	// shift every later offset, so fetch enough 100-item pages and slice
-	// out the caller's window ourselves.
-	start := (page - 1) * want
-	skip := start % apiMaxPerPage
-	need := skip + want // items required counting from the first fetched page
-	var acc []*store.Issue
-	total := 0
-	for apiPage := start/apiMaxPerPage + 1; len(acc) < need; apiPage++ {
-		q.Set("page", strconv.Itoa(apiPage))
-		q.Set("per_page", strconv.Itoa(apiMaxPerPage))
-		issues, t, err := c.listIssuesPage(ctx, q)
-		if err != nil {
-			return nil, 0, err
-		}
-		total = t
-		acc = append(acc, issues...)
-		if len(issues) < apiMaxPerPage {
-			break // last page
-		}
-	}
-	if skip >= len(acc) {
-		return []*store.Issue{}, total, nil
-	}
-	acc = acc[skip:]
-	if len(acc) > want {
-		acc = acc[:want]
-	}
-	return acc, total, nil
+	return listWindow(ctx, f.Page, f.PerPage,
+		func(apiPage, apiPerPage int) ([]*store.Issue, int, error) {
+			q.Set("page", strconv.Itoa(apiPage))
+			if apiPerPage > 0 {
+				q.Set("per_page", strconv.Itoa(apiPerPage))
+			} else {
+				q.Del("per_page")
+			}
+			return c.listIssuesPage(ctx, q)
+		})
 }
 
 func (c *Client) listIssuesPage(ctx context.Context, q url.Values) ([]*store.Issue, int, error) {
