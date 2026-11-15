@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
@@ -351,7 +352,10 @@ func (h *handler) deleteIssue(w http.ResponseWriter, r *http.Request) {
 }
 
 // createComment validates POST /issues/{id}/comments and redirects back to
-// the detail page anchored at the new comment's permalink.
+// the detail page anchored at the new comment's permalink. A request with
+// X-Partial gets a fragment instead: the new comment's <li> on success, or
+// the error-marked form on a validation failure (422) — the same defines
+// the detail page uses, so the DOM swap is markup-identical to a reload.
 func (h *handler) createComment(w http.ResponseWriter, r *http.Request) {
 	id, ok := parseID(r)
 	if !ok {
@@ -362,6 +366,7 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body := strings.TrimSpace(r.PostFormValue("body"))
+	partial := wantsPartial(r)
 
 	var errMsg string
 	switch {
@@ -371,6 +376,17 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request) {
 		errMsg = fmt.Sprintf("Comment must be %d characters or fewer.", maxBodyRunes)
 	}
 	if errMsg != "" {
+		// A partial request swaps only the form; a minimal view model
+		// (the issue ID for the action URL) is enough — no list reload.
+		if partial {
+			h.r.renderFragment(w, "issue_detail", "issue_comment_form", http.StatusUnprocessableEntity, issueDetailPage{
+				Issue:        &store.Issue{ID: id},
+				CommentDraft: body,
+				CommentError: errMsg,
+				User:         userFromContext(r.Context()),
+			})
+			return
+		}
 		issue, err := h.store.GetIssue(r.Context(), id)
 		if err != nil {
 			h.issueError(w, r, err)
@@ -396,6 +412,18 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request) {
 	commentID, err := h.store.CreateComment(r.Context(), id, body, authorIDFromContext(r.Context()))
 	if err != nil {
 		h.issueError(w, r, err)
+		return
+	}
+	if partial {
+		// The fragment shows the comment as the client will see it after
+		// the swap; re-fetching the row would only repeat what we set.
+		h.r.renderFragment(w, "issue_detail", "issue_comment", http.StatusOK, &store.Comment{
+			ID:        commentID,
+			IssueID:   id,
+			Body:      body,
+			Author:    userFromContext(r.Context()),
+			CreatedAt: time.Now(),
+		})
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("%s#comment-%d", issueURL(id), commentID), http.StatusSeeOther)

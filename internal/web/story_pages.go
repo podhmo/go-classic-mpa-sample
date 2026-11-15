@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"time"
 
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
@@ -452,7 +453,9 @@ func (storyStore) ListComments(ctx context.Context, issueID int64) ([]*store.Com
 	return storyComments, nil
 }
 func (storyStore) CreateComment(ctx context.Context, issueID int64, body string, authorID int64) (int64, error) {
-	return 1, nil
+	// An id outside the fixture range so a fragment inserted by the app
+	// mount is distinguishable from fixture comments.
+	return 99, nil
 }
 func (storyStore) ListLabels(ctx context.Context) ([]*store.Label, error) {
 	return storyLabels, nil
@@ -482,7 +485,7 @@ func (storyStore) ListDiscussionComments(ctx context.Context, discussionID int64
 	return storyDComments, nil
 }
 func (storyStore) CreateDiscussionComment(ctx context.Context, discussionID, parentID int64, body string, authorID int64) (int64, error) {
-	return 1, nil
+	return 99, nil
 }
 func (storyStore) SetCommentAnswer(ctx context.Context, discussionID, commentID int64, answer bool) error {
 	return nil
@@ -517,4 +520,101 @@ func StoryHttpIssueList(w http.ResponseWriter, r *http.Request) {
 // stories which always answer 200.
 func StoryHttpNotFound(w http.ResponseWriter, r *http.Request) {
 	New(storyStore{}).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/no-such-page", nil))
+}
+
+// ---- partial-update fragments --------------------------------------------
+
+// renderFragment prints one named template fragment the way a partial
+// POST would return it — the markup partial-submit.js swaps in.
+func renderFragment(page, name string, status int, data any) {
+	rec := httptest.NewRecorder()
+	NewRenderer().renderFragment(rec, page, name, status, data)
+	printRec(rec)
+}
+
+// StoryIssueCommentFragment is the <li> a successful partial comment
+// POST returns for an issue — appended to .comment-list by the swap.
+func StoryIssueCommentFragment() {
+	renderFragment("issue_detail", "issue_comment", http.StatusOK, storyComments[1])
+}
+
+// StoryIssueCommentFormFragment is the error-marked form a 422 partial
+// response swaps back in place of the submitted one.
+func StoryIssueCommentFormFragment() {
+	renderFragment("issue_detail", "issue_comment_form", http.StatusUnprocessableEntity, issueDetailPage{
+		Issue:        storyIssue,
+		CommentDraft: "kept as the draft",
+		CommentError: "Comment is required.",
+	})
+}
+
+// StoryDiscussionCommentFragment renders a top-level discussion comment
+// <li> — collapsed reply form and qa answer button included.
+func StoryDiscussionCommentFragment() {
+	renderFragment("discussion_detail", "discussion_comment", http.StatusOK,
+		dict("Discussion", storyDiscussion, "C", storyDComments[1]))
+}
+
+// StoryDiscussionReplyFragment renders the reply <li> appended to the
+// parent's .comment-replies by a partial reply POST.
+func StoryDiscussionReplyFragment() {
+	renderFragment("discussion_detail", "discussion_reply", http.StatusOK, storyDComments[0].Replies[0])
+}
+
+// ---- partial-update request replays ---------------------------------------
+
+// storyPost builds a form POST for the replay stories. The values land
+// in PostForm directly — handlers only read PostFormValue — because a
+// body strings.Reader hits an interpreter gap: httptest.NewRequest's
+// body type-switch can't resolve bytes.Reader under minigo.
+func storyPost(target string, form url.Values, partial bool) *http.Request {
+	req := httptest.NewRequest(http.MethodPost, target, nil)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.PostForm = form
+	if partial {
+		req.Header.Set("X-Partial", "1")
+	}
+	return req
+}
+
+// StoryHttpCreateCommentPartial replays a comment POST with X-Partial:
+// the mux answers the new comment's fragment instead of a 303 redirect.
+func StoryHttpCreateCommentPartial(w http.ResponseWriter, r *http.Request) {
+	New(storyStore{}).ServeHTTP(w, storyPost("/issues/2/comments", url.Values{"body": {"posted via fetch"}}, true))
+}
+
+// StoryHttpCreateCommentRedirect replays the same POST without the
+// header — the unchanged full-reload path answering 303 #comment-N.
+func StoryHttpCreateCommentRedirect(w http.ResponseWriter, r *http.Request) {
+	New(storyStore{}).ServeHTTP(w, storyPost("/issues/2/comments", url.Values{"body": {"classic post"}}, false))
+}
+
+// StoryHttpCreateCommentPartialError replays a partial post with an
+// empty body: the 422 response is the error-marked form fragment.
+func StoryHttpCreateCommentPartialError(w http.ResponseWriter, r *http.Request) {
+	New(storyStore{}).ServeHTTP(w, storyPost("/issues/2/comments", url.Values{"body": {""}}, true))
+}
+
+// StoryHttpCreateDiscussionReplyPartial replays a partial reply POST:
+// the fragment carries comment-reply markup for .comment-replies.
+func StoryHttpCreateDiscussionReplyPartial(w http.ResponseWriter, r *http.Request) {
+	New(storyStore{}).ServeHTTP(w, storyPost("/discussions/2/comments", url.Values{"body": {"a reply"}, "parent_id": {"1"}}, true))
+}
+
+// StoryHttpApp routes the real incoming request through the app's mux.
+// cmd/storybook mounts it as a catch-all, so the storybook doubles as a
+// fake-data instance of the whole app — enough for browser JS like
+// partial-submit.js (fetch → fragment → DOM swap) to run end to end
+// without a database.
+func StoryHttpApp(w http.ResponseWriter, r *http.Request) {
+	// The incoming request is a host value; ServeMux dispatches by
+	// stamping pattern fields on the request, which only works on one
+	// allocated inside the script — rebuild it, carrying method, URL,
+	// body, headers and context over.
+	req := httptest.NewRequest(r.Method, r.URL.RequestURI(), nil)
+	req.Body = r.Body
+	req.ContentLength = r.ContentLength
+	req.Header = r.Header.Clone()
+	req = req.WithContext(r.Context())
+	New(storyStore{}).ServeHTTP(w, req)
 }

@@ -72,7 +72,10 @@ func TestRender(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !strings.Contains(string(page.Body), "<html") {
+			// Print stories are pages — except the *Fragment ones, which
+			// print a partial-update fragment by design. HTTP stories
+			// legitimately answer any shape (303, fragment, page).
+			if !s.IsHTTP() && !strings.HasSuffix(s.Name, "Fragment") && !strings.Contains(string(page.Body), "<html") {
 				t.Errorf("%s: body misses the page markup", s.Name)
 			}
 			if page.Status >= 500 {
@@ -387,6 +390,81 @@ func TestHandlerWatch(t *testing.T) {
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/_livereload.js", nil))
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "EventSource") {
 		t.Error("want the live reload script")
+	}
+}
+
+// The catch-all mount routes every non-storybook path through the app's
+// real mux via StoryHttpApp — the storybook doubles as a fake-data
+// instance of the app, so browser JS has live endpoints to hit.
+func TestAppMount(t *testing.T) {
+	srv := httptest.NewServer(newBook().Handler())
+	defer srv.Close()
+
+	// The storybook index still owns GET /.
+	resp, err := srv.Client().Get(srv.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("index status %d, want 200", resp.StatusCode)
+	}
+
+	// An app path renders through the real mux with its real headers.
+	resp, err = srv.Client().Get(srv.URL + "/issues")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("app GET status %d, want 200", resp.StatusCode)
+	}
+	if !strings.Contains(string(body), "<!DOCTYPE") || !strings.Contains(string(body), "Improve responsive layout") {
+		t.Error("app mount should render the real issue list")
+	}
+	if csp := resp.Header.Get("Content-Security-Policy"); !strings.Contains(csp, "connect-src") {
+		t.Errorf("app response should carry the app's CSP, got %q", csp)
+	}
+
+	// A partial comment POST answers the fragment; a plain POST the 303.
+	noRedirect := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	post := func(form string, headers map[string]string) (*http.Response, string) {
+		t.Helper()
+		req, err := http.NewRequest(http.MethodPost, srv.URL+"/issues/2/comments", strings.NewReader(form))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+		resp, err := noRedirect.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp, string(body)
+	}
+	resp, body2 := post("body=via+fetch", map[string]string{"X-Partial": "1"})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("partial POST status %d, want 200", resp.StatusCode)
+	}
+	if !strings.Contains(body2, `class="card comment"`) || strings.Contains(body2, "<!DOCTYPE") {
+		t.Error("partial POST should answer the comment fragment")
+	}
+	resp, _ = post("body=classic", nil)
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("plain POST status %d, want 303 (client must not follow)", resp.StatusCode)
 	}
 }
 

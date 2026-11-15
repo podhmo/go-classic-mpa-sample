@@ -463,6 +463,11 @@ func (b *Book) Handler() http.Handler {
 		w.Write(body)
 	})
 	mux.Handle("GET /static/", b.staticHandler())
+	// Everything else — app paths like /issues/N, any POST — routes
+	// through the app's real mux via the StoryHttpApp story, so the
+	// storybook doubles as a fake-data instance of the app and browser
+	// JS (partial-submit.js) has live endpoints to hit.
+	mux.Handle("/", b.appHandler())
 	b.MountLiveReload(mux)
 	return mux
 }

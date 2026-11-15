@@ -135,6 +135,16 @@ func New(st Store) http.Handler {
 	mux.HandleFunc("GET /static/form-errors.js", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFileFS(w, r, staticFS, "static/form-errors.js")
 	})
+	// Shared polite live region used by the form-error and partial-submit
+	// modules (imported, not loaded as a script tag).
+	mux.HandleFunc("GET /static/announcer.js", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, staticFS, "static/announcer.js")
+	})
+	// Comment forms' partial-update submission (fetch → fragment → DOM
+	// swap) on the issue/discussion detail pages.
+	mux.HandleFunc("GET /static/partial-submit.js", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, staticFS, "static/partial-submit.js")
+	})
 	// Catch-alls: unknown GET/POST paths render the styled 404 page instead
 	// of the mux's plaintext default. They are method-scoped on purpose — a
 	// method-less "/" pattern would match PUT/DELETE too and swallow the
@@ -232,8 +242,13 @@ func withUser(h *handler, next http.Handler) http.Handler {
 // plain HTTP and the directive would rewrite every URL to https), report-to
 // (no reporting endpoint exists), and HSTS (ignored over HTTP; this is a
 // localhost app with no TLS).
+//
+// connect-src 'self' covers the fetch() calls partial-submit.js makes for
+// comment posting; without it the request is blocked before reaching the
+// network (fetch obeys connect-src, not script-src).
 const contentSecurityPolicy = "default-src 'none'; " +
 	"script-src 'self'; " +
+	"connect-src 'self'; " +
 	"style-src 'self'; " +
 	"style-src-attr 'unsafe-inline'; " +
 	"img-src 'self' data:; " +
@@ -284,6 +299,26 @@ var funcMap = template.FuncMap{
 	"statusURL":   statusURL,
 	"labelURL":    labelURL,
 	"maxTitleLen": func() int { return maxTitleRunes },
+	"dict":        dict,
+}
+
+// dict builds a map from alternating key/value pairs so templates can pass
+// several values into one {{template}} call (the detail pages use it to
+// hand page-level state into fragment defines).
+func dict(pairs ...any) map[string]any {
+	m := make(map[string]any, len(pairs)/2)
+	for i := 0; i+1 < len(pairs); i += 2 {
+		key, _ := pairs[i].(string)
+		m[key] = pairs[i+1]
+	}
+	return m
+}
+
+// wantsPartial reports whether the client asked for an HTML fragment
+// response: partial-submit.js sets X-Partial on its fetch. Everything else
+// gets the classic full-page PRG behavior.
+func wantsPartial(r *http.Request) bool {
+	return r.Header.Get("X-Partial") == "1"
 }
 
 // fmtTime renders a timestamp in a compact human-readable form.

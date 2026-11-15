@@ -317,3 +317,14 @@
 - **import map / bare specifier は使わない**: `<script type="importmap">` はインライン script で CSP `script-src 'self'` にブロックされる。全て自前ファイルなので相対パス import のみ。
 - **バンドル・minify・fingerprint は現時点不採用**: シングル Go バイナリ + embed.FS + node ツールチェーンなしの方針と、合計 ~12KB の規模では効果が小さいため。再評価トリガー（~50KB 超 / ページあたり 5 ファイル超 / 外部依存 vendored 化）をメモに記録。
 - **条件付き依存は `conditional-async-dependencies` の単一エントリパターン**: TLA + 兄弟 static import 回避（Safari 15–26.6 の TLA 同時 import bug 対策）。
+
+## 部分更新 Phase 1 の実装決定（2026-11-15、`devin/1794745928-partial-updates` ブランチ）
+
+「コメント/返信の部分更新方針」の実装で固めた細部。
+
+- **fetch body は `URLSearchParams`（urlencoded）で送る**: `FormData` を渡すと multipart/form-data になり、通常フォーム送信と別のパーサ経路を通ることになる。`new URLSearchParams(new FormData(form))` で JS/非JS が同一 wire format（`application/x-www-form-urlencoded`）を共有する。
+- **fragment のパースは `<template>` 一本**: `Document.parseHTML` は既定 Sanitizer を通し `class`/`id` を削る（実測）。同一オリジンのサーバー出力なのでサニタイズ不要、`<template>` innerHTML で属性を保持する（pitfalls.md 参照）。
+- **422 時はフォーム fragment ごと差し替え・live region は鳴らさない**: エラーフォーム差し替えで `<details open>` 等の状態もサーバー再現でき、フォーカス移動と競合しないため announce はしない（persistent-toast-notifications ガイドの原則どおり）。
+- **件数表示と空ノートは data 属性駆動**: サーバー再描画なしで `data-comment-count` を +1、`data-empty-note` を hidden にする。常時描画の `ol`（空なら `hidden`）を挿入先にして「0件→1件」の DOM 構造差を消した。
+- **新 `<li>` のハイライトは `.comment-new` 一時クラス**: `:target` は挿入ノードに効かないため、`:target` と同じ見た目のクラスを4秒だけ付ける方式。
+- **submit 奪取は document への delegated listener**: 差し替えられたフォーム（422 後や今後の注入）にも自動で効く。`enter-submit.js` も同理由で document delegation 化。

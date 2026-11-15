@@ -70,4 +70,9 @@
 - **Chrome は CSP `prefetch-src` を未実装**: 指定しても "Unrecognized Content-Security-Policy directive" と警告されるだけ。投機 fetch を CSP で絞る術は現状無いので、speculation rules の `where.selector_matches` で対象リンクを絞るのが実質の防御線になる。
 - **投機的読み込みは Playwright の `requests` / Network ドメインに出ない**: ブラウザプロセス発のフェッチなのでページ側からは観測不能。サーバー側で `Sec-Purpose: prefetch` / `Sec-Speculation-Tags` ヘッダーを見るのが確実（このアプリはリクエストログが無いので標準ライブラリのロギングプロキシを `:8081` に立てて観測した）。hover による `moderate` eagerness の発火は Playwright の `hover`（CDP 入力）で起きる。
 
+- **`Document.parseHTML` は既定 Sanitizer を通す**: `Document.parseHTML(html)` で作った DOM は `class`/`id`（と `data-*` 系）が削られる（Chromium 156 実測 — `<li class="card comment" id="x">` が `<li>` になる）。同一オリジンのサーバー fragment なら `<template>` innerHTML でパースするのが正解（属性を保持し `<script>` も不活性のまま）。「safe parser だから使おう」とすると静かに属性が消えるので注意。
+- **fetch の body に `FormData` をそのまま渡すと multipart になる**: 通常フォーム送信は `application/x-www-form-urlencoded` なので、JS 側だけ multipart だとサーバー側が「もう1つのパーサ経路」を持つことになる。`new URLSearchParams(new FormData(form))` で urlencoded に揃える。
+- **minigo: `s.Call` の引数に渡した host `*http.Request` はフィールド代入不可**: storybook の app mount で受け取った `*http.Request` をそのまま解釈コード（`ServeMux` の内部で `r.pat` 等を書く）に渡すと `host value *http.Request has no settable field pat` で失敗する。対策はスクリプト内で `httptest.NewRequest` で再構築し、`Body`/`ContentLength`/`Header.Clone()`/`WithContext` を写す（`StoryHttpApp`）。
+- **minigo: 解釈実行の `httptest.NewRequest` は `bytes.Reader` body を解決できない**: 非 nil body を渡すと型 switch が `bytes.Reader` を引けず `undefined: bytes.Reader`。body は `nil` にして `req.PostForm` / `req.Body` を直接代入する。
+- **minigo: 解釈実行では multipart の `ParseMultipartForm` が空を返す**: multipart/form-data の POST がバリデーション「本文必須」422 になる。urlencoded なら parse できるので、検証用途では urlencoded を使う。
 （随時追記）

@@ -6,6 +6,10 @@
 // announced even while hidden, so it must not be referenced up front.
 // An aria-invalid="true" this script didn't set (a server-side error) is
 // left alone: the server stays the source of truth until the next submit.
+// Loaded as an ES module so it shares the page's single live region with
+// partial-submit.js via announcer.js.
+import { politeRegion } from "./announcer.js";
+
 (() => {
   const linkError = (el, shown) => {
     const errorId = el.dataset.error;
@@ -18,13 +22,11 @@
     else el.removeAttribute("aria-describedby");
   };
 
-  // One polite live region for the page announces an error that appears
-  // when the user leaves or changes a field — a moment later so it doesn't
-  // talk over the next field.
-  const announcer = document.createElement("div");
-  announcer.setAttribute("aria-live", "polite");
-  announcer.classList.add("visually-hidden");
-  document.body.append(announcer);
+  // The page's one polite live region (announcer.js, created on load so
+  // it exists before anything writes to it) announces an error that
+  // appears when the user leaves or changes a field — a moment later so
+  // it doesn't talk over the next field.
+  const announcer = politeRegion();
   let announceTimer;
   let announcedField;
 

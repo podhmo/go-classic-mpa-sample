@@ -219,7 +219,7 @@ func TestE2ECommentsAndValidation(t *testing.T) {
 		t.Fatalf("comment redirect = %q, want %s#comment-…", loc2, loc)
 	}
 	_, _, body := e2eGet(t, srv, loc)
-	if !strings.Contains(body, "Comments (1)") {
+	if !strings.Contains(body, `data-comment-count>1<`) {
 		t.Error("detail should show a comment count of 1")
 	}
 	if !strings.Contains(body, `markdown-body"><p>hello there</p>`) {
@@ -263,7 +263,7 @@ func TestE2ECommentsAndValidation(t *testing.T) {
 	}
 	// The rejected comments never reached the database.
 	_, _, body = e2eGet(t, srv, loc)
-	if !strings.Contains(body, "Comments (1)") || strings.Contains(body, "Comments (2)") {
+	if !strings.Contains(body, `data-comment-count>1<`) || strings.Contains(body, `data-comment-count>2<`) {
 		t.Error("invalid comments must not be persisted")
 	}
 
@@ -601,7 +601,7 @@ func TestE2ESeededDataRenders(t *testing.T) {
 	for _, want := range []string{
 		"Crash when opening an empty project",
 		`class="label-badge"`, ">Bug<",
-		`id="comments"`, "Comments (2)",
+		`id="comments"`, `data-comment-count>2<`,
 		"Reproduced on macOS and Linux. Windows seems unaffected.",
 		"Bisected to the changes in the file scanner last week.",
 	} {

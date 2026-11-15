@@ -271,8 +271,74 @@ func TestDiscussionCommentCountIncludesReplies(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := getBody(t, resp)
-	if !strings.Contains(body, "Comments (2)") {
+	if !strings.Contains(body, `data-comment-count>2<`) {
 		t.Error("heading should count replies too")
+	}
+}
+
+// The partial-update contract (docs/sketch/ja/partial-updates.md): a POST
+// carrying X-Partial: 1 gets back just the fragment — the new comment's
+// <li> on success, the error-marked form on a validation failure (422) —
+// while a normal POST keeps the classic 303 PRG redirect.
+func TestPartialCommentContract(t *testing.T) {
+	srv, f := newTestServer(t)
+	issue := f.addIssue("Partial target", "b", "open", time.Now())
+	qa := f.addDiscussion("QA target", "b", 2, time.Now())
+	parent, err := f.CreateDiscussionComment(t.Context(), qa.ID, 0, "parent", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	partial := map[string]string{"X-Partial": "1"}
+
+	// A successful partial post returns only the new comment's <li>.
+	resp := postFormWithHeaders(t, srv.URL+"/issues/"+itoa(issue.ID)+"/comments",
+		url.Values{"body": {"fragment body"}}, partial)
+	body := getBody(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("partial POST status = %d, want 200", resp.StatusCode)
+	}
+	for _, want := range []string{`class="card comment"`, "fragment body"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("comment fragment missing %q", want)
+		}
+	}
+	if strings.Contains(body, "<!DOCTYPE") {
+		t.Error("partial response must be a fragment, not a full page")
+	}
+
+	// A validation failure returns only the error-marked form at 422.
+	resp = postFormWithHeaders(t, srv.URL+"/issues/"+itoa(issue.ID)+"/comments",
+		url.Values{"body": {""}}, partial)
+	body = getBody(t, resp)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("partial POST status = %d, want 422", resp.StatusCode)
+	}
+	for _, want := range []string{`class="comment-form`, `aria-invalid="true"`, "Comment is required"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("422 form fragment missing %q", want)
+		}
+	}
+	if strings.Contains(body, "<!DOCTYPE") {
+		t.Error("partial 422 must be a fragment, not a full page")
+	}
+
+	// A reply's fragment carries comment-reply markup.
+	resp = postFormWithHeaders(t, srv.URL+"/discussions/"+itoa(qa.ID)+"/comments",
+		url.Values{"body": {"a reply"}, "parent_id": {itoa(parent)}}, partial)
+	body = getBody(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("partial reply status = %d, want 200", resp.StatusCode)
+	}
+	if !strings.Contains(body, "comment-reply") {
+		t.Error("reply fragment should carry the comment-reply class")
+	}
+
+	// Without the header the same endpoints keep the 303 PRG redirect.
+	resp = postFormWithHeaders(t, srv.URL+"/discussions/"+itoa(qa.ID)+"/comments",
+		url.Values{"body": {"classic"}}, nil)
+	getBody(t, resp)
+	if resp.StatusCode != http.StatusSeeOther || !strings.Contains(resp.Header.Get("Location"), "#comment-") {
+		t.Errorf("normal POST status = %d location = %q, want 303 #comment-", resp.StatusCode, resp.Header.Get("Location"))
 	}
 }
 
