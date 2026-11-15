@@ -12,7 +12,7 @@
 //
 // The submit listener is delegated on document so it also catches forms
 // this script itself swapped in (and future injected forms).
-import { announce } from "./announcer.js";
+import { toast } from "./toast.js";
 
 // Server-rendered same-origin fragment, parsed via <template> so the
 // markup stays inert (<script> never executes) until insertion. Note:
@@ -149,7 +149,7 @@ async function postPartial(form) {
           .querySelector(`form[action="${CSS.escape(action)}"] button[type="submit"]`)
           ?.focus();
       }
-      announce(form.dataset.partialAnnounce || "Updated.");
+      toast(form.dataset.partialAnnounce || "Updated.");
       return;
     }
 
@@ -189,7 +189,7 @@ async function postPartial(form) {
       added.scrollIntoView({ block: "nearest" });
       setTimeout(() => added.classList.remove("comment-new"), 4000);
     }
-    announce(form.dataset.partialAnnounce || "Comment posted.");
+    toast(form.dataset.partialAnnounce || "Comment posted.");
   } catch {
     showSubmitError(form, "Comment could not be posted. Please try again.");
   } finally {

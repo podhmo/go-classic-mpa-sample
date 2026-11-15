@@ -401,3 +401,13 @@
 - **fake / storyStore の comment 作成も updated_at を bump**: 実 store の契約（comment = activity）に揃え、fragment の meta が実際に新しい値を返すことを `TestPartialCommentContract` で検証できるようにした。
 - **moveBefore は使わない**: 既存の実機検証どおり `moveBefore` は接続済みノード専用で detach 済み fragment を拒否する（HierarchyRequestError）。swap ノードも `replaceWith`。
 - **検証**: `go test ./...` + `cmd/storybook` の全テスト。実ブラウザ（playwright-cli）で実アプリの issue 詳細にコメント投稿 → URL が `/issues/1` のまま（非遷移）、`#issue-meta` の "Last updated" が新しい値に差し替わり新 `<li>` が append、コンソールエラー 0 を確認。
+
+## 投稿成功の視覚トースト（2026-11-16、`devin/1794771371-partial-toast` ブランチ）
+
+- **`/static/toast.js` 新設、`popover="manual"` で top layer 表示**: guide persistent-toast-notifications の MANDATORY。ライト解除なし・複数共存。Popover 非対応ブラウザでは属性が無意味なだけで、position:fixed の普通のボックスとして同じ見た目に落ちる（top layer なし）。ポリフィルは CSP `script-src 'self'` と "zero-JS 寄り" の方針から見送り。
+- **スタックは 1 個ずつ個別配置**: top layer の子は祖先レイアウトを無視するので `.toast-region`（`role="region" aria-label="Notifications"`、AT が toast を安定して見つけるための器）内の各 toast を JS の `--toast-lift` で積み上げる。
+- **SR 通知は ariaNotify() → announcer.js fallback**: ariaNotify() は Baseline 2026-09（Chrome 141+）。未対応では既存の polite live region に流す。toast 自身は live region にしないので二重読み上げにならない。
+- **タイマー解除（8s）+ Close ボタン**: コメント投稿は低重要度の確認なので自動消去を許容（投稿物は一覧に見える＝「toast なしでも識別可能」の MANDATORY を満たす）。ただし toast 内にフォーカスがある間は消さず、focusout 後に再アーム。Close は autofocus しない（トーストはフォーカス遷移と競合してはいけない）。フォーカス中の toast を手動で閉じたら次の toast の Close、なければ toast 出現前の要素へフォーカスを返す。
+- **入退場アニメーション**: `@starting-style` + `transition-behavior: allow-discrete`（shorthand に入れず別プロパティ宣言 — guide の DO）。display/overlay も transition 対象にして top layer 退場を拾う。`prefers-reduced-motion` で全無効。
+- **partial-submit.js の成功 announce() を toast() に置換**: 422 差し替え・エラー経路は従来どおり（role="alert" インライン表示 + フォーカス遷移 — toast を出さない、guide の DON'T）。
+- **検証**: `go test ./...`（`TestStaticToastJS` 追加 — module import なので `<script>` タグ検査では漏れる）。実ブラウザでコメント投稿 → 右下に "Comment posted. [Close]" が popover-open で出る、Close で消える、8s 自動消去、コンソールエラー 0 を確認。

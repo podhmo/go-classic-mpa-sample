@@ -24,7 +24,7 @@ Guides referenced below are in the `modern-web-guidance` catalog (`.agents/skill
 - [x] **部分更新 append パスのメタ行 stale**: コメント/返信の部分投稿で store は `updated_at` を進めるが、fragment は新 `<li>` だけを返すためヘッダの "Last updated" がリロードまで古いまま（Phase 2 の answer swap は `discussion_meta` ノード同梱で解決済み、PR #49 の review finding 由来）。append モードは全ノードを target へ挿入するので、自己ターゲットする swap ノードを混ぜるにはプロトコル拡張が要る（例: fragment 内で `data-swap` 印のノードは `replaceWith`、残りを append）。
 - [ ] **`<details>` の開閉アニメーション**: 返信フォーム等の details 展開を `interpolate-size: allow-keywords` + `::details-content` で高さアニメーションに（modern-web-guidance `animate-to-intrinsic-sizes`）。非対応ブラウザは従来どおり瞬時表示で graceful。
 - [ ] **部分更新の swap を scoped view transition で滑らかに**: `partial-submit.js` の DOM 差し替え（コメント挿入・422 フォーム差し替え・answer/status pill）を `document.startViewTransition` で囲み視覚遷移に（modern-web-guidance `scoped-component-transitions`）。`prefers-reduced-motion` と非対応ブラウザは素の swap にフォールバック。
-- [ ] **投稿成功の視覚トースト**: 部分更新の成功フィードバックは現在 announcer（SR 専用）のみ。`aria-live` toast で「コメントを投稿しました」等を視覚的にも出す（modern-web-guidance `persistent-toast-notifications`）。
+- [x] **投稿成功の視覚トースト**: 部分更新の成功フィードバックは現在 announcer（SR 専用）のみ。`aria-live` toast で「コメントを投稿しました」等を視覚的にも出す（modern-web-guidance `persistent-toast-notifications`）。
 - [ ] **タブの移動アンダーライン**: issues 一覧の open/closed/all タブで選択中インジケータを anchor positioning で遷移させる（modern-web-guidance `anchor-positioning-tab-underline`）。view-transition 中の要素追従に注意。
 - [ ] **ナビゲーション方向に応じた遷移**: cross-document view transition を前進/後退で方向づけ（一覧→詳細はスライドイン、戻るは逆方向）に（modern-web-guidance `directional-navigation-transitions`）。現行の一律 cross-fade を拡張。
 - [x] **長ページ用 back-to-top**: issue/discussion 詳細で下部までスクロールしたとき浮遊ボタンを scroll-driven animation で出現させる（modern-web-guidance `scroll-position-aware-elements`）。非対応ブラウザは常時表示または非表示で graceful。

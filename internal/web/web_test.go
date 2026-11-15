@@ -853,6 +853,23 @@ func TestStaticCSS(t *testing.T) {
 	}
 }
 
+// toast.js is imported by partial-submit.js (a module import, not a
+// <script> tag), so nothing else would catch a missing route.
+func TestStaticToastJS(t *testing.T) {
+	srv, _ := newTestServer(t)
+	resp, err := srv.Client().Get(srv.URL + "/static/toast.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "javascript") {
+		t.Fatalf("Content-Type = %q, want a JavaScript type", ct)
+	}
+}
+
 func TestLayoutOptsIntoOSTextScale(t *testing.T) {
 	srv, _ := newTestServer(t)
 	resp, err := srv.Client().Get(srv.URL + "/issues")

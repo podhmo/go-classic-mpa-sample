@@ -184,6 +184,11 @@ func New(st Store, opts ...Option) http.Handler {
 	mux.HandleFunc("GET /static/partial-submit.js", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFileFS(w, r, staticFS, "static/partial-submit.js")
 	})
+	// Visual toast notifications shown on partial-post success (imported
+	// by partial-submit.js, not loaded as a script tag).
+	mux.HandleFunc("GET /static/toast.js", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, staticFS, "static/toast.js")
+	})
 	// Catch-alls: unknown GET/POST paths render the styled 404 page instead
 	// of the mux's plaintext default. They are method-scoped on purpose — a
 	// method-less "/" pattern would match PUT/DELETE too and swallow the
