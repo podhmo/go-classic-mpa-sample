@@ -459,6 +459,15 @@ func (b *Book) Handler() http.Handler {
 		// A story opened in its own tab reloads too — only when the
 		// response is HTML, so non-HTML bodies stay byte-identical.
 		body := b.AppendLiveReload(h, res.Body)
+		if len(body) != len(res.Body) {
+			// The replayed CSP may block the reload script's EventSource:
+			// connect-src falls back to default-src. Adding the directive
+			// only when absent keeps an explicit connect-src intact — CSP
+			// ignores duplicate directives after the first.
+			if csp := h.Get("Content-Security-Policy"); csp != "" && !strings.Contains(csp, "connect-src") {
+				h.Set("Content-Security-Policy", csp+"; connect-src 'self'")
+			}
+		}
 		w.WriteHeader(res.Status)
 		w.Write(body)
 	})
