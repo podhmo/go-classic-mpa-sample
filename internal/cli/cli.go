@@ -20,6 +20,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -223,10 +224,31 @@ func (b *backendFlags) dbPath() string {
 // returned io.Closer is nil for remote backends.
 func (o Options) backend(b *backendFlags) (Backend, io.Closer, error) {
 	if b.server != "" {
+		warnPlaintext(o.Stderr, b.server, b.token)
 		be, err := o.OpenRemote(b.server, b.token)
 		return be, nil, err
 	}
 	return o.OpenLocal(b.dbPath())
+}
+
+// warnPlaintext warns when an API token is about to travel over
+// unencrypted HTTP to a non-loopback host — anyone on the path could
+// replay it. A warning rather than an error: http to loopback is the
+// normal case, and a hard refusal would also block exotic-but-valid
+// setups (a trusted LAN box, an SSH tunnel).
+func warnPlaintext(w io.Writer, server, token string) {
+	if token == "" {
+		return
+	}
+	u, err := url.Parse(server)
+	if err != nil || u.Scheme != "http" {
+		return
+	}
+	switch u.Hostname() {
+	case "localhost", "127.0.0.1", "::1":
+		return
+	}
+	fmt.Fprintf(w, "warning: %s is plaintext http; the API token will be sent unencrypted\n", server)
 }
 
 // nameFlag is a repeatable string flag (--label a --label b).

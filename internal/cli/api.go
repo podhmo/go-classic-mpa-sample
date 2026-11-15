@@ -26,6 +26,7 @@ func apiCmd(ctx context.Context, o Options, args []string) error {
 	if bf.server == "" {
 		return usageError{msg: "issues api requires --server (or ISSUES_SERVER)"}
 	}
+	warnPlaintext(o.Stderr, bf.server, bf.token)
 
 	// Paths resolve under /api/v1 like gh api resolves under its API host,
 	// so both `api issues` and `api /issues` hit the JSON endpoint.

@@ -12,6 +12,10 @@ import (
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
+// apiMaxPerPage mirrors the server's cap on ?per_page= (api.maxPerPage);
+// requests above it are stitched from multiple API pages below.
+const apiMaxPerPage = 100
+
 // ListIssues maps the filter onto the list endpoint's query parameters.
 // The API filters labels by name, so a LabelID filter resolves through
 // ListLabels.
@@ -28,24 +32,73 @@ func (c *Client) ListIssues(ctx context.Context, f store.ListFilter) ([]*store.I
 	if f.Sort != "" {
 		q.Set("sort", f.Sort)
 	}
-	if f.Page > 0 {
-		q.Set("page", strconv.Itoa(f.Page))
-	}
-	if f.PerPage > 0 {
-		q.Set("per_page", strconv.Itoa(f.PerPage))
-	}
 	if f.LabelID > 0 {
 		labels, err := c.ListLabels(ctx)
 		if err != nil {
 			return nil, 0, err
 		}
+		found := false
 		for _, l := range labels {
 			if l.ID == f.LabelID {
 				q.Set("label", l.Name)
+				found = true
 				break
 			}
 		}
+		if !found {
+			// Local semantics: an unknown label matches nothing.
+			// Dropping the filter would return unrelated issues.
+			return []*store.Issue{}, 0, nil
+		}
 	}
+
+	page := f.Page
+	if page < 1 {
+		page = 1
+	}
+	want := f.PerPage
+	if want <= apiMaxPerPage {
+		// Fast path: a single API page covers the request (want <= 0
+		// means "server default", which the CLI never sends).
+		q.Set("page", strconv.Itoa(page))
+		if want > 0 {
+			q.Set("per_page", strconv.Itoa(want))
+		}
+		return c.listIssuesPage(ctx, q)
+	}
+
+	// want > the API cap: the server would silently clamp per_page and
+	// shift every later offset, so fetch enough 100-item pages and slice
+	// out the caller's window ourselves.
+	start := (page - 1) * want
+	skip := start % apiMaxPerPage
+	need := skip + want // items required counting from the first fetched page
+	var acc []*store.Issue
+	total := 0
+	for apiPage := start/apiMaxPerPage + 1; len(acc) < need; apiPage++ {
+		q.Set("page", strconv.Itoa(apiPage))
+		q.Set("per_page", strconv.Itoa(apiMaxPerPage))
+		issues, t, err := c.listIssuesPage(ctx, q)
+		if err != nil {
+			return nil, 0, err
+		}
+		total = t
+		acc = append(acc, issues...)
+		if len(issues) < apiMaxPerPage {
+			break // last page
+		}
+	}
+	if skip >= len(acc) {
+		return []*store.Issue{}, total, nil
+	}
+	acc = acc[skip:]
+	if len(acc) > want {
+		acc = acc[:want]
+	}
+	return acc, total, nil
+}
+
+func (c *Client) listIssuesPage(ctx context.Context, q url.Values) ([]*store.Issue, int, error) {
 	var res struct {
 		Issues []api.Issue `json:"issues"`
 		Total  int         `json:"total"`
@@ -102,8 +155,15 @@ func (c *Client) CreateIssue(ctx context.Context, in store.IssueInput, _ int64) 
 }
 
 func (c *Client) UpdateIssue(ctx context.Context, id int64, in store.IssueInput) error {
+	labelIDs := in.LabelIDs
+	if labelIDs == nil {
+		// JSON null means "leave labels unchanged" to the API, but the
+		// local backend replaces — send an empty set so both modes
+		// agree that nil LabelIDs clears the labels.
+		labelIDs = []int64{}
+	}
 	return c.do(ctx, "PATCH", "/issues/"+fmt.Sprint(id), map[string]any{
-		"title": in.Title, "body": in.Body, "label_ids": in.LabelIDs,
+		"title": in.Title, "body": in.Body, "label_ids": labelIDs,
 	}, nil)
 }
 

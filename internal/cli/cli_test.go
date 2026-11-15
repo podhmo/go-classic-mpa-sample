@@ -227,3 +227,45 @@ func TestAuthTokenLocal(t *testing.T) {
 func itoa(n int64) string {
 	return strconv.FormatInt(n, 10)
 }
+
+// Regression: Devin Review findings — validation, -w ordering, --json shape.
+func TestReviewRegressions(t *testing.T) {
+	db := t.TempDir() + "/test.db"
+	id := seedIssue(t, db, "target")
+	o := localOptions(t, db)
+
+	// issue create --web without --server must not create anything.
+	code, _, _ := run(t, o, "issue", "create", "--title", "no server", "-w")
+	if code != ExitUsage {
+		t.Fatalf("create -w: exit %d, want %d", code, ExitUsage)
+	}
+	code, out, _ := run(t, o, "issue", "list", "--state", "all")
+	if strings.Contains(out, "no server") {
+		t.Fatalf("create -w still wrote an issue:\n%s", out)
+	}
+
+	// Blank/oversized input is rejected like the web/API, not persisted.
+	code, _, _ = run(t, o, "issue", "edit", itoa(id), "--title", "   ")
+	if code != ExitError {
+		t.Fatalf("edit --title '   ': exit %d, want %d", code, ExitError)
+	}
+	code, out, _ = run(t, o, "issue", "view", itoa(id))
+	if !strings.Contains(out, "title:\ttarget") {
+		t.Fatalf("bad edit was saved:\n%s", out)
+	}
+	code, _, _ = run(t, o, "comment", "create", itoa(id),
+		"--body", strings.Repeat("x", 10001))
+	if code != ExitError {
+		t.Fatalf("oversized comment: exit %d, want %d", code, ExitError)
+	}
+
+	// view --comments --json keeps issue fields at the root.
+	code, out, _ = run(t, o, "issue", "view", itoa(id), "--comments",
+		"--json", "title,comments")
+	if code != ExitOK {
+		t.Fatalf("view --comments --json: exit %d", code)
+	}
+	if !strings.Contains(out, `"title": "target"`) || !strings.Contains(out, `"comments"`) {
+		t.Fatalf("--json output:\n%s", out)
+	}
+}

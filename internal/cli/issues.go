@@ -3,8 +3,10 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
@@ -125,10 +127,15 @@ func issueView(ctx context.Context, o Options, args []string) error {
 	}
 	if *jsonFields != "" {
 		if *comments {
-			return writeJSONFields(o.Stdout, map[string]any{
-				"issue":    issueViewJSON(issue),
-				"comments": commentViews(cs),
-			}, *jsonFields)
+			// Issue fields stay at the root with "comments" added —
+			// nesting them under "issue" would make --json title
+			// silently select nothing.
+			m, err := jsonObject(issueViewJSON(issue))
+			if err != nil {
+				return err
+			}
+			m["comments"] = commentViews(cs)
+			return writeJSONFields(o.Stdout, m, *jsonFields)
 		}
 		return writeJSONFields(o.Stdout, issueViewJSON(issue), *jsonFields)
 	}
@@ -167,6 +174,11 @@ func issueCreate(ctx context.Context, o Options, args []string) error {
 	if strings.TrimSpace(*title) == "" {
 		return usageError{msg: "--title is required"}
 	}
+	if *web && bf.server == "" {
+		// Check before touching the backend: creating the issue first
+		// and only then failing means a retry creates a duplicate.
+		return usageError{msg: "-w/--web requires --server (or ISSUES_SERVER)"}
+	}
 	bodyText, err := o.readBody(*body, *bodyFile)
 	if err != nil {
 		return err
@@ -184,9 +196,15 @@ func issueCreate(ctx context.Context, o Options, args []string) error {
 	}
 	// The actor is anonymous locally; remotely it is whoever the API
 	// token resolves to — the authorID arg is ignored over HTTP.
-	id, err := b.CreateIssue(ctx, store.IssueInput{
+	in := store.IssueInput{
 		Title: strings.TrimSpace(*title), Body: strings.TrimSpace(bodyText), LabelIDs: labelIDs,
-	}, 0)
+	}
+	// The local backend doesn't validate; apply the same rules the
+	// web/API enforce so both modes reject the same input.
+	if err := validateIssueInput(in); err != nil {
+		return err
+	}
+	id, err := b.CreateIssue(ctx, in, 0)
 	if err != nil {
 		return err
 	}
@@ -247,6 +265,9 @@ func issueEdit(ctx context.Context, o Options, args []string) error {
 	}
 	if !changed {
 		return usageError{msg: "nothing to update: pass --title, --body or --label"}
+	}
+	if err := validateIssueInput(in); err != nil {
+		return err
 	}
 	if err := b.UpdateIssue(ctx, id, in); err != nil {
 		return err
@@ -313,8 +334,12 @@ func commentCmd(ctx context.Context, o Options, args []string) error {
 	if err != nil {
 		return err
 	}
-	if strings.TrimSpace(bodyText) == "" {
-		return usageError{msg: "--body is required (or --body-file)"}
+	bodyText = strings.TrimSpace(bodyText)
+	if msg := store.ValidateCommentBody(bodyText); msg != "" {
+		if bodyText == "" {
+			return usageError{msg: "--body is required (or --body-file)"}
+		}
+		return fmt.Errorf("invalid comment: %s", msg)
 	}
 	b, closer, err := o.backend(bf)
 	if err != nil {
@@ -322,7 +347,7 @@ func commentCmd(ctx context.Context, o Options, args []string) error {
 	}
 	defer closeQuietly(closer)
 
-	cid, err := b.CreateComment(ctx, id, strings.TrimSpace(bodyText), 0)
+	cid, err := b.CreateComment(ctx, id, bodyText, 0)
 	if err != nil {
 		return err
 	}
@@ -367,6 +392,40 @@ func (o Options) openPage(bf *backendFlags, prefix string, id int64) error {
 		return usageError{msg: "-w/--web requires --server (or ISSUES_SERVER)"}
 	}
 	return o.OpenBrowser(strings.TrimSuffix(bf.server, "/") + prefix + fmt.Sprint(id))
+}
+
+// validateIssueInput applies the shared validation rules (the same
+// ValidateIssueInput the web/API handlers use) — the local store backend
+// does not validate on its own.
+func validateIssueInput(in store.IssueInput) error {
+	fe := store.ValidateIssueInput(in)
+	if !fe.Any() {
+		return nil
+	}
+	keys := make([]string, 0, len(fe))
+	for k := range fe {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, k+": "+fe[k])
+	}
+	return fmt.Errorf("invalid input: %s", strings.Join(parts, "; "))
+}
+
+// jsonObject re-marshals a DTO into a map so extra keys (like comments)
+// can be spliced in before field selection.
+func jsonObject(v any) (map[string]any, error) {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 func labelNames(labels []store.Label) string {

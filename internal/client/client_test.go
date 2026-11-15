@@ -150,3 +150,65 @@ func TestClientLabels(t *testing.T) {
 		t.Fatalf("ListLabels = %+v", labels)
 	}
 }
+
+// Regression: Devin Review findings — unknown label filter and label
+// clearing through PATCH.
+func TestClientUnknownLabelFilter(t *testing.T) {
+	c, st := newFixture(t, "env-tok")
+	st.CreateIssue(context.Background(), store.IssueInput{Title: "x"}, 0)
+
+	got, _, err := c.ListIssues(context.Background(),
+		store.ListFilter{Status: "all", LabelID: 9999})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("unknown LabelID: want empty, got %d issues", len(got))
+	}
+}
+
+func TestClientUpdateClearsLabels(t *testing.T) {
+	c, st := newFixture(t, "env-tok")
+	st.SeedDemoData(context.Background())
+	id, err := st.CreateIssue(context.Background(),
+		store.IssueInput{Title: "labeled", LabelIDs: []int64{1}}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.UpdateIssue(context.Background(), id,
+		store.IssueInput{Title: "labeled"}); err != nil { // nil LabelIDs = clear
+		t.Fatalf("UpdateIssue: %v", err)
+	}
+	got, err := c.GetIssue(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Labels) != 0 {
+		t.Fatalf("labels after clear: %+v", got.Labels)
+	}
+}
+
+// PerPage above the API cap must still honor Page semantics.
+func TestClientPaginationAboveCap(t *testing.T) {
+	c, st := newFixture(t, "env-tok")
+	for i := 0; i < 250; i++ {
+		if _, err := st.CreateIssue(context.Background(),
+			store.IssueInput{Title: "bulk"}, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Sort oldest so ids match positions 1..250.
+	got, _, err := c.ListIssues(context.Background(), store.ListFilter{
+		Status: "all", Sort: "oldest", PerPage: 150, Page: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 100 || got[0].ID != 151 || got[99].ID != 250 {
+		var first, last int64
+		if len(got) > 0 {
+			first, last = got[0].ID, got[len(got)-1].ID
+		}
+		t.Fatalf("want issues 151..250 (100 items), got len=%d [%d..%d]", len(got), first, last)
+	}
+}
