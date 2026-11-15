@@ -312,20 +312,17 @@ func (h *handler) setStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	if wantsPartial(r) {
 		// The swap fragment is the whole article — badge, timestamps and
-		// the flipped toggle button all change at once. Re-fetch for the
-		// complete issue (labels etc.) and set the fields we just changed,
-		// like createComment's constructed fragment: re-reading status is
-		// not needed since we know what we wrote.
+		// the flipped toggle button all change at once. GetIssue returns
+		// the true post-state: the store bumps updated_at only when the
+		// status actually changes, so a no-op toggle must echo the stored
+		// timestamp, not time.Now().
 		issue, err := h.store.GetIssue(r.Context(), id)
 		if err != nil {
 			h.issueError(w, r, err)
 			return
 		}
-		updated := *issue
-		updated.Status = status
-		updated.UpdatedAt = time.Now()
 		h.r.renderFragment(w, "issue_detail", "issue_article", http.StatusOK, issueDetailPage{
-			Issue: &updated,
+			Issue: issue,
 			User:  userFromContext(r.Context()),
 		})
 		return

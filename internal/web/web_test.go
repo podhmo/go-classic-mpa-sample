@@ -234,8 +234,12 @@ func (f *fakeStore) SetIssueStatus(_ context.Context, id int64, status string) e
 	if !ok {
 		return store.ErrNotFound
 	}
-	is.Status = status
-	is.UpdatedAt = time.Now()
+	// Same contract as the real store: updated_at bumps only on change,
+	// so a no-op status post leaves the timestamp alone.
+	if is.Status != status {
+		is.Status = status
+		is.UpdatedAt = time.Now()
+	}
 	return nil
 }
 
@@ -1142,6 +1146,20 @@ func TestPartialSetStatusContract(t *testing.T) {
 	got, _ := f.GetIssue(context.Background(), 1)
 	if got.Status != store.StatusClosed {
 		t.Fatalf("status = %q, want closed", got.Status)
+	}
+
+	// A no-op toggle (closed on already-closed) must NOT show a fresh
+	// timestamp: the store leaves updated_at alone, so the fragment
+	// echoes the stored value — not time.Now().
+	resp2 := postFormWithHeaders(t, srv.URL+"/issues/1/status",
+		url.Values{"status": {"closed"}}, partial)
+	body2 := getBody(t, resp2)
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("no-op partial status POST status = %d, want 200", resp2.StatusCode)
+	}
+	stamp := got.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z07:00")
+	if !strings.Contains(body2, `datetime="`+stamp+`"`) {
+		t.Errorf("no-op toggle fragment must keep stored updated_at %q", stamp)
 	}
 }
 
