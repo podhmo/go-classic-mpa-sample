@@ -1156,6 +1156,21 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   box-shadow: 0 0 0 1px var(--accent);
 }
 
+/* partial-submit.js adds this to a comment it just inserted — the same
+   highlight a #comment-N anchor gives via :target (which can't match a
+   DOM-inserted node); the script removes the class after a few seconds. */
+.comment-new {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* Posting indicator appended to the comment form by partial-submit.js —
+   an indeterminate <progress> is the accessible spinner (guide spinner). */
+.comment-form > progress {
+  display: block;
+  margin-block-start: 0.5rem;
+}
+
 .comment-meta {
   font-size: 0.82rem;
   color: var(--text-muted);

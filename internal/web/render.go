@@ -30,13 +30,16 @@ func NewRenderer() *Renderer {
 func parsePages() map[string]*template.Template {
 	names := []string{"issues", "issue_detail", "issue_form", "issue_delete", "error", "auth_form",
 		"discussions", "discussion_detail", "discussion_form", "discussion_delete"}
+	// The detail pages also parse fragments.html: its defines power both
+	// their inline markup and the standalone partial-update responses.
+	fragments := map[string]bool{"issue_detail": true, "discussion_detail": true}
 	pages := make(map[string]*template.Template, len(names))
 	for _, name := range names {
-		pages[name] = template.Must(template.New(name).Funcs(funcMap).ParseFS(
-			templateFS,
-			"templates/layout.html",
-			"templates/"+name+".html",
-		))
+		files := []string{"templates/layout.html", "templates/" + name + ".html"}
+		if fragments[name] {
+			files = append(files, "templates/fragments.html")
+		}
+		pages[name] = template.Must(template.New(name).Funcs(funcMap).ParseFS(templateFS, files...))
 	}
 	return pages
 }
@@ -48,6 +51,22 @@ func (r *Renderer) execute(w http.ResponseWriter, page string, status int, data 
 	var buf bytes.Buffer
 	if err := r.pages[page].ExecuteTemplate(&buf, "layout", data); err != nil {
 		log.Printf("web: render %q: %v", page, err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+	_, _ = buf.WriteTo(w)
+}
+
+// renderFragment renders one named define from a page's template set and
+// writes it as a standalone response — the partial-update fragment contract
+// (X-Partial request header; see docs/sketch/ja/partial-updates.md). Like
+// execute it buffers first so a template failure can't half-write a reply.
+func (r *Renderer) renderFragment(w http.ResponseWriter, page, name string, status int, data any) {
+	var buf bytes.Buffer
+	if err := r.pages[page].ExecuteTemplate(&buf, name, data); err != nil {
+		log.Printf("web: render fragment %q in %q: %v", name, page, err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}

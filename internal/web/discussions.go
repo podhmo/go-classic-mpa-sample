@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
@@ -322,7 +323,10 @@ func (h *handler) deleteDiscussion(w http.ResponseWriter, r *http.Request) {
 
 // createDiscussionComment validates POST /discussions/{id}/comments — a
 // top-level comment, or a reply when the hidden parent_id is present — and
-// redirects back to the detail page anchored at the new comment.
+// redirects back to the detail page anchored at the new comment. With
+// X-Partial it answers a fragment instead: the new <li> on success, or the
+// error-marked form (reply form inside its <details>, or the bottom form)
+// on a validation failure (422).
 func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request) {
 	id, ok := parseID(r)
 	if !ok {
@@ -333,6 +337,7 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 		return
 	}
 	body := strings.TrimSpace(r.PostFormValue("body"))
+	partial := wantsPartial(r)
 	var parentID int64
 	var errMsg string
 	if v := r.PostFormValue("parent_id"); v != "" {
@@ -357,6 +362,10 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 		commentID, err := h.store.CreateDiscussionComment(r.Context(), id, parentID, body, authorIDFromContext(r.Context()))
 		switch {
 		case err == nil:
+			if partial {
+				h.renderNewDiscussionComment(w, r, id, parentID, commentID, body)
+				return
+			}
 			http.Redirect(w, r, fmt.Sprintf("%s#comment-%d", discussionURL(id), commentID), http.StatusSeeOther)
 			return
 		case errors.Is(err, store.ErrInvalidParent):
@@ -386,17 +395,33 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 	// (a nested reply, or a comment of another discussion), no per-comment
 	// form can hold the draft — drop ReplyDraftID so the bottom comment
 	// form keeps the text instead of losing it.
+	var parent *store.DiscussionComment
 	if parentID != 0 {
-		found := false
 		for _, c := range comments {
 			if c.ID == parentID {
-				found = true
+				parent = c
 				break
 			}
 		}
-		if !found {
+		if parent == nil {
 			parentID = 0
 		}
+	}
+	if partial {
+		if parent != nil {
+			h.r.renderFragment(w, "discussion_detail", "discussion_reply_form", http.StatusUnprocessableEntity,
+				dict("Discussion", discussion, "C", parent,
+					"ReplyDraftID", parentID, "CommentDraft", body, "CommentError", errMsg))
+			return
+		}
+		h.r.renderFragment(w, "discussion_detail", "discussion_comment_form", http.StatusUnprocessableEntity,
+			discussionDetailPage{
+				Discussion:   discussion,
+				CommentDraft: body,
+				CommentError: errMsg,
+				User:         userFromContext(r.Context()),
+			})
+		return
 	}
 	h.r.renderDiscussionDetail(w, http.StatusUnprocessableEntity, discussionDetailPage{
 		Title:        fmt.Sprintf("#%d %s", discussion.ID, discussion.Title),
@@ -409,6 +434,32 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 		Section:      "discussions",
 		User:         userFromContext(r.Context()),
 	})
+}
+
+// renderNewDiscussionComment answers a partial POST with the new comment's
+// <li>: a reply fragment when parentID is set, a top-level comment
+// fragment otherwise (the latter also carries the collapsed reply form and
+// the qa answer button, so it needs the parent discussion's category).
+func (h *handler) renderNewDiscussionComment(w http.ResponseWriter, r *http.Request, id, parentID, commentID int64, body string) {
+	comment := &store.DiscussionComment{
+		ID:           commentID,
+		DiscussionID: id,
+		ParentID:     parentID,
+		Body:         body,
+		Author:       userFromContext(r.Context()),
+		CreatedAt:    time.Now(),
+	}
+	if parentID != 0 {
+		h.r.renderFragment(w, "discussion_detail", "discussion_reply", http.StatusOK, comment)
+		return
+	}
+	discussion, err := h.store.GetDiscussion(r.Context(), id)
+	if err != nil {
+		h.discussionError(w, r, err)
+		return
+	}
+	h.r.renderFragment(w, "discussion_detail", "discussion_comment", http.StatusOK,
+		dict("Discussion", discussion, "C", comment))
 }
 
 // setCommentAnswer handles POST /discussions/{id}/comments/{cid}/answer.

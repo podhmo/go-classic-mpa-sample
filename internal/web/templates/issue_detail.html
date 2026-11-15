@@ -7,8 +7,13 @@
 <script src="/static/enter-submit.js" defer></script>
 {{/* Syncs aria-invalid/aria-describedby with :user-invalid and announces
    newly-shown errors via a polite live region (guide
-   accessible-error-announcement). Deferred external file. */}}
-<script src="/static/form-errors.js" defer></script>
+   accessible-error-announcement). ES module — it shares the live region
+   with partial-submit.js via announcer.js. */}}
+<script type="module" src="/static/form-errors.js"></script>
+{{/* Submits the comment form via fetch and swaps in the returned fragment
+   instead of a full reload (docs/sketch/ja/partial-updates.md). Without it
+   the form posts normally — progressive enhancement. */}}
+<script type="module" src="/static/partial-submit.js"></script>
 <nav class="breadcrumb" aria-label="Breadcrumb">
   <a href="/issues">Issues</a> <span aria-hidden="true">/</span> <span aria-current="page">#{{.Issue.ID}}</span>
 </nav>
@@ -66,37 +71,17 @@
 </article>
 
 <section id="comments" class="comments">
-  <h2>Comments{{if .Comments}} ({{len .Comments}}){{end}}</h2>
+  <h2>Comments<span class="comment-count"{{if not .Comments}} hidden{{end}}> (<span data-comment-count>{{len .Comments}}</span>)</span></h2>
 
-  {{if .Comments}}
-  <ol class="comment-list" role="list">
-    {{range .Comments}}
-    <li class="card comment" id="comment-{{.ID}}">
-      <header class="comment-meta">
-        <span class="comment-author">{{authorName .Author}} commented</span>
-        <a class="comment-permalink" href="#comment-{{.ID}}"><time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .CreatedAt}}</time> <span class="visually-hidden">(comment {{.ID}})</span></a>
-        <span class="copy-wrap">
-          <button type="button" class="copy-btn" command="--copy-permalink" commandfor="comment-{{.ID}}" data-url="/issues/{{$.Issue.ID}}#comment-{{.ID}}" aria-label="Copy link to comment {{.ID}}">copy link</button>
-          <span class="copy-tip" role="status"></span>
-        </span>
-      </header>
-      <div class="comment-body markdown-body">{{markdown .Body}}</div>
-    </li>
-    {{end}}
+  {{/* The list and the empty note render unconditionally but hidden as
+     needed, so partial-submit.js can insert into an empty list by just
+     unhiding it (same trick as .comment-replies on the discussion page). */}}
+  <ol class="comment-list" role="list"{{if not .Comments}} hidden{{end}}>
+    {{range .Comments}}{{template "issue_comment" .}}{{end}}
   </ol>
-  {{else}}
-  <p class="muted">No comments yet.</p>
-  {{end}}
+  <p class="muted" data-empty-note{{if .Comments}} hidden{{end}}>No comments yet.</p>
 
-  <form method="post" action="/issues/{{.Issue.ID}}/comments" class="comment-form card" novalidate>
-    <div class="field">
-      <label for="comment-body">Add a comment</label>
-      <textarea id="comment-body" name="body" rows="4" required data-error="comment-error" aria-keyshortcuts="Control+Enter Meta+Enter"{{if .CommentError}} aria-invalid="true" aria-describedby="comment-error comment-hint" autofocus{{else}} aria-invalid="false" aria-describedby="comment-hint"{{end}}>{{.CommentDraft}}</textarea>
-      <p class="field-error{{if not .CommentError}} field-error-pending{{end}}" id="comment-error">{{or .CommentError "Comment is required."}}</p>
-      <p class="field-hint" id="comment-hint">Markdown (GFM) supported. Raw HTML is not rendered. Ctrl+Enter (Cmd+Enter on macOS) submits.{{if .User}} Posting as @{{.User.Name}}.{{else}} Posting as anonymous — <a href="/login?next=/issues/{{$.Issue.ID}}">log in</a> to attach your name.{{end}}</p>
-    </div>
-    <button type="submit" class="btn btn-primary">Comment</button>
-  </form>
+  {{template "issue_comment_form" .}}
 </section>
 
 {{/* Back to top: shown only once the page is scrolled down, via a
