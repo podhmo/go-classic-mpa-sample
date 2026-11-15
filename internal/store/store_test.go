@@ -622,6 +622,11 @@ func TestSeedDemoData(t *testing.T) {
 		t.Fatal("no seeded comments")
 	}
 
+	// The demo account is seeded and can log in.
+	if _, err := s.AuthenticateUser(ctx, "demo", "demo"); err != nil {
+		t.Fatalf("demo login after seed: %v", err)
+	}
+
 	// Idempotent: second call changes nothing.
 	if err := s.SeedDemoData(ctx); err != nil {
 		t.Fatalf("second SeedDemoData: %v", err)
@@ -655,6 +660,11 @@ func TestSeedDemoData(t *testing.T) {
 	}
 	if n != 1 {
 		t.Fatalf("expected 1 issue, got %d", n)
+	}
+
+	// ...but the demo user is still created on an upgraded database.
+	if _, err := s2.AuthenticateUser(ctx, "demo", "demo"); err != nil {
+		t.Fatalf("demo login on pre-existing DB: %v", err)
 	}
 }
 
