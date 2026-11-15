@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/podhmo/minigo/storybook"
 )
@@ -310,6 +312,77 @@ func TestExportDropsStaticWhenSourceGone(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(out, "static")); !os.IsNotExist(err) {
 		t.Errorf("stale static mirror survives a vanished source: %v", err)
+	}
+}
+
+// -watch is a preview-server option: without -http it is an error.
+func TestWatchRequiresHTTP(t *testing.T) {
+	err := run(context.Background(), []string{"-watch", webDir}, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "-watch requires -http") {
+		t.Fatalf("want -watch requires -http, got %v", err)
+	}
+}
+
+// Watching stamps the reload script on the preview pages — index, grid,
+// and every HTML story body — and serves its endpoints; non-HTML bodies
+// stay byte-identical. Error pages keep the script too: a page that
+// loses it never rejoins the reload loop once the source is fixed.
+func TestHandlerWatch(t *testing.T) {
+	b := newBook()
+	if err := b.Watch(context.Background(), time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	stories, err := b.Stories()
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := b.Handler()
+	const tag = `<script src="/_livereload.js" defer></script>`
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if !strings.Contains(rec.Body.String(), tag) {
+		t.Error("index misses the reload script")
+	}
+	for _, s := range stories {
+		if s.Group == "" {
+			continue
+		}
+		rec = httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/grid/"+s.Group, nil))
+		if !strings.Contains(rec.Body.String(), tag) {
+			t.Errorf("grid %s misses the reload script", s.Group)
+		}
+		break // one grid is enough; every grid shares gridTmpl
+	}
+	// A story gets the script iff its served response is HTML.
+	for _, s := range stories {
+		rec = httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/story/"+s.Name, nil))
+		html := strings.Contains(rec.Header().Get("Content-Type"), "html")
+		if html != strings.Contains(rec.Body.String(), "/_livereload.js") {
+			t.Errorf("%s: Content-Type %q vs script presence mismatch", s.Name, rec.Header().Get("Content-Type"))
+		}
+		// When the story replays a CSP, it must not block the script's
+		// EventSource: connect-src falls back to default-src.
+		if csp := rec.Header().Get("Content-Security-Policy"); html && csp != "" && !strings.Contains(csp, "connect-src") {
+			t.Errorf("%s: CSP %q would block the reload EventSource", s.Name, csp)
+		}
+	}
+	for _, target := range []string{"/story/StoryMissing", "/grid/Nope"} {
+		rec = httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))
+		if !strings.Contains(rec.Body.String(), tag) {
+			t.Errorf("%s: error page misses the reload script", target)
+		}
+		if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "html") {
+			t.Errorf("%s: error page Content-Type %q", target, ct)
+		}
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/_livereload.js", nil))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "EventSource") {
+		t.Error("want the live reload script")
 	}
 }
 

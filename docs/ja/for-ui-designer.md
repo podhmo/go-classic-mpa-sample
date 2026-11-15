@@ -43,6 +43,13 @@ storybook プロセスを立てたまま、以下の編集は **再起動不要*
 テンプレートのパースエラーや `{{.MissingField}}` は story が **500**
 を返す形で表面化する（静かに空描画にはならない）。
 
+ブラウザのリロードすら省きたいときは `make storybook-watch`
+（= `-watch` フラグ）で起動する。パッケージ配下のファイル変更を検知して
+開いているプレビューページが自動でリロードされる（SSE ベース、
+`/_livereload.js` を各ページに埋め込む。`-watch` なしでは一切の
+JS を配信しない）。エラーで 500 になったページも watch 中は
+スクリプトを保持するので、修正保存すれば自動で復帰する。
+
 ## index の見方
 
 `http://127.0.0.1:6006` を開くと story 一覧が出る:
@@ -104,4 +111,4 @@ index.html + grid_*.html + static/ が出力される。ライブサーバーと
   エージェント向けスキル（実サーバ + playwright-cli）
 - `docs/sketch/ja/storybook-with-minigo.md` — ツール自体の設計・検証
   レポート
-- `cmd/storybook/README.md` — ツールのリファレンス
+- `cmd/storybook/main.go` の doc コメント — ツールのリファレンス（フラグ一覧）

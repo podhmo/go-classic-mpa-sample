@@ -15,6 +15,7 @@
 //	storybook ./internal/web StoryIssueList # print one story's body
 //	storybook -o out ./internal/web         # write out/index.html + one page per story
 //	storybook -http :6006 ./internal/web    # serve them, re-interpreting on every request
+//	storybook -http :6006 -watch ./internal/web # …and reload open previews on change
 package main
 
 import (
@@ -27,6 +28,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/podhmo/minigo/storybook"
 )
@@ -46,11 +48,15 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 	list := fs.Bool("list", false, "list stories and exit")
 	out := fs.String("o", "", "write index.html and one page per story into this directory")
 	addr := fs.String("http", "", "serve the stories on this address (e.g. :6006)")
+	watch := fs.Bool("watch", false, "reload open preview pages whenever a file under the package directory changes (-http only)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() < 1 {
 		return errors.New("usage: storybook [flags] <pkgdir> [Story]")
+	}
+	if *watch && *addr == "" {
+		return errors.New("-watch requires -http")
 	}
 	b := &Book{Book: &storybook.Book{Dir: fs.Arg(0), Tag: *tag, Setup: bindApp}, StaticDir: *staticDir}
 	if *src != "" {
@@ -76,7 +82,12 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 		if err != nil {
 			slog.WarnContext(ctx, "story discovery failed; serving anyway", "err", err)
 		}
-		slog.InfoContext(ctx, "serving stories", "addr", *addr, "dir", b.Dir, "stories", len(stories))
+		if *watch {
+			if err := b.Watch(ctx, 300*time.Millisecond, b.staticRoot()); err != nil {
+				return err
+			}
+		}
+		slog.InfoContext(ctx, "serving stories", "addr", *addr, "dir", b.Dir, "stories", len(stories), "watch", *watch)
 		return http.ListenAndServe(*addr, b.Handler())
 	case fs.NArg() >= 2:
 		res, err := b.Render(ctx, fs.Arg(1))
