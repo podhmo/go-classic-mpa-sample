@@ -78,7 +78,14 @@ export function toast(message) {
     announce(message);
   }
 
-  if (!region) restoreFocus = document.activeElement;
+  // Refresh the restore target per toast — capturing it only once leaves
+  // a stale (often detached, after a replace-mode swap) element. Keep the
+  // previous target when focus already sits inside the region, so a
+  // toast shown while another toast's Close has focus doesn't restore
+  // into a node that is about to be removed.
+  if (!region || !region.contains(document.activeElement)) {
+    restoreFocus = document.activeElement;
+  }
   const el = document.createElement("div");
   el.className = "toast";
   el.setAttribute("popover", "manual");
