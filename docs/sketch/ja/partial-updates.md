@@ -38,17 +38,44 @@
 |---|---|---|
 | A. 現状維持 + anchor 徹底 | 全 POST の redirect に適切な fragment を付ける（status→ `#comment-form` や該当箇所へ戻す等） | JS ゼロ。scroll 問題の大半はこれで消える。**まずやるべき一手** |
 | B. 手書き fetch + DOM 差し替え | comment form だけ `fetch` → 返ってきた `<li>` を `beforeend` で append | 依存ゼロ・~50 行。だが要件が増えると「htmx の車輪の再発明」になりやすい。検証可能性では最も素直（後述） |
-| C. htmx（vendored `/static/`） | 属性駆動（`hx-post`/`hx-swap="beforeend"`）。サーバは fragment を返すだけ | MPA 思想（サーバレンダリング・宣言的）と相性が良い。1 ファイル vendored で CSP `script-src 'self'` のまま動く |
-| D. Datastar | SSE + signals 基調。他者コメントの push 更新まで欲しいなら有力 | 今回の「投稿で部分更新」には過剰。概念・導入面が大きい。**push が欲しくなった時点で再評価** |
+| C. htmx（vendored `/static/`） | 属性駆動（`hx-post`/`hx-swap="beforeend"`）。サーバは `text/html` fragment を返すだけ | MPA 思想（サーバレンダリング・宣言的）と相性が良い。1 ファイル vendored で CSP `script-src 'self'` のまま動く（基本属性は eval 不要） |
+| D. Datastar | `data-*` 属性 + signals + **SSE（`text/event-stream`）で `datastar-patch-elements`/`patch-signals` を受け取る**モデル | 調査結果は下記「Datastar 補足」。OOB 更新が既定で強いが、今回の「comment append」には信号モデル・SSE 応答・CSP 対応の3点で過剰。**push が欲しくなった時点で再評価** |
 | E. JSON API + クライアント描画 | fetch → JSON → JS で DOM 生成 | markdown 描画の二重化が致命傷。不採用方向 |
+
+## Datastar 補足（調査結果）
+
+- **ライセンス**: コアは MIT で無料。ただし freemium — `datastar-pro` の利便
+  プラグイン群は商用ライセンスで「公開リポジトリに置くのは違反」。このリポジトリ
+  （public）に vendored するなら MIT コアのみ、という前提を明確にしておく。
+- **応答モデルが htmx と違う**: POST の応答は HTML fragment そのものではなく
+  **`text/event-stream` の SSE** で、`datastar-patch-elements`（HTML を patch）や
+  `datastar-patch-signals`（フロント状態を patch）のイベント列を返す。サーバ側は
+  手書きでも組めるフォーマットだが「fragment を返せば終わり」の htmx より一段
+  特殊。`datastar-go` SDK あり。OOB（画面の別領域の同時更新）がデフォルトで強い。
+- **signals**: `data-bind`/`data-signals`/`$foo` のフロント状態モデルを持ち、
+  既定で**全 signal を毎リクエストに送信**（GET は `datastar` query param、他は
+  JSON body）。バックエンドがフロント状態を常時読める設計だが、「コメントを
+  投稿したら末尾に `<li>` を足す」だけならこの往復は使わない。
+- **CSP が論点**: 既定は属性内 expression を `Function()` で評価するため
+  **`script-src 'unsafe-eval'` が要る** — 現行 CSP（`script-src 'self'`）とは衝突。
+  v1.0.3 以降の CSP mode（`<html data-nonce>` + `script-src 'nonce-…'`）なら
+  unsafe-eval を避けられるが、nonce を毎レスポンス発行して CSP ヘッダと html に
+  埋める機構が要る（現行の静的ヘッダ middleware には無い）。htmx の基本属性
+  （hx-get/post/swap 等）は eval 不要で `script-src 'self'` のまま動くので、
+  **CSP コストは htmx < Datastar**。
+- **progressive enhancement**: `data-*` 属性は JS 無しでは無害で、普通の form
+  submit に落ちる点は htmx と同じ。
+- **サイズ**: ~11KB（htmx ~14KB）と小型。
 
 ## htmx / Datastar を入れる場合に考える観点
 
 1. **progressive enhancement**: JS 無しで従来の POST→303 がそのまま動くこと。
    htmx は同じフォームに属性を足すだけで自然に成立する（JS があれば hx-post に
    乗り換え、無ければ普通の submit）。datastar も同じ考え方。
-2. **CSP**: vendored ファイルなら `script-src 'self'` のままで済む（現行 CSP に
-   変更不要）。htmx の inline script 相当機能（`hx-on:` 等）は CSP とは無関係だが
+2. **CSP**: vendored ファイルの読み込み自体は `script-src 'self'` で済む。ただし
+   **expression 評価に `Function()` を使う方式（Datastar 既定）は `unsafe-eval` が
+   要り現行 CSP と衝突** — 上記「Datastar 補足」参照。htmx の基本属性なら eval
+   不要で現行 CSP のまま動く。htmx の `hx-on:` 相当の機能は CSP とは無関係だが
    「挙動をテンプレートに散らさない」観点では使い方を決めておく。
 3. **エラー UX**: 422 応答を fragment で返してフォームだけ差し替えるか（htmx は
    `htmx:responseError`/`hx-target` 側で非 2xx の扱いを指定できる）。
@@ -76,7 +103,9 @@
 
 - **見た目は確認できる**: fragment 用テンプレートを story（print 型 or StoryHttp）に
   出せば、新 `<li>` やエラー時フォームの見た目は storybook で回る。テンプレート/
-  CSS/fixture の試行錯誤は既存の仕組みに乗る。
+  CSS/fixture の試行錯誤は既存の仕組みに乗る。Datastar 方式の場合、SSE 応答を
+  StoryHttp が `text/event-stream` で返せば**フォーマット自体**は storybook で
+  目視検査できるが、patch の見た目はブラウザでしか出ない。
 - **挙動（イベント発火→fetch→DOM swap）は storybook では足りない**:
   StoryHttp story は `httptest.NewRequest(GET /)` 固定で POST ハンドラを呼べない。
   fragment を GET で出す設計にすれば StoryHttp に乗せられるが、それでも
@@ -95,8 +124,9 @@
 
 1. **まず A**（redirect に適切な fragment を付ける）で scroll 問題の大半は解消できる。
 2. 部分更新は **B（手書き fetch）または C（htmx vendored）**。repo の思想では
-   C が機能対コストで良いが、検証可能性では B が素直。datastar は今回の要件には
-   過剰（SSE/push が欲しくなったら再評価）。
+   C が機能対コストで良いが、検証可能性では B が素直。Datastar は調査の結果
+   「SSE 応答モデル・signals 往復・CSP コスト（unsafe-eval or nonce 機構）」の3点で
+   今回の要件には過剰と確認 — push 更新が欲しくなったら再評価。
 3. JSON API 化は `cli-and-web-api.md` 側の話であり、**ページ内部分更新には HTML
    fragment が正解**。JSON API と fragment endpoint は将来同居しうる（用途が違う）。
 
