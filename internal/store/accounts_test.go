@@ -274,3 +274,57 @@ func TestAPITokenLifecycle(t *testing.T) {
 		t.Errorf("unknown token: err = %v, want ErrNotFound", err)
 	}
 }
+
+// TestListAndDeleteAPITokenByID covers the metadata side `auth token
+// list`/`revoke ID` use: rows come back newest first with the owning
+// user, and deletion by the stored hash id is strict (ErrNotFound).
+func TestListAndDeleteAPITokenByID(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	hash, _ := auth.HashPassword("pw")
+	uid, err := s.CreateUser(ctx, "frank", hash)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	t1, err := s.CreateAPIToken(ctx, uid)
+	if err != nil {
+		t.Fatalf("CreateAPIToken 1: %v", err)
+	}
+	t2, err := s.CreateAPIToken(ctx, uid)
+	if err != nil {
+		t.Fatalf("CreateAPIToken 2: %v", err)
+	}
+
+	tokens, err := s.ListAPITokens(ctx)
+	if err != nil {
+		t.Fatalf("ListAPITokens: %v", err)
+	}
+	if len(tokens) != 2 {
+		t.Fatalf("ListAPITokens = %d rows, want 2", len(tokens))
+	}
+	// The id is the stored SHA-256 hash — never the plaintext.
+	wantIDs := map[string]bool{auth.HashToken(t1): true, auth.HashToken(t2): true}
+	for _, tok := range tokens {
+		if tok.User == nil || tok.User.ID != uid {
+			t.Errorf("token %s resolved to user %+v, want %d", tok.ID[:8], tok.User, uid)
+		}
+		if !wantIDs[tok.ID] {
+			t.Errorf("token id %s is neither issued token's hash", tok.ID[:8])
+		}
+	}
+
+	if err := s.DeleteAPITokenByID(ctx, tokens[0].ID); err != nil {
+		t.Fatalf("DeleteAPITokenByID: %v", err)
+	}
+	tokens, err = s.ListAPITokens(ctx)
+	if err != nil {
+		t.Fatalf("ListAPITokens after delete: %v", err)
+	}
+	if len(tokens) != 1 {
+		t.Fatalf("ListAPITokens = %d rows after delete, want 1", len(tokens))
+	}
+	if err := s.DeleteAPITokenByID(ctx, "not-a-real-hash"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("DeleteAPITokenByID unknown: err = %v, want ErrNotFound", err)
+	}
+}

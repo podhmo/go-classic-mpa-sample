@@ -10,8 +10,9 @@
 //	issues discussion list|view|create|edit|delete
 //	issues discussion comment create N --body B [--parent C]
 //	issues discussion answer N --comment C [--unmark]
-//	issues auth token --user NAME     (local mode only)
-//	issues api <path>                 (remote mode only)
+//	issues auth token --user NAME | token list | token revoke  (local mode only)
+//	issues api <path> [-X METHOD] [-f k=v]... [-F k=v]...       (remote mode only)
+//	issues completion bash|zsh|fish
 //
 // Backend selection: --server/--token (or ISSUES_SERVER/ISSUES_TOKEN) for
 // remote mode over /api/v1; otherwise -db/ISSUES_DB opens SQLite directly.

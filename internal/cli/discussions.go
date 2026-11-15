@@ -49,8 +49,12 @@ func discussionList(ctx context.Context, o Options, args []string) error {
 	limit := fs.Int("limit", 30, "maximum discussions to list")
 	page := fs.Int("page", 1, "page number")
 	jsonFields := fs.String("json", "", "output JSON with the named fields (comma-separated)")
+	tmpl := fs.String("template", "", "render output through a Go text/template")
 	if _, err := parseLeaf(fs, args, 0); err != nil {
 		return err
+	}
+	if *jsonFields != "" && *tmpl != "" {
+		return usageError{msg: "--json and --template are mutually exclusive"}
 	}
 	switch *answered {
 	case "", "yes", "no":
@@ -79,9 +83,12 @@ func discussionList(ctx context.Context, o Options, args []string) error {
 	if *jsonFields != "" {
 		return writeJSONFields(o.Stdout, discussionViews(discussions), *jsonFields)
 	}
+	if *tmpl != "" {
+		return writeTemplate(o.Stdout, discussionViews(discussions), *tmpl)
+	}
 	for _, d := range discussions {
 		fmt.Fprintf(o.Stdout, "%d\t%s\t%s\t%s\t%s\n",
-			d.ID, d.Category.Slug, answeredMark(d.Answered), d.Title, fmtTimeShort(d.UpdatedAt))
+			d.ID, d.Category.Slug, o.answeredMark(d.Answered), d.Title, fmtTimeShort(d.UpdatedAt))
 	}
 	return nil
 }
@@ -92,11 +99,15 @@ func discussionView(ctx context.Context, o Options, args []string) error {
 	bf := o.addBackendFlags(fs)
 	comments := fs.Bool("comments", false, "include comments and replies")
 	jsonFields := fs.String("json", "", "output JSON with the named fields (comma-separated)")
+	tmpl := fs.String("template", "", "render output through a Go text/template")
 	web := fs.Bool("web", false, "open the discussion page in a browser (requires --server)")
 	fs.BoolVar(web, "w", false, "shorthand for --web")
 	rest, err := parseLeaf(fs, args, 1)
 	if err != nil {
 		return err
+	}
+	if *jsonFields != "" && *tmpl != "" {
+		return usageError{msg: "--json and --template are mutually exclusive"}
 	}
 	id, err := argNumber(rest, 0, "discussion")
 	if err != nil {
@@ -123,16 +134,22 @@ func discussionView(ctx context.Context, o Options, args []string) error {
 			return err
 		}
 	}
-	if *jsonFields != "" {
+	out := func(v any) error {
+		if *tmpl != "" {
+			return writeTemplate(o.Stdout, v, *tmpl)
+		}
+		return writeJSONFields(o.Stdout, v, *jsonFields)
+	}
+	if *jsonFields != "" || *tmpl != "" {
 		if *comments {
 			m, err := jsonObject(discussionViewJSON(d))
 			if err != nil {
 				return err
 			}
 			m["comments"] = discussionCommentViews(cs)
-			return writeJSONFields(o.Stdout, m, *jsonFields)
+			return out(m)
 		}
-		return writeJSONFields(o.Stdout, discussionViewJSON(d), *jsonFields)
+		return out(discussionViewJSON(d))
 	}
 
 	fmt.Fprintf(o.Stdout, "title:\t%s\n", d.Title)
@@ -156,7 +173,7 @@ func discussionView(ctx context.Context, o Options, args []string) error {
 func printDiscussionComment(o Options, c *store.DiscussionComment, indent string) {
 	answer := ""
 	if c.IsAnswer {
-		answer = " [answer]"
+		answer = " " + o.paint("32", "[answer]")
 	}
 	fmt.Fprintf(o.Stdout, "%s#%d %s (%s)%s\n%s  %s\n",
 		indent, c.ID, authorName(c.Author), fmtTimeShort(c.CreatedAt), answer,
@@ -418,12 +435,4 @@ func validateDiscussionInput(in store.DiscussionInput) error {
 		parts = append(parts, k+": "+fe[k])
 	}
 	return fmt.Errorf("invalid input: %s", strings.Join(parts, "; "))
-}
-
-// answeredMark is the list/detail marker for an answered discussion.
-func answeredMark(answered bool) string {
-	if answered {
-		return "answered"
-	}
-	return ""
 }

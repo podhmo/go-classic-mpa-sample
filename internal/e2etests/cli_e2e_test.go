@@ -240,4 +240,37 @@ func TestCLIE2E(t *testing.T) {
 	if !strings.Contains(envTok, "from cli") {
 		t.Fatalf("env-token list:\n%s", envTok)
 	}
+
+	// issues api takes a method and fields: POST sends a JSON body.
+	out = mustRun(t, cliBin, nil, remote("api", "issues",
+		"-X", "POST", "-f", "title=api posted", "-f", "body=from issues api")...)
+	if !strings.Contains(out, `"api posted"`) {
+		t.Fatalf("api POST /issues:\n%s", out)
+	}
+	// -f on GET becomes a query parameter (same filter as issue list).
+	out = mustRun(t, cliBin, nil, remote("api", "issues",
+		"-f", "status=closed", "--template", "{{range .issues}}{{.title}} {{end}}")...)
+	if !strings.Contains(out, "from cli") {
+		t.Fatalf("api GET -f/--template:\n%s", out)
+	}
+
+	// auth token management is local-mode: list shows the issued token's
+	// hash prefix and owner; revoke by that id removes it.
+	tokList := mustRun(t, cliBin, nil, "auth", "token", "list", "--db", db)
+	if !strings.Contains(tokList, "e2euser") {
+		t.Fatalf("auth token list:\n%s", tokList)
+	}
+	tokID := strings.Fields(strings.TrimSpace(tokList))[0]
+	mustRun(t, cliBin, nil, "auth", "token", "revoke", tokID, "--db", db)
+	code, _, _ = run(t, cliBin, nil,
+		"issue", "list", "--server", server, "--token", token)
+	if code != 1 {
+		t.Fatalf("issue list with revoked token: exit %d, want 1", code)
+	}
+
+	// completion prints a shell script without needing a backend.
+	comp := mustRun(t, cliBin, nil, "completion", "bash")
+	if !strings.Contains(comp, "complete -F") {
+		t.Fatalf("completion bash:\n%s", comp)
+	}
 }

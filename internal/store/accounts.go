@@ -225,6 +225,56 @@ func (s *Store) DeleteAPIToken(ctx context.Context, token string) error {
 	return err
 }
 
+// APIToken is the stored metadata of a per-user API token. The plaintext
+// is never persisted — ID holds its SHA-256 hash (the primary key), so a
+// listing can only show metadata, never the token itself.
+type APIToken struct {
+	ID        string // SHA-256 hex of the plaintext
+	User      *User
+	CreatedAt time.Time
+}
+
+// ListAPITokens returns all issued API tokens newest first, each with its
+// owning user — the management view behind `issues auth token list`.
+func (s *Store) ListAPITokens(ctx context.Context) ([]*APIToken, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT t.id, t.created_at, u.id, u.name, u.created_at
+		 FROM api_tokens t JOIN users u ON u.id = t.user_id
+		 ORDER BY t.created_at DESC, t.id DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*APIToken
+	for rows.Next() {
+		var t APIToken
+		var created int64
+		var u User
+		var ucreated int64
+		if err := rows.Scan(&t.ID, &created, &u.ID, &u.Name, &ucreated); err != nil {
+			return nil, err
+		}
+		t.CreatedAt = time.Unix(created, 0).UTC()
+		u.CreatedAt = time.Unix(ucreated, 0).UTC()
+		t.User = &u
+		out = append(out, &t)
+	}
+	return out, rows.Err()
+}
+
+// DeleteAPITokenByID revokes one API token by its stored (hashed) id —
+// the identifier `issues auth token list` shows, since the plaintext can
+// no longer be recovered. Returns ErrNotFound for an unknown id.
+func (s *Store) DeleteAPITokenByID(ctx context.Context, hash string) error {
+	res, err := s.db.ExecContext(ctx,
+		"DELETE FROM api_tokens WHERE id = ?", hash)
+	if err != nil {
+		return err
+	}
+	return checkAffected(res)
+}
+
 // HasAPITokens reports whether any API token exists. Startup uses it to
 // decide whether /api/v1 is mounted when no shared env token is set —
 // the API is fail-closed, so with neither credential it is not exposed.

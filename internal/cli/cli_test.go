@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/podhmo/go-classic-mpa-sample/internal/auth"
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
@@ -225,6 +226,105 @@ func TestAuthTokenLocal(t *testing.T) {
 	}
 }
 
+// TestAuthTokenListRevoke exercises the management side: the list shows
+// hash prefixes (never plaintext), revoke deletes by prefix id or by an
+// explicit --token, and --server is refused everywhere.
+func TestAuthTokenListRevoke(t *testing.T) {
+	ctx := context.Background()
+	db := t.TempDir() + "/test.db"
+	st, err := store.Open(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.CreateUser(ctx, "dave", "hashed"); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+
+	o := localOptions(t, db)
+
+	// Issue two tokens for the same user.
+	var tokens []string
+	for i := 0; i < 2; i++ {
+		code, out, _ := run(t, o, "auth", "token", "--user", "dave")
+		if code != ExitOK {
+			t.Fatalf("auth token #%d: exit %d", i, code)
+		}
+		tokens = append(tokens, strings.TrimSpace(out))
+	}
+
+	code, out, _ := run(t, o, "auth", "token", "list")
+	if code != ExitOK {
+		t.Fatalf("token list: exit %d", code)
+	}
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("token list shows %d rows, want 2:\n%s", len(lines), out)
+	}
+	// Rows print a hash prefix + owner — never the plaintext secret.
+	for _, tok := range tokens {
+		if strings.Contains(out, tok) {
+			t.Fatalf("token list leaked plaintext token")
+		}
+	}
+	if !strings.Contains(out, "dave") {
+		t.Fatalf("token list missing user:\n%s", out)
+	}
+
+	// --json shape: id (full hash) + user + created_at.
+	code, out, _ = run(t, o, "auth", "token", "list", "--json", "id,user")
+	if code != ExitOK || !strings.Contains(out, `"id"`) || !strings.Contains(out, `"dave"`) {
+		t.Fatalf("token list --json: exit %d\n%s", code, out)
+	}
+
+	// Revoke the first listed row by its prefix id — and figure out which
+	// plaintext it was, so the --token path revokes the *other* token.
+	prefix := strings.Fields(lines[0])[0]
+	remaining := tokens[0]
+	for _, tok := range tokens {
+		if strings.HasPrefix(auth.HashToken(tok), prefix) {
+			remaining = tokens[1]
+			if tok == tokens[1] {
+				remaining = tokens[0]
+			}
+		}
+	}
+	code, _, errOut := run(t, o, "auth", "token", "revoke", prefix)
+	if code != ExitOK {
+		t.Fatalf("token revoke %s: exit %d\n%s", prefix, code, errOut)
+	}
+	code, out, _ = run(t, o, "auth", "token", "list")
+	if code != ExitOK || len(strings.Split(strings.TrimSpace(out), "\n")) != 1 {
+		t.Fatalf("after revoke: %d / %q", code, out)
+	}
+
+	// An unknown prefix is an error; revoking the other token by its
+	// explicit plaintext --token also works.
+	code, _, _ = run(t, o, "auth", "token", "revoke", "zzzz-nope")
+	if code != ExitError {
+		t.Fatalf("revoke unknown id: want %d got %d", ExitError, code)
+	}
+	code, _, _ = run(t, o, "auth", "token", "revoke", "--token", remaining)
+	if code != ExitOK {
+		t.Fatalf("revoke --token: exit %d", code)
+	}
+	code, out, _ = run(t, o, "auth", "token", "list")
+	if code != ExitOK || strings.TrimSpace(out) != "" {
+		t.Fatalf("after --token revoke: %d / %q", code, out)
+	}
+
+	// Token management is local-mode only.
+	for _, args := range [][]string{
+		{"auth", "token", "--server", "http://x", "--user", "dave"},
+		{"auth", "token", "list", "--server", "http://x"},
+		{"auth", "token", "revoke", "abc", "--server", "http://x"},
+	} {
+		if code, _, _ := run(t, o, args...); code != ExitUsage {
+			t.Fatalf("%v: want usage exit %d got %d", args, ExitUsage, code)
+		}
+	}
+}
+
 func itoa(n int64) string {
 	return strconv.FormatInt(n, 10)
 }
@@ -268,5 +368,35 @@ func TestReviewRegressions(t *testing.T) {
 	}
 	if !strings.Contains(out, `"title": "target"`) || !strings.Contains(out, `"comments"`) {
 		t.Fatalf("--json output:\n%s", out)
+	}
+}
+
+// --template renders views through a Go template (decision: gh's --jq is
+// not re-implemented; Go templates are the stdlib answer), and a non-TTY
+// stdout never emits ANSI escapes.
+func TestTemplateAndNoColor(t *testing.T) {
+	db := t.TempDir() + "/test.db"
+	seedIssue(t, db, "tmpl issue")
+	o := localOptions(t, db)
+
+	code, out, _ := run(t, o, "issue", "list", "--state", "all",
+		"--template", "{{range .}}{{.title}}\n{{end}}")
+	if code != ExitOK || !strings.Contains(out, "tmpl issue") {
+		t.Fatalf("issue list --template: exit %d\n%s", code, out)
+	}
+	code, out, _ = run(t, o, "issue", "list", "--state", "all")
+	if code != ExitOK {
+		t.Fatalf("issue list: exit %d", code)
+	}
+	if strings.Contains(out, "\x1b[") {
+		t.Fatalf("non-TTY output must not contain ANSI escapes:\n%q", out)
+	}
+
+	// --json + --template is a usage error; a bad template is too.
+	if code, _, _ := run(t, o, "issue", "list", "--json", "id", "--template", "x"); code != ExitUsage {
+		t.Fatalf("--json + --template: want %d got %d", ExitUsage, code)
+	}
+	if code, _, _ := run(t, o, "issue", "list", "--template", "{{."); code != ExitUsage {
+		t.Fatalf("bad template: want %d got %d", ExitUsage, code)
 	}
 }
