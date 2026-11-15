@@ -5,6 +5,9 @@
 discussion タブを増やしたい。このときのテーブル定義・画面遷移を、issue と discussion の違いを
 整理したうえで検討する」という問いへの回答を整理する。
 
+**実装順序の前提**: アカウント機能（`accounts.md`）が先に入り、その後に本機能を実装する
+（2026-11-15 確認）。よって本メモのテーブルは `users` テーブルが存在する前提で書く。
+
 ## issue と discussion は何が違うのか（GitHub モデルの整理）
 
 | 観点 | Issue | Discussion |
@@ -32,12 +35,14 @@ status 列も status POST も要らない」というスキーマ上の差分と
 - **answer マーク**: `qa` 形式カテゴリの discussion だけ、top-level コメント1件を
   「答え」としてマークできる。
 - **独自採番**: `/issues/3` と `/discussions/3` が共存できるよう別テーブル・別 AUTOINCREMENT。
+- **投稿者**: `users` が既にある前提なので `author_id` 列を最初から入れる
+  （未ログイン投稿は NULL → "anonymous"、issues/comments と同じ表示ルール）。
 
 見送り（最初の実装には入れない）:
 
-- **reactions / 投票**: ユーザー概念がないこのアプリでは「誰が押したか」を記録できず、
-  カウントもトグルも意味を持たない。actor の導入（cli-and-web-api.md の論点）とセットの
-  future work。
+- **reactions / 投票**: アカウント先行で「誰が押したか」は記録できるようになるが、
+  reaction 対象・トグル UI・集計表示は別途の設計が要るため初回スコープ外。将来追加の
+  前提条件は accounts で揃う。
 - **poll 形式カテゴリ**: options/votes のテーブルが別途要る。`format` を拡張する形で後追加可能。
 - **issue→discussion 変換**: 移行フロー（本文+コメントのコピー）としては面白いが、
   まず本体を作ってから。
@@ -67,6 +72,7 @@ CREATE TABLE IF NOT EXISTS discussion_categories (
 CREATE TABLE IF NOT EXISTS discussions (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	category_id INTEGER NOT NULL REFERENCES discussion_categories(id),
+	author_id INTEGER REFERENCES users(id),          -- NULL = anonymous
 	title TEXT NOT NULL,
 	body TEXT NOT NULL DEFAULT '',
 	created_at INTEGER NOT NULL,
@@ -76,6 +82,7 @@ CREATE TABLE IF NOT EXISTS discussion_comments (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	discussion_id INTEGER NOT NULL REFERENCES discussions(id) ON DELETE CASCADE,
 	parent_id INTEGER REFERENCES discussion_comments(id) ON DELETE CASCADE,
+	author_id INTEGER REFERENCES users(id),          -- NULL = anonymous
 	is_answer INTEGER NOT NULL DEFAULT 0,
 	body TEXT NOT NULL,
 	created_at INTEGER NOT NULL
@@ -181,6 +188,8 @@ header:  Issues | Discussions        （aria-current 付きタブ）
 - コメントは top-level の `<ol>`、返信は親 `<li>` 内のネスト `<ol>`（1段）。
   `is_answer` コメントには "Answer" バッジ + 強調枠（issues の `:target` ハイライトと
   同じ仕組みを流用できる）。
+- 投稿者表示は issues と同じルール: `Opened by <name>` / `<name> commented` で
+  NULL は "anonymous"。author は作成時に固定。
 - **返信フォームは各 top-level コメントの `<details>` 内に畳む**（「Reply」の summary を
   開くとフォーム）。宣言的 HTML だけで GitHub の inline reply box と同じ UX になり、
   JS も専用ページも要らない。別案は `GET /discussions/{id}/comments/{cid}/reply` の
