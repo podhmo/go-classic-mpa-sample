@@ -120,6 +120,18 @@ func TestDiscussionDetailRendersThreadAndAnswer(t *testing.T) {
 			t.Errorf("detail missing %q", want)
 		}
 	}
+	// Per-comment controls repeat identically on every row, so each carries
+	// the comment id in its accessible name (accessibility guide: same look,
+	// different action → distinct accessible name).
+	for _, want := range []string{
+		`aria-label="Unmark answer on comment ` + itoa(cid) + `"`,
+		`aria-label="Reply to comment ` + itoa(cid) + `"`,
+		`aria-label="Post reply to comment ` + itoa(cid) + `"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("per-comment control lacks unique name %q", want)
+		}
+	}
 }
 
 func TestDiscussionDetailOpenCategoryHasNoAnswerButton(t *testing.T) {

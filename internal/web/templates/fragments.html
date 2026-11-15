@@ -44,17 +44,21 @@
   <div class="comment-actions">
     {{if eq .Discussion.Category.Format "qa"}}
     <form method="post" action="/discussions/{{.Discussion.ID}}/comments/{{.C.ID}}/answer" class="inline-form">
+      {{/* Per-comment controls repeat with identical looks on every row,
+         so each gets an accessible name carrying the comment id (the same
+         pattern the copy-link button already uses). The visible label
+         stays a strict substring of the name (WCAG 2.5.3 Label in Name). */}}
       {{if .C.IsAnswer}}
       <input type="hidden" name="answer" value="0">
-      <button type="submit" class="btn btn-quiet">Unmark answer</button>
+      <button type="submit" class="btn btn-quiet" aria-label="Unmark answer on comment {{.C.ID}}">Unmark answer</button>
       {{else}}
       <input type="hidden" name="answer" value="1">
-      <button type="submit" class="btn btn-quiet">Mark as answer</button>
+      <button type="submit" class="btn btn-quiet" aria-label="Mark as answer on comment {{.C.ID}}">Mark as answer</button>
       {{end}}
     </form>
     {{end}}
     <details class="reply-details"{{if and .ReplyDraftID (eq .ReplyDraftID .C.ID) .CommentError}} open{{end}}>
-      <summary>Reply</summary>
+      <summary aria-label="Reply to comment {{.C.ID}}">Reply</summary>
       {{template "discussion_reply_form" .}}
     </details>
   </div>
@@ -87,7 +91,7 @@
     <p class="field-error{{if not (and .ReplyDraftID (eq .ReplyDraftID .C.ID) .CommentError)}} field-error-pending{{end}}" id="reply-error-{{.C.ID}}">{{if eq .ReplyDraftID .C.ID}}{{or .CommentError "Comment is required."}}{{else}}Comment is required.{{end}}</p>
     <p class="field-hint" id="reply-hint-{{.C.ID}}">Markdown (GFM) supported. Ctrl+Enter (Cmd+Enter on macOS) submits.</p>
   </div>
-  <button type="submit" class="btn btn-primary">Reply</button>
+  <button type="submit" class="btn btn-primary" aria-label="Post reply to comment {{.C.ID}}">Reply</button>
 </form>
 {{end}}
 
