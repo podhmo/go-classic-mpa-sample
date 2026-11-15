@@ -94,7 +94,10 @@ func New(server, token string) *Client {
 	}
 }
 
-// Error is a non-2xx API response with the server's error message.
+// Error is a non-2xx API response with the server's error message. It is
+// deliberately not mapped onto the store's sentinel errors — remote
+// callers compare Status (mapping 404→ErrNotFound or a machine-readable
+// API error code is tracked as TODO work).
 type Error struct {
 	Status  int
 	Message string

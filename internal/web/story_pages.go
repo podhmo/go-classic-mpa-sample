@@ -428,6 +428,13 @@ func StoryDiscussionDelete() {
 // replayed request its own deep copy of the comment fixtures so
 // mutations (e.g. answer marks) are visible inside that request but
 // never leak into the shared fixtures.
+//
+// Declared simplifications vs the real store: list methods return the
+// fixtures ignoring filters and pagination; ListDiscussionComments
+// falls back to the fixture comments for an unknown discussion id;
+// create, update and delete are no-ops that report success (posts get
+// id 99); authentication always succeeds as the demo user and API
+// tokens are never valid.
 type storyStore struct {
 	issues      map[int64]*store.Issue
 	discussions map[int64]*store.Discussion
@@ -480,6 +487,11 @@ func (storyStore) UpdateIssue(ctx context.Context, id int64, in store.IssueInput
 	return nil
 }
 func (s storyStore) SetIssueStatus(ctx context.Context, id int64, status string) error {
+	// Same contract as the real store: the value is validated before the
+	// existence check.
+	if status != store.StatusOpen && status != store.StatusClosed {
+		return fmt.Errorf("store: invalid status %q", status)
+	}
 	is, ok := s.issues[id]
 	if !ok {
 		return store.ErrNotFound
@@ -511,14 +523,33 @@ func (storyStore) ListLabels(ctx context.Context) ([]*store.Label, error) {
 	return storyLabels, nil
 }
 
-func (storyStore) ListDiscussions(ctx context.Context, f store.DiscussionListFilter) ([]*store.Discussion, int, error) {
-	return storyDiscussions, len(storyDiscussions), nil
+func (s storyStore) ListDiscussions(ctx context.Context, f store.DiscussionListFilter) ([]*store.Discussion, int, error) {
+	out := make([]*store.Discussion, len(storyDiscussions))
+	for i, d := range storyDiscussions {
+		dd := *d
+		dd.Answered = s.answered(d.ID)
+		out[i] = &dd
+	}
+	return out, len(out), nil
 }
 func (s storyStore) GetDiscussion(ctx context.Context, id int64) (*store.Discussion, error) {
 	if d, ok := s.discussions[id]; ok {
-		return d, nil
+		dd := *d
+		dd.Answered = s.answered(id)
+		return &dd, nil
 	}
 	return nil, store.ErrNotFound
+}
+
+// answered recomputes a discussion's Answered flag from the comment
+// fixtures — the same derivation the real store's EXISTS clause performs.
+func (s storyStore) answered(discussionID int64) bool {
+	for _, c := range s.dcomments[discussionID] {
+		if c.IsAnswer {
+			return true
+		}
+	}
+	return false
 }
 func (storyStore) CreateDiscussion(ctx context.Context, in store.DiscussionInput, authorID int64) (int64, error) {
 	return 99, nil
@@ -543,18 +574,27 @@ func (s storyStore) CreateDiscussionComment(ctx context.Context, discussionID, p
 	return 99, nil
 }
 func (s storyStore) SetCommentAnswer(ctx context.Context, discussionID, commentID int64, answer bool) error {
+	d, dok := s.discussions[discussionID]
 	cs := s.dcomments[discussionID]
-	if cs == nil {
+	if !dok || cs == nil {
 		return store.ErrNotFound
 	}
 	var target *store.DiscussionComment
 	for _, c := range cs {
-		if c.ID == commentID && c.ParentID == 0 {
+		if c.ID == commentID {
 			target = c
 		}
 	}
 	if target == nil {
 		return store.ErrNotFound
+	}
+	// Same contract as the real store: replies and non-qa categories
+	// are ErrNotAnswerable, not ErrNotFound.
+	if target.ParentID != 0 {
+		return store.ErrNotAnswerable
+	}
+	if answer && d.Category.Format != store.CategoryFormatQA {
+		return store.ErrNotAnswerable
 	}
 	if answer {
 		for _, c := range cs {
@@ -564,9 +604,7 @@ func (s storyStore) SetCommentAnswer(ctx context.Context, discussionID, commentI
 	target.IsAnswer = answer
 	// Same contract as the real store: an answer mark bumps the
 	// discussion's updated_at, which the swap fragment reflects.
-	if d, ok := s.discussions[discussionID]; ok {
-		d.UpdatedAt = time.Now()
-	}
+	d.UpdatedAt = time.Now()
 	return nil
 }
 func (storyStore) ListDiscussionCategories(ctx context.Context) ([]*store.DiscussionCategory, error) {

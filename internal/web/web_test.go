@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -22,6 +23,14 @@ import (
 // fakeStore is an in-memory implementation of the Store contract used by the
 // web layer. It honors the documented semantics: ErrNotFound, status/query/
 // label filtering, newest/oldest sorting and pre-pagination totals.
+//
+// Declared simplifications: sessions carry no expiry (SessionUser ignores
+// ttl, so expiry and sliding-renewal scenarios are untestable through this
+// fake); APITokenUser always returns ErrNotFound; and foreign keys are not
+// enforced — an unknown authorID/userID posts anonymously instead of
+// failing. Comment values are shared pointers, so caller-side mutation is
+// visible to the store (the answer-swap handler relies on this for
+// storybook stories; the real store returns fresh rows each call).
 type fakeStore struct {
 	mu          sync.Mutex
 	nextIssue   int64
@@ -80,11 +89,7 @@ func (f *fakeStore) addIssue(title, body, status string, created time.Time, labe
 		UpdatedAt: created,
 	}
 	f.nextIssue++
-	for _, id := range labelIDs {
-		if l := f.labelByID(id); l != nil {
-			is.Labels = append(is.Labels, *l)
-		}
-	}
+	is.Labels = f.resolveLabels(labelIDs)
 	f.issues[is.ID] = is
 	return is
 }
@@ -96,6 +101,22 @@ func (f *fakeStore) labelByID(id int64) *store.Label {
 		}
 	}
 	return nil
+}
+
+// resolveLabels maps label ids onto the stored labels — the same way the
+// real store's setIssueLabels + attachLabels behave: unknown ids are
+// silently dropped, duplicates collapse, and the result is name-ordered.
+func (f *fakeStore) resolveLabels(ids []int64) []store.Label {
+	var out []store.Label
+	for _, id := range ids {
+		l := f.labelByID(id)
+		if l == nil || slices.ContainsFunc(out, func(x store.Label) bool { return x.ID == l.ID }) {
+			continue
+		}
+		out = append(out, *l)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
 }
 
 func cloneIssue(is *store.Issue) *store.Issue {
@@ -124,7 +145,7 @@ func (f *fakeStore) ListIssues(_ context.Context, fl store.ListFilter) ([]*store
 				continue
 			}
 		}
-		if fl.LabelID != 0 {
+		if fl.LabelID > 0 {
 			found := false
 			for _, l := range is.Labels {
 				if l.ID == fl.LabelID {
@@ -197,11 +218,7 @@ func (f *fakeStore) CreateIssue(_ context.Context, in store.IssueInput, authorID
 		u := fu.user
 		is.Author = &u
 	}
-	for _, id := range in.LabelIDs {
-		if l := f.labelByID(id); l != nil {
-			is.Labels = append(is.Labels, *l)
-		}
-	}
+	is.Labels = f.resolveLabels(in.LabelIDs)
 	f.issues[is.ID] = is
 	return is.ID, nil
 }
@@ -216,18 +233,18 @@ func (f *fakeStore) UpdateIssue(_ context.Context, id int64, in store.IssueInput
 	is.Title = in.Title
 	is.Body = in.Body
 	is.UpdatedAt = time.Now()
-	is.Labels = nil
-	for _, lid := range in.LabelIDs {
-		if l := f.labelByID(lid); l != nil {
-			is.Labels = append(is.Labels, *l)
-		}
-	}
+	is.Labels = f.resolveLabels(in.LabelIDs)
 	return nil
 }
 
 func (f *fakeStore) SetIssueStatus(_ context.Context, id int64, status string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	// Same contract as the real store: the value is validated before the
+	// existence check.
+	if status != store.StatusOpen && status != store.StatusClosed {
+		return fmt.Errorf("store: invalid status %q", status)
+	}
 	is, ok := f.issues[id]
 	if !ok {
 		return store.ErrNotFound
@@ -448,13 +465,15 @@ func (f *fakeStore) CreateDiscussion(_ context.Context, in store.DiscussionInput
 func (f *fakeStore) UpdateDiscussion(_ context.Context, id int64, in store.DiscussionInput) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	d, ok := f.discussions[id]
-	if !ok {
-		return store.ErrNotFound
-	}
+	// Same contract as the real store: the category check precedes the
+	// existence check.
 	cat := f.dcategoryByID(in.CategoryID)
 	if cat == nil {
 		return store.ErrInvalidCategory
+	}
+	d, ok := f.discussions[id]
+	if !ok {
+		return store.ErrNotFound
 	}
 	d.Title = in.Title
 	d.Body = in.Body

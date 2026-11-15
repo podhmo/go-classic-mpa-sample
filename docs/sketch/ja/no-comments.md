@@ -232,3 +232,12 @@ api/cli/e2e テストは全て本物実装を使用（api_test.go / client_test.
   「fake の仕様として宣言」する方向が安全
 - **削除漏れ発見（sweep の副産物）**: `web_test.go` 末尾 1092 行目に
   `/* ---------- accounts ---------- */` のバナーが宙吊りで残っている（パスの削除漏れ）
+
+**→ 対応済み（PR #71）**: 「実バグ寄り」は全て修正 — `storyStore.SetCommentAnswer`
+（reply→`ErrNotAnswerable`、非 qa 拒否）、`storyStore` の `Answered` 再計算、
+`fakeStore`/`storyStore` の `SetIssueStatus` 値検証、`fakeStore.ListIssues` の
+`LabelID > 0`、LabelIDs dedup・name 順（`resolveLabels` ヘルパ）、
+`fakeStore.UpdateDiscussion` のチェック順序。意図的スタブは `fakeStore`・
+`storyStore` の doc コメントと `client.Error`/`ListComments` 系のコメントで宣言済み。
+残件は共有 contract test と client sentinel 方針のみ（TODO.md 参照）。
+なお Unicode 大小文字のずれは fake 側の宣言に含めず残した（影響が極小のため要検討）。

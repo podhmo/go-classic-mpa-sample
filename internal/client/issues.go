@@ -87,6 +87,8 @@ func (c *Client) GetIssue(ctx context.Context, id int64) (*store.Issue, error) {
 
 // ListComments reads comments off the detail endpoint — there is no
 // dedicated comments GET (cli-and-web-api.md: bundled with the issue).
+// A missing issue surfaces as *Error{Status:404} where the local backend
+// returns an empty list and no error.
 func (c *Client) ListComments(ctx context.Context, issueID int64) ([]*store.Comment, error) {
 	var res struct {
 		Comments []api.Comment `json:"comments"`
