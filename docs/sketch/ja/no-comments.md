@@ -128,3 +128,107 @@ keep-list に該当するか、コードが言えない情報を運ぶものは�
 ## 検証
 
 `go test ./...` / `go vet ./...` / `gofmt -l .` / `go build ./...` すべてクリーン。
+
+## 追記: 契約乖離の全コード sweep（2026-11-16）
+
+TODO 項目「fake/stub の契約乖離を全コードから探索し整理する」の探索部分の結果。
+手順は TODO に記載の通り（interface 列挙 → 実装列挙 → 本物契約の特定 → 意味論突き合わせ）。
+
+### interface と実装の棚卸し
+
+| interface | メソッド数 | 実装 |
+|---|---|---|
+| `web.Store` | 24 | `*store.Store`（本物）/ `*fakeStore`（web_test.go）/ `storyStore`（story_pages.go、story tag） |
+| `api.Store` | 19 | `*store.Store` のみ（fake は存在しない。doc コメントの "tests may substitute a fake" は予約語で実在しない） |
+| `cli.Backend` | 19 | `*store.Store`（local）/ `*client.Client`（remote HTTP） |
+| `cli.TokenStore` | 6 | `*store.Store` のみ |
+| `store.scanner` | 1 | `*sql.Rows` / `*sql.Row` のみ（実質 seam、fake なし） |
+
+api/cli/e2e テストは全て本物実装を使用（api_test.go / client_test.go / cli_test.go / e2etests は `store.Open` or `api.New(st,…)`）。
+
+### 本物（*store.Store）の契約
+
+- `ListIssues`/`ListDiscussions`: フィルタ（status/label/category/answered/query）・ソート（"oldest" 以外は created_at,id DESC）・ページング（Page<1→1, PerPage<=0→20, total はページング前）。ラベルは `attachLabels` が name 順で populate
+- `CreateIssue`/`CreateDiscussion`: LabelIDs の重複・不存在は OR IGNORE で silent drop、不存在 categoryID は `ErrInvalidCategory`
+- 更新系: updated_at は `SetIssueStatus` のみ「値が変わったときだけ」、それ以外は無条件 bump。コメント投稿・answer マークも親の updated_at を bump
+- `SetIssueStatus` は値検証（open/closed 以外エラー）を存在チェックより先に行う。`UpdateDiscussion` も `requireCategory` を先に行う
+- `SetCommentAnswer`: reply へのマーク/アンマークは `ErrNotAnswerable`、非 qa への mark は `ErrNotAnswerable`、discussion/comment 不在は `ErrNotFound`、マーク移動は既存をクリア
+- `SessionUser`: 期限切れは行削除+`ErrNotFound`、残り半分でスライド更新。ttl 必須
+- `APITokenUser`: 不明/失効トークンは `ErrNotFound`
+- `CreateUser`: 名前重複は `ErrDuplicateName`（COLLATE NOCASE=ASCII 大小無視）。`AuthenticateUser`: 失敗は一律 `ErrInvalidCredentials`
+- FK 制約有効（`foreign_keys(1)`）: 存在しない `author_id`/`user_id` への insert は制約エラー
+- `ListComments`/`ListDiscussionComments` は親の存在を検証しない（不在なら空+nil）。返す値は毎回新しい row（呼び出し側の変更が store に漏れない）
+- Query の大小文字無視は SQLite の `lower()` = ASCII のみ
+
+### fakeStore の乖離
+
+**実バグ寄り（本物に揃える候補）**:
+
+1. `SetIssueStatus` — 値検証なし（本物は不正値でエラー）。チェック順序も逆（本物は検証→存在、fake は存在→検証）。
+   現状は web 層が先に検証するので不可達だが、契約テストを通すと引っかかる
+2. `ListIssues` — `fl.LabelID != 0`（本物は `> 0`）。負の LabelID で fake は全件除外、本物はフィルタ無視
+3. `CreateIssue`/`UpdateIssue`/`addIssue` — LabelIDs の重複が重複ラベルになる（本物は dedup）
+4. ラベル順序 — 挿入順のまま返す（本物は name 順）
+5. FK 非実装 — 存在しない authorID/userID を匿名扱い or そのまま通す（本物は制約エラー）:
+   `CreateIssue`/`CreateComment`/`CreateDiscussion`/`CreateDiscussionComment`/`CreateSession`
+6. `UpdateDiscussion` — (missing id, bad category) で `ErrNotFound`（本物は `ErrInvalidCategory` 先）。チェック順序のずれ
+7. Query マッチ — `strings.ToLower` は Unicode 全体、SQLite `lower()` は ASCII のみ。非 ASCII 大文字でずれる
+
+**意図的スタブ（宣言で済む）**:
+
+- `SessionUser`/`CreateSession`: ttl・期限・スライド更新なし（期限切れ・失効シナリオは fake では書けない）
+- `APITokenUser`: 常に `ErrNotFound`（API 認証経路は fake では到達不可）
+- `sessionUserErr`: テスト用エラー注入シーム
+- `ListComments`/`ListDiscussionComments` が `*Comment`/`*DiscussionComment` を共有
+  （本物は毎回 fresh row）。返り値の変更が store に漏れる点は本物と違うが、
+  `discussions.go` の answer-swap ハンドラが storybook 経路でこの共有に依存している
+
+### storyStore の乖離
+
+**実バグ寄り（swap フラグメント挙動に関わるので揃える）**:
+
+1. `SetCommentAnswer` — reply への mark/unmark は `ErrNotFound`（本物は `ErrNotAnswerable`）、
+   非 qa カテゴリへの mark 拒否なし
+2. `GetDiscussion`/`ListDiscussions` — `Answered` が fixture 固定のまま再計算されない
+   （マーク移動・全解除後も古い値。本物はコメントから EXISTS 導出）
+
+**意図的スタブ（宣言で済む）**:
+
+- `ListIssues`/`ListDiscussions` — フィルタ完全無視（fixture をそのまま返す）
+- `ListDiscussionComments` — 未知の discussionID にも fixture コメントを返す
+- `CreateComment`/`CreateDiscussionComment` — 親の存在チェックなし（常に 99）
+- `Create`/`Update`/`Delete` 系 — no-op（`99` or `nil` を返すだけ）
+- accounts 系全般 — `CreateUser`→1、`AuthenticateUser`→常に成功、`CreateSession`→固定
+  "story-token"、`SessionUser`→常に demo ユーザー、`DeleteSession`→nil、
+  `APITokenUser`→`ErrNotFound`
+- `SetIssueStatus` — 値検証なし（fakeStore と同じ穴）
+
+### *client.Client（cli.Backend remote）の乖離
+
+- **sentinel 未写像**: 404→`*Error{Status:404}`、422→`*Error{Status:422,Fields}`。
+  `ErrNotFound`/`ErrNotAnswerable`/`ErrInvalidCategory`/`ErrInvalidParent`/`ErrDuplicateName`
+  が remote では `errors.Is` 不可。消費者は local-only の `cli/auth.go:64`（TokenStore 経由）
+  のみなので実害なし。根治は 404→`ErrNotFound` 写像 or API の機械可読エラーコード
+- `ListComments`/`ListDiscussionComments` — 親不在 → 404 `*Error`（local は空+nil）。
+  CLI は GetX を先に呼ぶので実害なし
+- authorID 無視 — remote はトークンの actor になる（cli/issues.go:214 に宣言済み）
+- **契約を守っている好例**: `listWindow` の perPage>100 縫合、`UpdateIssue` の
+  nil→[] による replace 意味論合わせ、未知 LabelID → 空結果（本物と同じ）
+
+### API 層自身の差（fake/stub ではないが wire 契約のずれ）
+
+- `?label=<unknown name>` → 422（store の `LabelID>0` フィルタなら空結果）。
+  client は LabelID 側で空に揃えているので CLI 経由では一貫
+
+### 分類まとめ
+
+- **修正要**: storyStore.SetCommentAnswer（reply→ErrNotAnswerable + 非 qa 拒否）、
+  fakeStore.SetIssueStatus の値検証、fakeStore ListIssues の `LabelID > 0`、
+  LabelIDs dedup、ラベル name 順ソート、storyStore の Answered 再計算
+- **宣言で済む**: storyStore/fakeStore の「意図的スタブ」欄全部 + client.ListComments の 404
+- **根治**: `*store.Store`/`fakeStore`/`storyStore` に同一振る舞いスイート
+  （bump 規則・sentinel・フィルタ意味論）を流す共有 contract test。
+  fake のポインタ共有は storybook が依存するので「本物に揃える」のではなく
+  「fake の仕様として宣言」する方向が安全
+- **削除漏れ発見（sweep の副産物）**: `web_test.go` 末尾 1092 行目に
+  `/* ---------- accounts ---------- */` のバナーが宙吊りで残っている（パスの削除漏れ）

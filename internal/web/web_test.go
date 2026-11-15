@@ -1088,5 +1088,3 @@ func TestSpeculationRules(t *testing.T) {
 		}
 	}
 }
-
-/* ---------- accounts ---------- */
