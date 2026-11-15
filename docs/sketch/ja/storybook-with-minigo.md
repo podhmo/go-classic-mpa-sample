@@ -96,7 +96,7 @@ storybook に追いつくための要点である「書き換えたら再起動�
 | モックデータ (`story_pages.go`) | **不要** | 同上。fixture 値を書き換えると次のリクエストで反映 | fixture のタイトル書き換え → 即反映 |
 | story の追加 | **不要** | index は `b.Stories()`（= `storybook.Discover`）を毎リクエスト実行してナビを再構築する。新しい `StoryXxx` 関数は即座に一覧・描画とも有効 | `StoryZzzRuntimeCheck` 追加 → 一覧・描画とも即反映 |
 | CSS・静的アセット (`static/`) | **不要** | `http.FileServer` が毎回ディスクから出すだけ（インタプリタすら通らない） | app.css 追記 → 即反映 |
-| 本番コード (`web.go`, `handlers.go` 等) | **不要** | story が呼ぶ renderer もインタプリタ実行なので同じく都度再評価される | — |
+| 本番コード (`web.go`, `issues.go` 等) | **不要** | story が呼ぶ renderer もインタプリタ実行なので同じく都度再評価される | — |
 | storybook 本体 (`cmd/storybook`) | **必要** | ここだけは普通の Go バイナリ。`go run` なら再起動で再コンパイル | — |
 
 つまり storybook が要求する「書き換えたら再起動不要」は 2026-11-15 時点でも全項目成立している。minigo#1077 の共有キャッシュ（FileSet + sha256 再検証付き parseCache + indexCache）で fork あたりのコストも下がっており、warm で 70〜110ms/req（goldmark 実変換を含む詳細ページでも）。

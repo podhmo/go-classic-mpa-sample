@@ -342,3 +342,13 @@
 - **`/api/v1` の mount はメソッド付き subtree パターン（GET/POST/PATCH/DELETE）**: Go ServeMux の制約で、メソッド無指定の `/api/v1/` は catch-all `GET /` と衝突（パスは狭いがメソッド集合は広い）するため。PUT 等は 405 に落ちる。
 - **タイムスタンプは RFC 3339 文字列**: DTO 側で `time.Time.Format` して出す（Unix 秒ではなく人間可読寄せ）。
 - **web のテストは fakeStore、api のテストは実 `*store.Store`** を使い分け: API は store 直上の薄い層なので、実 DB で wire contract（認証・エンベロープ・422 fields）を見る方が意味が大きい。
+
+## Go ソースのファイル配置規則（2026-11-16、`devin/1794766503-file-symbol-alignment` ブランチ）
+
+ファイル名とシンボル名の対応を取るリファクタリングで固めた配置規則。
+
+- **トピックごとのファイルに、そのトピックの定義を集める**: `issues.go` / `discussions.go` / `accounts.go` の3本柱。`handlers.go`（issue 定義の寄せ集め）は `issues.go` に改名して廃止。
+- **web パッケージ**: `issues.go` = issue のページ view model + ハンドラ + `parseListFilter`/`issuesURL` 系、`auth.go` = アカウントルート + セッション/cookie/context 解決（`withUser`/`userFromContext`）、`web.go` = ルーティング (`New`)・middleware・横断 helper のみ。
+- **store パッケージ**: `store.go` = `Store`・スキーマ/migration・`Open` 等の DB 管理のみ。`Issue`/`Comment`/`Label` 型と CRUD は `issues.go`、共有 scan/null helper は `store.go` に残す。
+- **api パッケージ**: `api.go` = ルーティング・認証・JSON helper・`User` DTO のみ。DTO は所有者のファイルへ（`Issue`/`Comment`/`Label` → `issues.go`、`Discussion*` → `discussions.go`）。
+- **テストも同規則**: `*_test.go` は対象ファイル名に合わせる（`issues_test.go`/`auth_test.go`/`seed_test.go`）。パッケージ共有の fake/harness（`fakeStore`, `newTestStore`, `newServer`）は親玉ファイル（`web_test.go`/`store_test.go`/`api_test.go`）に残す。

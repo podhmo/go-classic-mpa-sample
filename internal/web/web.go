@@ -12,10 +12,7 @@ import (
 	"log"
 	"mime"
 	"net/http"
-	"net/url"
-	"slices"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/podhmo/go-classic-mpa-sample/internal/api"
@@ -180,62 +177,6 @@ func New(st Store, opts ...Option) http.Handler {
 	return securityHeaders(http.NewCrossOriginProtection().Handler(withUser(h, mux)))
 }
 
-// sessionCookieName is the cookie carrying the opaque session token.
-const sessionCookieName = "session"
-
-// sessionTTL is the server-side session lifetime. The cookie itself is a
-// browser-session cookie (no Max-Age): the cap lives in the sessions table
-// and renews slidingly while the browser stays open, so closing the
-// browser still drops the session.
-const sessionTTL = 30 * 24 * time.Hour
-
-// contextKey is the private key type for request-scoped values.
-type contextKey int
-
-const userContextKey contextKey = iota
-
-// userFromContext returns the logged-in user resolved by withUser, or nil
-// for an anonymous request.
-func userFromContext(ctx context.Context) *store.User {
-	u, _ := ctx.Value(userContextKey).(*store.User)
-	return u
-}
-
-// authorIDFromContext maps the logged-in user to the author_id recorded on
-// new posts; 0 means anonymous.
-func authorIDFromContext(ctx context.Context) int64 {
-	if u := userFromContext(ctx); u != nil {
-		return u.ID
-	}
-	return 0
-}
-
-// withUser is the authentication middleware: it resolves the session
-// cookie to a *store.User on the request context. Anonymous access is
-// fully supported — a nil user simply means "not logged in", and only an
-// unknown/expired session resolves that way. A lookup that fails for any
-// other reason (e.g. a transient DB error) is a 500 instead: proceeding
-// anonymously there would silently record an authored post with no
-// author.
-func withUser(h *handler, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if c, err := r.Cookie(sessionCookieName); err == nil {
-			u, err := h.store.SessionUser(r.Context(), c.Value, sessionTTL)
-			switch {
-			case err == nil:
-				r = r.WithContext(context.WithValue(r.Context(), userContextKey, u))
-			case errors.Is(err, store.ErrNotFound):
-				// Unknown/expired session: continue anonymously.
-			default:
-				h.renderError(w, r, http.StatusInternalServerError,
-					"Internal server error", "The session could not be verified. Please try again.")
-				return
-			}
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
 // contentSecurityPolicy is the enforced CSP for every response. The app
 // serves every byte itself — one stylesheet plus a data: favicon — so the
 // policy can be near-default-deny. script-src is 'self' rather than 'none':
@@ -354,63 +295,12 @@ func fmtTime(t time.Time) string {
 	return t.Local().Format("Jan 2, 2006 15:04")
 }
 
-// isChecked reports whether id is among the selected label IDs.
-func isChecked(id int64, ids []int64) bool {
-	return slices.Contains(ids, id)
-}
-
 // authorName renders a post's author; a nil author is an anonymous post.
 func authorName(u *store.User) string {
 	if u == nil {
 		return "anonymous"
 	}
 	return u.Name
-}
-
-// issuesURL builds /issues URLs carrying the current filter state, so
-// pagination, tabs and label links preserve active filters.
-func issuesURL(f store.ListFilter) string {
-	v := url.Values{}
-	// "open" is the default filter, so keep URLs clean by omitting it.
-	if f.Status != "" && f.Status != store.StatusOpen {
-		v.Set("status", f.Status)
-	}
-	if f.Query != "" {
-		v.Set("q", f.Query)
-	}
-	if f.LabelID != 0 {
-		v.Set("label", strconv.FormatInt(f.LabelID, 10))
-	}
-	if f.Sort != "" {
-		v.Set("sort", f.Sort)
-	}
-	if f.Page > 1 {
-		v.Set("page", strconv.Itoa(f.Page))
-	}
-	if enc := v.Encode(); enc != "" {
-		return "/issues?" + enc
-	}
-	return "/issues"
-}
-
-// listURL keeps the filter but moves to another page.
-func listURL(f store.ListFilter, page int) string {
-	f.Page = page
-	return issuesURL(f)
-}
-
-// statusURL keeps the filter but switches the status tab and resets paging.
-func statusURL(f store.ListFilter, status string) string {
-	f.Status = status
-	f.Page = 1
-	return issuesURL(f)
-}
-
-// labelURL keeps the filter but selects a label and resets paging.
-func labelURL(f store.ListFilter, labelID int64) string {
-	f.LabelID = labelID
-	f.Page = 1
-	return issuesURL(f)
 }
 
 // renderError renders the styled error page carrying the request's user so
@@ -472,34 +362,7 @@ func parseID(r *http.Request) (int64, bool) {
 	return id, true
 }
 
-// parseListFilter reads and normalizes the list query parameters.
-func parseListFilter(r *http.Request) store.ListFilter {
-	q := r.URL.Query()
-	f := store.ListFilter{
-		Status:  q.Get("status"),
-		Query:   strings.TrimSpace(q.Get("q")),
-		Sort:    q.Get("sort"),
-		Page:    1,
-		PerPage: perPage,
-	}
-	switch f.Status {
-	case store.StatusOpen, store.StatusClosed, "all":
-	default:
-		f.Status = store.StatusOpen
-	}
-	if f.Sort != "oldest" {
-		f.Sort = ""
-	}
-
-	// Reject absurd page numbers: huge values can overflow the store's
-	// (page-1)*perPage offset arithmetic and are never meaningful anyway.
-	if n, err := strconv.Atoi(q.Get("page")); err == nil && n > 0 && n <= 1_000_000 {
-		f.Page = n
-	}
-	if v := q.Get("label"); v != "" {
-		if id, err := strconv.ParseInt(v, 10, 64); err == nil && id > 0 {
-			f.LabelID = id
-		}
-	}
-	return f
+// home redirects the bare root to the issue list.
+func (h *handler) home(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, "/issues", http.StatusSeeOther)
 }
