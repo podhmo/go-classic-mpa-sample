@@ -424,17 +424,52 @@ func StoryDiscussionDelete() {
 
 // storyStore implements the Store contract with story fixtures so
 // handler-shaped stories drive the real mux — routing, security
-// headers, status codes — without a database.
-type storyStore struct{}
+// headers, status codes — without a database. newStoryStore gives each
+// replayed request its own deep copy of the comment fixtures so
+// mutations (e.g. answer marks) are visible inside that request but
+// never leak into the shared fixtures.
+type storyStore struct {
+	issues      map[int64]*store.Issue
+	discussions map[int64]*store.Discussion
+	dcomments   map[int64][]*store.DiscussionComment
+}
+
+func newStoryStore() storyStore {
+	issues := make(map[int64]*store.Issue, len(storyIssues))
+	for _, i := range storyIssues {
+		ii := *i
+		issues[i.ID] = &ii
+	}
+	discussions := make(map[int64]*store.Discussion, len(storyDiscussions))
+	for _, d := range storyDiscussions {
+		dd := *d
+		discussions[d.ID] = &dd
+	}
+	return storyStore{
+		issues:      issues,
+		discussions: discussions,
+		dcomments: map[int64][]*store.DiscussionComment{
+			storyDiscussion.ID: cloneDComments(storyDComments),
+		},
+	}
+}
+
+func cloneDComments(src []*store.DiscussionComment) []*store.DiscussionComment {
+	out := make([]*store.DiscussionComment, len(src))
+	for i, c := range src {
+		cc := *c
+		cc.Replies = cloneDComments(c.Replies)
+		out[i] = &cc
+	}
+	return out
+}
 
 func (storyStore) ListIssues(ctx context.Context, f store.ListFilter) ([]*store.Issue, int, error) {
 	return storyIssues, len(storyIssues), nil
 }
-func (storyStore) GetIssue(ctx context.Context, id int64) (*store.Issue, error) {
-	for _, is := range storyIssues {
-		if is.ID == id {
-			return is, nil
-		}
+func (s storyStore) GetIssue(ctx context.Context, id int64) (*store.Issue, error) {
+	if is, ok := s.issues[id]; ok {
+		return is, nil
 	}
 	return nil, store.ErrNotFound
 }
@@ -444,7 +479,16 @@ func (storyStore) CreateIssue(ctx context.Context, in store.IssueInput, authorID
 func (storyStore) UpdateIssue(ctx context.Context, id int64, in store.IssueInput) error {
 	return nil
 }
-func (storyStore) SetIssueStatus(ctx context.Context, id int64, status string) error {
+func (s storyStore) SetIssueStatus(ctx context.Context, id int64, status string) error {
+	is, ok := s.issues[id]
+	if !ok {
+		return store.ErrNotFound
+	}
+	// Same contract as the real store: updated_at bumps only on change.
+	if is.Status != status {
+		is.Status = status
+		is.UpdatedAt = time.Now()
+	}
 	return nil
 }
 func (storyStore) DeleteIssue(ctx context.Context, id int64) error {
@@ -465,11 +509,9 @@ func (storyStore) ListLabels(ctx context.Context) ([]*store.Label, error) {
 func (storyStore) ListDiscussions(ctx context.Context, f store.DiscussionListFilter) ([]*store.Discussion, int, error) {
 	return storyDiscussions, len(storyDiscussions), nil
 }
-func (storyStore) GetDiscussion(ctx context.Context, id int64) (*store.Discussion, error) {
-	for _, d := range storyDiscussions {
-		if d.ID == id {
-			return d, nil
-		}
+func (s storyStore) GetDiscussion(ctx context.Context, id int64) (*store.Discussion, error) {
+	if d, ok := s.discussions[id]; ok {
+		return d, nil
 	}
 	return nil, store.ErrNotFound
 }
@@ -482,13 +524,40 @@ func (storyStore) UpdateDiscussion(ctx context.Context, id int64, in store.Discu
 func (storyStore) DeleteDiscussion(ctx context.Context, id int64) error {
 	return nil
 }
-func (storyStore) ListDiscussionComments(ctx context.Context, discussionID int64) ([]*store.DiscussionComment, error) {
+func (s storyStore) ListDiscussionComments(ctx context.Context, discussionID int64) ([]*store.DiscussionComment, error) {
+	if cs, ok := s.dcomments[discussionID]; ok {
+		return cs, nil
+	}
 	return storyDComments, nil
 }
 func (storyStore) CreateDiscussionComment(ctx context.Context, discussionID, parentID int64, body string, authorID int64) (int64, error) {
 	return 99, nil
 }
-func (storyStore) SetCommentAnswer(ctx context.Context, discussionID, commentID int64, answer bool) error {
+func (s storyStore) SetCommentAnswer(ctx context.Context, discussionID, commentID int64, answer bool) error {
+	cs := s.dcomments[discussionID]
+	if cs == nil {
+		return store.ErrNotFound
+	}
+	var target *store.DiscussionComment
+	for _, c := range cs {
+		if c.ID == commentID && c.ParentID == 0 {
+			target = c
+		}
+	}
+	if target == nil {
+		return store.ErrNotFound
+	}
+	if answer {
+		for _, c := range cs {
+			c.IsAnswer = false
+		}
+	}
+	target.IsAnswer = answer
+	// Same contract as the real store: an answer mark bumps the
+	// discussion's updated_at, which the swap fragment reflects.
+	if d, ok := s.discussions[discussionID]; ok {
+		d.UpdatedAt = time.Now()
+	}
 	return nil
 }
 func (storyStore) ListDiscussionCategories(ctx context.Context) ([]*store.DiscussionCategory, error) {
@@ -513,14 +582,14 @@ func (storyStore) DeleteSession(ctx context.Context, token string) error {
 // StoryHttpIssueList drives the real mux for GET /issues, so the
 // preview replays the handler's status and security headers too.
 func StoryHttpIssueList(w http.ResponseWriter, r *http.Request) {
-	New(storyStore{}).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/issues", nil))
+	New(newStoryStore()).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/issues", nil))
 }
 
 // StoryHttpNotFound drives the real mux for an unknown path; the
 // recorded 404 status is replayed by the preview, unlike print
 // stories which always answer 200.
 func StoryHttpNotFound(w http.ResponseWriter, r *http.Request) {
-	New(storyStore{}).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/no-such-page", nil))
+	New(newStoryStore()).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/no-such-page", nil))
 }
 
 // ---- partial-update fragments --------------------------------------------
@@ -579,25 +648,52 @@ func storyPost(target string, form url.Values, partial bool) *http.Request {
 // StoryHttpCreateCommentPartial replays a comment POST with X-Partial:
 // the mux answers the new comment's fragment instead of a 303 redirect.
 func StoryHttpCreateCommentPartial(w http.ResponseWriter, r *http.Request) {
-	New(storyStore{}).ServeHTTP(w, storyPost("/issues/2/comments", url.Values{"body": {"posted via fetch"}}, true))
+	New(newStoryStore()).ServeHTTP(w, storyPost("/issues/2/comments", url.Values{"body": {"posted via fetch"}}, true))
 }
 
 // StoryHttpCreateCommentRedirect replays the same POST without the
 // header — the unchanged full-reload path answering 303 #comment-N.
 func StoryHttpCreateCommentRedirect(w http.ResponseWriter, r *http.Request) {
-	New(storyStore{}).ServeHTTP(w, storyPost("/issues/2/comments", url.Values{"body": {"classic post"}}, false))
+	New(newStoryStore()).ServeHTTP(w, storyPost("/issues/2/comments", url.Values{"body": {"classic post"}}, false))
 }
 
 // StoryHttpCreateCommentPartialError replays a partial post with an
 // empty body: the 422 response is the error-marked form fragment.
 func StoryHttpCreateCommentPartialError(w http.ResponseWriter, r *http.Request) {
-	New(storyStore{}).ServeHTTP(w, storyPost("/issues/2/comments", url.Values{"body": {""}}, true))
+	New(newStoryStore()).ServeHTTP(w, storyPost("/issues/2/comments", url.Values{"body": {""}}, true))
 }
 
 // StoryHttpCreateDiscussionReplyPartial replays a partial reply POST:
 // the fragment carries comment-reply markup for .comment-replies.
 func StoryHttpCreateDiscussionReplyPartial(w http.ResponseWriter, r *http.Request) {
-	New(storyStore{}).ServeHTTP(w, storyPost("/discussions/2/comments", url.Values{"body": {"a reply"}, "parent_id": {"1"}}, true))
+	New(newStoryStore()).ServeHTTP(w, storyPost("/discussions/2/comments", url.Values{"body": {"a reply"}, "parent_id": {"1"}}, true))
+}
+
+// StoryHttpSetStatusPartial replays a partial status toggle: the mux
+// answers the re-rendered issue article — badge, meta and flipped button
+// — that replace mode swaps over .issue-detail.
+func StoryHttpSetStatusPartial(w http.ResponseWriter, r *http.Request) {
+	New(newStoryStore()).ServeHTTP(w, storyPost("/issues/2/status", url.Values{"status": {"closed"}}, true))
+}
+
+// StoryHttpSetStatusRedirect replays the same POST without X-Partial —
+// the unchanged 303 PRG path.
+func StoryHttpSetStatusRedirect(w http.ResponseWriter, r *http.Request) {
+	New(newStoryStore()).ServeHTTP(w, storyPost("/issues/2/status", url.Values{"status": {"closed"}}, false))
+}
+
+// StoryHttpSetCommentAnswerPartial replays a partial answer mark on the
+// Q&A fixture: since marking moves the badge, the swap fragment carries
+// two <li>s — the newly marked comment 2 and comment 1 losing the mark —
+// each self-targeting by id.
+func StoryHttpSetCommentAnswerPartial(w http.ResponseWriter, r *http.Request) {
+	New(newStoryStore()).ServeHTTP(w, storyPost("/discussions/2/comments/2/answer", url.Values{"answer": {"1"}}, true))
+}
+
+// StoryHttpSetCommentAnswerRedirect replays the same POST without
+// X-Partial — the unchanged 303 #comment-N path.
+func StoryHttpSetCommentAnswerRedirect(w http.ResponseWriter, r *http.Request) {
+	New(newStoryStore()).ServeHTTP(w, storyPost("/discussions/2/comments/2/answer", url.Values{"answer": {"1"}}, false))
 }
 
 // StoryHttpApp routes the real incoming request through the app's mux.
@@ -606,5 +702,5 @@ func StoryHttpCreateDiscussionReplyPartial(w http.ResponseWriter, r *http.Reques
 // partial-submit.js (fetch → fragment → DOM swap) to run end to end
 // without a database.
 func StoryHttpApp(w http.ResponseWriter, r *http.Request) {
-	New(storyStore{}).ServeHTTP(w, r)
+	New(newStoryStore()).ServeHTTP(w, r)
 }

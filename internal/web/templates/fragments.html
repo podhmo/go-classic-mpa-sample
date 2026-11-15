@@ -3,6 +3,65 @@
    handlers render the same defines standalone when the request carries
    X-Partial, so the swapped-in markup is byte-identical to a full reload. */}}
 
+{{define "issue_article"}}
+{{/* The whole issue card: badge, meta and the action row all change when
+   the status toggles, so the smallest correct swap unit is the article
+   itself (partial-submit.js replace mode — a single node without an id
+   falls back to data-partial-target=".issue-detail"). The status forms
+   ride the same fetch machinery the comment forms use. */}}
+<article class="card issue-detail">
+  <header class="issue-detail-head">
+    <div class="issue-title-row">
+      <span class="badge badge-{{.Issue.Status}}">{{if eq .Issue.Status "open"}}Open{{else}}Closed{{end}}</span>
+      <h1>{{.Issue.Title}} <span class="issue-num">#{{.Issue.ID}}</span></h1>
+    </div>
+    {{if .Issue.Labels}}
+    <div class="issue-labels">
+      {{range .Issue.Labels}}
+      <a class="label-badge" style="--label-color: {{.Color}}" href="/issues?status=all&amp;label={{.ID}}">{{.Name}}</a>
+      {{end}}
+    </div>
+    {{end}}
+    <p class="issue-meta">
+      Opened by {{authorName .Issue.Author}} <time datetime="{{.Issue.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .Issue.CreatedAt}}</time>
+      · Last updated <time datetime="{{.Issue.UpdatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .Issue.UpdatedAt}}</time>
+    </p>
+  </header>
+
+  {{if .Issue.Body}}
+  <div class="issue-body markdown-body">{{markdown .Issue.Body}}</div>
+  {{else}}
+  <div class="issue-body issue-body-empty"><em>No description provided.</em></div>
+  {{end}}
+
+  <div class="issue-actions">
+    <a class="btn" href="/issues/{{.Issue.ID}}/edit">Edit</a>
+    {{if eq .Issue.Status "open"}}
+    <form method="post" action="/issues/{{.Issue.ID}}/status" class="inline-form" data-partial data-partial-mode="replace" data-partial-target=".issue-detail" data-partial-announce="Issue closed.">
+      <input type="hidden" name="status" value="closed">
+      <button type="submit" class="btn">Close issue</button>
+    </form>
+    {{else}}
+    <form method="post" action="/issues/{{.Issue.ID}}/status" class="inline-form" data-partial data-partial-mode="replace" data-partial-target=".issue-detail" data-partial-announce="Issue reopened.">
+      <input type="hidden" name="status" value="open">
+      <button type="submit" class="btn">Reopen issue</button>
+    </form>
+    {{end}}
+    <button type="button" class="btn btn-danger delete-open" commandfor="delete-dialog" command="show-modal">Delete</button>
+    <a class="btn btn-danger delete-fallback" href="/issues/{{.Issue.ID}}/delete">Delete</a>
+  </div>
+
+  <dialog id="delete-dialog" class="confirm-dialog" closedby="any" aria-labelledby="delete-dialog-title" aria-describedby="delete-dialog-desc">
+    <h2 id="delete-dialog-title">Delete issue #{{.Issue.ID}}?</h2>
+    <p id="delete-dialog-desc">This permanently removes <strong>{{.Issue.Title}}</strong> and all of its comments. This action cannot be undone.</p>
+    <form method="post" action="/issues/{{.Issue.ID}}/delete" class="form-actions">
+      <button type="button" class="btn" commandfor="delete-dialog" command="close" autofocus>Cancel</button>
+      <button type="submit" class="btn btn-danger">Delete issue</button>
+    </form>
+  </dialog>
+</article>
+{{end}}
+
 {{define "issue_comment"}}
 <li class="card comment" id="comment-{{.ID}}">
   <header class="comment-meta">
@@ -43,7 +102,7 @@
   <div class="comment-body markdown-body">{{markdown .C.Body}}</div>
   <div class="comment-actions">
     {{if eq .Discussion.Category.Format "qa"}}
-    <form method="post" action="/discussions/{{.Discussion.ID}}/comments/{{.C.ID}}/answer" class="inline-form">
+    <form method="post" action="/discussions/{{.Discussion.ID}}/comments/{{.C.ID}}/answer" class="inline-form" data-partial data-partial-mode="replace" data-partial-target="#comment-{{.C.ID}}" data-partial-announce="Answer updated.">
       {{/* Per-comment controls repeat with identical looks on every row,
          so each gets an accessible name carrying the comment id (the same
          pattern the copy-link button already uses). The visible label
@@ -66,6 +125,26 @@
     {{range .C.Replies}}{{template "discussion_reply" .}}{{end}}
   </ol>
 </li>
+{{end}}
+
+{{define "discussion_meta"}}
+{{/* The discussion header meta line, carried as a swap node: marking an
+   answer bumps discussion.updated_at, so the fragment re-renders this
+   too. It self-targets by id in the client's replace mode. */}}
+<p class="issue-meta" id="discussion-meta">
+  Opened by {{authorName .Author}} <time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .CreatedAt}}</time>
+  · Last updated <time datetime="{{.UpdatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .UpdatedAt}}</time>
+</p>
+{{end}}
+
+{{define "discussion_comment_swap"}}
+{{/* Answer-mark swaps: marking a second comment moves the mark, so the
+   response carries every changed <li> — the toggled comment and, when the
+   mark moved, the previously-marked one — plus the header meta (the store
+   bumps discussion.updated_at). Each node self-targets by its id in the
+   client's replace mode. */}}
+{{template "discussion_meta" .Discussion}}
+{{range .Comments}}{{template "discussion_comment" (dict "Discussion" $.Discussion "C" .)}}{{end}}
 {{end}}
 
 {{define "discussion_reply"}}

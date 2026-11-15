@@ -134,6 +134,52 @@ func TestDiscussionDetailRendersThreadAndAnswer(t *testing.T) {
 	}
 }
 
+// Phase 2 of the partial-update contract: a partial answer POST swaps
+// <li>s in place instead of appending. Since marking moves the badge, the
+// fragment carries the toggled comment AND the previous mark holder, each
+// self-targeting by id.
+func TestPartialSetCommentAnswerContract(t *testing.T) {
+	srv, f := newTestServer(t)
+	qa := f.addDiscussion("QA target", "b", 2, time.Now())
+	c1, _ := f.CreateDiscussionComment(t.Context(), qa.ID, 0, "first", 0)
+	c2, _ := f.CreateDiscussionComment(t.Context(), qa.ID, 0, "second", 0)
+	if err := f.SetCommentAnswer(t.Context(), qa.ID, c1, true); err != nil {
+		t.Fatal(err)
+	}
+	partial := map[string]string{"X-Partial": "1"}
+
+	resp := postFormWithHeaders(t,
+		srv.URL+"/discussions/"+itoa(qa.ID)+"/comments/"+itoa(c2)+"/answer",
+		url.Values{"answer": {"1"}}, partial)
+	body := getBody(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("partial answer POST status = %d, want 200", resp.StatusCode)
+	}
+	// The moved mark: c2's <li> is marked, c1's is re-rendered unmarked —
+	// and the header meta rides along since marking bumps updated_at.
+	for _, want := range []string{
+		`class="card comment" id="comment-` + itoa(c1) + `"`,
+		`class="card comment comment-answer" id="comment-` + itoa(c2) + `"`,
+		`aria-label="Unmark answer on comment ` + itoa(c2) + `"`,
+		`class="issue-meta" id="discussion-meta"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("swap fragment missing %q", want)
+		}
+	}
+	if strings.Contains(body, "<!DOCTYPE") {
+		t.Error("partial response must be a fragment, not a full page")
+	}
+
+	// Without X-Partial the same POST keeps the classic 303 PRG.
+	resp = postForm(t, noRedirectClient(),
+		srv.URL+"/discussions/"+itoa(qa.ID)+"/comments/"+itoa(c2)+"/answer",
+		url.Values{"answer": {"0"}})
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("plain answer POST status = %d, want 303", resp.StatusCode)
+	}
+}
+
 func TestDiscussionDetailOpenCategoryHasNoAnswerButton(t *testing.T) {
 	srv, f := newTestServer(t)
 	d := f.addDiscussion("Open cat", "body", 1, time.Now())

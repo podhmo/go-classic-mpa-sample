@@ -310,6 +310,23 @@ func (h *handler) setStatus(w http.ResponseWriter, r *http.Request) {
 		h.issueError(w, r, err)
 		return
 	}
+	if wantsPartial(r) {
+		// The swap fragment is the whole article — badge, timestamps and
+		// the flipped toggle button all change at once. GetIssue returns
+		// the true post-state: the store bumps updated_at only when the
+		// status actually changes, so a no-op toggle must echo the stored
+		// timestamp, not time.Now().
+		issue, err := h.store.GetIssue(r.Context(), id)
+		if err != nil {
+			h.issueError(w, r, err)
+			return
+		}
+		h.r.renderFragment(w, "issue_detail", "issue_article", http.StatusOK, issueDetailPage{
+			Issue: issue,
+			User:  userFromContext(r.Context()),
+		})
+		return
+	}
 	http.Redirect(w, r, issueURL(id), http.StatusSeeOther)
 }
 

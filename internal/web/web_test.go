@@ -234,8 +234,12 @@ func (f *fakeStore) SetIssueStatus(_ context.Context, id int64, status string) e
 	if !ok {
 		return store.ErrNotFound
 	}
-	is.Status = status
-	is.UpdatedAt = time.Now()
+	// Same contract as the real store: updated_at bumps only on change,
+	// so a no-op status post leaves the timestamp alone.
+	if is.Status != status {
+		is.Status = status
+		is.UpdatedAt = time.Now()
+	}
 	return nil
 }
 
@@ -1109,6 +1113,57 @@ func TestToggleStatus(t *testing.T) {
 	got2, _ := f.GetIssue(context.Background(), 1)
 	if got2.Status != store.StatusOpen {
 		t.Fatalf("status = %q, want open", got2.Status)
+	}
+}
+
+// Phase 2 of the partial-update contract: a partial status POST answers
+// the re-rendered issue article — badge, meta and the flipped toggle —
+// which the client swaps over .issue-detail (replace mode).
+func TestPartialSetStatusContract(t *testing.T) {
+	srv, f := newTestServer(t)
+	f.addIssue("Toggle me", "", store.StatusOpen, time.Now())
+	partial := map[string]string{"X-Partial": "1"}
+
+	resp := postFormWithHeaders(t, srv.URL+"/issues/1/status",
+		url.Values{"status": {"closed"}}, partial)
+	body := getBody(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("partial status POST status = %d, want 200", resp.StatusCode)
+	}
+	for _, want := range []string{
+		`<article class="card issue-detail">`,
+		`badge-closed`,
+		`name="status" value="open"`,
+		"Reopen issue",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("status swap fragment missing %q", want)
+		}
+	}
+	if strings.Contains(body, "<!DOCTYPE") {
+		t.Error("partial response must be a fragment, not a full page")
+	}
+	got, _ := f.GetIssue(context.Background(), 1)
+	if got.Status != store.StatusClosed {
+		t.Fatalf("status = %q, want closed", got.Status)
+	}
+
+	// A no-op toggle (closed on already-closed) must NOT show a fresh
+	// timestamp: the store leaves updated_at alone, so the fragment
+	// echoes the stored value — not time.Now().
+	resp2 := postFormWithHeaders(t, srv.URL+"/issues/1/status",
+		url.Values{"status": {"closed"}}, partial)
+	body2 := getBody(t, resp2)
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("no-op partial status POST status = %d, want 200", resp2.StatusCode)
+	}
+	// Format the stored value the way the template does — in the time's
+	// own zone, not forced to UTC. A non-UTC zone renders "+09:00", which
+	// html/template escapes to &#43; in the attribute, so normalize the
+	// body before comparing (works in any local zone).
+	stamp := got.UpdatedAt.Format("2006-01-02T15:04:05Z07:00")
+	if !strings.Contains(strings.ReplaceAll(body2, "&#43;", "+"), `datetime="`+stamp+`"`) {
+		t.Errorf("no-op toggle fragment must keep stored updated_at %q", stamp)
 	}
 }
 
