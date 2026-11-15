@@ -68,8 +68,8 @@ ALTER TABLE comments ADD COLUMN author_id INTEGER REFERENCES users(id);
   `user_version` を読み、不足分のマイグレーション関数を順に適用する。
   今後の変更すべてに通用する形になり、discussions 実装もこの線に乗せられる。
 
-推奨は **B**。初めて migration の仕組みを持つ機会として `user_version` を
-導入し、「version N → N+1 の移行関数の列」を store に持たせる。
+**B に決定済み**（2026-11-15 確認）。初めて migration の仕組みを持つ機会として
+`user_version` を導入し、「version N → N+1 の移行関数の列」を store に持たせる。
 新規 DB でも同じ関数を辿るので「初期化と移行が同じ経路」になる
 （既存の「`init` サブコマンド＝冪等な検証ステップ」の意味も維持できる）。
 
@@ -88,10 +88,9 @@ ALTER TABLE comments ADD COLUMN author_id INTEGER REFERENCES users(id);
   `golang.org/x/crypto` の `bcrypt` か `argon2id` を使う。x/crypto はフレーム
   ワークでなく準公式の低レイヤライブラリなので、リポジトリの「標準ライブラリ
   中心・フレームワーク非依存」方針と整合する。
-- 推奨は **argon2id**（現代的デフォルト）。ハッシュ文字列は PHC 形式
+- **argon2id に決定済み**（2026-11-15 確認）。ハッシュ文字列は PHC 形式
   （`$argon2id$v=19$m=...,t=...,p=...$salt$hash`）でパラメータ埋め込みにし、
-  将来のパラメータ変更を検証時に読み取れる形にする。bcrypt なら `GenerateFromPassword`
-  で同様にコスト埋め込み。どちらでも動くが選定は実装時に固定。
+  将来のパラメータ変更を検証時に読み取れる形にする。
 - 照合は `subtle` 系の定数時間比較（x/crypto の verify 関数が内蔵）。
 
 ### セッション
@@ -112,7 +111,7 @@ ALTER TABLE comments ADD COLUMN author_id INTEGER REFERENCES users(id);
 
 | 案 | 内容 | 評価 |
 |---|---|---|
-| A. 自己登録（/register） | 誰でも name+password で作成 | **推奨**。ローカルアプリに spam 概念はなく、権限も絡まないので開いてよい。GitHub 的な UX でもある |
+| A. 自己登録（/register） | 誰でも name+password で作成 | **これに決定済み**（2026-11-15 確認）。ローカルアプリに spam 概念はなく、権限も絡まないので開いてよい。GitHub 的な UX でもある |
 | B. seed の固定ユーザー | 事前定義ユーザーのみ | 管理 UI 不要だが増やせない。「識別」の要求には行き過ぎ |
 | C. 最初の1人 + 招待制 | admin がユーザーを招待 | 権限モデルを持たない今の構造では意味をなさない |
 
@@ -180,7 +179,9 @@ POST /register          作成 → 自動的にログイン状態で 303 → /is
 
 1. **Phase 1（認証と記録）**: `user_version` マイグレーション機構 + users/sessions +
    register/login/logout + middleware + 投稿時の author_id 記録 + 表示。
-   seed にデモユーザー（例: `demo`/`demo` 的な固定、あるいはシードなし）も検討。
+   seed にデモユーザー 1 人を入れる（初回起動ですぐログインできる形にする —
+   2026-11-15 確認）。パスワードは固定の簡単なもの（例: `demo`）でよいが、
+   seed でハッシュを生成して埋め込むこと。
 2. **Phase 2（discussions 連携）**: discussions 実装時に author 列を初めから入れ、
    投稿者表示を揃える。
 3. **Future work**: 権限制御（author 以外の編集・削除・answer mark 禁止）、
@@ -188,15 +189,11 @@ POST /register          作成 → 自動的にログイン状態で 303 → /is
 
 ## 残課題・未決事項
 
-- **マイグレーション機構の形**: `user_version` 方式（推奨）の具体的なレイアウト
+- **マイグレーション機構の形**: `user_version` 方式（決定済み）の具体的なレイアウト
   — version 一覧を `[]func(tx)` で持つか、DDL 文字列の列で持つか。
-- **パスワードアルゴリズムの確定**: argon2id か bcrypt か。x/crypto 依存の
-  追加として decisions.md に記録する。
 - **name の正規化**: `COLLATE NOCASE` を列に付けるか、登録時に正規化して保存か。
 - **ログイン前の遷移先**: `?next=` をフォームに持たせて投稿フォーム直前に戻すか
   （issue 詳細 → login → 元の issue）。`/issues` 固定でも動くが next が自然。
-- **demo ユーザーを seed するか**: デモデータと同じく「初回のみ」か、ユーザーは
-  seed せず register させるか。起動直後の体験を優先するなら1人入れる。
 - **ブルートフォース対策の強度**: 固定遅延のみか、失敗カウンタまで持つか。
 - **「anonymous」の表記**: 固定英語でよいか、設定可能にするか。
 - **複数セッションの扱い**: 同一ユーザーの複数ログインを許可する（推奨・普通）
