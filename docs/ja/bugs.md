@@ -18,6 +18,7 @@
 | 4 | nit | 修正済 | `GET /static/` がディレクトリリスティングを返す | `FileServerFS` の挙動。対応: `GET /static/app.css` を `ServeFileFS` で明示登録、`/static/` は 404 |
 | 5 | nit | 修正済 | 変化のない status POST が `updated_at` を更新 | closed issue に `status=closed` で `updated_at` が動いた。対応: `updated_at = CASE WHEN status != ? THEN ? ELSE updated_at END`（CASE を status 代入より前に配置して評価順の曖昧さを回避）。回帰テスト追加済 |
 | 6 | nit | 修正済 | コメント投稿が issue の `updated_at` を更新しない | GitHub 慣習では bump する。対応: `CreateComment` を tx 化（存在確認の TOCTOU も解消）し同一 tx で `issues.updated_at` 更新。回帰テスト追加済 |
+| 7 | nit | 修正済 | `multipart/form-data` の POST はフィールドを読めず 422 になる | 当初「`ParseForm` が multipart を PostForm に入れない仕様」として wontfix 記録していたが、minigo#1084 の調査で実因が判明: `parseForm` が `r.ParseForm()` を無条件に呼ぶと `r.Form` が非 nil になり、`PostFormValue` が `ParseMultipartForm` を起動しない（コンパイル済みでも同じ標準挙動）。対応: `parseForm` で media type を見て `multipart/form-data` なら `r.ParseMultipartForm` を呼ぶ |
 | 8 | minor | 修正済 | 存在しない issue への edit POST が検証エラー時 422 フォームを返す | `POST /issues/999/edit -d 'title='` → 存在しない issue の編集フォームが出ていた。対応: バリデーション前に `GetIssue` で存在確認 → 404。回帰テスト追加済 |
 | 9 | nit | 修正済 | 詳細ページのラベルリンクが `status` を保持しない | `issue_detail.html` が `/issues?label=N` 固定。closed issue から飛ぶと open フィルタで自身が見えない。対応: `?status=all&label=N` |
 | 11 | nit | 修正済 | `-db ""` で無名 ephemeral DB が開かれデータが黙って消える | 対応: main.go で空文字を `log.Fatal` |
@@ -39,7 +40,6 @@
 |---|--------|------|------|------|
 | 3' | minor | wontfix | 405 のボディが素の text/plain | 既知パスへの誤メソッド（PUT/DELETE 等）は Go mux の自動 405（`Allow` 付き）でステータス自体は正しい。styled 化するには mux をラップする複雑さが増すので見送り |
 | 5' | nit | wontfix | `UpdateIssue` は同一内容でも `updated_at` を bump | フォーム送信=更新意思ありと解釈。GitHub も同様の挙動 |
-| 7 | nit | wontfix | `multipart/form-data` の POST は 422 "Title is required" になる | `ParseForm` が multipart を PostForm に入れない仕様。フォームは multipart を使わないので実害なし。fail closed で安全 |
 | 10 | info | wontfix | 検索の `lower()` は ASCII のみ（`Ä`↔`ä` 不一致） | SQLite の `lower()` の制限。ローカルデモとして許容 |
 | 13' | info | wontfix | `fmtTime` が分単位のため同分内の updated_at 変化が見えない | 表示解像度の話（この項目に同居していた「CSP 未設定」は #24 で解消済み） |
 | 16 | nit | wontfix | 空白のみのコメントのドラフトが trim されて空で再表示される | E2Eテストで確認（E2Eエージェント指摘）: `createComment` が `strings.TrimSpace` 後の値を `CommentDraft` に使うため `"   "` 投稿失敗時は空の textarea になる。「入力内容を保持」の字面どおりではないが、空白のみは意味を持たないため実害なし。挙動はテストで固定済（`integration_test.go`） |
