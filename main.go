@@ -7,6 +7,9 @@
 // The "init" subcommand (or the -init flag) prepares the database file and
 // schema, refreshes planner statistics, prints a report, and exits without
 // starting the server.
+//
+// The gh-like CLI is a separate binary, cmd/issues — clients of the web
+// API should not have the server embedded in their tool.
 package main
 
 import (
