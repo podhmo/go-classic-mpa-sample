@@ -479,6 +479,25 @@ gh pr comment 123 --body "Settings page after the fix." --attach ./settings-afte
 
 See [references/pr-attachments.md](references/pr-attachments.md) for alt text, inline references, size limits and attaching test artifacts from CI.
 
+## Testing partial updates (fetch + DOM swap)
+
+- Every `playwright-cli` invocation pays ~700ms of startup. You cannot
+  catch transient in-flight states (busy/disabled/progress) with separate
+  commands — bundle act + mid-flight `evaluate` + `screenshot` + settle
+  into one `run-code --filename` script. Real key events work inside it:
+  `page.locator('#x').press('Control+Enter')`.
+- Routes registered inside `run-code` via `page.route()` are invisible to
+  `route-list`/`unroute` — clear them with `run-code "async page =>
+  page.unrouteAll()"`.
+- Snapshot refs go stale every time the page swaps DOM (a 422 form swap
+  replaces the element). Re-run `snapshot` after each swap before
+  `fill`/`click`.
+- To make a fetch observable, delay it: `page.route('**/comments', async
+  r => { await new Promise(t=>setTimeout(t,2500)); r.continue(); })`.
+- Headless-by-default on this box. To watch/record the run, open with a
+  config that sets `headless:false`, e.g.
+  `playwright-cli open --config=/tmp/pw-headed.json <url>`.
+
 ## Specific tasks
 
 * **Running and Debugging Playwright tests** [references/playwright-tests.md](references/playwright-tests.md)
