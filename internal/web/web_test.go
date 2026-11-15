@@ -458,6 +458,11 @@ func (f *fakeStore) UpdateDiscussion(_ context.Context, id int64, in store.Discu
 	d.Body = in.Body
 	d.Category = *cat
 	d.UpdatedAt = time.Now()
+	if cat.Format != store.CategoryFormatQA {
+		for _, c := range f.dcomments[id] {
+			c.IsAnswer = false
+		}
+	}
 	return nil
 }
 

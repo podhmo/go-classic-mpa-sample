@@ -36,16 +36,27 @@ type discussionListPage struct {
 // discussionDetailPage is the view model for GET /discussions/{id}.
 // CommentDraft/CommentError carry a failed comment submission back into the
 // form; ReplyDraftID does the same for a failed reply so the <details> on
-// that comment can reopen.
+// that comment can reopen. CommentCount includes replies, since the heading
+// counts every comment shown on the page.
 type discussionDetailPage struct {
 	Title        string
 	Discussion   *store.Discussion
 	Comments     []*store.DiscussionComment
+	CommentCount int
 	CommentDraft string
 	CommentError string
 	ReplyDraftID int64 // parent comment ID whose reply failed validation
 	Section      string
 	User         *store.User
+}
+
+// countDiscussionComments counts top-level comments plus their replies.
+func countDiscussionComments(comments []*store.DiscussionComment) int {
+	n := len(comments)
+	for _, c := range comments {
+		n += len(c.Replies)
+	}
+	return n
 }
 
 // discussionFormPage is the view model for both the new-discussion and
@@ -193,11 +204,12 @@ func (h *handler) showDiscussion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.r.renderDiscussionDetail(w, http.StatusOK, discussionDetailPage{
-		Title:      fmt.Sprintf("#%d %s", discussion.ID, discussion.Title),
-		Discussion: discussion,
-		Comments:   comments,
-		Section:    "discussions",
-		User:       userFromContext(r.Context()),
+		Title:        fmt.Sprintf("#%d %s", discussion.ID, discussion.Title),
+		Discussion:   discussion,
+		Comments:     comments,
+		CommentCount: countDiscussionComments(comments),
+		Section:      "discussions",
+		User:         userFromContext(r.Context()),
 	})
 }
 
@@ -322,33 +334,40 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 	}
 	body := strings.TrimSpace(r.PostFormValue("body"))
 	var parentID int64
+	var errMsg string
 	if v := r.PostFormValue("parent_id"); v != "" {
+		// A present but malformed parent_id must not degrade to a
+		// top-level comment — the poster asked for a reply.
 		if pid, err := strconv.ParseInt(v, 10, 64); err == nil && pid > 0 {
 			parentID = pid
+		} else {
+			errMsg = "Invalid reply target."
+		}
+	}
+	if errMsg == "" {
+		switch {
+		case body == "":
+			errMsg = "Comment is required."
+		case utf8.RuneCountInString(body) > maxBodyRunes:
+			errMsg = fmt.Sprintf("Comment must be %d characters or fewer.", maxBodyRunes)
 		}
 	}
 
-	var errMsg string
-	switch {
-	case body == "":
-		errMsg = "Comment is required."
-	case utf8.RuneCountInString(body) > maxBodyRunes:
-		errMsg = fmt.Sprintf("Comment must be %d characters or fewer.", maxBodyRunes)
-	}
-
-	commentID, err := h.store.CreateDiscussionComment(r.Context(), id, parentID, body, authorIDFromContext(r.Context()))
-	switch {
-	case err == nil:
-		http.Redirect(w, r, fmt.Sprintf("%s#comment-%d", discussionURL(id), commentID), http.StatusSeeOther)
-		return
-	case errors.Is(err, store.ErrInvalidParent):
-		errMsg = "Replies can only be added to top-level comments."
-	case errors.Is(err, store.ErrNotFound):
-		h.notFound(w, r)
-		return
-	default:
-		h.internalError(w, r, err)
-		return
+	if errMsg == "" {
+		commentID, err := h.store.CreateDiscussionComment(r.Context(), id, parentID, body, authorIDFromContext(r.Context()))
+		switch {
+		case err == nil:
+			http.Redirect(w, r, fmt.Sprintf("%s#comment-%d", discussionURL(id), commentID), http.StatusSeeOther)
+			return
+		case errors.Is(err, store.ErrInvalidParent):
+			errMsg = "Replies can only be added to top-level comments."
+		case errors.Is(err, store.ErrNotFound):
+			h.notFound(w, r)
+			return
+		default:
+			h.internalError(w, r, err)
+			return
+		}
 	}
 
 	// Re-render the detail page with the error. ReplyDraftID reopens the
@@ -383,6 +402,7 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 		Title:        fmt.Sprintf("#%d %s", discussion.ID, discussion.Title),
 		Discussion:   discussion,
 		Comments:     comments,
+		CommentCount: countDiscussionComments(comments),
 		CommentDraft: body,
 		CommentError: errMsg,
 		ReplyDraftID: parentID,

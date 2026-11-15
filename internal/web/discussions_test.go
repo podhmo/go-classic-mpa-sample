@@ -220,6 +220,62 @@ func TestDiscussionCommentReplyFlow(t *testing.T) {
 	}
 }
 
+func TestDiscussionCommentValidation(t *testing.T) {
+	srv, f := newTestServer(t)
+	d := f.addDiscussion("D", "b", 1, time.Now())
+
+	// empty body must 422 and NOT be saved
+	resp := postForm(t, srv.Client(), srv.URL+"/discussions/"+itoa(d.ID)+"/comments", url.Values{
+		"body": {"   "},
+	})
+	body := getBody(t, resp)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("empty comment: status = %d, want 422", resp.StatusCode)
+	}
+	if !strings.Contains(body, "Comment is required") {
+		t.Error("expected comment validation error")
+	}
+	if cs, _ := f.ListDiscussionComments(t.Context(), d.ID); len(cs) != 0 {
+		t.Fatalf("empty comment was saved: %+v", cs)
+	}
+
+	// malformed parent_id must 422, not degrade to a top-level post
+	resp = postForm(t, srv.Client(), srv.URL+"/discussions/"+itoa(d.ID)+"/comments", url.Values{
+		"body": {"orphan"}, "parent_id": {"abc"},
+	})
+	getBody(t, resp)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("bad parent_id: status = %d, want 422", resp.StatusCode)
+	}
+	resp = postForm(t, srv.Client(), srv.URL+"/discussions/"+itoa(d.ID)+"/comments", url.Values{
+		"body": {"orphan"}, "parent_id": {"-5"},
+	})
+	getBody(t, resp)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("negative parent_id: status = %d, want 422", resp.StatusCode)
+	}
+	if cs, _ := f.ListDiscussionComments(t.Context(), d.ID); len(cs) != 0 {
+		t.Fatalf("malformed reply was saved as top-level: %+v", cs)
+	}
+}
+
+func TestDiscussionCommentCountIncludesReplies(t *testing.T) {
+	srv, f := newTestServer(t)
+	d := f.addDiscussion("D", "b", 1, time.Now())
+	cid, _ := f.CreateDiscussionComment(t.Context(), d.ID, 0, "top", 0)
+	if _, err := f.CreateDiscussionComment(t.Context(), d.ID, cid, "reply", 0); err != nil {
+		t.Fatal(err)
+	}
+	resp, err := srv.Client().Get(srv.URL + "/discussions/" + itoa(d.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := getBody(t, resp)
+	if !strings.Contains(body, "Comments (2)") {
+		t.Error("heading should count replies too")
+	}
+}
+
 func TestSetCommentAnswerFlow(t *testing.T) {
 	srv, f := newTestServer(t)
 	d := f.addDiscussion("QA", "b", 2, time.Now())

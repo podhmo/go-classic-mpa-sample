@@ -48,7 +48,7 @@
 </article>
 
 <section id="comments" class="comments">
-  <h2>Comments{{if .Comments}} ({{len .Comments}}){{end}}</h2>
+  <h2>Comments{{if .CommentCount}} ({{.CommentCount}}){{end}}</h2>
 
   {{if .Comments}}
   <ol class="comment-list" role="list">

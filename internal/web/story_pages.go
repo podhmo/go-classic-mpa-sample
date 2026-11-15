@@ -376,10 +376,11 @@ func StoryDiscussionListEmpty() {
 // top-level comment with a nested reply.
 func StoryDiscussionDetail() {
 	renderDiscussionDetail(http.StatusOK, discussionDetailPage{
-		Title:      "#2 How do custom labels get their color?",
-		Discussion: storyDiscussion,
-		Comments:   storyDComments,
-		Section:    "discussions",
+		Title:        "#2 How do custom labels get their color?",
+		Discussion:   storyDiscussion,
+		Comments:     storyDComments,
+		CommentCount: countDiscussionComments(storyDComments),
+		Section:      "discussions",
 	})
 }
 
