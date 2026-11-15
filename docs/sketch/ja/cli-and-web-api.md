@@ -4,6 +4,12 @@
 ただしローカルだけで使えるのではうれしくないかもしれない。その場合どうするか、やはり
 Web API か」という問いに対する回答を設計する。
 
+> **2026-11-16 再検討**: accounts Phase 1（ログイン+投稿者識別）・discussions・
+> 部分更新（`X-Partial` fragment）の実装後に再評価。変化した前提は本文の該当箇所を
+> 更新した。結論（JSON Web API + 薄い CLI、単一バイナリ + サブコマンド、段階導入）は
+> 変わらないが、**最大の論点だった actor 問題は accounts Phase 1 で半分解けた**ため
+> 認証周りを書き直している。
+
 ## 問いの整理
 
 1. **gh のような CLI** — `gh issue list` / `gh issue view 3` / `gh issue create` のように、
@@ -33,18 +39,29 @@ Web API か」という問いに対する回答を設計する。
 ## 現状の構造（このリポジトリ）
 
 - `main.go`: `-addr`/`-db` フラグ + `init` サブコマンド（前例として重要）。
-- `internal/store`: `*store.Store` が SQLite に対する全操作を持つ。
-- `internal/web`: **consumer 側 `Store` interface（9メソッド）**を宣言し `*store.Store`
-  が構造的に満たす。ハンドラはこの interface だけを知る。
-- 認証なし・`127.0.0.1` bind が前提（decisions.md「意図的に実装しないもの」）。
+- `internal/store`: `*store.Store` が SQLite に対する全操作を持つ。スキーマは
+  `PRAGMA user_version` のマイグレーション機構で v3 に到達
+  （v1=base、v2=accounts、v3=discussions）。
+- `internal/web`: **consumer 側 `Store` interface**を宣言し `*store.Store`
+  が構造的に満たす。ハンドラはこの interface だけを知る。メソッド数は初回メモ
+  時点の 9 から 25 に増えた（issues/comments/labels 9 + discussions 8 +
+  auth sessions/users 8、2026-11-16 時点）。
+- 認証は**識別のみ**実装済み（accounts Phase 1: `/register` `/login` `/logout`、
+  cookie session、投稿への `author_id` 記録。`internal/auth` に argon2id と
+  opaque token のプリミティブ）。authorization は未導入 — 匿名でも全機能が使え、
+  `127.0.0.1` bind 前提も変わらない。
 - `POST` は全て form + PRG。`PUT/PATCH/DELETE` は HTML フォームから出せないので
-  使っていない。
+  使っていない。ただし部分更新の導入で、`X-Partial: 1` 付き POST には 303/422 の
+  代わりに HTML fragment を返す分岐が同じルートに入った（`wantsPartial`、
+  partial-updates.md）。「1 ルートが応答の形をネゴる」先例はすでにある。
 
 ここで重要な観察: **`web.Store` interface は既に事実上の「service contract」である**。
 HTTP ハンドラがその消費者の1つ。CLI は「同じ契約の別の消費者」として追加でき、
 ローカルでは `*store.Store`、リモートでは HTTP クライアントが同じ interface を満たせば
 コマンド本体はどちらかを意識しない。新たな service 層を作る必要はない — 契約は
-すでに存在している。
+すでに存在している。（追記: 契約は広がったが、CLI が要るのはそのサブセット —
+issues/comments/labels、加えて discussions — だけ。Backend interface は CLI 側が
+必要な分だけ要求する consumer 側定義にすればよい。）
 
 ## 「ローカルだけではうれしくない」への選択肢
 
@@ -98,8 +115,8 @@ HTTP ハンドラがその消費者の1つ。CLI は「同じ契約の別の消�
   を持つ）。`issues` 裸起動=従来どおり serve、`issues issue list` 等=CLI。`init`
   サブコマンドの前例と同じ発想で、「シングルバイナリ動作」の価値も維持できる。
   欠点: `flag` が最初の位置引数で parse を止めるため、`os.Args[1]` による先回り
-  dispatch が必要になる（`issue`/`label`/`comment`/`api` を見て `cli.Run` に丸ごと
-  渡す）。`-init` フラグと `init` 位置引数の互換は残す。
+  dispatch が必要になる（`issue`/`label`/`comment`/`discussion`/`auth`/`api`
+  を見て `cli.Run` に丸ごと渡す）。`-init` フラグと `init` 位置引数の互換は残す。
 - **案2: `cmd/issues` 別バイナリ**（storybook 式）。flag 処理が素直で名前も `issues`
   コマンドとして自然。ただし storybook が別 module なのは minigo 依存を隔離する
   ためで、CLI は標準ライブラリだけで書けるので隔離の動機がない。配布物が 2 つに
@@ -119,6 +136,11 @@ issues issue close|reopen N
 issues issue delete N
 issues comment create N --body B
 issues label list
+issues discussion list|view|create|edit|delete   # v2 で増えたドメイン。
+                                                 # close/reopen は無い（discussions は閉じない）
+issues discussion comment create N --body B [--parent C]
+issues discussion answer N --comment C            # qa カテゴリの answer マーク
+issues auth token --user NAME                     # ローカルモード限定: ユーザー別 API token の発行（後述）
 issues api <path>            # 生 API への抜け道（gh api 相当）
 ```
 
@@ -154,33 +176,49 @@ issues api <path>            # 生 API への抜け道（gh api 相当）
   / `DELETE /issues/{id}` / `POST /issues/{id}/comments`）。ただし「チームが最初は
   HTML 動詞のミラーから入る」のも自然なので、status だけ POST のまま残す、くらいの
   折衷もありえる。ここは実装時に再確認したい論点。
-- **認証**: `Authorization: Bearer <ISSUES_API_TOKEN>` の**単一トークン**。
-  `crypto/subtle` で定数時間比較。**`ISSUES_API_TOKEN` 未設定なら `/api/v1` を
-  mount しない**（fail-closed: 認証なし API を localhost 以外に出さない）。これで
-  「認証なしローカルアプリ」の前提を壊さずに API は opt-in の deploy 判断にできる。
+  （追記: `X-Partial` 分岐で HTML の POST ルートが「303 か fragment か」をネゴる
+  先例ができた。fragment はページ内部向け、JSON API は外部クライアント向け —
+  応答の形は増えても用途が違うので分離の結論は変わらない。）
+- **認証**: `Authorization: Bearer <token>`。accounts Phase 1（users/sessions）が
+  できたので、実装度は 2 段階ある:
+  - **単一トークン（初回案・最小）**: `ISSUES_API_TOKEN` の env トークンを
+    `crypto/subtle` で定数時間比較。actor を特定できないので API 経由の書き込みは
+    全て anonymous 扱いになる。
+  - **ユーザー別トークン（actor を立てるならこちら）**: `api_tokens` テーブルに
+    `SHA-256(token) → user_id` を持つ。sessions テーブルの前例（平文は保存せず
+    ハッシュのみ）をそのまま踏襲でき、`auth.NewToken`/`auth.HashToken`
+    （`internal/auth`）も再利用できる。発行導線はローカルモード CLI の
+    `issues auth token --user NAME` が素直 — パスワード検証を HTTP に出さずに
+    済む。token→user_id が引けるので API 書き込みに author_id が立つ。
+  どちらでも **token が 1 つも無ければ `/api/v1` を mount しない**（fail-closed:
+  認証なし API を localhost 以外に出さない）のは同じ。「認証なしローカルアプリ」の
+  前提を壊さず opt-in の deploy 判断にできる。session cookie を API 認証に流用する
+  手もあるが、cookie session と API token は寿命と revoke の単位が違うので別物にする。
 - **API 認証だけでは公開時に足りない**: `/api/v1` にトークンを掛けても、同じ
   リスナーの HTML ルート（`/issues` 等）は無認証のまま — 閲覧・更新・削除が
   できる。サーバをリモート公開する場合の選択肢は、(a) アプリ本体は localhost bind
   のままにして `/api/v1` だけを別リスナーかリバースプロキシで公開する、
   (b) トークン設定時は HTML ルートにも同じ Bearer を要求する（ブラウザ UI まで
-  認証付きになる＝モデルが変わる）、(c) HTML に別の仕組み（セッション等）を足す。
+  認証付きになる＝モデルが変わる）、(c) HTML に別の仕組みを足す — こちらは
+  accounts Phase 1 の session cookie が既にあるので、「書き込み系にログイン必須」
+  の authorization を掛けるならその枠組みに乗る。
   (a) が「認証なしローカルアプリ」前提との整合が一番良い。
-- **認証と識別（actor）は別問題**: 現行スキーマは issues/comments に author 列を
-  持たず、コメントは「固定のローカルユーザー扱い」（prompts.md）と決められている
-  ため、**今は誰が書いたか・誰の担当かを表現できない**。Bearer 単一トークンは
-  「入ってよいか」の判定であって「誰が書いたか」の識別にはならない — API 経由の
-  全書き込みが同一 actor に潰れる。gh parity（`--author`/`--assignee`、コメントの
-  投稿者表示）を目指すなら actor の概念は避けて通れず、**ユーザー概念は API
-  認証とセットで決める**べき論点。最小の識別モデルは users テーブル +
-  ユーザーごとのトークン（token → user_id の対応表）で、issues/comments に
-  `author_id`、任意で `assignee_id` を足す。HTML 側はログインなしのまま「既定
-  ユーザー」として書き込ませる折衷が現行思想と整合する（anonymous write を
-  default user に帰属）。users 管理 UI まで作ると一気に大きくなるので、最初は
-  seed 投入の固定ユーザーでよい。
+- **認証と識別（actor）は別問題 — 2026-11-16 更新: 識別側は実装済み**。初回メモ
+  時点は「issues/comments に author 列を持たず actor を表現できない」が最大の論点
+  だったが、accounts Phase 1（migrateV2）で users/sessions が入り、issues/comments/
+  discussions/discussion_comments の全てが `author_id` を持つようになった
+  （NULL = anonymous。本メモが提案した「anonymous write を default user に帰属」とは
+  違い、匿名行は users に作らない方式が採られた — accounts.md）。残る論点は API 側の
+  credential 選択だけで、それが上記の単一トークン vs ユーザー別トークンの差分に
+  そのまま対応する（token→user_id を引けなければ API 書き込みは全て anonymous に
+  潰れ、gh parity の投稿者識別に届かない）。`assignee` は引き続き存在しない —
+  やるなら schema v4 の追加になる。
 - **CSRF**: `http.NewCrossOriginProtection` は `Sec-Fetch-Site`/`Origin` を送らない
   リクエストを通すので、CLI からの呼び出しは既存 middleware のままで動く想定
   （要実測）。Bearer 認証は ambient credential ではないので CSRF モデル自体も
-  変わらない。
+  変わらない。なお ambient credential としては session cookie（`SameSite=Lax`）が
+  既に存在する — HTML ルートは CrossOriginProtection + SameSite の二重防御済み。
+  `/api/v1` で cookie 認証を受け付けなければ経路は増えない。
 - **エラー形式**: `{"error": {"message": "...", "fields": {"title": "..."}}}`。
   ステータスは HTML 側と同じ意味論（404 not found / 422 validation / 400 bad input /
   201 create / 204 delete）。
@@ -188,14 +226,21 @@ issues api <path>            # 生 API への抜け道（gh api 相当）
   （`issue view` が 1 リクエストで済む。コメント数が増えたら `?limit=` や分離 endpoint
   で後追い対応）。
 - **ハンドラの共有**: HTML 側と API 側でバリデーションを二重実装しないよう、
-  `validateIssueInput` を「`IssueInput` 値を検証する関数」に分解して web/api 両方から
-  使う（現状は `*http.Request` から PostForm を読む形なので小リファクタが必要）。
+  `validateIssueInput`/`validateDiscussionInput` を「`*Input` 値を検証する関数」に
+  分解して web/api 両方から使う（現状はどちらも `*http.Request` から PostForm を
+  読む形なので小リファクタが必要）。
 
 ### 検証
 
 - API ハンドラは `StoryHttp*` story で storybook からプレビューできる（実ルーティング
   + 実ヘッダをリプレイする機構が既にある）。認証 middleware の挙動も story で固定
   できる。
+- **catch-all mount ができた**（partial-submit.js の fetch 検証のため導入）:
+  `cmd/storybook` は storybook chrome がクレームしない全リクエストを `StoryHttpApp`
+  story 経由で `web.New(storyStore)` の実 mux に流すので、storybook が「偽データの
+  全アプリインスタンス」として動く（`mux.Handle("/", b.appHandler())`）。`/api/v1`
+  を mux に載せれば、POST・ヘッダ・Bearer 認証を含む往復を storybook 起動中に
+  curl やブラウザから実在パスで試せる。
 - 実サーバ + curl / 実 CLI での E2E は verify-ui 系の流儀に乗る。
 
 ## 段階的導入（レガシーチームの道のりをなぞる）
@@ -207,7 +252,9 @@ issues api <path>            # 生 API への抜け道（gh api 相当）
   edit|close|reopen|delete` と `label list`。Backend は `*store.Store` 直結だけ。
   `--json` 出力まで入れる。ここまでで「gh 風」の見た目は完成、しかも認証問題ゼロ。
 - **Phase 2（API 追加）**: `/api/v1` + Bearer token（opt-in）。`internal/api` + DTO。
-  この時点で「認証なし前提」を decisions.md からどうずらすかを記録する。
+  「認証なし前提」は accounts Phase 1 で既にずれている（識別はある、authorization は
+  無い）ので、記録すべき論点は「API に誰の credential を通すか（単一 token か
+  `api_tokens` か）」と「fail-closed の起動条件」に絞られた。
 - **Phase 3（リモートモード）**: `internal/client` で `Backend` の HTTP 実装。
   `--server`/`--token`/`issues api`/`-w` を足して本当に gh ライクになる。
 - **Phase 4（仕上げ）**: `issue create --web`、`api` の `--method/--field`、
@@ -215,14 +262,21 @@ issues api <path>            # 生 API への抜け道（gh api 相当）
 
 ## 残課題・未決事項
 
-- **認証を先に決める（ユーザー確認済み・最重要論点）**: API を外に出すなら単一
-  トークンで足りるか、ユーザー概念（コメント投稿者・担当者）まで入れるか。現行
-  スキーマは author/担当者を表現できないため、actor を扱うならスキーマ変更を含む
-  大きめの論点になる（上記「認証と識別（actor）は別問題」参照）。
+- ~~**認証を先に決める（ユーザー確認済み・最重要論点）**: API を外に出すなら単一
+  トークンで足りるか、ユーザー概念まで入れるか~~ → **識別の土台は accounts Phase 1
+  で実装済み**（users/sessions/author_id）。残るのは API credential の粒度だけ:
+  単一 env トークン（最小・API 書き込みは anonymous に潰れる）か `api_tokens` の
+  ユーザー別トークン（author_id が立つ、gh parity に届く）か。後者なら
+  `issues auth token` 発行サブコマンドが Phase 1 に入る。
+- **discussions を API に含めるか**: v2 で増えたドメイン。`issue` と同形の
+  `discussion` サブコマンド群 + `/api/v1/discussions` を足すか、まず issues のみに
+  絞るか。契約・ルート・テンプレートは揃っているので追加分は機械的だが、
+  API surface を広げる判断は別途。
 - **PATCH/DELETE 化の線引き**: 上記のとおり実装時に再確認。
 - **ページネーション**: offset 方式のままでよいが `per_page` の上限を API 側でも
   設けるか。
-- **トークンの管理**: 単一 env トークン→複数トークン/DB 管理への拡張は future work。
+- **トークンの管理**: 単一 env トークン or `api_tokens` テーブル（token→user_id、
+  revoke は行削除 — sessions と同じ寿命設計が要る）。
 - **レート制限・監査ログ**: 公開するなら検討。ローカル/LAN 用途なら不要。
 - **`issues serve` を明示するか**: 裸起動=serve のままか、`serve` サブコマンドを
   用意して将来の CLI 拡張に備えるか。
