@@ -1401,6 +1401,36 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   margin-bottom: 8px;
 }
 
+/* <details> open/close animation (guide animate-to-intrinsic-sizes):
+   interpolate-size lets block-size transition 0 ↔ auto, ::details-content
+   is the browser-generated wrapper around everything but the <summary>.
+   content-visibility in the transition keeps the content rendered while
+   the closing animation plays. Unsupported browsers (no ::details-content
+   / interpolate-size) drop these rules and toggle instantly — same UX as
+   before. */
+:root {
+  interpolate-size: allow-keywords;
+}
+
+details.reply-details::details-content {
+  block-size: 0;
+  overflow: clip;
+  transition: block-size 0.22s ease, content-visibility 0.22s ease;
+  /* Separate declaration, not in the shorthand, so older engines keep
+     the working transitions (guide persistent-toast-notifications). */
+  transition-behavior: allow-discrete;
+}
+
+details.reply-details[open]::details-content {
+  block-size: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  details.reply-details::details-content {
+    transition: none;
+  }
+}
+
 .reply-form {
   padding: 12px;
   background: var(--bg);
