@@ -81,7 +81,6 @@ go run ./cmd/issues issue view 3
 go run ./cmd/issues comment create 3 --body "nice catch"
 go run ./cmd/issues discussion list
 go run ./cmd/issues auth token --user alice          # mint a per-user API token
-go run ./cmd/issues api /api/v1/issues -f q=bug      # raw escape hatch (gh-style -f/-F/-X)
 go run ./cmd/issues completion zsh                   # bash|zsh|fish
 ```
 
@@ -90,7 +89,9 @@ Two backends, selected automatically:
 - **local** (default): opens the SQLite file directly via `-db`/`ISSUES_DB`
   — no server needed. `auth token …` is local-only.
 - **remote**: `--server`/`--token` or `ISSUES_SERVER`/`ISSUES_TOKEN` talks
-  to `/api/v1`. The raw `api` command is remote-only.
+  to `/api/v1`. The raw escape hatch is remote-only —
+  `issues api /api/v1/issues -f q=bug` (gh-style `-f`/`-F`/`-X`; `-f`
+  fields become query params on GET, a JSON body otherwise).
 
 ## Test
 
