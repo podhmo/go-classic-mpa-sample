@@ -421,15 +421,26 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if partial {
-		// The fragment shows the comment as the client will see it after
-		// the swap; re-fetching the row would only repeat what we set.
-		h.r.renderFragment(w, "issue_detail", "issue_comment", http.StatusOK, &store.Comment{
-			ID:        commentID,
-			IssueID:   id,
-			Body:      body,
-			Author:    userFromContext(r.Context()),
-			CreatedAt: time.Now(),
-		})
+		// The fragment also carries the header meta as a data-swap node —
+		// the comment bumped updated_at, so the stale "Last updated" line
+		// must be re-rendered. GetIssue returns the true post-state.
+		issue, err := h.store.GetIssue(r.Context(), id)
+		if err != nil {
+			h.issueError(w, r, err)
+			return
+		}
+		// The comment <li> shows what the client will see after the swap;
+		// re-fetching the row would only repeat what we set.
+		h.r.renderFragment(w, "issue_detail", "issue_comment_append", http.StatusOK, dict(
+			"Issue", issue,
+			"Comment", &store.Comment{
+				ID:        commentID,
+				IssueID:   id,
+				Body:      body,
+				Author:    userFromContext(r.Context()),
+				CreatedAt: time.Now(),
+			},
+		))
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("%s#comment-%d", issueURL(id), commentID), http.StatusSeeOther)

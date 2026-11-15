@@ -1,6 +1,8 @@
 // Partial submit: forms marked data-partial are posted via fetch and the
 // returned HTML fragment is swapped in — comment forms (default mode)
-// append the new comment's <li> to the form's data-partial-target, while
+// append the new comment's <li> to the form's data-partial-target, except
+// fragment nodes marked data-swap, which replace their same-id element
+// instead (e.g. the header meta re-rendered for the bumped updated_at);
 // data-partial-mode="replace" forms (status toggle, answer mark) swap
 // existing elements out: each fragment node self-targets by its own id,
 // and a node without an id falls back to data-partial-target. On 422 the
@@ -153,7 +155,20 @@ async function postPartial(form) {
 
     const target = document.querySelector(form.dataset.partialTarget);
     if (!target) throw new Error(`no insertion target: ${form.dataset.partialTarget}`);
-    for (const node of nodes) target.append(node);
+    let appended = null;
+    for (const node of nodes) {
+      // A node marked data-swap (e.g. the header meta re-rendered because
+      // the post bumped updated_at) replaces its stale counterpart by id
+      // instead of appending to the list. A swap node whose id is already
+      // gone is skipped rather than appended in the wrong place.
+      if (node.hasAttribute("data-swap")) {
+        const existing = node.id ? document.getElementById(node.id) : null;
+        existing?.replaceWith(node);
+        continue;
+      }
+      target.append(node);
+      appended = node;
+    }
     if (target.hidden) target.hidden = false;
     // The "No comments yet." note lives next to the top-level list.
     const note = target.parentElement?.querySelector("[data-empty-note]");
@@ -164,7 +179,7 @@ async function postPartial(form) {
       count.parentElement.hidden = false; // unwrap "Comments (N)"
     }
 
-    const added = target.lastElementChild;
+    const added = appended;
     resetPostedForm(form);
     form.querySelector("textarea")?.focus();
     if (added) {

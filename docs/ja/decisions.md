@@ -392,3 +392,12 @@
 - **`auth token` の管理は `list`/`revoke` サブコマンド**: `list` はハッシュ先頭 8 文字の id + ユーザー + 発行時刻を出す（平文は永続化されていないので出しようもない）。`revoke` は位置引数の id（list が出すハッシュ prefix。曖昧ならエラー、該当なしもエラー）か、コマンドライン明示の `--token` 平文（`fs.Visit` で明示判定 — `ISSUES_TOKEN` env 既定値では誤 revoke させない。未知の平文は無害な no-op）。
 - **`issues completion` は静的スクリプト**: コマンド文法が固定なので生成器は持たず bash/zsh/fish のスクリプトを定数として埋め込んだ（`issues completion bash` 等で標準出力）。
 - **init は固定カテゴリもシード（PR #59 レビュー対応、前ブランチ）**: `store.SeedCategories` を公開して init から呼ぶ — 参照データ（他の作成経路なし）とデモデータを分け、init 直後のスキーマのみ DB でもローカル `discussion create` が動くようにした。
+
+## 部分更新 append パスの stale メタ解消（2026-11-16、`devin/1794771092-partial-meta-swap` ブランチ）
+
+- **`data-swap` プロトコル拡張**: append モードの fragment 内で `data-swap` 属性を持つノードはリストへの append ではなく同 id の既存要素を `replaceWith` で差し替える。`partial-submit.js` の append ループが先にこの印を見る。id が消えている stale な swap ノードは append せず捨てる（replace モードの self-target と同じ防御）。
+- **ヘッダの "Last updated" を fragment に同梱**: コメント/返信の部分 POST は store の `updated_at` を進めるが、fragment が新 `<li>` だけだったためヘッダ行がリロードまで古いままだった。`issue_meta` / `discussion_meta` を `{{define}}` に切り出し（issue 側は新規に `id="issue-meta"` を付与、`article` 内のインライン `<p>` からの抽出）、`*_append` fragment が先頭に載せる。answer マークの replace モードが `discussion_meta` を同梱していたのと同じ発想。
+- **POST 側は `GetIssue`/`GetDiscussion` で bump 後の値を取る**: status toggle の swap と同じく store の真の事後状態を描く。discussion の返信経路はこれまで discussion を再取得していなかったが、meta 同梱のために統一して取得する。
+- **fake / storyStore の comment 作成も updated_at を bump**: 実 store の契約（comment = activity）に揃え、fragment の meta が実際に新しい値を返すことを `TestPartialCommentContract` で検証できるようにした。
+- **moveBefore は使わない**: 既存の実機検証どおり `moveBefore` は接続済みノード専用で detach 済み fragment を拒否する（HierarchyRequestError）。swap ノードも `replaceWith`。
+- **検証**: `go test ./...` + `cmd/storybook` の全テスト。実ブラウザ（playwright-cli）で実アプリの issue 詳細にコメント投稿 → URL が `/issues/1` のまま（非遷移）、`#issue-meta` の "Last updated" が新しい値に差し替わり新 `<li>` が append、コンソールエラー 0 を確認。

@@ -22,10 +22,7 @@
       {{end}}
     </div>
     {{end}}
-    <p class="issue-meta">
-      Opened by {{authorName .Issue.Author}} <time datetime="{{.Issue.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .Issue.CreatedAt}}</time>
-      · Last updated <time datetime="{{.Issue.UpdatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .Issue.UpdatedAt}}</time>
-    </p>
+    {{template "issue_meta" .Issue}}
   </header>
 
   {{if .Issue.Body}}
@@ -60,6 +57,25 @@
     </form>
   </dialog>
 </article>
+{{end}}
+
+{{define "issue_meta"}}
+{{/* The header meta line, carried as a swap node: a new comment bumps
+   issue.updated_at, so the append fragment re-renders this too. data-swap
+   tells the client's append mode to replaceWith the stale node by id
+   instead of appending it to the list. */}}
+<p class="issue-meta" id="issue-meta" data-swap>
+  Opened by {{authorName .Author}} <time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .CreatedAt}}</time>
+  · Last updated <time datetime="{{.UpdatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .UpdatedAt}}</time>
+</p>
+{{end}}
+
+{{define "issue_comment_append"}}
+{{/* Append-mode fragment for a comment POST: the meta <p> rides along as
+   a data-swap node (the store bumped updated_at) while the <li> is
+   appended to the comment list. */}}
+{{template "issue_meta" .Issue}}
+{{template "issue_comment" .Comment}}
 {{end}}
 
 {{define "issue_comment"}}
@@ -129,12 +145,27 @@
 
 {{define "discussion_meta"}}
 {{/* The discussion header meta line, carried as a swap node: marking an
-   answer bumps discussion.updated_at, so the fragment re-renders this
-   too. It self-targets by id in the client's replace mode. */}}
-<p class="issue-meta" id="discussion-meta">
+   answer or posting a comment bumps discussion.updated_at, so fragments
+   re-render this too. It self-targets by id in the client's replace
+   mode; data-swap marks it for replaceWith in append mode. */}}
+<p class="issue-meta" id="discussion-meta" data-swap>
   Opened by {{authorName .Author}} <time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .CreatedAt}}</time>
   · Last updated <time datetime="{{.UpdatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .UpdatedAt}}</time>
 </p>
+{{end}}
+
+{{define "discussion_comment_append"}}
+{{/* Append-mode fragment for a top-level comment POST: meta <p> as a
+   data-swap node plus the new comment <li>. */}}
+{{template "discussion_meta" .Discussion}}
+{{template "discussion_comment" .}}
+{{end}}
+
+{{define "discussion_reply_append"}}
+{{/* Append-mode fragment for a reply POST: meta <p> as a data-swap node
+   plus the new reply <li>. */}}
+{{template "discussion_meta" .Discussion}}
+{{template "discussion_reply" .Comment}}
 {{end}}
 
 {{define "discussion_comment_swap"}}

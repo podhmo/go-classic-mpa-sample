@@ -497,9 +497,14 @@ func (storyStore) DeleteIssue(ctx context.Context, id int64) error {
 func (storyStore) ListComments(ctx context.Context, issueID int64) ([]*store.Comment, error) {
 	return storyComments, nil
 }
-func (storyStore) CreateComment(ctx context.Context, issueID int64, body string, authorID int64) (int64, error) {
+func (s storyStore) CreateComment(ctx context.Context, issueID int64, body string, authorID int64) (int64, error) {
 	// An id outside the fixture range so a fragment inserted by the app
 	// mount is distinguishable from fixture comments.
+	// Same contract as the real store: a new comment bumps updated_at,
+	// which the append fragment's meta node reflects.
+	if is, ok := s.issues[issueID]; ok {
+		is.UpdatedAt = time.Now()
+	}
 	return 99, nil
 }
 func (storyStore) ListLabels(ctx context.Context) ([]*store.Label, error) {
@@ -530,7 +535,11 @@ func (s storyStore) ListDiscussionComments(ctx context.Context, discussionID int
 	}
 	return storyDComments, nil
 }
-func (storyStore) CreateDiscussionComment(ctx context.Context, discussionID, parentID int64, body string, authorID int64) (int64, error) {
+func (s storyStore) CreateDiscussionComment(ctx context.Context, discussionID, parentID int64, body string, authorID int64) (int64, error) {
+	// Same contract as the real store: a new comment bumps updated_at.
+	if d, ok := s.discussions[discussionID]; ok {
+		d.UpdatedAt = time.Now()
+	}
 	return 99, nil
 }
 func (s storyStore) SetCommentAnswer(ctx context.Context, discussionID, commentID int64, answer bool) error {

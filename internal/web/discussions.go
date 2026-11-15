@@ -434,6 +434,8 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 // <li>: a reply fragment when parentID is set, a top-level comment
 // fragment otherwise (the latter also carries the collapsed reply form and
 // the qa answer button, so it needs the parent discussion's category).
+// Either way the fragment starts with the header meta as a data-swap
+// node — the post bumped discussion.updated_at.
 func (h *handler) renderNewDiscussionComment(w http.ResponseWriter, r *http.Request, id, parentID, commentID int64, body string) {
 	comment := &store.DiscussionComment{
 		ID:           commentID,
@@ -443,16 +445,17 @@ func (h *handler) renderNewDiscussionComment(w http.ResponseWriter, r *http.Requ
 		Author:       userFromContext(r.Context()),
 		CreatedAt:    time.Now(),
 	}
-	if parentID != 0 {
-		h.r.renderFragment(w, "discussion_detail", "discussion_reply", http.StatusOK, comment)
-		return
-	}
 	discussion, err := h.store.GetDiscussion(r.Context(), id)
 	if err != nil {
 		h.discussionError(w, r, err)
 		return
 	}
-	h.r.renderFragment(w, "discussion_detail", "discussion_comment", http.StatusOK,
+	if parentID != 0 {
+		h.r.renderFragment(w, "discussion_detail", "discussion_reply_append", http.StatusOK,
+			dict("Discussion", discussion, "Comment", comment))
+		return
+	}
+	h.r.renderFragment(w, "discussion_detail", "discussion_comment_append", http.StatusOK,
 		dict("Discussion", discussion, "C", comment))
 }
 

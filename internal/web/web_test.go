@@ -285,6 +285,8 @@ func (f *fakeStore) CreateComment(_ context.Context, issueID int64, body string,
 		c.Author = &u
 	}
 	f.comments[issueID] = append(f.comments[issueID], c)
+	// Same contract as the real store: a new comment bumps updated_at.
+	f.issues[issueID].UpdatedAt = time.Now()
 	return c.ID, nil
 }
 
@@ -538,6 +540,8 @@ func (f *fakeStore) CreateDiscussionComment(_ context.Context, discussionID, par
 		c.Author = &u
 	}
 	f.dcomments[discussionID] = append(f.dcomments[discussionID], c)
+	// Same contract as the real store: a new comment bumps updated_at.
+	f.discussions[discussionID].UpdatedAt = time.Now()
 	return c.ID, nil
 }
 
