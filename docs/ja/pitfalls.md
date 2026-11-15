@@ -72,7 +72,7 @@
 
 - **`Document.parseHTML` は既定 Sanitizer を通す**: `Document.parseHTML(html)` で作った DOM は `class`/`id`（と `data-*` 系）が削られる（Chromium 156 実測 — `<li class="card comment" id="x">` が `<li>` になる）。同一オリジンのサーバー fragment なら `<template>` innerHTML でパースするのが正解（属性を保持し `<script>` も不活性のまま）。「safe parser だから使おう」とすると静かに属性が消えるので注意。
 - **fetch の body に `FormData` をそのまま渡すと multipart になる**: 通常フォーム送信は `application/x-www-form-urlencoded` なので、JS 側だけ multipart だとサーバー側が「もう1つのパーサ経路」を持つことになる。`new URLSearchParams(new FormData(form))` で urlencoded に揃える。
-- **minigo: `s.Call` の引数に渡した host `*http.Request` はフィールド代入不可**: storybook の app mount で受け取った `*http.Request` をそのまま解釈コード（`ServeMux` の内部で `r.pat` 等を書く）に渡すと `host value *http.Request has no settable field pat` で失敗する。対策はスクリプト内で `httptest.NewRequest` で再構築し、`Body`/`ContentLength`/`Header.Clone()`/`WithContext` を写す（`StoryHttpApp`）。
-- **minigo: 解釈実行の `httptest.NewRequest` は `bytes.Reader` body を解決できない**: 非 nil body を渡すと型 switch が `bytes.Reader` を引けず `undefined: bytes.Reader`。body は `nil` にして `req.PostForm` / `req.Body` を直接代入する。
-- **minigo: 解釈実行では multipart の `ParseMultipartForm` が空を返す**: multipart/form-data の POST がバリデーション「本文必須」422 になる。urlencoded なら parse できるので、検証用途では urlencoded を使う。
+- **minigo: `s.Call` の引数に渡した host `*http.Request` はフィールド代入不可**（minigo#1085 で修正済み）: storybook の app mount で受け取った `*http.Request` をそのまま解釈コード（`ServeMux` の内部で `r.pat` 等を書く）に渡すと `host value *http.Request has no settable field pat` で失敗していた。修正後は host フィールドが宣言パッケージ限定で書き込み可（gc の公開性ルールと同じ）になり、`StoryHttpApp` は再構築せず `r` をそのまま `ServeHTTP` に渡す。
+- **minigo: 解釈実行の `httptest.NewRequest` は `bytes.Reader` body を解決できない**（minigo#1085 で修正済み）: 非 nil body を渡すと型 switch が `bytes.Reader` を引けず `undefined: bytes.Reader` だった。`bytes.Reader` が binding されて解消し、`storyPost` は実 body（`strings.NewReader`）を渡す形に戻した。
+- **「multipart の `ParseMultipartForm` が空を返す」は minigo のバグではなく標準 net/http 挙動だった**: `parseForm` が `r.ParseForm()` を無条件に呼ぶと `r.Form` が非 nil になり、`PostFormValue` が `ParseMultipartForm` を起動しないため multipart のフィールドが全て `""` になる — **コンパイル済みバイナリでも同じ**。対策は `parseForm` で Content-Type を見て multipart なら `r.ParseMultipartForm` を呼ぶこと（bugs.md #7、minigo#1084 の調査で判明）。
 （随時追記）

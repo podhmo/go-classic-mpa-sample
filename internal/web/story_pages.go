@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
@@ -563,14 +564,12 @@ func StoryDiscussionReplyFragment() {
 
 // ---- partial-update request replays ---------------------------------------
 
-// storyPost builds a form POST for the replay stories. The values land
-// in PostForm directly — handlers only read PostFormValue — because a
-// body strings.Reader hits an interpreter gap: httptest.NewRequest's
-// body type-switch can't resolve bytes.Reader under minigo.
+// storyPost builds a urlencoded form POST for the replay stories, body
+// included — the handler's parseForm populates PostForm like a real
+// submission.
 func storyPost(target string, form url.Values, partial bool) *http.Request {
-	req := httptest.NewRequest(http.MethodPost, target, nil)
+	req := httptest.NewRequest(http.MethodPost, target, strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.PostForm = form
 	if partial {
 		req.Header.Set("X-Partial", "1")
 	}
@@ -607,15 +606,5 @@ func StoryHttpCreateDiscussionReplyPartial(w http.ResponseWriter, r *http.Reques
 // partial-submit.js (fetch → fragment → DOM swap) to run end to end
 // without a database.
 func StoryHttpApp(w http.ResponseWriter, r *http.Request) {
-	// The incoming request is a host value; ServeMux dispatches by
-	// stamping pattern fields on the request, which only works on one
-	// allocated inside the script — rebuild it, carrying method, URL,
-	// body, headers and context over.
-	req := httptest.NewRequest(r.Method, r.URL.RequestURI(), nil)
-	req.Host = r.Host // NewRequest stamps example.com; keep the real host so the Origin check compares correctly.
-	req.Body = r.Body
-	req.ContentLength = r.ContentLength
-	req.Header = r.Header.Clone()
-	req = req.WithContext(r.Context())
-	New(storyStore{}).ServeHTTP(w, req)
+	New(storyStore{}).ServeHTTP(w, r)
 }

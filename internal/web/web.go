@@ -10,6 +10,7 @@ import (
 	"errors"
 	"html/template"
 	"log"
+	"mime"
 	"net/http"
 	"net/url"
 	"slices"
@@ -414,7 +415,17 @@ func (h *handler) internalError(w http.ResponseWriter, r *http.Request, err erro
 // failure it writes the error response itself and reports false.
 func (h *handler) parseForm(w http.ResponseWriter, r *http.Request) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, maxFormBytes)
-	if err := r.ParseForm(); err != nil {
+	// ParseForm marks r.Form parsed without reading a multipart body, so a
+	// later PostFormValue would never trigger ParseMultipartForm and every
+	// field would read "". Dispatch on the media type instead.
+	mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	var err error
+	if mediaType == "multipart/form-data" {
+		err = r.ParseMultipartForm(maxFormBytes)
+	} else {
+		err = r.ParseForm()
+	}
+	if err != nil {
 		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			h.renderError(w, r, http.StatusRequestEntityTooLarge, "Form too large",
 				"The submitted form exceeded the size limit.")
