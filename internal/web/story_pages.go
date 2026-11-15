@@ -604,8 +604,6 @@ func StoryHttpNotFound(w http.ResponseWriter, r *http.Request) {
 	New(newStoryStore()).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/no-such-page", nil))
 }
 
-// ---- partial-update fragments --------------------------------------------
-
 // renderFragment prints one named template fragment the way a partial
 // POST would return it — the markup partial-submit.js swaps in.
 func renderFragment(page, name string, status int, data any) {
@@ -642,8 +640,6 @@ func StoryDiscussionCommentFragment() {
 func StoryDiscussionReplyFragment() {
 	renderFragment("discussion_detail", "discussion_reply", http.StatusOK, storyDComments[0].Replies[0])
 }
-
-// ---- partial-update request replays ---------------------------------------
 
 // storyPost builds a urlencoded form POST for the replay stories, body
 // included — the handler's parseForm populates PostForm like a real

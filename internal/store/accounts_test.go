@@ -40,7 +40,6 @@ func TestCreateUserAndAuthenticate(t *testing.T) {
 	if got.ID != id {
 		t.Errorf("authenticated ID = %d, want %d", got.ID, id)
 	}
-	// Login lookup follows the column's COLLATE NOCASE.
 	if _, err := s.AuthenticateUser(ctx, "ALICE", "correct horse"); err != nil {
 		t.Errorf("case-insensitive login failed: %v", err)
 	}
@@ -134,7 +133,6 @@ func TestSessionExpiryAndRenewal(t *testing.T) {
 
 	now := time.Now().UTC()
 
-	// Expired sessions do not resolve and are swept on lookup.
 	insert("expired", now.Add(-48*time.Hour), now.Add(-time.Hour))
 	if _, err := s.SessionUser(ctx, "expired", 12*time.Hour); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("expired session: err = %v, want ErrNotFound", err)
@@ -180,7 +178,6 @@ func TestSessionExpiryAndRenewal(t *testing.T) {
 		t.Errorf("second lookup changed expires_at: %d -> %d", expiresAt, expiresAt2)
 	}
 
-	// Fresh sessions (more than half the lifetime left) are not renewed.
 	insert("fresh", now.Add(-time.Hour), now.Add(11*time.Hour))
 	before := now.Add(11 * time.Hour).Unix()
 	if _, err := s.SessionUser(ctx, "fresh", 12*time.Hour); err != nil {
@@ -210,7 +207,6 @@ func TestUserByName(t *testing.T) {
 	if u.Name != "dave" {
 		t.Errorf("name = %q, want dave", u.Name)
 	}
-	// Lookup is case-insensitive like login (COLLATE NOCASE).
 	if _, err := s.UserByName(ctx, "DAVE"); err != nil {
 		t.Errorf("case-insensitive lookup failed: %v", err)
 	}

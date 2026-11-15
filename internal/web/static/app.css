@@ -229,8 +229,6 @@ a:hover {
   white-space: nowrap !important;
 }
 
-/* ---------- skip link ---------- */
-
 /* First element in <body>, so the first Tab stop: invisible until focused,
    then pinned to the top-left corner of the viewport. :focus (not
    :focus-visible) is the trigger — the link can only be focused by keyboard
@@ -271,8 +269,6 @@ a:hover {
   outline: 2px solid var(--on-emphasis);
   outline-offset: 2px;
 }
-
-/* ---------- header / footer ---------- */
 
 /* Sticky site header: stays pinned at the top while scrolling. The stuck
    state is styled via a scroll-state container query (guide
@@ -368,8 +364,6 @@ a:hover {
   padding: 16px 0;
 }
 
-/* ---------- buttons ---------- */
-
 .btn {
   display: inline-block;
   padding: 6px 14px;
@@ -443,8 +437,6 @@ textarea:focus-visible {
   outline-offset: 2px;
 }
 
-/* ---------- cards, page head ---------- */
-
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -461,7 +453,6 @@ textarea:focus-visible {
   margin-bottom: 16px;
 }
 
-/* ---------- status badges ---------- */
 /* Open and closed differ by shape (ring vs filled disc), text and color. */
 
 .badge {
@@ -507,8 +498,6 @@ textarea:focus-visible {
   /* filled disc */
   background: var(--closed);
 }
-
-/* ---------- label badges ---------- */
 
 /* Long label names end in an ellipsis instead of widening the row; the full
    name stays in the DOM (accessible name, find-in-page) and the badge grows
@@ -608,8 +597,6 @@ a.category-badge:is(:hover, :focus-visible) {
   box-shadow: 0 0 0 1px var(--open-border);
 }
 
-/* ---------- tabs ---------- */
-
 .tabs {
   display: flex;
   gap: 4px;
@@ -667,8 +654,6 @@ a.category-badge:is(:hover, :focus-visible) {
   }
 }
 
-/* ---------- filter bar ---------- */
-
 /* Reflowing columns instead of a breakpoint: four in a row when they fit,
    then two, then one. rem keeps the threshold in step with the text size. */
 .filter-bar {
@@ -704,8 +689,6 @@ a.category-badge:is(:hover, :focus-visible) {
 .filter-actions .btn {
   flex: 1;
 }
-
-/* ---------- form controls ---------- */
 
 input[type="text"],
 input[type="search"],
@@ -775,8 +758,6 @@ input[type="checkbox"] {
   font-size: 0.82rem;
   color: var(--text-muted);
 }
-
-/* ---------- validation feedback ---------- */
 
 /* Two sources mark a field invalid, styled the same way:
    - the server, after a failed submit: aria-invalid="true" plus a rendered
@@ -881,8 +862,6 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   margin-top: 8px;
 }
 
-/* ---------- issue list ---------- */
-
 .result-count {
   font-size: 0.85rem;
   color: var(--text-muted);
@@ -985,8 +964,6 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   white-space: nowrap;
 }
 
-/* ---------- empty state ---------- */
-
 .empty-state {
   text-align: center;
   padding: 48px 20px;
@@ -1003,8 +980,6 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   margin: 0 0 6px;
 }
 
-/* ---------- pagination ---------- */
-
 .pagination {
   display: flex;
   flex-wrap: wrap;
@@ -1018,8 +993,6 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   color: var(--text-muted);
   font-size: 0.9rem;
 }
-
-/* ---------- issue detail ---------- */
 
 .breadcrumb {
   font-size: 0.85rem;
@@ -1123,8 +1096,6 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   margin: 0;
 }
 
-/* ---------- delete confirmation dialog ---------- */
-
 /* The Delete button opens a modal <dialog> through Invoker Commands
    (command="show-modal"), with no JavaScript. Browsers without Invoker
    Commands get the plain link to the GET confirmation page instead.
@@ -1185,8 +1156,6 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   margin-top: 20px;
 }
 
-/* ---------- comments ---------- */
-
 .comment-list {
   list-style: none;
   margin: 0 0 20px;
@@ -1236,8 +1205,6 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   display: block;
   margin-block-start: 0.5rem;
 }
-
-/* ---------- toasts ---------- */
 
 /* toast.js creates one .toast-region (role="region") and puts a
    popover="manual" .toast in it per success message. Top-layer children
@@ -1483,8 +1450,6 @@ details.reply-details[open]::details-content {
   background: var(--bg);
 }
 
-/* ---------- back to top ---------- */
-
 /* html is the root scroll-state container: descendants query its
    scroll position. */
 html {
@@ -1548,7 +1513,6 @@ html {
   margin-bottom: 12px;
 }
 
-/* ---------- markdown content ---------- */
 /* Applied to issue bodies and comments rendered through goldmark (GFM).
    Block-level elements need explicit spacing now that output is HTML,
    not plaintext with pre-wrap. */
@@ -1744,8 +1708,6 @@ html {
   margin: 20px 0;
 }
 
-/* ---------- error page ---------- */
-
 .error-page {
   max-width: 30rem;
   margin: 48px auto;
@@ -1762,8 +1724,6 @@ html {
 .error-page h1 {
   margin: 4px 0 12px;
 }
-
-/* ---------- page transitions ---------- */
 
 /* Cross-document view transitions: a short cross-fade between pages in
    browsers that support them; everyone else gets a normal navigation.
@@ -1826,8 +1786,6 @@ html:active-view-transition-type(backward)::view-transition-new(root) {
     animation: none !important;
   }
 }
-
-/* ---------- responsive ---------- */
 
 /* Component layouts (filter bar, issue rows) adapt on their own above; what
    is left is page-level. The breakpoint is in em, which media queries resolve

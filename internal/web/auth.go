@@ -265,7 +265,6 @@ const sessionCookieName = "session"
 // browser still drops the session.
 const sessionTTL = 30 * 24 * time.Hour
 
-// contextKey is the private key type for request-scoped values.
 type contextKey int
 
 const userContextKey contextKey = iota

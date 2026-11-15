@@ -34,7 +34,6 @@ func TestAPICommandFields(t *testing.T) {
 		return run(t, o, append(args, "--server", srv.URL)...)
 	}
 
-	// GET: fields go to the query string, no body.
 	code, _, errOut := runAPI(t, "api", "issues", "-f", "state=all", "-F", "per_page=5")
 	if code != ExitOK {
 		t.Fatalf("api GET: exit %d\n%s", code, errOut)
@@ -46,7 +45,6 @@ func TestAPICommandFields(t *testing.T) {
 		t.Fatalf("api GET query: %q", got.query)
 	}
 
-	// POST: -f stays a string, -F is typed, and Content-Type is JSON.
 	code, _, errOut = runAPI(t, "api", "issues", "-X", "POST",
 		"-f", "title=x", "-F", "n=3", "-F", "flag=true", "-F", "nothing=null")
 	if code != ExitOK {
@@ -76,13 +74,11 @@ func TestAPICommandFields(t *testing.T) {
 		t.Fatalf("api -F NaN: body %v", body)
 	}
 
-	// --template renders the decoded body.
 	code, out, _ := runAPI(t, "api", "issues", "--template", "{{.ok}}")
 	if code != ExitOK || strings.TrimSpace(out) != "true" {
 		t.Fatalf("api --template: exit %d out %q", code, out)
 	}
 
-	// A malformed field is a usage error.
 	code, _, _ = runAPI(t, "api", "issues", "-f", "novalue")
 	if code != ExitUsage {
 		t.Fatalf("api -f novalue: want exit %d got %d", ExitUsage, code)

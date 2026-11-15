@@ -141,8 +141,6 @@ func (c *Client) ListDiscussionCategories(ctx context.Context) ([]*store.Discuss
 	return out, nil
 }
 
-// --- api DTO → store domain types ---
-
 func discussionFromDTO(d api.Discussion) *store.Discussion {
 	return &store.Discussion{
 		ID: d.ID, Title: d.Title, Body: d.Body,

@@ -1,4 +1,3 @@
-// Issue, comment and label endpoints.
 package api
 
 import (

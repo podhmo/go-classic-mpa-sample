@@ -26,7 +26,6 @@ var ErrInvalidParent = errors.New("store: reply target is not a top-level commen
 // reply rather than a top-level comment.
 var ErrNotAnswerable = errors.New("store: comment cannot be marked as answer")
 
-// Category formats.
 const (
 	CategoryFormatOpen = "open"
 	CategoryFormatQA   = "qa"

@@ -83,7 +83,6 @@ func TestAuthRequired(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("authorized GET → %d, want 200", code)
 	}
-	// Unauthorized responses are JSON, not HTML.
 	req, _ := http.NewRequest("GET", srv.URL+"/api/v1/issues", nil)
 	resp, err := srv.Client().Do(req)
 	if err != nil {
@@ -98,7 +97,6 @@ func TestAuthRequired(t *testing.T) {
 func TestWrongMethodAndTrailingJSON(t *testing.T) {
 	srv, _ := newServer(t)
 
-	// Known path + wrong method → 405 JSON with Allow header.
 	req, _ := http.NewRequest("PATCH", srv.URL+"/api/v1/issues/1/status", nil)
 	req.Header.Set("Authorization", "Bearer "+testToken)
 	resp, err := srv.Client().Do(req)
@@ -128,7 +126,6 @@ func TestWrongMethodAndTrailingJSON(t *testing.T) {
 		t.Fatalf("HEAD = %d, want 200", resp.StatusCode)
 	}
 
-	// Trailing bytes after a complete JSON object → 400.
 	code, _ := do(t, srv, "POST", "/api/v1/issues", `{"title":"x"} {"title":"y"}`)
 	if code != http.StatusBadRequest {
 		t.Fatalf("trailing payload = %d, want 400", code)
@@ -195,13 +192,11 @@ func TestPerUserTokenActor(t *testing.T) {
 		return out
 	}
 
-	// The shared env token still works but writes stay anonymous.
 	out := post(testToken)
 	if issue, _ := out["issue"].(map[string]any); issue["author"] != nil {
 		t.Errorf("env-token issue author = %v, want anonymous", issue["author"])
 	}
 
-	// A per-user token makes the user the author.
 	out = post(userToken)
 	issue, _ := out["issue"].(map[string]any)
 	author, _ := issue["author"].(map[string]any)

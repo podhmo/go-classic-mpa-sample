@@ -159,14 +159,12 @@ func TestDiscussionUsageAndErrors(t *testing.T) {
 		}
 	}
 
-	// Unknown category slug: runtime error naming the valid slugs.
 	code, _, errOut := run(t, o, "discussion", "create",
 		"--title", "x", "--category", "nope")
 	if code != ExitError || !strings.Contains(errOut, "qa") {
 		t.Fatalf("unknown category: exit %d\n%s", code, errOut)
 	}
 
-	// Answer mark on a non-qa discussion is rejected.
 	id := createDiscussion(t, o, "not qa", "general")
 	cid := createDComment(t, o, id, "c")
 	code, _, _ = run(t, o, "discussion", "answer", itoa(id), "--comment", itoa(cid))

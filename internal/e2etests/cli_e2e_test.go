@@ -114,7 +114,6 @@ func TestCLIE2E(t *testing.T) {
 	addr := freePort(t)
 	server := "http://" + addr
 
-	// init creates the schema without serving.
 	mustRun(t, serverBin, nil, "-db", db, "init")
 
 	// The fixed discussion categories are reference data: init seeds them,
@@ -130,7 +129,6 @@ func TestCLIE2E(t *testing.T) {
 	// startup also seeds the demo data.
 	serve(t, serverBin, db, addr, "envtok")
 
-	// Register a user through the real web form.
 	resp, err := http.PostForm(server+"/register", url.Values{
 		"name": {"e2euser"}, "password": {"pw-pw-pw"},
 	})
@@ -142,13 +140,11 @@ func TestCLIE2E(t *testing.T) {
 		t.Fatalf("register: %s", resp.Status)
 	}
 
-	// Local mode: mint a per-user API token.
 	token := strings.TrimSpace(mustRun(t, cliBin, nil, "auth", "token", "--db", db, "--user", "e2euser"))
 	if token == "" {
 		t.Fatal("auth token returned empty token")
 	}
 
-	// auth token rejects unknown users.
 	if code, _, _ := run(t, cliBin, nil, "auth", "token", "--db", db, "--user", "ghost"); code != 1 {
 		t.Fatalf("auth token --user ghost: exit %d, want 1", code)
 	}
@@ -170,7 +166,6 @@ func TestCLIE2E(t *testing.T) {
 		t.Fatalf("issue list missing created issue:\n%s", list)
 	}
 
-	// The per-user token makes the CLI the author of the issue.
 	view := mustRun(t, cliBin, nil, remote("issue", "view", strconv.FormatInt(id, 10), "--json", "title,author")...)
 	var got struct {
 		Title  string `json:"title"`
@@ -191,7 +186,6 @@ func TestCLIE2E(t *testing.T) {
 		t.Fatalf("issue close: %q", out)
 	}
 
-	// Discussion commands take the same remote path over /api/v1/discussions.
 	out = mustRun(t, cliBin, nil, remote("discussion", "create",
 		"--title", "remote qa", "--category", "qa", "--body", "how?")...)
 	var did int64
@@ -216,7 +210,6 @@ func TestCLIE2E(t *testing.T) {
 		t.Fatalf("discussion view after answer:\n%s", dview)
 	}
 
-	// issues api returns raw JSON; a bad token fails with exit 1.
 	raw := mustRun(t, cliBin, nil, remote("api", "/issues")...)
 	if !strings.Contains(raw, `"issues"`) {
 		t.Fatalf("issues api /issues:\n%s", raw)
@@ -226,7 +219,6 @@ func TestCLIE2E(t *testing.T) {
 		t.Fatalf("api with bad token: exit %d\n%s", code, errOut)
 	}
 
-	// Env vars select remote mode too.
 	envOut := mustRun(t, cliBin,
 		[]string{"ISSUES_SERVER=" + server, "ISSUES_TOKEN=" + token},
 		"issue", "list", "--state", "all")
@@ -234,28 +226,23 @@ func TestCLIE2E(t *testing.T) {
 		t.Fatalf("env-based remote list:\n%s", envOut)
 	}
 
-	// The env token still works alongside per-user tokens.
 	envTok := mustRun(t, cliBin, nil,
 		"issue", "list", "--state", "all", "--server", server, "--token", "envtok")
 	if !strings.Contains(envTok, "from cli") {
 		t.Fatalf("env-token list:\n%s", envTok)
 	}
 
-	// issues api takes a method and fields: POST sends a JSON body.
 	out = mustRun(t, cliBin, nil, remote("api", "issues",
 		"-X", "POST", "-f", "title=api posted", "-f", "body=from issues api")...)
 	if !strings.Contains(out, `"api posted"`) {
 		t.Fatalf("api POST /issues:\n%s", out)
 	}
-	// -f on GET becomes a query parameter (same filter as issue list).
 	out = mustRun(t, cliBin, nil, remote("api", "issues",
 		"-f", "status=closed", "--template", "{{range .issues}}{{.title}} {{end}}")...)
 	if !strings.Contains(out, "from cli") {
 		t.Fatalf("api GET -f/--template:\n%s", out)
 	}
 
-	// auth token management is local-mode: list shows the issued token's
-	// hash prefix and owner; revoke by that id removes it.
 	tokList := mustRun(t, cliBin, nil, "auth", "token", "list", "--db", db)
 	if !strings.Contains(tokList, "e2euser") {
 		t.Fatalf("auth token list:\n%s", tokList)
@@ -268,7 +255,6 @@ func TestCLIE2E(t *testing.T) {
 		t.Fatalf("issue list with revoked token: exit %d, want 1", code)
 	}
 
-	// completion prints a shell script without needing a backend.
 	comp := mustRun(t, cliBin, nil, "completion", "bash")
 	if !strings.Contains(comp, "complete -F") {
 		t.Fatalf("completion bash:\n%s", comp)

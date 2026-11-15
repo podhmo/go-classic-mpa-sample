@@ -58,8 +58,7 @@ type Store interface {
 const (
 	// maxFormBytes caps POST request bodies (forms only send a few fields).
 	maxFormBytes = 1 << 20 // 1 MiB
-	// perPage is the fixed page size of the issue list.
-	perPage = 20
+	perPage      = 20
 )
 
 // Option configures New.
@@ -92,11 +91,7 @@ func WithAPIEnabled(on bool) Option {
 	return func(c *config) { c.apiEnabled = on }
 }
 
-// New returns the root http.Handler for the application. The ServeMux uses
-// Go 1.22+ method+path patterns, is wrapped in withUser (session-cookie →
-// context auth resolution) and then the stdlib CrossOriginProtection
-// middleware, which rejects cross-site state-changing browser requests
-// (CSRF) via Sec-Fetch-Site / Origin headers.
+// New returns the root http.Handler for the application.
 func New(st Store, opts ...Option) http.Handler {
 	var cfg config
 	for _, o := range opts {
@@ -196,6 +191,10 @@ func New(st Store, opts ...Option) http.Handler {
 	mux.HandleFunc("GET /", h.notFound)
 	mux.HandleFunc("POST /", h.notFound)
 
+	// Requests run under withUser (session-cookie → context auth resolution)
+	// and then the stdlib CrossOriginProtection middleware, which rejects
+	// cross-site state-changing browser requests (CSRF) via Sec-Fetch-Site /
+	// Origin headers.
 	return securityHeaders(http.NewCrossOriginProtection().Handler(withUser(h, mux)))
 }
 

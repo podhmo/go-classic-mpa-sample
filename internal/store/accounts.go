@@ -175,8 +175,6 @@ func (s *Store) DeleteExpiredSessions(ctx context.Context) error {
 	return err
 }
 
-// --- API tokens (api_tokens, schema version 4) ---
-//
 // Per-user Bearer tokens for /api/v1. They reuse the sessions primitives
 // (auth.NewToken/HashToken: only the SHA-256 is stored) but have no
 // expiry — an API token lives until its row is deleted (revoked).

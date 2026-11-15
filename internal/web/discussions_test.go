@@ -37,7 +37,6 @@ func TestDiscussionListRenders(t *testing.T) {
 			t.Errorf("list missing %q", want)
 		}
 	}
-	// nav marks the Discussions tab current, not Issues
 	if !strings.Contains(body, `href="/discussions" aria-current="page"`) {
 		t.Error("discussions nav tab should be aria-current")
 	}
@@ -68,7 +67,6 @@ func TestDiscussionListAnsweredFilter(t *testing.T) {
 	d := f.addDiscussion("Answered question", "b", 2, time.Now())
 	f.addDiscussion("Open question", "b", 2, time.Now())
 
-	// mark an answer on the first discussion via the store
 	cid, err := f.CreateDiscussionComment(t.Context(), d.ID, 0, "the fix", 0)
 	if err != nil {
 		t.Fatal(err)
@@ -218,7 +216,6 @@ func TestCreateDiscussionPRG(t *testing.T) {
 
 func TestCreateDiscussionValidation(t *testing.T) {
 	srv, _ := newTestServer(t)
-	// missing category
 	resp := postForm(t, srv.Client(), srv.URL+"/discussions", url.Values{
 		"title": {"t"}, "body": {"b"}, "category_id": {""},
 	})
@@ -226,7 +223,6 @@ func TestCreateDiscussionValidation(t *testing.T) {
 		t.Fatalf("missing category: status = %d, want 422", resp.StatusCode)
 	}
 	getBody(t, resp)
-	// bogus category id
 	resp = postForm(t, srv.Client(), srv.URL+"/discussions", url.Values{
 		"title": {"t"}, "body": {"b"}, "category_id": {"999"},
 	})
@@ -234,7 +230,6 @@ func TestCreateDiscussionValidation(t *testing.T) {
 		t.Fatalf("unknown category: status = %d, want 422", resp.StatusCode)
 	}
 	getBody(t, resp)
-	// missing title
 	resp = postForm(t, srv.Client(), srv.URL+"/discussions", url.Values{
 		"title": {"  "}, "body": {"b"}, "category_id": {"1"},
 	})
@@ -252,7 +247,6 @@ func TestDiscussionCommentReplyFlow(t *testing.T) {
 	d := f.addDiscussion("D", "b", 1, time.Now())
 	cid, _ := f.CreateDiscussionComment(t.Context(), d.ID, 0, "top", 0)
 
-	// reply with valid parent → 303 back to the comment anchor
 	resp := postForm(t, noRedirectClient(), srv.URL+"/discussions/"+itoa(d.ID)+"/comments", url.Values{
 		"body": {"a reply"}, "parent_id": {itoa(cid)},
 	})
@@ -264,7 +258,6 @@ func TestDiscussionCommentReplyFlow(t *testing.T) {
 		t.Fatalf("Location = %q, want anchor", loc)
 	}
 
-	// reply to the reply → invalid parent → 422 re-render keeping the draft
 	rid, _ := f.CreateDiscussionComment(t.Context(), d.ID, cid, "nested", 0)
 	resp = postForm(t, srv.Client(), srv.URL+"/discussions/"+itoa(d.ID)+"/comments", url.Values{
 		"body": {"too deep"}, "parent_id": {itoa(rid)},
@@ -282,7 +275,6 @@ func TestDiscussionCommentValidation(t *testing.T) {
 	srv, f := newTestServer(t)
 	d := f.addDiscussion("D", "b", 1, time.Now())
 
-	// empty body must 422 and NOT be saved
 	resp := postForm(t, srv.Client(), srv.URL+"/discussions/"+itoa(d.ID)+"/comments", url.Values{
 		"body": {"   "},
 	})
@@ -297,7 +289,6 @@ func TestDiscussionCommentValidation(t *testing.T) {
 		t.Fatalf("empty comment was saved: %+v", cs)
 	}
 
-	// malformed parent_id must 422, not degrade to a top-level post
 	resp = postForm(t, srv.Client(), srv.URL+"/discussions/"+itoa(d.ID)+"/comments", url.Values{
 		"body": {"orphan"}, "parent_id": {"abc"},
 	})
@@ -502,7 +493,6 @@ func TestDeleteDiscussionFlow(t *testing.T) {
 	srv, f := newTestServer(t)
 	d := f.addDiscussion("Doomed", "b", 1, time.Now())
 
-	// GET shows the confirmation page
 	resp, err := srv.Client().Get(srv.URL + "/discussions/" + itoa(d.ID) + "/delete")
 	if err != nil {
 		t.Fatal(err)

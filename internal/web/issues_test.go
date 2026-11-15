@@ -40,13 +40,11 @@ func TestListRendersIssues(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
-	// Open issues shown by default.
 	for _, want := range []string{"Fix flaky test", "Add dark mode"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("list missing %q", want)
 		}
 	}
-	// Closed issue hidden under the default open filter.
 	if strings.Contains(body, "Write docs") {
 		t.Error("closed issue should not appear in default list")
 	}
@@ -205,7 +203,6 @@ func TestShowIssueRendersMarkdown(t *testing.T) {
 		t.Error("fenced code content should appear escaped inside the block")
 	}
 
-	// The edit form must keep the raw markdown source, not rendered HTML.
 	resp2, err := srv.Client().Get(srv.URL + "/issues/1/edit")
 	if err != nil {
 		t.Fatal(err)
@@ -299,7 +296,6 @@ func TestCreateIssueSuccess(t *testing.T) {
 		t.Fatalf("Location = %q, want /issues/{id}", loc)
 	}
 
-	// The created issue must be fetchable with its labels.
 	resp2, err := srv.Client().Get(srv.URL + loc)
 	if err != nil {
 		t.Fatal(err)
@@ -335,8 +331,6 @@ func TestCreateComment(t *testing.T) {
 	if !strings.Contains(body, "hello there") {
 		t.Error("comment should appear on the detail page")
 	}
-	// Each comment carries a permalink: an id anchor on the <li> and the
-	// timestamp linking back to it.
 	if !strings.Contains(body, `id="comment-1"`) || !strings.Contains(body, `href="#comment-1"`) {
 		t.Error("comment should render with a permalink anchor and link")
 	}
@@ -368,7 +362,6 @@ func TestToggleStatus(t *testing.T) {
 	srv, f := newTestServer(t)
 	f.addIssue("Toggle me", "", store.StatusOpen, time.Now())
 
-	// open → closed
 	resp := postForm(t, noRedirectClient(), srv.URL+"/issues/1/status", url.Values{
 		"status": {"closed"},
 	})
@@ -381,7 +374,6 @@ func TestToggleStatus(t *testing.T) {
 		t.Fatalf("status = %q, want closed", got.Status)
 	}
 
-	// closed → open
 	resp2 := postForm(t, noRedirectClient(), srv.URL+"/issues/1/status", url.Values{
 		"status": {"open"},
 	})
@@ -459,7 +451,6 @@ func TestDeleteFlow(t *testing.T) {
 	srv, f := newTestServer(t)
 	f.addIssue("Delete me", "", store.StatusOpen, time.Now())
 
-	// GET confirmation page renders WITHOUT deleting.
 	resp, err := srv.Client().Get(srv.URL + "/issues/1/delete")
 	if err != nil {
 		t.Fatal(err)
@@ -475,7 +466,6 @@ func TestDeleteFlow(t *testing.T) {
 		t.Fatal("GET delete confirm must not delete the issue")
 	}
 
-	// POST actually deletes and redirects to the list.
 	resp2 := postForm(t, noRedirectClient(), srv.URL+"/issues/1/delete", url.Values{})
 	defer resp2.Body.Close()
 	if resp2.StatusCode != http.StatusSeeOther {
@@ -524,7 +514,6 @@ func TestEditFlow(t *testing.T) {
 	srv, f := newTestServer(t)
 	f.addIssue("Old title", "old body", store.StatusOpen, time.Now(), 1)
 
-	// Edit form is populated with current values.
 	resp, err := srv.Client().Get(srv.URL + "/issues/1/edit")
 	if err != nil {
 		t.Fatal(err)
@@ -537,7 +526,6 @@ func TestEditFlow(t *testing.T) {
 		t.Error("edit form should prefill the body")
 	}
 
-	// POST updates and redirects to the detail page.
 	resp2 := postForm(t, noRedirectClient(), srv.URL+"/issues/1/edit", url.Values{
 		"title":    {"New title"},
 		"body":     {"new body"},
@@ -565,7 +553,6 @@ func TestHTMLEscaping(t *testing.T) {
 	f.addIssue(payload, payload, store.StatusOpen, time.Now())
 	f.comments[1] = append(f.comments[1], &store.Comment{ID: 1, IssueID: 1, Body: payload, CreatedAt: time.Now()})
 
-	// List page.
 	resp, err := srv.Client().Get(srv.URL + "/issues")
 	if err != nil {
 		t.Fatal(err)
@@ -578,7 +565,6 @@ func TestHTMLEscaping(t *testing.T) {
 		t.Error("list page should contain the escaped payload")
 	}
 
-	// Detail page (title, body and comment).
 	resp2, err := srv.Client().Get(srv.URL + "/issues/1")
 	if err != nil {
 		t.Fatal(err)
@@ -624,8 +610,6 @@ func TestListOutOfRangePageShowsLastPage(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
-	// Clamped to the last page: real items plus a correct range header and
-	// working pagination — not the misleading empty state.
 	if !strings.Contains(body, "Showing 21–25 of 25 issues") {
 		t.Errorf("expected last-page range header, got:\n%s", body)
 	}
@@ -666,7 +650,6 @@ func TestListAbsurdPageFallsBackToFirst(t *testing.T) {
 
 func TestUpdateIssueMissingIssue404(t *testing.T) {
 	srv, _ := newTestServer(t)
-	// A validation-failing POST to a nonexistent issue must 404, not 422.
 	resp := postForm(t, srv.Client(), srv.URL+"/issues/999/edit", url.Values{
 		"title": {""},
 	})
@@ -708,7 +691,6 @@ func TestListLinksOmitDefaultStatus(t *testing.T) {
 		t.Error("expected the Open tab link to be bare /issues")
 	}
 
-	// Non-default statuses are still preserved in generated links.
 	resp2, err := srv.Client().Get(srv.URL + "/issues?status=closed")
 	if err != nil {
 		t.Fatal(err)
@@ -728,7 +710,6 @@ func TestListA11ySemantics(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := getBody(t, resp)
-	// The filter form is the page's search region.
 	if !strings.Contains(body, `class="filter-bar" role="search" aria-label="Filter issues"`) {
 		t.Error("filter form lacks role=search")
 	}
@@ -750,8 +731,6 @@ func TestDetailA11ySemantics(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := getBody(t, resp)
-	// The trail is an ordered list; the current item is a self-referencing
-	// link carrying aria-current, and the separator is CSS-generated.
 	if !strings.Contains(body, `<nav class="breadcrumb" aria-label="Breadcrumb"><ol>`) &&
 		!strings.Contains(body, `class="breadcrumb" aria-label="Breadcrumb"`) {
 		t.Error("breadcrumb nav missing")
@@ -776,14 +755,12 @@ func TestAuthorRecordedAndDisplayed(t *testing.T) {
 	srv, f := newTestServer(t)
 	f.addUser(t, "alice", "password123")
 
-	// Log in and capture the cookie.
 	resp := postForm(t, noRedirectClient(), srv.URL+"/login", url.Values{
 		"name": {"alice"}, "password": {"password123"},
 	})
 	resp.Body.Close()
 	c := sessionCookie(t, resp)
 
-	// Logged-in post: the store records the author and the page names them.
 	form := url.Values{"title": {"authored issue"}, "body": {"with a name"}}
 	req, err := http.NewRequest(http.MethodPost, srv.URL+"/issues", strings.NewReader(form.Encode()))
 	if err != nil {
@@ -803,7 +780,6 @@ func TestAuthorRecordedAndDisplayed(t *testing.T) {
 		t.Fatal("issue author not recorded")
 	}
 
-	// Anonymous post: NULL author renders as anonymous.
 	f.addIssue("anon issue", "", store.StatusOpen, time.Now(), 2)
 	code, body := getWithCookie(t, srv, "/issues/2", nil)
 	if code != http.StatusOK || !strings.Contains(body, "Opened by anonymous") {
@@ -814,7 +790,6 @@ func TestAuthorRecordedAndDisplayed(t *testing.T) {
 		t.Error("authored issue missing author name")
 	}
 
-	// Logged-in comment names its author.
 	form = url.Values{"body": {"signed comment"}}
 	req, err = http.NewRequest(http.MethodPost, srv.URL+"/issues/1/comments", strings.NewReader(form.Encode()))
 	if err != nil {

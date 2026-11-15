@@ -165,8 +165,6 @@ func (c *Client) ListLabels(ctx context.Context) ([]*store.Label, error) {
 	return out, nil
 }
 
-// --- api DTO → store domain types ---
-
 func issueFromDTO(i api.Issue) *store.Issue {
 	out := &store.Issue{
 		ID: i.ID, Title: i.Title, Body: i.Body, Status: i.Status,

@@ -25,13 +25,11 @@ func TestDiscussionLifecycle(t *testing.T) {
 		}
 	}
 
-	// categories endpoint
 	code, out := do(t, srv, "GET", "/api/v1/discussion-categories", "")
 	if code != http.StatusOK || len(out["categories"].([]any)) == 0 {
 		t.Fatalf("categories = %d %v", code, out)
 	}
 
-	// create by slug
 	code, out = do(t, srv, "POST", "/api/v1/discussions",
 		fmt.Sprintf(`{"title":"how?","body":"details","category":"%s"}`, qaSlug))
 	if code != http.StatusCreated {
@@ -43,7 +41,6 @@ func TestDiscussionLifecycle(t *testing.T) {
 		t.Fatalf("category = %v", d["category"])
 	}
 
-	// comment + reply + answer
 	code, out = do(t, srv, "POST", fmt.Sprintf("/api/v1/discussions/%d/comments", did), `{"body":"try this"}`)
 	if code != http.StatusCreated {
 		t.Fatalf("comment = %d", code)
@@ -54,7 +51,6 @@ func TestDiscussionLifecycle(t *testing.T) {
 	if code != http.StatusCreated || out["comment"].(map[string]any)["parent_id"].(float64) != float64(cid) {
 		t.Fatalf("reply = %d %v", code, out)
 	}
-	// reply to a reply must be 422 (one level only)
 	rid := int64(out["comment"].(map[string]any)["id"].(float64))
 	code, _ = do(t, srv, "POST", fmt.Sprintf("/api/v1/discussions/%d/comments", did),
 		fmt.Sprintf(`{"body":"nested","parent_id":%d}`, rid))
@@ -62,7 +58,6 @@ func TestDiscussionLifecycle(t *testing.T) {
 		t.Fatalf("nested reply = %d, want 422", code)
 	}
 
-	// missing "answer" field → 422 (a false default must not clear the mark)
 	code, out = do(t, srv, "POST", fmt.Sprintf("/api/v1/discussions/%d/comments/%d/answer", did, cid), `{}`)
 	if code != http.StatusUnprocessableEntity || out["error"].(map[string]any)["fields"].(map[string]any)["answer"] == nil {
 		t.Fatalf("empty answer body = %d %v", code, out)
@@ -80,7 +75,6 @@ func TestDiscussionLifecycle(t *testing.T) {
 		t.Fatalf("comment tree = %v", c0)
 	}
 
-	// answered filter: the newly answered discussion must be listed
 	code, out = do(t, srv, "GET", "/api/v1/discussions?answered=yes", "")
 	found := false
 	for _, d := range out["discussions"].([]any) {
@@ -92,7 +86,6 @@ func TestDiscussionLifecycle(t *testing.T) {
 		t.Fatalf("answered=yes missing discussion %d: %v", did, out)
 	}
 
-	// patch + delete
 	code, out = do(t, srv, "PATCH", fmt.Sprintf("/api/v1/discussions/%d", did), `{"title":"renamed"}`)
 	if code != http.StatusOK || out["discussion"].(map[string]any)["title"] != "renamed" {
 		t.Fatalf("patch = %d %v", code, out)

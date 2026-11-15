@@ -98,20 +98,17 @@ func TestListDiscussions(t *testing.T) {
 	d2 := mustDiscussion(t, s, qa, "why empty export")
 	mustDiscussion(t, s, qa, "keyboard shortcuts")
 
-	// category filter
 	list, total, err := s.ListDiscussions(ctx, DiscussionListFilter{CategorySlug: "qa"})
 	if err != nil || total != 2 {
 		t.Fatalf("category=qa: total=%d err=%v", total, err)
 	}
 	_ = list
 
-	// query matches title/body
 	_, total, err = s.ListDiscussions(ctx, DiscussionListFilter{Query: "keyboard"})
 	if err != nil || total != 1 {
 		t.Fatalf("q=keyboard: total=%d err=%v", total, err)
 	}
 
-	// answered filter
 	if _, err := s.CreateDiscussionComment(ctx, d1, 0, "no", 0); err != nil {
 		t.Fatalf("comment: %v", err)
 	}
@@ -131,7 +128,6 @@ func TestListDiscussions(t *testing.T) {
 		t.Fatalf("answered=no: total=%d err=%v", total, err)
 	}
 
-	// sort: newest first by default, oldest reverses
 	list, _, err = s.ListDiscussions(ctx, DiscussionListFilter{Sort: "oldest"})
 	if err != nil {
 		t.Fatalf("list: %v", err)
@@ -162,11 +158,9 @@ func TestDiscussionCommentThreading(t *testing.T) {
 		t.Fatalf("reply: %v", err)
 	}
 
-	// A reply cannot be a parent (one level only).
 	if _, err := s.CreateDiscussionComment(ctx, d1, r1, "nested reply", 0); !errors.Is(err, ErrInvalidParent) {
 		t.Fatalf("reply-to-reply: %v", err)
 	}
-	// A comment of another discussion cannot be a parent.
 	cOther, err := s.CreateDiscussionComment(ctx, d2, 0, "other", 0)
 	if err != nil {
 		t.Fatalf("comment: %v", err)
@@ -174,7 +168,6 @@ func TestDiscussionCommentThreading(t *testing.T) {
 	if _, err := s.CreateDiscussionComment(ctx, d1, cOther, "x", 0); !errors.Is(err, ErrInvalidParent) {
 		t.Fatalf("cross-discussion parent: %v", err)
 	}
-	// Missing discussion.
 	if _, err := s.CreateDiscussionComment(ctx, 999, 0, "x", 0); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("comment on missing discussion: %v", err)
 	}
@@ -216,15 +209,12 @@ func TestSetCommentAnswer(t *testing.T) {
 	reply, _ := s.CreateDiscussionComment(ctx, dQA, c1, "r1", 0)
 	cOpen, _ := s.CreateDiscussionComment(ctx, dOpen, 0, "c-open", 0)
 
-	// non-qa category cannot mark answers
 	if err := s.SetCommentAnswer(ctx, dOpen, cOpen, true); !errors.Is(err, ErrNotAnswerable) {
 		t.Fatalf("answer on open category: %v", err)
 	}
-	// a reply cannot be the answer
 	if err := s.SetCommentAnswer(ctx, dQA, reply, true); !errors.Is(err, ErrNotAnswerable) {
 		t.Fatalf("answer on reply: %v", err)
 	}
-	// missing comment/discussion
 	if err := s.SetCommentAnswer(ctx, dQA, 999, true); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("answer on missing comment: %v", err)
 	}
@@ -232,7 +222,6 @@ func TestSetCommentAnswer(t *testing.T) {
 		t.Fatalf("answer on missing discussion: %v", err)
 	}
 
-	// mark, then move the mark — at most one answer survives
 	if err := s.SetCommentAnswer(ctx, dQA, c1, true); err != nil {
 		t.Fatalf("mark c1: %v", err)
 	}
@@ -256,7 +245,6 @@ func TestSetCommentAnswer(t *testing.T) {
 		t.Fatalf("marked = %d, want 1", marked)
 	}
 
-	// unmark
 	if err := s.SetCommentAnswer(ctx, dQA, c2, false); err != nil {
 		t.Fatalf("unmark: %v", err)
 	}
