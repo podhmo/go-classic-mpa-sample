@@ -1,6 +1,6 @@
-// Package cli implements the gh-like command surface of the issues binary
-// (docs/sketch/ja/cli-and-web-api.md, Phase 1 and 3). The commands only
-// know the Backend interface: locally it is *store.Store over -db,
+// Package cli implements the gh-like command surface of the cmd/issues
+// binary (docs/sketch/ja/cli-and-web-api.md, Phase 1 and 3). The commands
+// only know the Backend interface: locally it is *store.Store over -db,
 // remotely it is *client.Client over /api/v1 (--server/--token).
 //
 // Command grammar (gh-style):
@@ -71,17 +71,6 @@ type Options struct {
 	OpenTokenStore func(dbPath string) (TokenStore, error)
 	OpenBrowser    func(url string) error
 }
-
-// subcommands are the first-position argv words that select CLI mode in
-// main. "init" is deliberately absent — it stays on the flag path.
-var subcommands = map[string]bool{
-	"issue": true, "label": true, "comment": true,
-	"discussion": true, "auth": true, "api": true,
-	"help": true,
-}
-
-// IsSubcommand reports whether arg selects CLI mode.
-func IsSubcommand(arg string) bool { return subcommands[arg] }
 
 // Exit codes returned by Run.
 const (

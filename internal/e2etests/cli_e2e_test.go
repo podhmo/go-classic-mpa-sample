@@ -21,15 +21,23 @@ import (
 	"time"
 )
 
-// buildBinary compiles the issues binary once for the whole test.
-func buildBinary(t *testing.T) string {
+// buildBinaries compiles the server binary and the CLI binary (separate
+// commands: cmd/issues is the client, the repo root is the server).
+func buildBinaries(t *testing.T) (serverBin, cliBin string) {
 	t.Helper()
-	bin := filepath.Join(t.TempDir(), "issues")
-	out, err := exec.Command("go", "build", "-o", bin, "../..").CombinedOutput()
-	if err != nil {
-		t.Fatalf("go build: %v\n%s", err, out)
+	dir := t.TempDir()
+	serverBin = filepath.Join(dir, "issues-server")
+	cliBin = filepath.Join(dir, "issues")
+	for target, out := range map[string]string{
+		"../..":            serverBin,
+		"../../cmd/issues": cliBin,
+	} {
+		b, err := exec.Command("go", "build", "-o", out, target).CombinedOutput()
+		if err != nil {
+			t.Fatalf("go build %s: %v\n%s", target, err, b)
+		}
 	}
-	return bin
+	return serverBin, cliBin
 }
 
 // freePort grabs an unused loopback port for the test server.
@@ -100,18 +108,18 @@ func serve(t *testing.T, bin, db, addr, apiToken string) {
 }
 
 func TestCLIE2E(t *testing.T) {
-	bin := buildBinary(t)
+	serverBin, cliBin := buildBinaries(t)
 	dir := t.TempDir()
 	db := filepath.Join(dir, "e2e.db")
 	addr := freePort(t)
 	server := "http://" + addr
 
 	// init creates the schema without serving.
-	mustRun(t, bin, nil, "-db", db, "init")
+	mustRun(t, serverBin, nil, "-db", db, "init")
 
 	// Serve with the env token so /api/v1 is mounted from the start;
 	// startup also seeds the demo data.
-	serve(t, bin, db, addr, "envtok")
+	serve(t, serverBin, db, addr, "envtok")
 
 	// Register a user through the real web form.
 	resp, err := http.PostForm(server+"/register", url.Values{
@@ -126,13 +134,13 @@ func TestCLIE2E(t *testing.T) {
 	}
 
 	// Local mode: mint a per-user API token.
-	token := strings.TrimSpace(mustRun(t, bin, nil, "auth", "token", "--db", db, "--user", "e2euser"))
+	token := strings.TrimSpace(mustRun(t, cliBin, nil, "auth", "token", "--db", db, "--user", "e2euser"))
 	if token == "" {
 		t.Fatal("auth token returned empty token")
 	}
 
 	// auth token rejects unknown users.
-	if code, _, _ := run(t, bin, nil, "auth", "token", "--db", db, "--user", "ghost"); code != 1 {
+	if code, _, _ := run(t, cliBin, nil, "auth", "token", "--db", db, "--user", "ghost"); code != 1 {
 		t.Fatalf("auth token --user ghost: exit %d, want 1", code)
 	}
 
@@ -141,20 +149,20 @@ func TestCLIE2E(t *testing.T) {
 	remote := func(args ...string) []string {
 		return append(args, "--server", server, "--token", token)
 	}
-	out := mustRun(t, bin, nil, remote("issue", "create",
+	out := mustRun(t, cliBin, nil, remote("issue", "create",
 		"--title", "from cli", "--body", "made remotely", "--label", "Bug")...)
 	var id int64
 	if _, err := fmt.Sscanf(out, "created issue #%d", &id); err != nil || id == 0 {
 		t.Fatalf("issue create: %q", out)
 	}
 
-	list := mustRun(t, bin, nil, remote("issue", "list", "--state", "all")...)
+	list := mustRun(t, cliBin, nil, remote("issue", "list", "--state", "all")...)
 	if !strings.Contains(list, "from cli") {
 		t.Fatalf("issue list missing created issue:\n%s", list)
 	}
 
 	// The per-user token makes the CLI the author of the issue.
-	view := mustRun(t, bin, nil, remote("issue", "view", strconv.FormatInt(id, 10), "--json", "title,author")...)
+	view := mustRun(t, cliBin, nil, remote("issue", "view", strconv.FormatInt(id, 10), "--json", "title,author")...)
 	var got struct {
 		Title  string `json:"title"`
 		Author *struct {
@@ -168,24 +176,24 @@ func TestCLIE2E(t *testing.T) {
 		t.Fatalf("issue view: %+v", got)
 	}
 
-	mustRun(t, bin, nil, remote("comment", "create", strconv.FormatInt(id, 10), "--body", "remote comment")...)
-	out = mustRun(t, bin, nil, remote("issue", "close", strconv.FormatInt(id, 10))...)
+	mustRun(t, cliBin, nil, remote("comment", "create", strconv.FormatInt(id, 10), "--body", "remote comment")...)
+	out = mustRun(t, cliBin, nil, remote("issue", "close", strconv.FormatInt(id, 10))...)
 	if !strings.Contains(out, "closed issue #") {
 		t.Fatalf("issue close: %q", out)
 	}
 
 	// issues api returns raw JSON; a bad token fails with exit 1.
-	raw := mustRun(t, bin, nil, remote("api", "/issues")...)
+	raw := mustRun(t, cliBin, nil, remote("api", "/issues")...)
 	if !strings.Contains(raw, `"issues"`) {
 		t.Fatalf("issues api /issues:\n%s", raw)
 	}
-	code, _, errOut := run(t, bin, nil, "api", "/issues", "--server", server, "--token", "bogus")
+	code, _, errOut := run(t, cliBin, nil, "api", "/issues", "--server", server, "--token", "bogus")
 	if code != 1 || !strings.Contains(errOut, "401") {
 		t.Fatalf("api with bad token: exit %d\n%s", code, errOut)
 	}
 
 	// Env vars select remote mode too.
-	envOut := mustRun(t, bin,
+	envOut := mustRun(t, cliBin,
 		[]string{"ISSUES_SERVER=" + server, "ISSUES_TOKEN=" + token},
 		"issue", "list", "--state", "all")
 	if !strings.Contains(envOut, "from cli") {
@@ -193,7 +201,7 @@ func TestCLIE2E(t *testing.T) {
 	}
 
 	// The env token still works alongside per-user tokens.
-	envTok := mustRun(t, bin, nil,
+	envTok := mustRun(t, cliBin, nil,
 		"issue", "list", "--state", "all", "--server", server, "--token", "envtok")
 	if !strings.Contains(envTok, "from cli") {
 		t.Fatalf("env-token list:\n%s", envTok)

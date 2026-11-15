@@ -365,7 +365,7 @@
 
 ## gh ライクな CLI（issues サブコマンド群）の実装決定（2026-11-16、`devin/1794767751-gh-cli` ブランチ）
 
-- **ディスパッチ**: main.go は `os.Args[1]` が `internal/cli` のサブコマンド名（issue/comment/label/auth/api/help/discussion）なら CLI モードへ `os.Exit(cli.Run(...))`。`init` も含めた対称の分岐は「init だけ flag パス」の非対称が既存と整合するためこの形。usage は `issues <command>` 表記。
+- **バイナリ構成: `cmd/issues` 別コマンド（案2）**: 初版は設計メモ推奨どおり単一バイナリ+サブコマンド（main.go が `os.Args[1]` 先回り dispatch）で実装したが、「web api を呼ぶ CLI はサーバーとは別のコマンドと定義場所であるべき（gh CLI 利用者に GitHub サーバ同梱のものを渡すようなもの）」との指摘で `cmd/issues/main.go` に分離。サーババイナリは `init` だけが残る（従来どおり）。storybook とは違い別 module にしない（依存隔離の理由がない）。
 - **Backend interface は consumer 側宣言**: `cli.Backend` は store ドメイン型（`store.Issue`/`ListFilter`/`IssueInput` 等）のまま定義し、ローカルは `*store.Store` がそのまま構造的に満たし、リモートは `*client.Client` が api DTO ↔ store 型を往復変換して満たす。`web.Store`/`api.Store` と同じ「同一契約の 2 実装」パターン。
 - **フラグは leaf command 単位**: flag.Parse は位置引数で止まるため `--db/--server/--token` は各 leaf の FlagSet に定義し、位置引数を挟んだ再 Parse で `issue view 1 --json title` 等どこに書いても効く形にした（gh と同じ自由度）。環境変数は `ISSUES_DB/ISSUES_SERVER/ISSUES_TOKEN`。
 - **`auth token` はローカル専用**: api_tokens への INSERT は HTTP を通さず DB 直書き（パスワード検証を API に載せない設計メモ「認証」節の通り）。`--server` 指定時は usage エラーで拒否。
