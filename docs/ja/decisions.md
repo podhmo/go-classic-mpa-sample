@@ -299,3 +299,12 @@
 - **返信フォームは `<details>`**: JS なし宣言型（メモ通り）。エラー時は `ReplyDraftID` で該当 `<details>` を `open` にして下書きを保持。親がトップレベル以外（返信への返信・他 discussion のコメント）の場合はどの `<details>` にも置けないため、下段コメントフォームへドラフトをフォールバックさせて入力文を失わない。
 - **一覧は `.issue-list` / `.issue-title` クラスを再利用**: search-highlight.js が無修正で効く。`.discussion-list` を併記して今後の分岐余地を残す。speculation-rules のセレクタは `.discussion-list a.issue-title` も対象に追加。
 - **storyStore を現行 Store インターフェースへ追従**: auth 系メソッドと `authorID` 引数が抜けて `-tags story` が壊れていた既存 bug を修正し、discussion fixture/story（list/empty/detail/form/errors/delete）を追加。
+
+## コメント/返信の部分更新方針（2026-11-15、`devin/1794743974-partial-updates-revisited` ブランチ）
+
+設計メモ `docs/sketch/ja/partial-updates.md` の再検討結果を決定として記録。実装は未着手（TODO.md の「コメント/返信の部分更新」エントリ参照）。
+
+- **採用は手書き fetch + HTML fragment（案B）、スコープはコメント/返信投稿のみ**: `X-Partial` 判定ヘッダで POST が `<li>` fragment を返し、`/static/partial-submit.js`（~100 行）が submit を奪って fetch→挿入→通知する小機構。answer マーク・status toggle は Phase 2 で同機構に乗せる。
+- **CSP に `connect-src 'self'` の追加が必須前提**: 現行 `default-src 'none'` では fetch が全ブロックされる。部分更新のどの案でも必要。
+- **htmx / Datastar は採用しない（再評価条件つき）**: ネイティブ API（`setHTML()` Sanitizer、`moveBefore()`、`ariaNotify()`、`<progress>`）が vendored 依存の売りを相当埋めたため。機構が増えて管理が面倒になった時点で htmx、push/SSE 需要が出た時点で Datastar を再評価する。JSON API 経由は「ページ内更新の道具としては」不採用のまま。
+- **volatile 機能は採用不可・ウォッチのみ**: `html-setters` / html-streaming-setters（宣言的部分更新）は単一エンジンの volatile 機能で opt-in ゲート付きのため選択肢から除外。
