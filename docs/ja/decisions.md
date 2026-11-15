@@ -421,16 +421,26 @@
 - **reduced-motion の CSS 保険**: `::view-transition-group(*)/old(*)/new(*) { animation: none !important }` を `@media (prefers-reduced-motion: reduce)` に追加（guide MANDATORY）。JS 側でもスキップする二重化。
 - **検証**: Chromium 156 で `Element.prototype.startViewTransition` を計装して append（コメント投稿）・replace（status toggle）・422（空投稿）の 3 経路すべてで scoped VT が 1 回走り、DOM 差し替え・toast・エラー表示が正常、コンソールエラー 0 を確認。
 
-## `<details>` 開閉アニメーション（2026-11-16、`devin/…-details-anim` ブランチ）
+## `<details>` 開閉アニメーション（2026-11-16、`devin/1794771977-details-anim` ブランチ）
 
 - **`interpolate-size: allow-keywords` を :root に opt-in**: guide animate-to-intrinsic-sizes の MANDATORY。`block-size: 0 ↔ auto` の遷移を有効化する。対象は現状 `.reply-details`（discussion の返信フォーム）のみ。
 - **`::details-content` 疑似要素に transition**: `<summary>` 以外の内容を包むブラウザ生成ラッパー。`block-size: 0; overflow: clip` + `transition: block-size, content-visibility` — content-visibility を遷移対象に入れないと閉じる途中で内容が先に消えて高さだけが動く。`transition-behavior: allow-discrete` は shorthand に入れず別プロパティ宣言（guide DO）。
 - **非対応はルールごと落ちるだけ**: `::details-content` / `interpolate-size` 非対応ブラウザ（Firefox・Safari 現行）はセレクタ/プロパティを無視して従来どおり瞬時表示 — 別の fallback は書かない（guide の graceful 方針どおり）。`prefers-reduced-motion` で `transition: none`。
 - **検証**: Chromium 156 で `details.open` 切替時に `offsetHeight` を rAF サンプリング → 195px→20px が ~15 フレームかけて滑らかに縮むことを確認（瞬時ではない）。
 
-## タブの移動アンダーライン（2026-11-16、`devin/…-tab-anchor-underline` ブランチ）
+## タブの移動アンダーライン（2026-11-16、`devin/1794772097-tab-anchor-underline` ブランチ）
 
 - **`.tabs::before` + anchor positioning**: guide anchor-positioning-tab-underline の推奨パターン — `.tab-active` に `anchor-name: --active-tab`、疑似要素に `position-anchor` + `anchor(left/right/bottom)` でインジケータを係留。装飾用の DOM 追加なし。
 - **MPA ゆえ遷移は cross-document VT 側に載せる**: タブは通常リンク → ページ遷移。guide の「ページ遷移では動かない」制約は、疑似要素に `view-transition-name: tab-underline` を付けて既存の `@view-transition navigation: auto` に乗せることで解消 — 旧ページの下線が新ページの位置へ morph する（TODO の「view-transition 中の要素追従に注意」の対応）。同一ドキュメント内の scoped VT（partial-submit）とは無関係なので衝突なし。
 - **fallback は既存の `.tab-active` border-bottom**: `@supports not (position-anchor)` 側は従来のスタイルのまま。対応ブラウザでは `.tab-active` の border を透明化して ::before に一本化（二本下線を防ぐ）。ARIA 側は既存の `aria-current="page"` を維持（guide MANDATORY、変更不要）。
 - **検証**: Chromium 156 で `anchorName`/`view-transition-name`/`inset-*` の computed を確認、Open→Closed 遷移で下線が新タブ位置に配置されることをスクリーンショット確認。
+
+## ナビゲーション方向に応じた遷移（2026-11-16、`devin/1794773401-directional-nav-vt` ブランチ）
+
+- **一覧↔詳細を forward/backward に分類**: `pagination-transition.js` を拡張 — 同一路径の `?page=N` は従来どおりページ番号比較、パスが違う場合は `/issues|discussions(/<id>)?` で「list→detail=forward / detail→list=backward」。その他の遷移（タブ・フィルタ・セクション跨ぎ）はタグなし＝従来の cross-fade 維持（modern-web-guidance directional-navigation-transitions）。
+- **タグ付けは `pageswap` と `pagereveal` 両方**: `pageswap` は旧ページ側で `event.activation.from/entry.url` を比較、`pagereveal` は新ページ側で `navigation.activation` を比較。Chrome 156 実測で pageswap 側に add した type が pagereveal の `vt.types` に引き継がれないため、`:active-view-transition-type()` が確実に効くよう新ページ側でも add する。direction() は同一路径かどうかで分岐するため、パンくず戻り・ページ送りどちらの方向でも同一結果になる。
+- **`pagereveal` が `viewTransition=null` だった不具合の解消（本 PR の一番の発見）**: Chrome は opt-in（`@view-transition { navigation: auto }`）の検出を「新ページの pagereveal 直前」に行うが、長大な外部 stylesheet の末尾にあった opt-in が検出に間に合わず遷移がスキップされていた（vtbag.dev の既知の落とし穴）。対策として `@view-transition` だけを `layout.html` `<head>` の **inline `<style>`** に移動し一本化（app.css 側は `::view-transition-*` アニメーション群のみ残し、遷移開始までには確実に読み込まれている）。
+- **inline `<style>` 解禁のため CSP に `style-src-elem` を追加**: 既存方針（`style-src 'self'` + 属性だけ `style-src-attr 'unsafe-inline'`、`<style>` 要素は遮断）を維持するため `style-src-elem 'self' 'unsafe-inline'` を追加 — 外部 stylesheet の `self` に加えて `<style>` 要素のみ許可。`unsafe-inline` が必要なのは opt-in 要素だけでなく、Chrome が遷移の capture スタイルを実行時に `<style>` 要素として挿入するため（`style-src 'self'` 単独では `Applying inline style violates ... style-src 'self'` で遷移自体が abort される — 実測）。
+- **スクリプトは `<head>` の同期 script に移動**: `defer`/`module` では遷移保留中の pagereveal より後に実行されることがありリスナー未登録のままパリティを取りこぼす（実測で `pagereveal` 未捕捉を確認）。`<head>` の通常 `<script src>` なら解析中に必ず登録される。全ページで load しても副作用は pagereveal/pageswap への no-op リスナーのみ。
+- **speculation rules との関係**: 一覧の `prefetch` は再現中の一因と誤認して一時無効化して試したが、inline opt-in 後は prefetch 有りでも `vt.types` 付きで遷移が走ることを確認し、`Speculation-Rules` ヘッダーは維持（両立する）。
+- **検証**: Chromium 156 headed で一覧→詳細 `pv:forward` / 詳細→一覧 `pv:backward` の type 付与と `:active-view-transition-type(forward|backward)` 一致を確認、アニメーション 8s 化の一時改修でスライド中の両ページ同居をスクリーンショット確認（前進: 旧リスト左→新詳細右から / 後退: 逆）。最終形は 0.22s ＋計装なしに戻してあり console エラー 0。

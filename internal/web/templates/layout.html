@@ -7,7 +7,16 @@
   <meta name="text-scale" content="scale">
   <title>{{.Title}} · Issue Tracker</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cstyle%3E@media%20(prefers-color-scheme:dark)%7Brect%7Bfill:%2358a6ff%7Dcircle%7Bstroke:%230d1117%7D%7D%3C/style%3E%3Crect width='16' height='16' rx='3' fill='%232563eb'/%3E%3Ccircle cx='8' cy='8' r='3.5' fill='none' stroke='white' stroke-width='1.5'/%3E%3C/svg%3E">
+  {{/* Cross-document view-transition opt-in as an inline style: Chrome
+     checks @view-transition at pagereveal without reliably waiting for the
+     external stylesheet (vtbag.dev "unreliable detection of
+     @view-transition"). Hash-pinned via style-src-elem in the CSP. */}}
+  <style>@media (prefers-reduced-motion: no-preference) { @view-transition { navigation: auto; } }</style>
   <link rel="stylesheet" href="/static/app.css">
+  {{/* Direction tags for cross-document view transitions. Loaded in <head>
+     so the pageswap/pagereveal listeners are registered before the new
+     page's first render — defer at the end of <body> can miss pagereveal. */}}
+  <script src="/static/pagination-transition.js"></script>
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
