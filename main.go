@@ -7,6 +7,10 @@
 // The "init" subcommand (or the -init flag) prepares the database file and
 // schema, refreshes planner statistics, prints a report, and exits without
 // starting the server.
+//
+// When the first argument is a CLI subcommand (issue, comment, label,
+// auth, api, ...) the binary behaves as the gh-like client instead —
+// see internal/cli and docs/sketch/ja/cli-and-web-api.md.
 package main
 
 import (
@@ -22,11 +26,16 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/podhmo/go-classic-mpa-sample/internal/cli"
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 	"github.com/podhmo/go-classic-mpa-sample/internal/web"
 )
 
 func main() {
+	if len(os.Args) > 1 && cli.IsSubcommand(os.Args[1]) {
+		os.Exit(cli.Run(context.Background(), cli.Options{Args: os.Args[1:]}))
+	}
+
 	addr := flag.String("addr", envOr("ISSUES_ADDR", "127.0.0.1:8080"),
 		"listen address (env ISSUES_ADDR)")
 	dbPath := flag.String("db", envOr("ISSUES_DB", "issues.db"),

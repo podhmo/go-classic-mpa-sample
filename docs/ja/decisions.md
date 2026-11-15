@@ -362,3 +362,14 @@
 - **mount 判定は起動時の1回**: `env token 非空 OR api_tokens 非空` で `/api/v1` を mount（`web.WithAPIEnabled` を追加。WithAPIToken は非空で enabled を兼ねるので既存呼び出しはそのまま）。稼働中に初めて token を発行しても remount はされないため再起動が要る — 一度 mount されれば発行/revoke の反映はリクエスト毎の解決で即効く（fail-closed と即時 revoke の折衷点としてここに置いた）。
 - **actor は request context 経由で渡す**: bearerAuth が解決した user_id（0=anonymous）を context に入れ、4つの create ハンドラ（issue/comment/discussion/discussion_comment）が authorID に使う。ハンドラ内の anonymous 直値は残さない。
 - **発行はローカルモード CLI（`issues auth token --user NAME`）**: パスワード検証を HTTP に出さないため、発行は DB 直結のサブコマンドに限定（メモどおり）。user 解決は `store.UserByName`（COLLATE NOCASE の unique index で大文字小文字無視）。
+
+## gh ライクな CLI（issues サブコマンド群）の実装決定（2026-11-16、`devin/1794767751-gh-cli` ブランチ）
+
+- **ディスパッチ**: main.go は `os.Args[1]` が `internal/cli` のサブコマンド名（issue/comment/label/auth/api/help/discussion）なら CLI モードへ `os.Exit(cli.Run(...))`。`init` も含めた対称の分岐は「init だけ flag パス」の非対称が既存と整合するためこの形。usage は `issues <command>` 表記。
+- **Backend interface は consumer 側宣言**: `cli.Backend` は store ドメイン型（`store.Issue`/`ListFilter`/`IssueInput` 等）のまま定義し、ローカルは `*store.Store` がそのまま構造的に満たし、リモートは `*client.Client` が api DTO ↔ store 型を往復変換して満たす。`web.Store`/`api.Store` と同じ「同一契約の 2 実装」パターン。
+- **フラグは leaf command 単位**: flag.Parse は位置引数で止まるため `--db/--server/--token` は各 leaf の FlagSet に定義し、位置引数を挟んだ再 Parse で `issue view 1 --json title` 等どこに書いても効く形にした（gh と同じ自由度）。環境変数は `ISSUES_DB/ISSUES_SERVER/ISSUES_TOKEN`。
+- **`auth token` はローカル専用**: api_tokens への INSERT は HTTP を通さず DB 直書き（パスワード検証を API に載せない設計メモ「認証」節の通り）。`--server` 指定時は usage エラーで拒否。
+- **`issues api` はリモート専用・GET のみ**: パスは `/api/v1` 配下に正規化（`/issues` も `issues` も同じ）。非 2xx は body を stderr + exit 1。`--method/--field` は Phase 4 へ送った。
+- **--json のキー名は api DTO 準拠**: `issue list --json id,title` と `issues api /issues` が同じ JSON 語彙を話すよう、cli 側で store 型→api DTO 変換してからフィールド選択する。
+- **未実装は明示**: `discussion` は `IsSubcommand` に含めるが Run では「未実装（TODO.md 管理）」の usage エラー。discussion コマンド群と Phase 4（completion、--method/--field、NO_COLOR/TTY、token revoke/list）は TODO.md のオープン項目として残す。
+- **E2E は実バイナリで**: `internal/e2etests`（`-tags=e2e`、`make test-e2e`）で `go build` → `init` → serve(`-api-token` 付き) → `/register` POST → `auth token` → `--server/--token` と `ISSUES_SERVER/ISSUES_TOKEN` の両経路で issue CRUD + `api` + author がユーザー別トークン名になることまで確認した。
