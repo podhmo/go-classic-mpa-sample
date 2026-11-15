@@ -102,6 +102,16 @@ keep-list に該当するか、コードが言えない情報を運ぶものは�
     「implements the Store contract」という記述がやや過大で、乖離は各メソッドに
     宣言されていない。「コメントの複写が正しいか」ではなく「複写の裏の実装が
     すでに緩く乖離している」のが実態 —— 共有 contract-test 化の動機が補強された。
+  - **全コード探索（interface 列挙 → 実装突き合わせ）の追加発見**:
+    `cli.Backend` の第2実装 `*client.Client`（HTTP 越し）は wire の
+    `*client.Error{Status,Message,Fields}` をそのまま返し、`store.ErrNotFound`
+    /`ErrNotAnswerable` 等の sentinel に写像しない。「同一契約の2実装」なのに
+    remote では `errors.Is(err, store.ErrNotFound)` が成立しない潜在乖離。
+    現状 sentinel を判定する消費者は local 限定の TokenStore のみなので実害は
+    ないが、404→ErrNotFound の写像 or API 側の機械可読なエラーコード化が根治。
+    なお `listWindow` の perPage>100 ページ縫合は逆に契約を守る側の好例。
+    他の interface（api.Store/cli.TokenStore）には fake 実装自体が存在しなかった
+    （api/cli/client/e2e テストは全て本物実装を使用）。
 - **`// Regression: Devin Review findings — ...`** は issue リンク相当として keep。
 - `//go:embed`, `//go:build` などディレクティブはコメントではないので無対象。
 - HTML テンプレートの `{{/* ... */}}` コメントは「なぜこの script タグがここにあるか」の
