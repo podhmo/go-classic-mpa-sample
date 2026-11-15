@@ -80,7 +80,7 @@ func TestCreateAndGetIssue(t *testing.T) {
 
 	id, err := s.CreateIssue(ctx, IssueInput{
 		Title: "first issue", Body: "hello body", LabelIDs: []int64{feat, bug},
-	})
+	}, 0)
 	if err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
@@ -117,14 +117,14 @@ func TestIssueIDsNotReused(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	id1, err := s.CreateIssue(ctx, IssueInput{Title: "one"})
+	id1, err := s.CreateIssue(ctx, IssueInput{Title: "one"}, 0)
 	if err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
 	if err := s.DeleteIssue(ctx, id1); err != nil {
 		t.Fatalf("DeleteIssue: %v", err)
 	}
-	id2, err := s.CreateIssue(ctx, IssueInput{Title: "two"})
+	id2, err := s.CreateIssue(ctx, IssueInput{Title: "two"}, 0)
 	if err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestUpdateIssue(t *testing.T) {
 	feat := mustLabel(t, s, "Feature", "#0075ca")
 	doc := mustLabel(t, s, "Docs", "#1f6feb")
 
-	id, err := s.CreateIssue(ctx, IssueInput{Title: "old", Body: "old body", LabelIDs: []int64{bug, feat}})
+	id, err := s.CreateIssue(ctx, IssueInput{Title: "old", Body: "old body", LabelIDs: []int64{bug, feat}}, 0)
 	if err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
@@ -178,7 +178,7 @@ func TestIssueLabelsSkipUnknownAndDuplicates(t *testing.T) {
 
 	id, err := s.CreateIssue(ctx, IssueInput{
 		Title: "x", LabelIDs: []int64{bug, bug, 99999},
-	})
+	}, 0)
 	if err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
@@ -207,7 +207,7 @@ func TestSetIssueStatus(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	id, err := s.CreateIssue(ctx, IssueInput{Title: "x"})
+	id, err := s.CreateIssue(ctx, IssueInput{Title: "x"}, 0)
 	if err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
@@ -243,7 +243,7 @@ func TestSetIssueStatusUpdatedAt(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	id, err := s.CreateIssue(ctx, IssueInput{Title: "x"})
+	id, err := s.CreateIssue(ctx, IssueInput{Title: "x"}, 0)
 	if err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
@@ -288,11 +288,11 @@ func TestDeleteIssue(t *testing.T) {
 	ctx := context.Background()
 
 	bug := mustLabel(t, s, "Bug", "#d73a4a")
-	id, err := s.CreateIssue(ctx, IssueInput{Title: "gone", LabelIDs: []int64{bug}})
+	id, err := s.CreateIssue(ctx, IssueInput{Title: "gone", LabelIDs: []int64{bug}}, 0)
 	if err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
-	if _, err := s.CreateComment(ctx, id, "a comment"); err != nil {
+	if _, err := s.CreateComment(ctx, id, "a comment", 0); err != nil {
 		t.Fatalf("CreateComment: %v", err)
 	}
 
@@ -325,12 +325,12 @@ func TestComments(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	id, err := s.CreateIssue(ctx, IssueInput{Title: "threaded"})
+	id, err := s.CreateIssue(ctx, IssueInput{Title: "threaded"}, 0)
 	if err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
 	for _, b := range []string{"first", "second", "third"} {
-		if _, err := s.CreateComment(ctx, id, b); err != nil {
+		if _, err := s.CreateComment(ctx, id, b, 0); err != nil {
 			t.Fatalf("CreateComment(%q): %v", b, err)
 		}
 	}
@@ -363,7 +363,7 @@ func TestCreateCommentBumpsIssueUpdatedAt(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	id, err := s.CreateIssue(ctx, IssueInput{Title: "x"})
+	id, err := s.CreateIssue(ctx, IssueInput{Title: "x"}, 0)
 	if err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
@@ -373,7 +373,7 @@ func TestCreateCommentBumpsIssueUpdatedAt(t *testing.T) {
 		t.Fatalf("GetIssue: %v", err)
 	}
 
-	cid, err := s.CreateComment(ctx, id, "ping")
+	cid, err := s.CreateComment(ctx, id, "ping", 0)
 	if err != nil {
 		t.Fatalf("CreateComment: %v", err)
 	}
@@ -398,7 +398,7 @@ func TestCreateCommentBumpsIssueUpdatedAt(t *testing.T) {
 
 func TestCreateCommentMissingIssue(t *testing.T) {
 	s := newTestStore(t)
-	if _, err := s.CreateComment(context.Background(), 9999, "hi"); !errors.Is(err, ErrNotFound) {
+	if _, err := s.CreateComment(context.Background(), 9999, "hi", 0); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("CreateComment = %v, want ErrNotFound", err)
 	}
 }
@@ -429,7 +429,7 @@ func TestListIssues(t *testing.T) {
 	feat := mustLabel(t, s, "Feature", "#0075ca")
 
 	mk := func(title, body string, age time.Duration, labels ...int64) int64 {
-		id, err := s.CreateIssue(ctx, IssueInput{Title: title, Body: body, LabelIDs: labels})
+		id, err := s.CreateIssue(ctx, IssueInput{Title: title, Body: body, LabelIDs: labels}, 0)
 		if err != nil {
 			t.Fatalf("CreateIssue(%q): %v", title, err)
 		}
@@ -643,7 +643,7 @@ func TestSeedDemoData(t *testing.T) {
 
 	// Seed on a non-empty DB is a no-op even if it would duplicate labels.
 	s2 := newTestStore(t)
-	if _, err := s2.CreateIssue(ctx, IssueInput{Title: "existing"}); err != nil {
+	if _, err := s2.CreateIssue(ctx, IssueInput{Title: "existing"}, 0); err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
 	if err := s2.SeedDemoData(ctx); err != nil {

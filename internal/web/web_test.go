@@ -165,7 +165,7 @@ func (f *fakeStore) GetIssue(_ context.Context, id int64) (*store.Issue, error) 
 	return cloneIssue(is), nil
 }
 
-func (f *fakeStore) CreateIssue(_ context.Context, in store.IssueInput) (int64, error) {
+func (f *fakeStore) CreateIssue(_ context.Context, in store.IssueInput, authorID int64) (int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	now := time.Now()
@@ -178,6 +178,10 @@ func (f *fakeStore) CreateIssue(_ context.Context, in store.IssueInput) (int64, 
 		UpdatedAt: now,
 	}
 	f.nextIssue++
+	if fu := f.users[authorID]; fu != nil {
+		u := fu.user
+		is.Author = &u
+	}
 	for _, id := range in.LabelIDs {
 		if l := f.labelByID(id); l != nil {
 			is.Labels = append(is.Labels, *l)
@@ -244,7 +248,7 @@ func (f *fakeStore) ListComments(_ context.Context, issueID int64) ([]*store.Com
 	return out, nil
 }
 
-func (f *fakeStore) CreateComment(_ context.Context, issueID int64, body string) (int64, error) {
+func (f *fakeStore) CreateComment(_ context.Context, issueID int64, body string, authorID int64) (int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if _, ok := f.issues[issueID]; !ok {
@@ -257,6 +261,10 @@ func (f *fakeStore) CreateComment(_ context.Context, issueID int64, body string)
 		CreatedAt: time.Now(),
 	}
 	f.nextComment++
+	if fu := f.users[authorID]; fu != nil {
+		u := fu.user
+		c.Author = &u
+	}
 	f.comments[issueID] = append(f.comments[issueID], c)
 	return c.ID, nil
 }
@@ -1369,7 +1377,7 @@ func TestListA11ySemantics(t *testing.T) {
 func TestDetailA11ySemantics(t *testing.T) {
 	srv, f := newTestServer(t)
 	is := f.addIssue("Detail target", "body", store.StatusOpen, time.Now(), 1)
-	if _, err := f.CreateComment(context.Background(), is.ID, "first comment"); err != nil {
+	if _, err := f.CreateComment(context.Background(), is.ID, "first comment", 0); err != nil {
 		t.Fatal(err)
 	}
 

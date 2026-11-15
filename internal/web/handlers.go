@@ -167,7 +167,7 @@ func (h *handler) createIssue(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	id, err := h.store.CreateIssue(r.Context(), in)
+	id, err := h.store.CreateIssue(r.Context(), in, authorIDFromContext(r.Context()))
 	if err != nil {
 		h.internalError(w, r, err)
 		return
@@ -381,7 +381,7 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	commentID, err := h.store.CreateComment(r.Context(), id, body)
+	commentID, err := h.store.CreateComment(r.Context(), id, body, authorIDFromContext(r.Context()))
 	if err != nil {
 		h.issueError(w, r, err)
 		return

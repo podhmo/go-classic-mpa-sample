@@ -32,12 +32,12 @@ var staticFS embed.FS
 type Store interface {
 	ListIssues(ctx context.Context, f store.ListFilter) ([]*store.Issue, int, error)
 	GetIssue(ctx context.Context, id int64) (*store.Issue, error)
-	CreateIssue(ctx context.Context, in store.IssueInput) (int64, error)
+	CreateIssue(ctx context.Context, in store.IssueInput, authorID int64) (int64, error)
 	UpdateIssue(ctx context.Context, id int64, in store.IssueInput) error
 	SetIssueStatus(ctx context.Context, id int64, status string) error
 	DeleteIssue(ctx context.Context, id int64) error
 	ListComments(ctx context.Context, issueID int64) ([]*store.Comment, error)
-	CreateComment(ctx context.Context, issueID int64, body string) (int64, error)
+	CreateComment(ctx context.Context, issueID int64, body string, authorID int64) (int64, error)
 	ListLabels(ctx context.Context) ([]*store.Label, error)
 	CreateUser(ctx context.Context, name, passwordHash string) (int64, error)
 	AuthenticateUser(ctx context.Context, name, password string) (*store.User, error)
@@ -147,6 +147,15 @@ func userFromContext(ctx context.Context) *store.User {
 	return u
 }
 
+// authorIDFromContext maps the logged-in user to the author_id recorded on
+// new posts; 0 means anonymous.
+func authorIDFromContext(ctx context.Context) int64 {
+	if u := userFromContext(ctx); u != nil {
+		return u.ID
+	}
+	return 0
+}
+
 // withUser is the authentication middleware: it resolves the session
 // cookie to a *store.User on the request context. It never rejects a
 // request — anonymous access is fully supported; a nil user simply means
@@ -239,6 +248,7 @@ var funcMap = template.FuncMap{
 	"add":         func(a, b int) int { return a + b },
 	"sub":         func(a, b int) int { return a - b },
 	"isChecked":   isChecked,
+	"authorName":  authorName,
 	"listURL":     listURL,
 	"statusURL":   statusURL,
 	"labelURL":    labelURL,
@@ -256,6 +266,14 @@ func fmtTime(t time.Time) string {
 // isChecked reports whether id is among the selected label IDs.
 func isChecked(id int64, ids []int64) bool {
 	return slices.Contains(ids, id)
+}
+
+// authorName renders a post's author; a nil author is an anonymous post.
+func authorName(u *store.User) string {
+	if u == nil {
+		return "anonymous"
+	}
+	return u.Name
 }
 
 // issuesURL builds /issues URLs carrying the current filter state, so

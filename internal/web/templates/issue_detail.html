@@ -27,7 +27,7 @@
     </div>
     {{end}}
     <p class="issue-meta">
-      Opened <time datetime="{{.Issue.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .Issue.CreatedAt}}</time>
+      Opened by {{authorName .Issue.Author}} <time datetime="{{.Issue.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .Issue.CreatedAt}}</time>
       · Last updated <time datetime="{{.Issue.UpdatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .Issue.UpdatedAt}}</time>
     </p>
   </header>
@@ -73,6 +73,7 @@
     {{range .Comments}}
     <li class="card comment" id="comment-{{.ID}}">
       <header class="comment-meta">
+        <span class="comment-author">{{authorName .Author}} commented</span>
         <a class="comment-permalink" href="#comment-{{.ID}}"><time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .CreatedAt}}</time> <span class="visually-hidden">(comment {{.ID}})</span></a>
         <span class="copy-wrap">
           <button type="button" class="copy-btn" command="--copy-permalink" commandfor="comment-{{.ID}}" data-url="/issues/{{$.Issue.ID}}#comment-{{.ID}}" aria-label="Copy link to comment {{.ID}}">copy link</button>
@@ -92,7 +93,7 @@
       <label for="comment-body">Add a comment</label>
       <textarea id="comment-body" name="body" rows="4" required data-error="comment-error" aria-keyshortcuts="Control+Enter Meta+Enter"{{if .CommentError}} aria-invalid="true" aria-describedby="comment-error comment-hint" autofocus{{else}} aria-invalid="false" aria-describedby="comment-hint"{{end}}>{{.CommentDraft}}</textarea>
       <p class="field-error{{if not .CommentError}} field-error-pending{{end}}" id="comment-error">{{or .CommentError "Comment is required."}}</p>
-      <p class="field-hint" id="comment-hint">Markdown (GFM) supported. Raw HTML is not rendered. Ctrl+Enter (Cmd+Enter on macOS) submits.</p>
+      <p class="field-hint" id="comment-hint">Markdown (GFM) supported. Raw HTML is not rendered. Ctrl+Enter (Cmd+Enter on macOS) submits.{{if .User}} Posting as @{{.User.Name}}.{{else}} Posting as anonymous — <a href="/login?next=/issues/{{$.Issue.ID}}">log in</a> to attach your name.{{end}}</p>
     </div>
     <button type="submit" class="btn btn-primary">Comment</button>
   </form>
