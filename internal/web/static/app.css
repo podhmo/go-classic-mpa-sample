@@ -1755,6 +1755,20 @@ html:active-view-transition-type(backward)::view-transition-new(root) {
   animation-name: vt-slide-from-left;
 }
 
+/* partial-submit.js wraps each DOM swap in an element-scoped
+   startViewTransition (guide scoped-component-transitions). The scope
+   element gets the UA's view-transition-name: root, so the group
+   duration above applies to scoped swaps as well. No child names:
+   naming every <li> (match-element) would also leak per-item
+   morphing into the cross-document navigation transition. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+
 /* ---------- responsive ---------- */
 
 /* Component layouts (filter bar, issue rows) adapt on their own above; what
