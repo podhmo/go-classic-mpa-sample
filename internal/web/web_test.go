@@ -1112,6 +1112,39 @@ func TestToggleStatus(t *testing.T) {
 	}
 }
 
+// Phase 2 of the partial-update contract: a partial status POST answers
+// the re-rendered issue article — badge, meta and the flipped toggle —
+// which the client swaps over .issue-detail (replace mode).
+func TestPartialSetStatusContract(t *testing.T) {
+	srv, f := newTestServer(t)
+	f.addIssue("Toggle me", "", store.StatusOpen, time.Now())
+	partial := map[string]string{"X-Partial": "1"}
+
+	resp := postFormWithHeaders(t, srv.URL+"/issues/1/status",
+		url.Values{"status": {"closed"}}, partial)
+	body := getBody(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("partial status POST status = %d, want 200", resp.StatusCode)
+	}
+	for _, want := range []string{
+		`<article class="card issue-detail">`,
+		`badge-closed`,
+		`name="status" value="open"`,
+		"Reopen issue",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("status swap fragment missing %q", want)
+		}
+	}
+	if strings.Contains(body, "<!DOCTYPE") {
+		t.Error("partial response must be a fragment, not a full page")
+	}
+	got, _ := f.GetIssue(context.Background(), 1)
+	if got.Status != store.StatusClosed {
+		t.Fatalf("status = %q, want closed", got.Status)
+	}
+}
+
 func TestSetStatusInvalid(t *testing.T) {
 	srv, f := newTestServer(t)
 	f.addIssue("Bad status", "", store.StatusOpen, time.Now())

@@ -488,9 +488,31 @@ func (h *handler) setCommentAnswer(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, http.StatusBadRequest, "Bad request", "Invalid answer value.")
 		return
 	}
+	// A partial request must know the pre-update mark holder: marking moves
+	// the badge, so the swap fragment re-renders the previous answer's <li>
+	// too. Only the holder's id survives the write — fake stores share
+	// comment pointers (storybook's does), so IsAnswer flags are
+	// post-mutation by the time the response renders.
+	var prevID int64
+	if wantsPartial(r) {
+		cs, err := h.store.ListDiscussionComments(r.Context(), id)
+		if err != nil {
+			h.internalError(w, r, err)
+			return
+		}
+		for _, c := range cs {
+			if c.IsAnswer {
+				prevID = c.ID
+			}
+		}
+	}
 	err = h.store.SetCommentAnswer(r.Context(), id, cid, answer)
 	switch {
 	case err == nil:
+		if wantsPartial(r) {
+			h.renderAnswerSwap(w, r, id, cid, prevID)
+			return
+		}
 		http.Redirect(w, r, fmt.Sprintf("%s#comment-%d", discussionURL(id), cid), http.StatusSeeOther)
 	case errors.Is(err, store.ErrNotFound):
 		h.notFound(w, r)
@@ -500,6 +522,35 @@ func (h *handler) setCommentAnswer(w http.ResponseWriter, r *http.Request) {
 	default:
 		h.internalError(w, r, err)
 	}
+}
+
+// renderAnswerSwap answers a partial answer-mark POST with every <li>
+// that changed: the toggled comment plus, when the mark moved, the
+// comment that carried it before (prevID, 0 when nothing was marked).
+// Each <li> self-targets by id in the client's replace swap.
+func (h *handler) renderAnswerSwap(w http.ResponseWriter, r *http.Request, id, cid, prevID int64) {
+	discussion, err := h.store.GetDiscussion(r.Context(), id)
+	if err != nil {
+		h.discussionError(w, r, err)
+		return
+	}
+	cs, err := h.store.ListDiscussionComments(r.Context(), id)
+	if err != nil {
+		h.internalError(w, r, err)
+		return
+	}
+	var nodes []*store.DiscussionComment
+	for _, c := range cs {
+		if c.ID == cid || (prevID != 0 && c.ID == prevID) {
+			nodes = append(nodes, c)
+		}
+	}
+	if len(nodes) == 0 {
+		h.notFound(w, r)
+		return
+	}
+	h.r.renderFragment(w, "discussion_detail", "discussion_comment_swap", http.StatusOK,
+		dict("Discussion", discussion, "Comments", nodes))
 }
 
 // discussionError maps store.ErrNotFound to a 404 page and delegates

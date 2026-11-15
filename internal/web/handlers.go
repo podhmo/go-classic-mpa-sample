@@ -310,6 +310,26 @@ func (h *handler) setStatus(w http.ResponseWriter, r *http.Request) {
 		h.issueError(w, r, err)
 		return
 	}
+	if wantsPartial(r) {
+		// The swap fragment is the whole article — badge, timestamps and
+		// the flipped toggle button all change at once. Re-fetch for the
+		// complete issue (labels etc.) and set the fields we just changed,
+		// like createComment's constructed fragment: re-reading status is
+		// not needed since we know what we wrote.
+		issue, err := h.store.GetIssue(r.Context(), id)
+		if err != nil {
+			h.issueError(w, r, err)
+			return
+		}
+		updated := *issue
+		updated.Status = status
+		updated.UpdatedAt = time.Now()
+		h.r.renderFragment(w, "issue_detail", "issue_article", http.StatusOK, issueDetailPage{
+			Issue: &updated,
+			User:  userFromContext(r.Context()),
+		})
+		return
+	}
 	http.Redirect(w, r, issueURL(id), http.StatusSeeOther)
 }
 

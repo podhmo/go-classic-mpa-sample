@@ -1,9 +1,12 @@
 // Partial submit: forms marked data-partial are posted via fetch and the
-// returned HTML fragment is swapped in — the new comment's <li> appended
-// to the form's data-partial-target, or on 422 the re-rendered form
-// replacing itself. Without this module the same forms do a classic
-// POST → 303 → GET round-trip (progressive enhancement). Design:
-// docs/sketch/ja/partial-updates.md.
+// returned HTML fragment is swapped in — comment forms (default mode)
+// append the new comment's <li> to the form's data-partial-target, while
+// data-partial-mode="replace" forms (status toggle, answer mark) swap
+// existing elements out: each fragment node self-targets by its own id,
+// and a node without an id falls back to data-partial-target. On 422 the
+// re-rendered form replaces itself. Without this module the same forms do
+// a classic POST → 303 → GET round-trip (progressive enhancement).
+// Design: docs/sketch/ja/partial-updates.md.
 //
 // The submit listener is delegated on document so it also catches forms
 // this script itself swapped in (and future injected forms).
@@ -64,6 +67,38 @@ function resetPostedForm(form) {
   }
 }
 
+// Replace mode: each element node in the fragment self-targets —
+// id="comment-3" replaces #comment-3 — so one response can refresh
+// several spots at once (an answer mark re-renders both the newly marked
+// comment and the one losing the badge). A node without an id falls back
+// to the form's data-partial-target, which is consumed once; a stale
+// self-targeting node whose id is already gone is skipped rather than
+// replacing the wrong element.
+//
+// replaceWith, not moveBefore: moveBefore is a state-preserving move for
+// an element already connected in the document — it rejects a detached
+// node with HierarchyRequestError (Chrome 133+), which every freshly
+// parsed fragment node is, so it can never apply to a fragment swap.
+// (TODO's moveBefore note assumed it was a drop-in insertBefore
+// replacement; verified against the live browser: it is not.)
+function swapTargets(form, nodes) {
+  let fallback = form.dataset.partialTarget
+    ? document.querySelector(form.dataset.partialTarget)
+    : null;
+  let swapped = 0;
+  for (const node of nodes) {
+    let target = node.id ? document.getElementById(node.id) : null;
+    if (!target && fallback) {
+      target = fallback;
+      fallback = null;
+    }
+    if (!target || !target.parentNode) continue;
+    target.replaceWith(node);
+    swapped++;
+  }
+  if (swapped === 0) throw new Error("fragment matched no element on the page");
+}
+
 async function postPartial(form) {
   form.dataset.busy = "1";
   form.setAttribute("aria-busy", "true");
@@ -101,6 +136,21 @@ async function postPartial(form) {
     }
     if (!res.ok || nodes.length === 0) throw new Error(`post failed: ${res.status}`);
 
+    if (form.dataset.partialMode === "replace") {
+      swapTargets(form, nodes);
+      // The submitted form went away with its host element: move focus to
+      // its re-rendered counterpart (same action ⇒ same control). This is
+      // focus continuity, not a jump — no announcement conflicts.
+      const action = form.getAttribute("action");
+      if (action) {
+        document
+          .querySelector(`form[action="${CSS.escape(action)}"] button[type="submit"]`)
+          ?.focus();
+      }
+      announce(form.dataset.partialAnnounce || "Updated.");
+      return;
+    }
+
     const target = document.querySelector(form.dataset.partialTarget);
     if (!target) throw new Error(`no insertion target: ${form.dataset.partialTarget}`);
     for (const node of nodes) target.append(node);
@@ -124,7 +174,7 @@ async function postPartial(form) {
       added.scrollIntoView({ block: "nearest" });
       setTimeout(() => added.classList.remove("comment-new"), 4000);
     }
-    announce("Comment posted.");
+    announce(form.dataset.partialAnnounce || "Comment posted.");
   } catch {
     showSubmitError(form, "Comment could not be posted. Please try again.");
   } finally {
