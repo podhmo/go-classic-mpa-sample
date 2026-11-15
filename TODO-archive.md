@@ -98,3 +98,8 @@
 - [x] Accounts Phase 1: ログイン + 投稿者識別 > **投稿への author_id 記録 + 表示**: `CreateIssue`/`CreateComment` に author を渡し、詳細ページに `Opened by <name>` / `<name> commented` を表示。NULL は `anonymous`。
 - [x] Accounts Phase 1: ログイン + 投稿者識別 > **seed デモユーザー**: `demo`/`demo` のユーザーを seed（ハッシュは実行時生成）して初回起動からログインできる形に。
 - [x] Accounts Phase 1: ログイン + 投稿者識別 > **テスト + 実機検証 + docs**: store/web テスト追加、`go test ./... && go vet ./... && gofmt -l .`、実サーバで register→login→投稿→logout を確認。`docs/ja/decisions.md`・`docs/ja/roadmap.md` を更新。
+
+- [x] **Discussions タブ（GitHub Discussions 風）**: `/discussions` 系の追加。カテゴリ（単一選択・シード定義、format: open/qa）・1段スレッド返信・qa の answer マークを採用。reactions・poll・issue→discussion 変換・pin・カテゴリ管理 UI は見送り（設計メモ「見送り」節）。設計: `docs/sketch/ja/discussions.md`（案B: 並列テーブル）
+- [x] Discussions タブ（GitHub Discussions 風） > **Phase 1: 骨格** — migration V3（`discussion_categories`/`discussions`/`discussion_comments` + 部分一意 index）・store メソッド・一覧/詳細/作成/編集/削除/コメント投稿のルート・ナビの Issues/Discussions タブ化（view model に `Section` を追加し New ボタンを文脈分岐）・カテゴリ＋デモ discussion のシード・store/web テスト。コメント表示は時系列フラット（スレッド化は Phase 2）。
+- [x] Discussions タブ（GitHub Discussions 風） > **Phase 2: 対話構造** — 1段ネスト表示と `<details>` 内返信フォーム（hidden `parent_id`、store 層で「同一 discussion の top-level」検証）、qa のみ answer マーク/解除（`POST .../comments/{cid}/answer`、2行更新を1トランザクション＋部分一意 index）、詳細・一覧の Answered バッジと `?answered=yes|no` フィルタ、answer/返信で `updated_at` bump。
+- [x] Discussions タブ（GitHub Discussions 風） > **Phase 3: 仕上げ** — speculation-rules の discussions 対応、search-highlight.js の selector 一般化（**JS**）、storybook story 充実、`docs/ja/roadmap.md` の v2 欄更新。
