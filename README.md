@@ -182,7 +182,9 @@ A machine-facing JSON API (design: `docs/sketch/ja/cli-and-web-api.md`),
 mounted only when a credential exists — `-api-token`/`ISSUES_API_TOKEN`
 set **or** at least one per-user token minted via `issues auth token`.
 With neither, `/api/v1` is not mounted at all (fail-closed). Every
-request then needs `Authorization: Bearer <token>`.
+request then needs `Authorization: Bearer <token>`. Credential presence
+is decided once at startup — if you mint the first token while the
+server is running, `/api/v1` stays 404 until it is restarted.
 
 Two credential kinds:
 
