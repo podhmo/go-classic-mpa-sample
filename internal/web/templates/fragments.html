@@ -180,7 +180,7 @@
 {{define "discussion_reply"}}
 <li class="card comment comment-reply" id="comment-{{.C.ID}}">
   <header class="comment-meta">
-    <span class="comment-author">{{authorName .C.Author}} replied</span>
+    <span class="comment-author">{{authorName .C.Author}} commented</span>
     <a class="comment-permalink" href="#comment-{{.C.ID}}"><time datetime="{{.C.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .C.CreatedAt}}</time> <span class="visually-hidden">(comment {{.C.ID}})</span></a>
     <span class="copy-wrap">
       <button type="button" class="copy-btn" command="--copy-permalink" commandfor="comment-{{.C.ID}}" data-url="/discussions/{{.Discussion.ID}}#comment-{{.C.ID}}" aria-label="Copy link to comment {{.C.ID}}">copy link</button>
