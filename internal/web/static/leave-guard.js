@@ -92,6 +92,14 @@ new MutationObserver((records) => {
       if (node instanceof HTMLFormElement) snapshot(node);
       for (const form of node.querySelectorAll("form")) snapshot(form);
     }
+    // Forms detached by a fragment swap (e.g. the 422 re-render replaces
+    // a dirty form with a fresh baseline) must release their dirty count;
+    // otherwise the guard keeps warning after the state is gone.
+    for (const node of rec.removedNodes) {
+      if (!(node instanceof Element)) continue;
+      if (node instanceof HTMLFormElement) unmark(node);
+      for (const form of node.querySelectorAll("form")) unmark(form);
+    }
   }
 }).observe(document.body, { childList: true, subtree: true });
 
