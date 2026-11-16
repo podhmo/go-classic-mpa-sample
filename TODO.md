@@ -17,3 +17,12 @@ Guides referenced below are in the `modern-web-guidance` catalog (`.agents/skill
 - [x] **fake/stub の契約乖離を全コードから探索し整理する**: 全 5 interface × 全実装の意味論突き合わせを実施（記録は PR #71）。実バグ寄りは全て修正、意図的スタブは doc コメントで宣言済み
 - [ ] **fake/stub 向けの共有 contract test を書く**: `*store.Store` / `fakeStore` / `storyStore` に同一振る舞いスイート（bump 規則・エラー種別・フィルタ意味論）を流す。fake のポインタ共有は answer-swap ハンドラが依存しているので本物に揃えず「fake の仕様として宣言」する方向（詳細: PR #71）
 - [ ] **`*client.Client` の sentinel 非写像の方針を決める**: remote モードでは `errors.Is(err, store.ErrNotFound)` が成立しない潜在乖離（現状 sentinel 判定する消費者は local 限定で実害なし）。404→`ErrNotFound` 写像 or API の機械可読エラーコード化を検討（bugs.md #27）
+- [ ] **UI ルール監査で検出した不統一の修正**: `docs/ja/ui-rules.md` の「変更予定」項目（外部デザインシステムチェックリスト監査 2026-11-16 の結果）
+  - [ ] **ボタン配置の統一**: 作成/編集フォーム（issue_form/discussion_form）と GET 削除確認ページ（issue_delete/discussion_delete）を「左:キャンセル / 右:確定・右寄せ」に揃える。dialog・返信フォームは準拠済み
+  - [ ] **ヘッダ New ボタンの枠線化**: layout.html の "New issue"/"New discussion" から `btn-primary` を外しページ内 Primary を1つにする
+  - [ ] **コメント欄が空のとき送信ボタンを Disabled に**: **JS**（textarea の input 監視。トップレベル・返信両方）
+  - [ ] **返信の部分投稿後に `<details>` を畳む**: **JS**（partial-submit.js append パスで `.reply-form` 成功時に `details.open=false`）
+  - [ ] **入力中の離脱ガード**: **JS**（dirty 時に beforeunload 確認を出す static/ スクリプト。送信成功で解除）
+  - [ ] **モバイル対応の残件**: 固定要素（toast/back-to-top）に `env(safe-area-inset-*)` を加味、装飾的 `:hover` を `@media (hover:hover)` でガード統一、狭画面で固定要素が送信ボタン等を覆わない配置の見直し
+  - [ ] **storybook ストーリーの拡充**: 変更予定項目（ボタン配置・狭画面レイアウト等）を目視確認できるよう、不足している状態ストーリーを `internal/web/story_pages.go` に追加する。JS 挙動は verify-ui 側で確認
+  - [ ] **コメント permalink を判別可能にする**: `.comment-permalink` が `color: inherit; text-decoration: none` で本文と同色無下線（hover でしか判別できない）→ リンクと分かる表現に直す（ui-rules.md §9、2026-11-16 決定）
