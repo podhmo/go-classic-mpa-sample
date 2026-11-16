@@ -100,7 +100,9 @@
     <p class="field-error{{if not .CommentError}} field-error-pending{{end}}" id="comment-error">{{or .CommentError "Body is required."}}</p>
     <p class="field-hint" id="comment-hint">Markdown (GFM) supported. Raw HTML is not rendered. Ctrl+Enter (Cmd+Enter on macOS) submits.{{if .User}} Posting as @{{.User.Name}}.{{else}} Posting as anonymous — <a href="/login?next=/issues/{{.Issue.ID}}">log in</a> to attach your name.{{end}}</p>
   </div>
-  <button type="submit" class="btn btn-primary">Comment</button>
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary">Comment</button>
+  </div>
 </form>
 {{end}}
 

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
   <meta name="text-scale" content="scale">
   <title>{{.Title}} · Issue Tracker</title>
@@ -28,9 +28,9 @@
           <a href="/issues"{{if eq .Section "issues"}} aria-current="page"{{end}}>Issues</a>
           <a href="/discussions"{{if eq .Section "discussions"}} aria-current="page"{{end}}>Discussions</a>
           {{if eq .Section "discussions"}}
-          <a class="btn btn-primary" href="/discussions/new">New discussion</a>
+          <a class="btn" href="/discussions/new">New discussion</a>
           {{else}}
-          <a class="btn btn-primary" href="/issues/new">New issue</a>
+          <a class="btn" href="/issues/new">New issue</a>
           {{end}}
           {{if .User}}
           <span class="user-handle">@{{.User.Name}}</span>

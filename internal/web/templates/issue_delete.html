@@ -7,8 +7,8 @@
   <p>Are you sure you want to delete <strong>{{.Issue.Title}}</strong>?</p>
   <p class="muted">This permanently removes the issue and all of its comments. This action cannot be undone.</p>
   <form method="post" action="/issues/{{.Issue.ID}}/delete" class="form-actions">
-    <button type="submit" class="btn btn-danger">Delete issue</button>
     <a class="btn btn-quiet" href="/issues/{{.Issue.ID}}">Cancel</a>
+    <button type="submit" class="btn btn-danger">Delete issue</button>
   </form>
 </div>
 {{end}}

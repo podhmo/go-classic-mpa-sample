@@ -17,13 +17,13 @@
 
 ## 1. ボタンとアクション配置
 
-- [正] **確定系は右、取り消し系は左、右寄せ配置**。`<dialog>` と返信フォーム
-  （`.comment-form .form-actions` は `justify-content: flex-end`）は準拠済み。
-- [変更予定] 作成・編集フォーム（`.form-actions` 左寄せで「Submit → Cancel」）
-  および GET 削除確認ページ（「Delete → Cancel」）は逆順のまま → 上記ルールに揃える。
+- [正] **確定系は右、取り消し系は左、右寄せ配置**。`.form-actions` 自体が
+  `justify-content: flex-end` を持ち、作成/編集フォーム・GET 削除確認
+  ページ・`<dialog>`・返信フォームのすべてで「Cancel（`<a>`/`<button>`）
+  → 確定（`<button type="submit">`）」の順に統一済み（2026-11-16）。
 - [正] **1 画面 1 プライマリ**（ページ内アクションに限る）。
-- [変更予定] グローバルヘッダの "New issue" / "New discussion" は Primary のまま
-  常駐しておりページ内 Primary と重複 → 枠線 `.btn` に落とす。
+- [正] **グローバルヘッダの "New issue" / "New discussion" は枠線 `.btn`**。
+  Primary はページ内アクション 1 つのみ（2026-11-16 枠線化）。
 - [正] **破壊的アクションは `btn-danger`（枠線型・hover で塗り）で抑制し、
   必ず確認を挟む**（モーダル `<dialog>` or GET 確認ページ）。
 - [正] **削除モーダルは Cancel に `autofocus`**。Esc・Cancel・背景クリック
@@ -52,7 +52,11 @@
 - [正] **二重送信防止**: data-partial 経路は busy フラグ + submit 非活性 +
   `<progress>`。失敗時は入力を消さずインラインエラー（サーバ側もドラフトを
   再描画して保持）。
-- [変更予定] **入力中の離脱ガード**（beforeunload 相当）がない → 追加する。
+- [正] **入力中の離脱ガード** — `static/leave-guard.js` が textarea/テキスト
+  入力/checkbox・radio（ラベル変更）を持つフォームの未送信変更を検出し
+  `beforeunload` で確認する（部分投稿成功＝`reset` イベントで解除。
+  auth 系の短いフォームは対象外）。作成/編集フォームと詳細ページに
+  読み込む（2026-11-16）。
 
 ## 4. 一覧（リスト画面）
 
@@ -73,14 +77,19 @@
 ## 6. コメント追加 UI
 
 - [正] **トップレベル入力欄は画面最下部に常時展開**、キャンセルボタンなし。
-- [変更予定] **コメント欄が空のとき送信ボタンを Disabled に** → 追加する
-  （トップレベル・返信両方）。
+- [正] **コメント欄が空のとき送信ボタンを Disabled に**
+  （`static/comment-submit-disabled.js`。トップレベル・返信両方。
+  空投稿は 422 しか返せないため、入力があるまでボタンを無効化する
+  GitHub 式の方針として採用 — バリデーション表示を妨げる disable とは
+  別扱い。2026-11-16）。
 - [正（代案）] **返信欄は `<details>` で畳んだ擬似入力バー**（summary 「Add a comment」）。子 0 件 / 1 件以上で同一の見た目（「返信」ボタンのみの形は取らない）。（元の規定: 6-2 子 0 件はフッターに「返信」ボタンのみ / 6-3 子 1 件以上は子一覧の最下部に 1 行の擬似入力欄）
 - [正] **展開時は JS で autofocus、`field-sizing: content` で自動伸縮**、
   右下に「Cancel（左）/ Comment（右）」。
 - [正] **複数返信欄の排他制御は設けない**。同時に複数開いたままでよい（2026-11-16 決定）。（元の規定: 6-5 空の返信欄は別の返信欄を開いた時に自動で閉じ、入力ありは保持）
 - [正（代案）] **返信キャンセルは入力有無を問わず即座に畳む**。破棄確認は出さないが、畳んでも textarea の内容は保持される（再展開で戻る）ため実質データを失わない。（元の規定: 6-6 空なら即畳み、入力ありなら破棄確認を出す）
-- [変更予定] **部分投稿の成功後は `<details>` を畳んで元の状態に戻す**。
+- [正] **部分投稿の成功後は `<details>` を畳んで元の状態に戻す**
+  （partial-submit.js の append パスで `details.open=false`、フォーカスは
+  折り畳みバーの summary へ戻す。2026-11-16）。
 
 ## 7. メニュー（`...`）と破壊的操作
 
@@ -109,8 +118,9 @@
   もの」と分かる外観であること。古典的 web リンク（青・紫・常時下線）の
   強制はしない（2026-11-16 決定）。現行の `--accent` 色リンク、
   `.btn` 化した `<a>`、badge/tab リンクはこれで許容。
-- [変更予定] `.comment-permalink` は `color: inherit; text-decoration: none`
-  で本文と同色無下線（hover でしか判別できない）→ 見直す。
+- [正] **`.comment-permalink` は常時下線つき**（muted 色のまま
+  `text-decoration-color: var(--text-muted)` で下線表示、hover で accent に。
+  2026-11-16）。
 
 ## 10. アクセシビリティ・キーボード操作
 
@@ -172,14 +182,16 @@
 - [正] **狭幅はコンテナクエリ / `auto-fit` で自然に積む**（filter-bar・
   issue-row）。ビューポート基準の 40em ブレークポイントは page-head と
   issue-actions の縦積み用のみ。
-- [変更予定] **safe-area-inset 未考慮**: 固定要素（toast・back-to-top）
-  がノッチ/ホームインジケータに被りうる → `env(safe-area-inset-*)` を
-  加味する。
-- [変更予定] **sticky hover**: iOS でタップ後に hover スタイルが残る
-  問題。装飾的な `:hover` も `@media (hover: hover)` でガードする
-  方針へ統一する（現状は copy-btn のみガード済み）。
-- [変更予定] **固定要素が狭画面でフォーム送信ボタン等を覆う可能性**
-  （back-to-top/toast）→ 表示位置か表示条件を見直す。
+- [正] **safe-area-inset 考慮済み**: 固定要素（toast・back-to-top）の
+  オフセットに `env(safe-area-inset-*)` を加算。viewport meta に
+  `viewport-fit=cover` を付けて env() が値を持つようにした（2026-11-16）。
+- [正] **sticky hover 対策統一済み**: 装飾的な `:hover` はすべて
+  `@media (hover: hover)` でガード。`:is(:hover, :focus-visible)` 複合は
+  focus 側を無条件・hover 側をガードに分離（2026-11-16）。
+- [正] **狭画面での固定要素配置**: back-to-top は `max-width: 40em` で
+  左下に移動（右寄せの送信ボタンと干渉しない）、`.main-content` の
+  `padding-block-end` を拡大して最下部のフォーム操作が固定要素帯より
+  上までスクロールできるようにした（toast は一時表示＋Close 付き）。
 
 ## 15. ルールの検証方法
 
@@ -212,17 +224,20 @@
 
 ## 変更予定のまとめ
 
-上記「変更予定」項目に対応するタスクは `TODO.md` に登録済み。
+監査時点の「変更予定」はすべて実装済み（2026-11-16）。当時のタスク一覧と
+対応内容:
 
 1. **ボタン配置の統一** — 作成/編集フォーム・削除確認ページを「左:キャンセル
-   / 右:確定・右寄せ」に揃える（1-1）
+   / 右:確定・右寄せ」に揃えた。`.form-actions` 自体が `flex-end` を持ち
+   `.comment-form`/`.confirm-dialog` の個別例外は撤去（1-1）
 2. **ヘッダ New ボタンの枠線化** — `btn-primary` を外し、ページ内 Primary を
-   1つにする（1-2）
-3. **コメント欄が空のとき送信 Disabled**（6-1）
-4. **返信の部分投稿後に `<details>` を畳む**（6-6）
-5. **入力中の離脱ガード**（3-7）
-6. **モバイル対応の残件** — `env(safe-area-inset-*)` の加味、`:hover` の
-   `@media (hover: hover)` ガード統一、狭画面で固定要素が操作を覆わない
-   配置の見直し（セクション 14）
-7. **コメント permalink の判別可能化** — `.comment-permalink` が本文色・
-   無下線でリンクと識別できないのを直す（セクション 9）
+   1つにした（1-2）
+3. **コメント欄が空のとき送信 Disabled** — `comment-submit-disabled.js`
+   （6-1）
+4. **返信の部分投稿後に `<details>` を畳む** — partial-submit.js（6-6）
+5. **入力中の離脱ガード** — `leave-guard.js`（3-7）
+6. **モバイル対応の残件** — `env(safe-area-inset-*)` 加味、`viewport-fit=cover`
+   付与、装飾 `:hover` の `@media (hover: hover)` ガード統一、狭画面で
+   back-to-top を左下へ移動＋`.main-content` 下端余白の確保（セクション 14）
+7. **コメント permalink の判別可能化** — `.comment-permalink` に常時下線
+   （セクション 9）

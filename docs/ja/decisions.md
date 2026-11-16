@@ -490,3 +490,16 @@
 - **ボタン配置は「左:キャンセル / 右:確定・右寄せ」を正とする**: dialog と返信フォームは準拠済み。未適用の作成/編集フォーム・GET 削除確認ページは TODO で追従。
 - **グローバルヘッダの New ボタンは枠線化**: `btn-primary` を外してページ内 Primary を1つにする（TODO で対応）。
 - **リンクの外観ルールは「本文テキストと見分けがつくこと」まで**: 古典的 web リンク（青・紫・常時下線）の強制は採用しない。現行の `--accent` 色・ボタン/バッジ/tab 化した `<a>` は許容。判別不能な `.comment-permalink`（本文色・無下線）は TODO で修正。
+
+## UI ルール監査の「変更予定」一括対応（2026-11-16、`devin/1794806699-ui-rule-audit-fixes` ブランチ）
+
+ui-rules.md の監査 TODO 全7件を実装。個別の判断:
+
+- **`.form-actions` 自体を `flex-end` に**: 「左:キャンセル/右:確定・右寄せ」が全フォームの規約なので、`.comment-form`/`.confirm-dialog` の個別 flex-end 指定を撤去してベースに一本化。あわせてフォーム/削除確認ページの DOM 順を Cancel→確定 に入れ替え。例外（左寄せが正しい場所）は存在しない。
+- **ヘッダ New ボタンは `btn`（枠線）に**: `btn-primary` を外し、ページ内 Primary（空状態 CTA やフォーム送信）との重複を解消。
+- **空欄 disabled は GitHub 式の採用判断**: modern-web-guidance `forms` の「バリデーションを塞ぐための submit 無効化は不可」とは別物（空投稿は 422 しか返らず表示すべきエラーもない）。`comment-submit-disabled.js` は delegated `input` + MutationObserver でスワップ投入フォームにも対応し、`syncCommentSubmit` を partial-submit.js が import して二重送信防止の再活性化と競合しないよう最終状態で再評価する。
+- **返信投稿後の畳み**: append 成功パスで `details.open=false`＋summary へフォーカス（Cancel ボタンと同じ着地）。トップレベルフォームは従来どおり textarea にフォーカスを残す。
+- **離脱ガード（`leave-guard.js`）**: フィールド値を描画時値と比較して dirty 判定（編集フォームが「最初から dirty」にならないよう値比較式）。`reset` イベント（部分投稿成功時のみ発火）で microtask 遅延に再ベースラインして解除。`beforeunload` の文言はブラウザ固定。auth フォームは対象外。
+- **モバイル残件**: `viewport-fit=cover` を付けて `env(safe-area-inset-*)` が効くようにしたうえで toast/back-to-top に加算。装飾 `:hover` を全て `@media (hover: hover)` ガードへ（`:is(:hover,:focus-visible)` は分離して focus 側を維持）。狭画面は back-to-top を左下に移動し `.main-content` の下端余白を拡大して送信ボタンがスクロールで固定要素帯から外れるようにした。
+- **permalink は常時下線**: muted 色のまま `text-decoration-color: var(--text-muted)` の下線で「押せる」と判別できる形に。
+- **検証**: `go test ./...`、`go vet`、`gofmt`、storybook（新規 StoryDiscussionDetailReplyOpen / StoryDiscussionDetailLong / StoryIssueDetailEmpty 含む全ストーリー描画）全パス。JS 挙動（disabled 切替・details 畳み・beforeunload）は実サーバ + Playwright で確認。

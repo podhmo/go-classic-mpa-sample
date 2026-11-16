@@ -297,6 +297,16 @@ func StoryIssueDetailCommentError() {
 	})
 }
 
+// StoryIssueDetailEmpty renders the detail page with no comments: the
+// empty list state plus the bottom comment form's initial state.
+func StoryIssueDetailEmpty() {
+	renderIssueDetail(http.StatusOK, issueDetailPage{
+		Title:   "#2 Improve responsive layout",
+		Issue:   storyIssue,
+		Section: "issues",
+	})
+}
+
 // StoryIssueFormNew renders the empty create form.
 func StoryIssueFormNew() {
 	renderIssueForm(http.StatusOK, issueFormPage{
@@ -388,6 +398,42 @@ func StoryDiscussionDetail() {
 		Title:      "#2 How do custom labels get their color?",
 		Discussion: storyDiscussion,
 		Threads:    storyDThreads,
+		Section:    "discussions",
+	})
+}
+
+// StoryDiscussionDetailReplyOpen renders the reply form expanded: the
+// server opens a thread's <details> only when re-rendering a rejected
+// reply draft, which is also how the Cancel/Comment action row and the
+// reply field error get their visual check.
+func StoryDiscussionDetailReplyOpen() {
+	renderDiscussionDetail(http.StatusUnprocessableEntity, discussionDetailPage{
+		Title:         "#2 How do custom labels get their color?",
+		Discussion:    storyDiscussion,
+		Threads:       storyDThreads,
+		ThreadDraftID: 1,
+		CommentDraft:  "   ",
+		CommentError:  "Body is required.",
+		Section:       "discussions",
+	})
+}
+
+// StoryDiscussionDetailLong renders enough threads for the page to
+// scroll, so the fixed back-to-top affordance (and its narrow-viewport
+// placement) can be exercised.
+func StoryDiscussionDetailLong() {
+	var threads []*store.DiscussionThread
+	for i := range 24 {
+		threads = append(threads, &store.DiscussionThread{
+			ID: int64(i + 1), DiscussionID: 2,
+			Body:      fmt.Sprintf("Thread %d — a filler line to make the page tall enough to scroll.", i+1),
+			CreatedAt: storyTime.Add(time.Duration(i) * time.Hour),
+		})
+	}
+	renderDiscussionDetail(http.StatusOK, discussionDetailPage{
+		Title:      "#2 How do custom labels get their color?",
+		Discussion: storyDiscussion,
+		Threads:    threads,
 		Section:    "discussions",
 	})
 }
