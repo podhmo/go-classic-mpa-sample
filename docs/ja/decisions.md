@@ -503,3 +503,15 @@ ui-rules.md の監査 TODO 全7件を実装。個別の判断:
 - **モバイル残件**: `viewport-fit=cover` を付けて `env(safe-area-inset-*)` が効くようにしたうえで toast/back-to-top に加算。装飾 `:hover` を全て `@media (hover: hover)` ガードへ（`:is(:hover,:focus-visible)` は分離して focus 側を維持）。狭画面は back-to-top を左下に移動し `.main-content` の下端余白を拡大して送信ボタンがスクロールで固定要素帯から外れるようにした。
 - **permalink は常時下線**: muted 色のまま `text-decoration-color: var(--text-muted)` の下線で「押せる」と判別できる形に。
 - **検証**: `go test ./...`、`go vet`、`gofmt`、storybook（新規 StoryDiscussionDetailReplyOpen / StoryDiscussionDetailLong / StoryIssueDetailEmpty 含む全ストーリー描画）全パス。JS 挙動（disabled 切替・details 畳み・beforeunload）は実サーバ + Playwright で確認。
+
+## クライアント JS のライフサイクル統合（2026-11-16、`devin/dom-hooks-js-consolidation` ブランチ）
+
+監査対応で増えたクライアント JS（計10ファイル約930行）の「散在」を整理するリファクタリング。議論の結論: 痛いのはファイル数ではなく「fragment 差し替えに各ファイルが独自に追従する」構造だった（422 swap で dirty 残留・checkbox 未追跡の2バグはこれが原因）。vdom 系は不採用 — DOM の所有権はサーバ（X-Partial fragment swap）にあり、クライアント reconcile は宣言的 SSR と衝突するため。
+
+- **`dom-hooks.js`（新規）**: 共有 MutationObserver 1本 + `bind(selector, {init, teardown})` の attach/detach 契約。既存要素には即時 init、注入要素は addedNodes で init、removedNodes で teardown。`seen` は WeakSet で差し替えられた要素を自然に捨てる。
+- **leave-guard.js**: 自前の MutationObserver と初回スナップショットループを廃止し `bind("form", {init: snapshot, teardown: unmark})` に一本化。dirtyCount のリークは契約上起こり得ない構造になった。
+- **comment-submit-disabled.js**: 同様に `bind("form.comment-form", {init: syncCommentSubmit})`。無状態なので teardown は不要。
+- **form-errors.js**: 初回の全フィールド `syncAria` を bind の init に置き換え、スワップ投入されたフィールド（422 再描画）にも aria-invalid="false" の初期状態が付くようにした。
+- **partial-submit.js は無変更**: delegated submit/click/toggle リスナーで注入フォームをカバーできており、要素 attach 時の作業を持たないため。
+- **ページ種別エントリ1本化**: detail ページの script タグ 6本を `page-detail.js` 1本に、form ページの 3本を `page-form.js` 1本に集約。テンプレ側で振る舞いの組み合わせが drift しない。各振る舞いファイルは残り、ui-rules.md のファイル名参照はそのまま有効。
+- **検証**: `go test ./...`、`go vet`、`gofmt` 全パス。

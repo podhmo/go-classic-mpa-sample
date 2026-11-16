@@ -1,25 +1,9 @@
 {{define "content"}}
-{{/* Copies each comment's #comment-N permalink via Invoker Commands + the
-   Async Clipboard API. Deferred external file (CSP script-src 'self'). */}}
-<script src="/static/copy-permalink.js" defer></script>
-{{/* Ctrl/Cmd+Enter submits the comment form from the textarea — IME-safe by
-   construction (guide ime-safe-enter-submit). Deferred external file. */}}
-<script src="/static/enter-submit.js" defer></script>
-{{/* Syncs aria-invalid/aria-describedby with :user-invalid and announces
-   newly-shown errors via a polite live region (guide
-   accessible-error-announcement). ES module — it shares the live region
-   with partial-submit.js via announcer.js. */}}
-<script type="module" src="/static/form-errors.js"></script>
-{{/* Submits the comment form via fetch and swaps in the returned fragment
-   instead of a full reload (docs/sketch/ja/partial-updates.md). Without it
-   the form posts normally — progressive enhancement. */}}
-<script type="module" src="/static/partial-submit.js"></script>
-{{/* Disables the comment submit button while the textarea is empty
-   (comment-submit-disabled.js). Without it the empty post just 422s. */}}
-<script type="module" src="/static/comment-submit-disabled.js"></script>
-{{/* Warns on navigation while a form holds unsent input
-   (leave-guard.js). */}}
-<script src="/static/leave-guard.js" defer></script>
+{{/* One module entry (page-detail.js) pulls in every detail-page
+   behavior: permalink copy, Ctrl/Cmd+Enter, aria-invalid sync, partial
+   submit + fragment swap, empty-submit disable, unsaved-input guard.
+   All progressive enhancement — without JS the forms post normally. */}}
+<script type="module" src="/static/page-detail.js"></script>
 <nav class="breadcrumb" aria-label="Breadcrumb">
   <ol>
     <li><a href="/issues">Issues</a></li>

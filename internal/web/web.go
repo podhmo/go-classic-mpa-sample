@@ -194,6 +194,19 @@ func New(st Store, opts ...Option) http.Handler {
 	mux.HandleFunc("GET /static/leave-guard.js", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFileFS(w, r, staticFS, "static/leave-guard.js")
 	})
+	// Shared element-lifecycle registry (attach/detach on DOM mutations) —
+	// a module, fetched only as an import dependency.
+	mux.HandleFunc("GET /static/dom-hooks.js", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, staticFS, "static/dom-hooks.js")
+	})
+	// Per-page-type module entries: the single <script type="module"> tag
+	// on the detail pages and the create/edit form pages.
+	mux.HandleFunc("GET /static/page-detail.js", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, staticFS, "static/page-detail.js")
+	})
+	mux.HandleFunc("GET /static/page-form.js", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, staticFS, "static/page-form.js")
+	})
 	// Catch-alls: unknown GET/POST paths render the styled 404 page instead
 	// of the mux's plaintext default. They are method-scoped on purpose — a
 	// method-less "/" pattern would match PUT/DELETE too and swallow the

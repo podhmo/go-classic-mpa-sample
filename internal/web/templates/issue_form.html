@@ -1,14 +1,8 @@
 {{define "content"}}
-{{/* Ctrl/Cmd+Enter submits the issue form from the body textarea
-   (guide ime-safe-enter-submit). Deferred external file. */}}
-<script src="/static/enter-submit.js" defer></script>
-{{/* Syncs aria-invalid/aria-describedby with :user-invalid and announces
-   newly-shown errors via a polite live region (guide
-   accessible-error-announcement). Deferred external file. */}}
-<script type="module" src="/static/form-errors.js"></script>
-{{/* Warns on navigation while the form holds unsent input
-   (leave-guard.js). Deferred external file. */}}
-<script src="/static/leave-guard.js" defer></script>
+{{/* One module entry (page-form.js) pulls in Ctrl/Cmd+Enter submit,
+   aria-invalid sync, and the unsaved-input guard — all progressive
+   enhancement over a plain POST. */}}
+<script type="module" src="/static/page-form.js"></script>
 <div class="page-head">
   <h1>{{.Heading}}</h1>
 </div>
