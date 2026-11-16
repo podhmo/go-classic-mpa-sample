@@ -138,8 +138,8 @@ issues comment create N --body B
 issues label list
 issues discussion list|view|create|edit|delete   # v2 で増えたドメイン。
                                                  # close/reopen は無い（discussions は閉じない）
-issues discussion comment create N --body B [--parent C]
-issues discussion answer N --comment C            # qa カテゴリの answer マーク
+issues discussion comment create N --body B [--thread T]
+issues discussion answer N --thread T             # qa カテゴリの answer マーク
 issues auth token --user NAME                     # ローカルモード限定: ユーザー別 API token の発行（後述）
 issues api <path>            # 生 API への抜け道（gh api 相当）
 ```

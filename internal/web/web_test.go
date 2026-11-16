@@ -40,7 +40,7 @@ type fakeStore struct {
 	comments    map[int64][]*store.Comment
 	labels      []*store.Label
 	discussions map[int64]*store.Discussion
-	dcomments   map[int64][]*store.DiscussionComment
+	dthreads    map[int64][]*store.DiscussionThread
 	dcategories []*store.DiscussionCategory
 	nextD       int64
 	nextDC      int64
@@ -58,7 +58,7 @@ func newFakeStore() *fakeStore {
 		issues:      map[int64]*store.Issue{},
 		comments:    map[int64][]*store.Comment{},
 		discussions: map[int64]*store.Discussion{},
-		dcomments:   map[int64][]*store.DiscussionComment{},
+		dthreads:    map[int64][]*store.DiscussionThread{},
 		users:       map[int64]*fakeUser{},
 		sessions:    map[string]int64{},
 		nextD:       1,
@@ -352,11 +352,11 @@ func cloneDiscussion(d *store.Discussion) *store.Discussion {
 	return &c
 }
 
-// answered reports whether any stored comment carries IsAnswer — the same
+// answered reports whether any stored thread carries IsAnswer — the same
 // derivation the SQL EXISTS clause performs.
 func (f *fakeStore) answered(discussionID int64) bool {
-	for _, c := range f.dcomments[discussionID] {
-		if c.IsAnswer {
+	for _, t := range f.dthreads[discussionID] {
+		if t.IsAnswer {
 			return true
 		}
 	}
@@ -480,8 +480,8 @@ func (f *fakeStore) UpdateDiscussion(_ context.Context, id int64, in store.Discu
 	d.Category = *cat
 	d.UpdatedAt = time.Now()
 	if cat.Format != store.CategoryFormatQA {
-		for _, c := range f.dcomments[id] {
-			c.IsAnswer = false
+		for _, t := range f.dthreads[id] {
+			t.IsAnswer = false
 		}
 	}
 	return nil
@@ -494,99 +494,101 @@ func (f *fakeStore) DeleteDiscussion(_ context.Context, id int64) error {
 		return store.ErrNotFound
 	}
 	delete(f.discussions, id)
-	delete(f.dcomments, id)
+	delete(f.dthreads, id)
 	return nil
 }
 
-func (f *fakeStore) ListDiscussionComments(_ context.Context, discussionID int64) ([]*store.DiscussionComment, error) {
+func (f *fakeStore) ListDiscussionThreads(_ context.Context, discussionID int64) ([]*store.DiscussionThread, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	src := f.dcomments[discussionID]
-	flat := make([]*store.DiscussionComment, len(src))
-	copy(flat, src)
-	sort.Slice(flat, func(i, j int) bool {
-		if flat[i].CreatedAt.Equal(flat[j].CreatedAt) {
-			return flat[i].ID < flat[j].ID
+	out := make([]*store.DiscussionThread, len(f.dthreads[discussionID]))
+	copy(out, f.dthreads[discussionID])
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].ID < out[j].ID
 		}
-		return flat[i].CreatedAt.Before(flat[j].CreatedAt)
+		return out[i].CreatedAt.Before(out[j].CreatedAt)
 	})
-	byID := make(map[int64]*store.DiscussionComment, len(flat))
-	for _, c := range flat {
-		byID[c.ID] = c
-	}
-	var out []*store.DiscussionComment
-	for _, c := range flat {
-		if c.ParentID != 0 {
-			if parent := byID[c.ParentID]; parent != nil {
-				parent.Replies = append(parent.Replies, c)
-				continue
-			}
-		}
-		out = append(out, c)
-	}
 	return out, nil
 }
 
-func (f *fakeStore) CreateDiscussionComment(_ context.Context, discussionID, parentID int64, body string, authorID int64) (int64, error) {
+func (f *fakeStore) CreateDiscussionThread(_ context.Context, discussionID int64, body string, authorID int64) (int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if _, ok := f.discussions[discussionID]; !ok {
 		return 0, store.ErrNotFound
 	}
-	if parentID != 0 {
-		ok := false
-		for _, c := range f.dcomments[discussionID] {
-			if c.ID == parentID && c.ParentID == 0 {
-				ok = true
-			}
-		}
-		if !ok {
-			return 0, store.ErrInvalidParent
-		}
-	}
-	c := &store.DiscussionComment{
+	t := &store.DiscussionThread{
 		ID:           f.nextDC,
 		DiscussionID: discussionID,
-		ParentID:     parentID,
 		Body:         body,
 		CreatedAt:    time.Now(),
 	}
 	f.nextDC++
 	if fu := f.users[authorID]; fu != nil {
 		u := fu.user
+		t.Author = &u
+	}
+	f.dthreads[discussionID] = append(f.dthreads[discussionID], t)
+	// Same contract as the real store: a new thread bumps updated_at.
+	f.discussions[discussionID].UpdatedAt = time.Now()
+	return t.ID, nil
+}
+
+func (f *fakeStore) CreateDiscussionComment(_ context.Context, discussionID, threadID int64, body string, authorID int64) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, ok := f.discussions[discussionID]; !ok {
+		return 0, store.ErrNotFound
+	}
+	var thread *store.DiscussionThread
+	for _, t := range f.dthreads[discussionID] {
+		if t.ID == threadID {
+			thread = t
+		}
+	}
+	if thread == nil {
+		return 0, store.ErrInvalidThread
+	}
+	c := &store.DiscussionComment{
+		ID:        f.nextDC,
+		ThreadID:  threadID,
+		Body:      body,
+		CreatedAt: time.Now(),
+	}
+	f.nextDC++
+	if fu := f.users[authorID]; fu != nil {
+		u := fu.user
 		c.Author = &u
 	}
-	f.dcomments[discussionID] = append(f.dcomments[discussionID], c)
+	thread.Comments = append(thread.Comments, c)
 	// Same contract as the real store: a new comment bumps updated_at.
 	f.discussions[discussionID].UpdatedAt = time.Now()
 	return c.ID, nil
 }
 
-func (f *fakeStore) SetCommentAnswer(_ context.Context, discussionID, commentID int64, answer bool) error {
+func (f *fakeStore) SetThreadAnswer(_ context.Context, discussionID, threadID int64, answer bool) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	d, ok := f.discussions[discussionID]
 	if !ok {
 		return store.ErrNotFound
 	}
-	var target *store.DiscussionComment
-	for _, c := range f.dcomments[discussionID] {
-		if c.ID == commentID {
-			target = c
+	var target *store.DiscussionThread
+	for _, t := range f.dthreads[discussionID] {
+		if t.ID == threadID {
+			target = t
 		}
 	}
 	if target == nil {
 		return store.ErrNotFound
 	}
-	if target.ParentID != 0 {
-		return store.ErrNotAnswerable
-	}
 	if answer && d.Category.Format != store.CategoryFormatQA {
 		return store.ErrNotAnswerable
 	}
 	if answer {
-		for _, c := range f.dcomments[discussionID] {
-			c.IsAnswer = false
+		for _, t := range f.dthreads[discussionID] {
+			t.IsAnswer = false
 		}
 		target.IsAnswer = true
 	} else {

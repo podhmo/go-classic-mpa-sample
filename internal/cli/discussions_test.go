@@ -38,15 +38,16 @@ func createDiscussion(t *testing.T, o Options, title, category string) int64 {
 	return id
 }
 
-// createDComment runs `discussion comment create` and returns the new id.
-func createDComment(t *testing.T, o Options, id int64, body string) int64 {
+// createDThread runs `discussion comment create` and returns the new
+// thread id (a top-level post is a thread).
+func createDThread(t *testing.T, o Options, id int64, body string) int64 {
 	t.Helper()
 	code, out, _ := run(t, o, "discussion", "comment", "create", itoa(id), "--body", body)
 	var cid int64
 	if code != ExitOK {
 		t.Fatalf("comment create: exit %d\n%s", code, out)
 	}
-	if _, err := fmt.Sscanf(out, "created comment #%d", &cid); err != nil || cid == 0 {
+	if _, err := fmt.Sscanf(out, "created thread #%d", &cid); err != nil || cid == 0 {
 		t.Fatalf("comment output: %q", out)
 	}
 	return cid
@@ -71,9 +72,9 @@ func TestDiscussionLifecycleLocal(t *testing.T) {
 		t.Fatalf("view: exit %d\n%s", code, out)
 	}
 
-	cid := createDComment(t, o, id, "the answer")
+	cid := createDThread(t, o, id, "the answer")
 	code, out, _ = run(t, o, "discussion", "comment", "create", itoa(id),
-		"--parent", itoa(cid), "--body", "a reply")
+		"--thread", itoa(cid), "--body", "a reply")
 	if code != ExitOK || !strings.Contains(out, "created reply #") {
 		t.Fatalf("reply create: exit %d\n%s", code, out)
 	}
@@ -83,8 +84,8 @@ func TestDiscussionLifecycleLocal(t *testing.T) {
 		t.Fatalf("view --comments: exit %d\n%s", code, out)
 	}
 
-	code, out, _ = run(t, o, "discussion", "answer", itoa(id), "--comment", itoa(cid))
-	if code != ExitOK || !strings.Contains(out, "marked comment #") {
+	code, out, _ = run(t, o, "discussion", "answer", itoa(id), "--thread", itoa(cid))
+	if code != ExitOK || !strings.Contains(out, "marked thread #") {
 		t.Fatalf("answer: exit %d\n%s", code, out)
 	}
 	code, out, _ = run(t, o, "discussion", "view", itoa(id))
@@ -95,7 +96,7 @@ func TestDiscussionLifecycleLocal(t *testing.T) {
 	if code != ExitOK || !strings.Contains(out, "cli question") {
 		t.Fatalf("list --answered yes: exit %d\n%s", code, out)
 	}
-	code, out, _ = run(t, o, "discussion", "answer", itoa(id), "--comment", itoa(cid), "--unmark")
+	code, out, _ = run(t, o, "discussion", "answer", itoa(id), "--thread", itoa(cid), "--unmark")
 	if code != ExitOK || !strings.Contains(out, "unmarked") {
 		t.Fatalf("unmark: exit %d\n%s", code, out)
 	}
@@ -149,7 +150,7 @@ func TestDiscussionUsageAndErrors(t *testing.T) {
 		{"discussion", "create", "--category", "qa"},                       // missing --title
 		{"discussion", "edit", "1"},                                        // nothing to update
 		{"discussion", "comment"},                                          // missing action
-		{"discussion", "answer", "1"},                                      // missing --comment
+		{"discussion", "answer", "1"},                                      // missing --thread
 		{"discussion", "view", "1", "-w"},                                  // -w without --server
 		{"discussion", "create", "--title", "x", "--category", "qa", "-w"}, // -w without --server
 	} {
@@ -166,8 +167,8 @@ func TestDiscussionUsageAndErrors(t *testing.T) {
 	}
 
 	id := createDiscussion(t, o, "not qa", "general")
-	cid := createDComment(t, o, id, "c")
-	code, _, _ = run(t, o, "discussion", "answer", itoa(id), "--comment", itoa(cid))
+	cid := createDThread(t, o, id, "c")
+	code, _, _ = run(t, o, "discussion", "answer", itoa(id), "--thread", itoa(cid))
 	if code != ExitError {
 		t.Fatalf("answer on open category: exit %d, want %d", code, ExitError)
 	}

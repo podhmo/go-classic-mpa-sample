@@ -105,12 +105,12 @@ var (
 		Answered: true,
 	}
 
-	storyDComments = []*store.DiscussionComment{
+	storyDThreads = []*store.DiscussionThread{
 		{
 			ID: 1, DiscussionID: 2, Body: "Look at `label_color` in the seed data.", CreatedAt: storyTime,
 			IsAnswer: true,
-			Replies: []*store.DiscussionComment{
-				{ID: 3, DiscussionID: 2, ParentID: 1, Body: "That was it — thank you!", CreatedAt: storyTime2},
+			Comments: []*store.DiscussionComment{
+				{ID: 3, ThreadID: 1, Body: "That was it — thank you!", CreatedAt: storyTime2},
 			},
 		},
 		{ID: 2, DiscussionID: 2, Body: "Same question on Firefox.", CreatedAt: storyTime2},
@@ -285,7 +285,7 @@ func StoryIssueDetailCommentError() {
 		Issue:        storyIssue,
 		Comments:     storyComments,
 		CommentDraft: "   ",
-		CommentError: "Comment is required.",
+		CommentError: "Body is required.",
 		Section:      "issues",
 	})
 }
@@ -375,13 +375,13 @@ func StoryDiscussionListEmpty() {
 }
 
 // StoryDiscussionDetail renders the Q&A detail page: an answer-marked
-// top-level comment with a nested reply.
+// thread with a nested reply.
 func StoryDiscussionDetail() {
 	renderDiscussionDetail(http.StatusOK, discussionDetailPage{
 		Title:        "#2 How do custom labels get their color?",
 		Discussion:   storyDiscussion,
-		Comments:     storyDComments,
-		CommentCount: countDiscussionComments(storyDComments),
+		Threads:      storyDThreads,
+		CommentCount: countDiscussionComments(storyDThreads),
 		Section:      "discussions",
 	})
 }
@@ -430,15 +430,15 @@ func StoryDiscussionDelete() {
 // never leak into the shared fixtures.
 //
 // Declared simplifications vs the real store: list methods return the
-// fixtures ignoring filters and pagination; ListDiscussionComments
-// falls back to the fixture comments for an unknown discussion id;
+// fixtures ignoring filters and pagination; ListDiscussionThreads
+// falls back to the fixture threads for an unknown discussion id;
 // create, update and delete are no-ops that report success (posts get
 // id 99); authentication always succeeds as the demo user and API
 // tokens are never valid.
 type storyStore struct {
 	issues      map[int64]*store.Issue
 	discussions map[int64]*store.Discussion
-	dcomments   map[int64][]*store.DiscussionComment
+	dthreads    map[int64][]*store.DiscussionThread
 }
 
 func newStoryStore() storyStore {
@@ -455,17 +455,26 @@ func newStoryStore() storyStore {
 	return storyStore{
 		issues:      issues,
 		discussions: discussions,
-		dcomments: map[int64][]*store.DiscussionComment{
-			storyDiscussion.ID: cloneDComments(storyDComments),
+		dthreads: map[int64][]*store.DiscussionThread{
+			storyDiscussion.ID: cloneDThreads(storyDThreads),
 		},
 	}
+}
+
+func cloneDThreads(src []*store.DiscussionThread) []*store.DiscussionThread {
+	out := make([]*store.DiscussionThread, len(src))
+	for i, t := range src {
+		tt := *t
+		tt.Comments = cloneDComments(t.Comments)
+		out[i] = &tt
+	}
+	return out
 }
 
 func cloneDComments(src []*store.DiscussionComment) []*store.DiscussionComment {
 	out := make([]*store.DiscussionComment, len(src))
 	for i, c := range src {
 		cc := *c
-		cc.Replies = cloneDComments(c.Replies)
 		out[i] = &cc
 	}
 	return out
@@ -541,11 +550,11 @@ func (s storyStore) GetDiscussion(ctx context.Context, id int64) (*store.Discuss
 	return nil, store.ErrNotFound
 }
 
-// answered recomputes a discussion's Answered flag from the comment
+// answered recomputes a discussion's Answered flag from the thread
 // fixtures — the same derivation the real store's EXISTS clause performs.
 func (s storyStore) answered(discussionID int64) bool {
-	for _, c := range s.dcomments[discussionID] {
-		if c.IsAnswer {
+	for _, t := range s.dthreads[discussionID] {
+		if t.IsAnswer {
 			return true
 		}
 	}
@@ -560,45 +569,47 @@ func (storyStore) UpdateDiscussion(ctx context.Context, id int64, in store.Discu
 func (storyStore) DeleteDiscussion(ctx context.Context, id int64) error {
 	return nil
 }
-func (s storyStore) ListDiscussionComments(ctx context.Context, discussionID int64) ([]*store.DiscussionComment, error) {
-	if cs, ok := s.dcomments[discussionID]; ok {
-		return cs, nil
+func (s storyStore) ListDiscussionThreads(ctx context.Context, discussionID int64) ([]*store.DiscussionThread, error) {
+	if ts, ok := s.dthreads[discussionID]; ok {
+		return ts, nil
 	}
-	return storyDComments, nil
+	return storyDThreads, nil
 }
-func (s storyStore) CreateDiscussionComment(ctx context.Context, discussionID, parentID int64, body string, authorID int64) (int64, error) {
+func (s storyStore) CreateDiscussionThread(ctx context.Context, discussionID int64, body string, authorID int64) (int64, error) {
+	// Same contract as the real store: a new thread bumps updated_at.
+	if d, ok := s.discussions[discussionID]; ok {
+		d.UpdatedAt = time.Now()
+	}
+	return 99, nil
+}
+func (s storyStore) CreateDiscussionComment(ctx context.Context, discussionID, threadID int64, body string, authorID int64) (int64, error) {
 	// Same contract as the real store: a new comment bumps updated_at.
 	if d, ok := s.discussions[discussionID]; ok {
 		d.UpdatedAt = time.Now()
 	}
 	return 99, nil
 }
-func (s storyStore) SetCommentAnswer(ctx context.Context, discussionID, commentID int64, answer bool) error {
+func (s storyStore) SetThreadAnswer(ctx context.Context, discussionID, threadID int64, answer bool) error {
 	d, dok := s.discussions[discussionID]
-	cs := s.dcomments[discussionID]
-	if !dok || cs == nil {
+	ts := s.dthreads[discussionID]
+	if !dok || ts == nil {
 		return store.ErrNotFound
 	}
-	var target *store.DiscussionComment
-	for _, c := range cs {
-		if c.ID == commentID {
-			target = c
+	var target *store.DiscussionThread
+	for _, t := range ts {
+		if t.ID == threadID {
+			target = t
 		}
 	}
 	if target == nil {
 		return store.ErrNotFound
 	}
-	// Same contract as the real store: replies and non-qa categories
-	// are ErrNotAnswerable, not ErrNotFound.
-	if target.ParentID != 0 {
-		return store.ErrNotAnswerable
-	}
 	if answer && d.Category.Format != store.CategoryFormatQA {
 		return store.ErrNotAnswerable
 	}
 	if answer {
-		for _, c := range cs {
-			c.IsAnswer = false
+		for _, t := range ts {
+			t.IsAnswer = false
 		}
 	}
 	target.IsAnswer = answer
@@ -662,7 +673,7 @@ func StoryIssueCommentFormFragment() {
 	renderFragment("issue_detail", "issue_comment_form", http.StatusUnprocessableEntity, issueDetailPage{
 		Issue:        storyIssue,
 		CommentDraft: "kept as the draft",
-		CommentError: "Comment is required.",
+		CommentError: "Body is required.",
 	})
 }
 
@@ -670,13 +681,14 @@ func StoryIssueCommentFormFragment() {
 // <li> — collapsed reply form and qa answer button included.
 func StoryDiscussionCommentFragment() {
 	renderFragment("discussion_detail", "discussion_comment", http.StatusOK,
-		dict("Discussion", storyDiscussion, "C", storyDComments[1]))
+		dict("Discussion", storyDiscussion, "C", storyDThreads[1]))
 }
 
 // StoryDiscussionReplyFragment renders the reply <li> appended to the
 // parent's .comment-replies by a partial reply POST.
 func StoryDiscussionReplyFragment() {
-	renderFragment("discussion_detail", "discussion_reply", http.StatusOK, storyDComments[0].Replies[0])
+	renderFragment("discussion_detail", "discussion_reply", http.StatusOK,
+		dict("Discussion", storyDiscussion, "C", storyDThreads[0].Comments[0]))
 }
 
 // storyPost builds a urlencoded form POST for the replay stories, body
@@ -712,7 +724,7 @@ func StoryHttpCreateCommentPartialError(w http.ResponseWriter, r *http.Request) 
 // StoryHttpCreateDiscussionReplyPartial replays a partial reply POST:
 // the fragment carries comment-reply markup for .comment-replies.
 func StoryHttpCreateDiscussionReplyPartial(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, storyPost("/discussions/2/comments", url.Values{"body": {"a reply"}, "parent_id": {"1"}}, true))
+	New(newStoryStore()).ServeHTTP(w, storyPost("/discussions/2/comments", url.Values{"body": {"a reply"}, "thread_id": {"1"}}, true))
 }
 
 // StoryHttpSetStatusPartial replays a partial status toggle: the mux

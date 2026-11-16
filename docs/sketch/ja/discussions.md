@@ -1,5 +1,12 @@
 # Discussion タブ（GitHub Discussions 風）の追加 — 調査・設計メモ
 
+> **変更（2026-11-16）**: コメント構造を GitHub の 3 層モデルに合わせて
+> `discussions` 1—N `discussion_threads` 1—N `discussion_comments` に分割した
+> （本メモの `parent_id` self-FK 記述は初版設計）。スレッド自体が開始投稿
+> （body/author/is_answer を持つ `discussion_threads`）、返信のみが
+> `discussion_comments`（`thread_id` FK）。詳しくは `../../ja/decisions.md`
+> の「discussion_comments を threads/comments 2 テーブルへ分割」を参照。
+
 調査・設計メモ（実装前の検討段階）。`cli-and-web-api.md` / `partial-updates.md` の姉妹編。
 「現状は issue 管理のみだが、GitHub Discussions のような機能を追加してトップのナビゲーションに
 discussion タブを増やしたい。このときのテーブル定義・画面遷移を、issue と discussion の違いを

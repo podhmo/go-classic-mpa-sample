@@ -213,10 +213,15 @@ func seedIssuesAndLabels(ctx context.Context, tx *sql.Tx) error {
 }
 
 type seedDComment struct {
+	body string
+	age  time.Duration
+}
+
+type seedDThread struct {
 	body     string
 	age      time.Duration
 	isAnswer bool
-	replies  []seedDComment
+	comments []seedDComment
 }
 
 type seedDiscussion struct {
@@ -224,7 +229,7 @@ type seedDiscussion struct {
 	body     string
 	category string // slug
 	age      time.Duration
-	comments []seedDComment
+	threads  []seedDThread
 }
 
 var seedCategoryRows = []DiscussionCategory{
@@ -246,12 +251,12 @@ var seedDiscussionRows = []seedDiscussion{
 		body:     "We use labels for triage today. How do other teams separate \"what kind of work\" from \"when it ships\" in a tracker this small?",
 		category: "general",
 		age:      5 * 24 * time.Hour,
-		comments: []seedDComment{
+		threads: []seedDThread{
 			{body: "Labels for *kind*, milestones for *when*. In this app labels already cover the kind side.", age: 4*24*time.Hour + 12*time.Hour},
 			{
 				body: "Agreed — I would not add milestones until release planning actually hurts.",
 				age:  4 * 24 * time.Hour,
-				replies: []seedDComment{
+				comments: []seedDComment{
 					{body: "Seconded. The closed/open split plus labels has been enough so far.", age: 3*24*time.Hour + 18*time.Hour},
 				},
 			},
@@ -262,7 +267,7 @@ var seedDiscussionRows = []seedDiscussion{
 		body:     "I keep reaching for `j`/`k` to move between rows. Worth adding, or is the tab order already good enough?",
 		category: "ideas",
 		age:      3 * 24 * time.Hour,
-		comments: []seedDComment{
+		threads: []seedDThread{
 			{body: "The no-JS constraint makes this awkward, but a `<kbd>` friendly tab order would already help.", age: 2*24*time.Hour + 6*time.Hour},
 		},
 	},
@@ -271,13 +276,13 @@ var seedDiscussionRows = []seedDiscussion{
 		body:     "I filtered the issue list and hit export, but the file only contains the header row. What am I doing wrong?",
 		category: "qa",
 		age:      2 * 24 * time.Hour,
-		comments: []seedDComment{
+		threads: []seedDThread{
 			{body: "Does the filter itself return rows? An empty export usually means the filter matched nothing.", age: 2*24*time.Hour - 4*time.Hour},
 			{
 				body:     "The export honors the `status` filter too — `status=open` drops closed rows. Try `status=all` in the URL before exporting.",
 				age:      24 * time.Hour,
 				isAnswer: true,
-				replies: []seedDComment{
+				comments: []seedDComment{
 					{body: "That was it — thank you!", age: 20 * time.Hour},
 				},
 			},
@@ -366,25 +371,36 @@ func seedDiscussions(ctx context.Context, tx *sql.Tx) error {
 			return err
 		}
 		updated := created
-		insertComment := func(c seedDComment, parentID int64) (int64, error) {
+		insertThread := func(t seedDThread) (int64, error) {
 			res, err := tx.ExecContext(ctx,
-				"INSERT INTO discussion_comments(discussion_id, parent_id, is_answer, body, created_at) VALUES(?, ?, ?, ?, ?)",
-				did, nullID(parentID), c.isAnswer, c.body, now.Add(-c.age).Unix())
+				"INSERT INTO discussion_threads(discussion_id, is_answer, body, created_at) VALUES(?, ?, ?, ?)",
+				did, t.isAnswer, t.body, now.Add(-t.age).Unix())
 			if err != nil {
 				return 0, err
 			}
-			if ts := now.Add(-c.age).Unix(); ts > updated {
+			if ts := now.Add(-t.age).Unix(); ts > updated {
 				updated = ts
 			}
 			return res.LastInsertId()
 		}
-		for _, c := range sd.comments {
-			cid, err := insertComment(c, 0)
+		insertComment := func(c seedDComment, threadID int64) error {
+			if _, err := tx.ExecContext(ctx,
+				"INSERT INTO discussion_comments(thread_id, body, created_at) VALUES(?, ?, ?)",
+				threadID, c.body, now.Add(-c.age).Unix()); err != nil {
+				return err
+			}
+			if ts := now.Add(-c.age).Unix(); ts > updated {
+				updated = ts
+			}
+			return nil
+		}
+		for _, t := range sd.threads {
+			tid, err := insertThread(t)
 			if err != nil {
 				return err
 			}
-			for _, rc := range c.replies {
-				if _, err := insertComment(rc, cid); err != nil {
+			for _, rc := range t.comments {
+				if err := insertComment(rc, tid); err != nil {
 					return err
 				}
 			}

@@ -237,7 +237,7 @@ func TestE2ECommentsAndValidation(t *testing.T) {
 			if resp.StatusCode != http.StatusUnprocessableEntity {
 				t.Fatalf("status = %d, want 422", resp.StatusCode)
 			}
-			if !strings.Contains(page, "Comment is required") {
+			if !strings.Contains(page, "Body is required") {
 				t.Error("expected the comment validation error")
 			}
 			if !strings.Contains(page, `aria-invalid="true"`) {

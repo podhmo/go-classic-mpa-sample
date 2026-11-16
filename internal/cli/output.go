@@ -101,24 +101,32 @@ func discussionViews(ds []*store.Discussion) []api.Discussion {
 	return out
 }
 
-func discussionCommentViews(cs []*store.DiscussionComment) []api.DiscussionComment {
-	out := make([]api.DiscussionComment, 0, len(cs))
-	for _, c := range cs {
-		out = append(out, discussionCommentView(c))
+func discussionThreadViews(ts []*store.DiscussionThread) []api.DiscussionThread {
+	out := make([]api.DiscussionThread, 0, len(ts))
+	for _, t := range ts {
+		out = append(out, discussionThreadView(t))
+	}
+	return out
+}
+
+func discussionThreadView(t *store.DiscussionThread) api.DiscussionThread {
+	out := api.DiscussionThread{
+		ID: t.ID, IsAnswer: t.IsAnswer, Body: t.Body,
+		Author:    userView(t.Author),
+		CreatedAt: t.CreatedAt.Format(time.RFC3339),
+	}
+	for _, c := range t.Comments {
+		out.Comments = append(out.Comments, discussionCommentView(c))
 	}
 	return out
 }
 
 func discussionCommentView(c *store.DiscussionComment) api.DiscussionComment {
-	out := api.DiscussionComment{
-		ID: c.ID, ParentID: c.ParentID, IsAnswer: c.IsAnswer, Body: c.Body,
+	return api.DiscussionComment{
+		ID: c.ID, Body: c.Body,
 		Author:    userView(c.Author),
 		CreatedAt: c.CreatedAt.Format(time.RFC3339),
 	}
-	for _, rep := range c.Replies {
-		out.Replies = append(out.Replies, discussionCommentView(rep))
-	}
-	return out
 }
 
 func userView(u *store.User) *api.User {

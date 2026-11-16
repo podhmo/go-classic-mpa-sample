@@ -67,11 +67,11 @@ func TestDiscussionListAnsweredFilter(t *testing.T) {
 	d := f.addDiscussion("Answered question", "b", 2, time.Now())
 	f.addDiscussion("Open question", "b", 2, time.Now())
 
-	cid, err := f.CreateDiscussionComment(t.Context(), d.ID, 0, "the fix", 0)
+	cid, err := f.CreateDiscussionThread(t.Context(), d.ID, "the fix", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.SetCommentAnswer(t.Context(), d.ID, cid, true); err != nil {
+	if err := f.SetThreadAnswer(t.Context(), d.ID, cid, true); err != nil {
 		t.Fatal(err)
 	}
 
@@ -100,11 +100,11 @@ func TestDiscussionListAnsweredFilter(t *testing.T) {
 func TestDiscussionDetailRendersThreadAndAnswer(t *testing.T) {
 	srv, f := newTestServer(t)
 	d := f.addDiscussion("Detail", "body", 2, time.Now())
-	cid, _ := f.CreateDiscussionComment(t.Context(), d.ID, 0, "top comment", 0)
+	cid, _ := f.CreateDiscussionThread(t.Context(), d.ID, "top comment", 0)
 	if _, err := f.CreateDiscussionComment(t.Context(), d.ID, cid, "nested reply", 0); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.SetCommentAnswer(t.Context(), d.ID, cid, true); err != nil {
+	if err := f.SetThreadAnswer(t.Context(), d.ID, cid, true); err != nil {
 		t.Fatal(err)
 	}
 
@@ -113,7 +113,7 @@ func TestDiscussionDetailRendersThreadAndAnswer(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := getBody(t, resp)
-	for _, want := range []string{"top comment", "nested reply", "comment-answer", "badge-answer", "Unmark answer", `name="parent_id"`, "reply-details"} {
+	for _, want := range []string{"top comment", "nested reply", "comment-answer", "badge-answer", "Unmark answer", `name="thread_id"`, "reply-details"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("detail missing %q", want)
 		}
@@ -122,9 +122,9 @@ func TestDiscussionDetailRendersThreadAndAnswer(t *testing.T) {
 	// the comment id in its accessible name (accessibility guide: same look,
 	// different action → distinct accessible name).
 	for _, want := range []string{
-		`aria-label="Unmark answer on comment ` + itoa(cid) + `"`,
-		`aria-label="Reply to comment ` + itoa(cid) + `"`,
-		`aria-label="Post reply to comment ` + itoa(cid) + `"`,
+		`aria-label="Unmark answer on thread ` + itoa(cid) + `"`,
+		`aria-label="Reply to thread ` + itoa(cid) + `"`,
+		`aria-label="Post comment on thread ` + itoa(cid) + `"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("per-comment control lacks unique name %q", want)
@@ -139,9 +139,9 @@ func TestDiscussionDetailRendersThreadAndAnswer(t *testing.T) {
 func TestPartialSetCommentAnswerContract(t *testing.T) {
 	srv, f := newTestServer(t)
 	qa := f.addDiscussion("QA target", "b", 2, time.Now())
-	c1, _ := f.CreateDiscussionComment(t.Context(), qa.ID, 0, "first", 0)
-	c2, _ := f.CreateDiscussionComment(t.Context(), qa.ID, 0, "second", 0)
-	if err := f.SetCommentAnswer(t.Context(), qa.ID, c1, true); err != nil {
+	c1, _ := f.CreateDiscussionThread(t.Context(), qa.ID, "first", 0)
+	c2, _ := f.CreateDiscussionThread(t.Context(), qa.ID, "second", 0)
+	if err := f.SetThreadAnswer(t.Context(), qa.ID, c1, true); err != nil {
 		t.Fatal(err)
 	}
 	partial := map[string]string{"X-Partial": "1"}
@@ -156,9 +156,9 @@ func TestPartialSetCommentAnswerContract(t *testing.T) {
 	// The moved mark: c2's <li> is marked, c1's is re-rendered unmarked —
 	// and the header meta rides along since marking bumps updated_at.
 	for _, want := range []string{
-		`class="card comment" id="comment-` + itoa(c1) + `"`,
-		`class="card comment comment-answer" id="comment-` + itoa(c2) + `"`,
-		`aria-label="Unmark answer on comment ` + itoa(c2) + `"`,
+		`class="card comment" id="thread-` + itoa(c1) + `"`,
+		`class="card comment comment-answer" id="thread-` + itoa(c2) + `"`,
+		`aria-label="Unmark answer on thread ` + itoa(c2) + `"`,
 		`class="issue-meta" id="discussion-meta"`,
 	} {
 		if !strings.Contains(body, want) {
@@ -181,7 +181,7 @@ func TestPartialSetCommentAnswerContract(t *testing.T) {
 func TestDiscussionDetailOpenCategoryHasNoAnswerButton(t *testing.T) {
 	srv, f := newTestServer(t)
 	d := f.addDiscussion("Open cat", "body", 1, time.Now())
-	if _, err := f.CreateDiscussionComment(t.Context(), d.ID, 0, "c", 0); err != nil {
+	if _, err := f.CreateDiscussionThread(t.Context(), d.ID, "c", 0); err != nil {
 		t.Fatal(err)
 	}
 	resp, err := srv.Client().Get(srv.URL + "/discussions/" + itoa(d.ID))
@@ -192,7 +192,7 @@ func TestDiscussionDetailOpenCategoryHasNoAnswerButton(t *testing.T) {
 	if strings.Contains(body, "Mark as answer") {
 		t.Error("open-format category must not offer answer marking")
 	}
-	if !strings.Contains(body, `name="parent_id"`) {
+	if !strings.Contains(body, `name="thread_id"`) {
 		t.Error("reply form still expected")
 	}
 }
@@ -245,10 +245,10 @@ func TestCreateDiscussionValidation(t *testing.T) {
 func TestDiscussionCommentReplyFlow(t *testing.T) {
 	srv, f := newTestServer(t)
 	d := f.addDiscussion("D", "b", 1, time.Now())
-	cid, _ := f.CreateDiscussionComment(t.Context(), d.ID, 0, "top", 0)
+	cid, _ := f.CreateDiscussionThread(t.Context(), d.ID, "top", 0)
 
 	resp := postForm(t, noRedirectClient(), srv.URL+"/discussions/"+itoa(d.ID)+"/comments", url.Values{
-		"body": {"a reply"}, "parent_id": {itoa(cid)},
+		"body": {"a reply"}, "thread_id": {itoa(cid)},
 	})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusSeeOther {
@@ -260,7 +260,7 @@ func TestDiscussionCommentReplyFlow(t *testing.T) {
 
 	rid, _ := f.CreateDiscussionComment(t.Context(), d.ID, cid, "nested", 0)
 	resp = postForm(t, srv.Client(), srv.URL+"/discussions/"+itoa(d.ID)+"/comments", url.Values{
-		"body": {"too deep"}, "parent_id": {itoa(rid)},
+		"body": {"too deep"}, "thread_id": {itoa(rid)},
 	})
 	body := getBody(t, resp)
 	if resp.StatusCode != http.StatusUnprocessableEntity {
@@ -282,36 +282,36 @@ func TestDiscussionCommentValidation(t *testing.T) {
 	if resp.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("empty comment: status = %d, want 422", resp.StatusCode)
 	}
-	if !strings.Contains(body, "Comment is required") {
+	if !strings.Contains(body, "Body is required") {
 		t.Error("expected comment validation error")
 	}
-	if cs, _ := f.ListDiscussionComments(t.Context(), d.ID); len(cs) != 0 {
-		t.Fatalf("empty comment was saved: %+v", cs)
+	if ts, _ := f.ListDiscussionThreads(t.Context(), d.ID); len(ts) != 0 {
+		t.Fatalf("empty comment was saved: %+v", ts)
 	}
 
 	resp = postForm(t, srv.Client(), srv.URL+"/discussions/"+itoa(d.ID)+"/comments", url.Values{
-		"body": {"orphan"}, "parent_id": {"abc"},
+		"body": {"orphan"}, "thread_id": {"abc"},
 	})
 	getBody(t, resp)
 	if resp.StatusCode != http.StatusUnprocessableEntity {
-		t.Fatalf("bad parent_id: status = %d, want 422", resp.StatusCode)
+		t.Fatalf("bad thread_id: status = %d, want 422", resp.StatusCode)
 	}
 	resp = postForm(t, srv.Client(), srv.URL+"/discussions/"+itoa(d.ID)+"/comments", url.Values{
-		"body": {"orphan"}, "parent_id": {"-5"},
+		"body": {"orphan"}, "thread_id": {"-5"},
 	})
 	getBody(t, resp)
 	if resp.StatusCode != http.StatusUnprocessableEntity {
-		t.Fatalf("negative parent_id: status = %d, want 422", resp.StatusCode)
+		t.Fatalf("negative thread_id: status = %d, want 422", resp.StatusCode)
 	}
-	if cs, _ := f.ListDiscussionComments(t.Context(), d.ID); len(cs) != 0 {
-		t.Fatalf("malformed reply was saved as top-level: %+v", cs)
+	if ts, _ := f.ListDiscussionThreads(t.Context(), d.ID); len(ts) != 0 {
+		t.Fatalf("malformed reply was saved as new thread: %+v", ts)
 	}
 }
 
 func TestDiscussionCommentCountIncludesReplies(t *testing.T) {
 	srv, f := newTestServer(t)
 	d := f.addDiscussion("D", "b", 1, time.Now())
-	cid, _ := f.CreateDiscussionComment(t.Context(), d.ID, 0, "top", 0)
+	cid, _ := f.CreateDiscussionThread(t.Context(), d.ID, "top", 0)
 	if _, err := f.CreateDiscussionComment(t.Context(), d.ID, cid, "reply", 0); err != nil {
 		t.Fatal(err)
 	}
@@ -333,7 +333,7 @@ func TestPartialCommentContract(t *testing.T) {
 	srv, f := newTestServer(t)
 	issue := f.addIssue("Partial target", "b", "open", time.Now())
 	qa := f.addDiscussion("QA target", "b", 2, time.Now())
-	parent, err := f.CreateDiscussionComment(t.Context(), qa.ID, 0, "parent", 0)
+	parent, err := f.CreateDiscussionThread(t.Context(), qa.ID, "parent", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -370,7 +370,7 @@ func TestPartialCommentContract(t *testing.T) {
 	if resp.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("partial POST status = %d, want 422", resp.StatusCode)
 	}
-	for _, want := range []string{`class="comment-form`, `aria-invalid="true"`, "Comment is required"} {
+	for _, want := range []string{`class="comment-form`, `aria-invalid="true"`, "Body is required"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("422 form fragment missing %q", want)
 		}
@@ -382,7 +382,7 @@ func TestPartialCommentContract(t *testing.T) {
 	// A reply's fragment carries comment-reply markup plus the header meta
 	// swap node (posting bumped the discussion's updated_at).
 	resp = postFormWithHeaders(t, srv.URL+"/discussions/"+itoa(qa.ID)+"/comments",
-		url.Values{"body": {"a reply"}, "parent_id": {itoa(parent)}}, partial)
+		url.Values{"body": {"a reply"}, "thread_id": {itoa(parent)}}, partial)
 	body = getBody(t, resp)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("partial reply status = %d, want 200", resp.StatusCode)
@@ -409,15 +409,15 @@ func TestPartialCommentContract(t *testing.T) {
 	resp = postFormWithHeaders(t, srv.URL+"/discussions/"+itoa(qa.ID)+"/comments",
 		url.Values{"body": {"classic"}}, nil)
 	getBody(t, resp)
-	if resp.StatusCode != http.StatusSeeOther || !strings.Contains(resp.Header.Get("Location"), "#comment-") {
-		t.Errorf("normal POST status = %d location = %q, want 303 #comment-", resp.StatusCode, resp.Header.Get("Location"))
+	if resp.StatusCode != http.StatusSeeOther || !strings.Contains(resp.Header.Get("Location"), "#thread-") {
+		t.Errorf("normal POST status = %d location = %q, want 303 #thread-", resp.StatusCode, resp.Header.Get("Location"))
 	}
 }
 
 func TestSetCommentAnswerFlow(t *testing.T) {
 	srv, f := newTestServer(t)
 	d := f.addDiscussion("QA", "b", 2, time.Now())
-	cid, _ := f.CreateDiscussionComment(t.Context(), d.ID, 0, "c", 0)
+	cid, _ := f.CreateDiscussionThread(t.Context(), d.ID, "c", 0)
 	base := srv.URL + "/discussions/" + itoa(d.ID) + "/comments/" + itoa(cid) + "/answer"
 
 	resp := postForm(t, noRedirectClient(), base, url.Values{"answer": {"1"}})
@@ -442,7 +442,7 @@ func TestSetCommentAnswerFlow(t *testing.T) {
 
 	// open-format category refuses marks
 	dOpen := f.addDiscussion("O", "b", 1, time.Now())
-	oc, _ := f.CreateDiscussionComment(t.Context(), dOpen.ID, 0, "c", 0)
+	oc, _ := f.CreateDiscussionThread(t.Context(), dOpen.ID, "c", 0)
 	resp = postForm(t, srv.Client(),
 		srv.URL+"/discussions/"+itoa(dOpen.ID)+"/comments/"+itoa(oc)+"/answer",
 		url.Values{"answer": {"1"}})

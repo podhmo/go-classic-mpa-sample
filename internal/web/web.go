@@ -43,9 +43,10 @@ type Store interface {
 	CreateDiscussion(ctx context.Context, in store.DiscussionInput, authorID int64) (int64, error)
 	UpdateDiscussion(ctx context.Context, id int64, in store.DiscussionInput) error
 	DeleteDiscussion(ctx context.Context, id int64) error
-	ListDiscussionComments(ctx context.Context, discussionID int64) ([]*store.DiscussionComment, error)
-	CreateDiscussionComment(ctx context.Context, discussionID, parentID int64, body string, authorID int64) (int64, error)
-	SetCommentAnswer(ctx context.Context, discussionID, commentID int64, answer bool) error
+	ListDiscussionThreads(ctx context.Context, discussionID int64) ([]*store.DiscussionThread, error)
+	CreateDiscussionThread(ctx context.Context, discussionID int64, body string, authorID int64) (int64, error)
+	CreateDiscussionComment(ctx context.Context, discussionID, threadID int64, body string, authorID int64) (int64, error)
+	SetThreadAnswer(ctx context.Context, discussionID, threadID int64, answer bool) error
 	ListDiscussionCategories(ctx context.Context) ([]*store.DiscussionCategory, error)
 	CreateUser(ctx context.Context, name, passwordHash string) (int64, error)
 	AuthenticateUser(ctx context.Context, name, password string) (*store.User, error)

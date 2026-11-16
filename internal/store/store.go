@@ -64,6 +64,7 @@ var migrations = []func(ctx context.Context, tx *sql.Tx) error{
 	migrateV2, // accounts: users/sessions + author_id on issues/comments
 	migrateV3, // discussions: categories, discussions, discussion_comments
 	migrateV4, // api_tokens: per-user Bearer tokens for /api/v1
+	migrateV5, // discussion_threads split out of discussion_comments
 }
 
 // schemaVersion is the user_version a fully migrated database reports.
@@ -157,6 +158,51 @@ CREATE TABLE IF NOT EXISTS api_tokens (
 	created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_api_tokens_user ON api_tokens(user_id);
+`)
+	return err
+}
+
+// migrateV5 restructures discussion comments into the two-table model:
+// discussion_threads holds each top-level post (its own body, author and
+// the qa answer mark) while discussion_comments keeps only replies, hung
+// off thread_id. Top-level rows move into threads keeping their ids and
+// replies keep theirs, so existing #comment-N anchors still resolve.
+// Replies whose parent was somehow missing have no thread to join and
+// are dropped — the store never produces that state (parent validation
+// predates it). The comment table is rebuilt rather than ALTERed: its
+// parent_id self-FK and per-discussion index cannot be repurposed.
+func migrateV5(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, `
+CREATE TABLE discussion_threads (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	discussion_id INTEGER NOT NULL REFERENCES discussions(id) ON DELETE CASCADE,
+	author_id INTEGER REFERENCES users(id),
+	is_answer INTEGER NOT NULL DEFAULT 0,
+	body TEXT NOT NULL,
+	created_at INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX idx_dthreads_answer
+	ON discussion_threads(discussion_id) WHERE is_answer = 1;
+CREATE INDEX idx_dthreads_discussion_created
+	ON discussion_threads(discussion_id, created_at);
+INSERT INTO discussion_threads(id, discussion_id, author_id, is_answer, body, created_at)
+	SELECT id, discussion_id, author_id, is_answer, body, created_at
+	FROM discussion_comments WHERE parent_id IS NULL;
+CREATE TABLE discussion_comments_new (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	thread_id INTEGER NOT NULL REFERENCES discussion_threads(id) ON DELETE CASCADE,
+	author_id INTEGER REFERENCES users(id),
+	body TEXT NOT NULL,
+	created_at INTEGER NOT NULL
+);
+INSERT INTO discussion_comments_new(id, thread_id, author_id, body, created_at)
+	SELECT id, parent_id, author_id, body, created_at
+	FROM discussion_comments
+	WHERE parent_id IN (SELECT id FROM discussion_threads);
+DROP TABLE discussion_comments;
+ALTER TABLE discussion_comments_new RENAME TO discussion_comments;
+CREATE INDEX idx_dcomments_thread_created
+	ON discussion_comments(thread_id, created_at);
 `)
 	return err
 }

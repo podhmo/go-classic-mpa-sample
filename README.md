@@ -148,11 +148,11 @@ The CLI reads its own variables: `ISSUES_DB` for local mode,
 | POST   | `/issues/{id}/comments`               | Add comment → 303 to `/issues/{id}#comment-N`    |
 | GET    | `/discussions`                        | Discussion list: `?category=<slug>`, `?answered=`, `?q=`, `?sort=`, `?page=` |
 | GET/POST | `/discussions/new` + `/discussions` | Create form → create → 303 to detail             |
-| GET    | `/discussions/{id}`                   | Detail: category, comments with one-level replies |
+| GET    | `/discussions/{id}`                   | Detail: category, threads with their replies |
 | GET/POST | `/discussions/{id}/edit`            | Edit form → 303 to detail                        |
 | GET/POST | `/discussions/{id}/delete`          | GET confirm page / POST delete → 303 to list     |
-| POST   | `/discussions/{id}/comments`          | Comment or reply (`parent_id`) → 303 to `#comment-N` |
-| POST   | `/discussions/{id}/comments/{cid}/answer` | Mark/unmark the Q&A answer (qa only) → 303  |
+| POST   | `/discussions/{id}/comments`          | New thread, or reply (`thread_id`) → 303 to `#thread-N`/`#comment-N` |
+| POST   | `/discussions/{id}/comments/{cid}/answer` | Mark/unmark a thread as the Q&A answer (qa only) → 303 |
 | GET    | `/static/*`                           | Embedded CSS/JS assets (explicitly registered)   |
 
 Notes:
@@ -203,11 +203,12 @@ Two credential kinds:
 | GET    | `/api/v1/labels`                              | All labels                                          |
 | GET    | `/api/v1/discussions`                         | List: `?category=&answered=&q=&sort=&page=`         |
 | POST   | `/api/v1/discussions`                         | `{title, body, category_id\|category}` → 201        |
-| GET    | `/api/v1/discussions/{id}`                    | Discussion + comments (replies nested)              |
+| GET    | `/api/v1/discussions/{id}`                    | Discussion + threads (replies nested)               |
 | PATCH  | `/api/v1/discussions/{id}`                    | Partial update                                      |
 | DELETE | `/api/v1/discussions/{id}`                    | Delete → 204                                        |
-| POST   | `/api/v1/discussions/{id}/comments`           | `{body, parent_id?}` → 201                          |
-| POST   | `/api/v1/discussions/{id}/comments/{cid}/answer` | `{answer: bool}` mark/unmark the answer (qa)     |
+| POST   | `/api/v1/discussions/{id}/threads`            | `{body}` → 201 (new thread)                         |
+| POST   | `/api/v1/discussions/{id}/threads/{tid}/comments` | `{body}` → 201 (reply to thread)                |
+| POST   | `/api/v1/discussions/{id}/threads/{tid}/answer` | `{answer: bool}` mark/unmark the answer (qa)      |
 | GET    | `/api/v1/discussion-categories`               | All categories                                      |
 
 Notes:
