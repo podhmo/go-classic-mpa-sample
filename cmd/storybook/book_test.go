@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -133,12 +134,54 @@ func TestHandler(t *testing.T) {
 	body := rec.Body.String()
 	for _, want := range []string{
 		`href="?s=` + aPrint + `"`,
-		`target="_blank"`,           // http stories open in a new tab
-		`?w=360`,                    // viewport widths
-		`href="/grid/` + grid + `"`, // a variants grid per render function
+		`target="_blank"`,               // http stories open in a new tab
+		`?w=360`,                        // viewport widths
+		`href="?g=` + grid + `"`,        // a grid pill per render function
+		`data-src="/grid/` + grid + `"`, // ...carrying the grid document
+		`data-src="/story/` + aPrint + `"`,
+		`type="search"`, // the story filter
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("index misses %s", want)
+		}
+	}
+
+	// ?g previews the grid inside the index frame; ?q filters the nav
+	// down to matching stories.
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/?g="+grid, nil))
+	if !strings.Contains(rec.Body.String(), `src="/grid/`+grid+`"`) {
+		t.Error("?g should preview the grid in the index frame")
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/?q="+url.QueryEscape(aPrint+" nomatch"), nil))
+	if !strings.Contains(rec.Body.String(), "no stories match") {
+		t.Error("a filter matching nothing should say so")
+	}
+	other := ""
+	for _, s := range stories {
+		if !s.IsHTTP() && s.Name != aPrint && !matchStory(s, aPrint) {
+			other = s.Name
+			break
+		}
+	}
+	if other != "" {
+		rec = httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/?q="+aPrint, nil))
+		body = rec.Body.String()
+		if !strings.Contains(body, `data-name="`+aPrint+`"`) {
+			t.Errorf("filtered index drops %s", aPrint)
+		}
+		// Non-matching rows stay in the DOM (hidden) so the client-side
+		// filter can restore them when the query changes.
+		i := strings.Index(body, `data-name="`+other+`"`)
+		if i < 0 {
+			t.Errorf("filtered index omits non-matching %s", other)
+		} else {
+			end := strings.Index(body[i:], ">")
+			if end < 0 || !strings.HasSuffix(body[i:i+end], " hidden") {
+				t.Errorf("non-matching %s is not marked hidden", other)
+			}
 		}
 	}
 

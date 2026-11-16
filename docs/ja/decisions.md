@@ -528,3 +528,16 @@ ui-rules.md の監査 TODO 全7件を実装。個別の判断:
 - **WriteTimeout は per-response で解除**: `http.NewResponseController(w).SetWriteDeadline(time.Time{})` — サーバ全体の 15s 制限は通常レスポンスにはそのまま残す（設計メモの落とし穴1）。
 - **`fragments.js` 新設**: `parseFragment`/`runScopedTransition`/`commonScope` を partial-submit.js から抽出し、live-updates.js と共有 — fragment の解釈（`<template>` parse・scoped transition・`data-swap` 自己対象化）を drift させない。
 - **検証**: `go test ./...`・`go vet`・`gofmt` 全パスに加え、実サーバ + playwright で issue comment・discussion thread・reply の3パスを実ブラウザ確認（他クライアントの投稿が `.comment-new` ハイライト付きで live append される）。
+
+## storybook index/grid の UI 再設計（2026-11-16、`devin/*-storybook-ui` ブランチ）
+
+podhmo からの改善要望（grid と story のリンク誤押・見た目・story を探す手間）に対する chrome の作り直し。`cmd/storybook` は upstream 例の port だが chrome はすでに独自拡張済みのため、このリポジトリ側で改修した。
+
+- **選択モデルを「プレビュー領域に何を出すか」に統一**: story は `?s=`、group の variants grid は `?g=`。grid pill を押しても index のナビは残り、iframe 内に grid が開く。`/grid/<name>` ページ自体は全幅比較用・共有リンク用に残す。
+- **grid 導線と story リンクの視覚的分離**: グループ名はリンクをやめて sticky なセクション見出し化（件数バッジ付き）。grid への入口は形の違う `⊞ grid` ピルボタンのみ — 一覧内で story 行と押し間違えないように、というのが目的。
+- **`?q=` フィルタ**: name/doc/group の小文字 haystack へのトークン AND 部分一致。JS では input 毎にライブ絞り込み（`?q` は replaceState）、JS なしでは `<search>` の GET form でサーバ側フィルタにフォールバック。`/` でフォーカス、Esc でクリア、Enter で先頭候補を開く、↑↓ で候補間移動。
+- **プレビューツールバー**: iframe 上のバーに group / story 名 / `story_pages.go:行` / `open ↗`（raw を新規タブ）/ `⊞ grid` / 幅切替を集約。viewport 切替はナビからここへ移動 — 幅はプレビューの属性なので。
+- **story 選択はページリロードしない**: `data-src`（preview 用 URL）を各行に持たせ、クリックは iframe.src 差替え + active 付け替え + pushState。フィルタ語・ナビのスクロール位置が維持される（スクロール位置は sessionStorage にも退避）。JS が無くても `?s`/`?g`/`?w`/`?q` のサーバレンダリングで全機能が動く。
+- **export も同じ UX**: 静的 index.html ではサーバがいない代わりに、同じ inline script が URLSearchParams から `?s/?g/?w/?q` を読んで選択を適用する。`data-src` が serve（`/story/X`）と export（`X.html`）で差を吸収する。
+- **story ページへの chrome 注入はしない**: プレビュー中の story 名・アクションは index 側ツールバーに置く方針 — story ドキュメントを汚すとスクリーンショット用途（PR 添付・ドキュメント用スナップショット）に chrome が写り込むため。export の story html はバイト単位で素のまま。
+- **検証**: `cd cmd/storybook && go test ./...` パス（index 構造・`?g` プレビュー・`?q` フィルタのサーバ側検査を追加）。served（:6006）と静的 export（python http.server）の両方で Playwright により story/grid 切替・フィルタ・キーボード・幅切替・popstate を実ブラウザ確認。
