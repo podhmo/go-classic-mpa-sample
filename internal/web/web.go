@@ -185,6 +185,15 @@ func New(st Store, opts ...Option) http.Handler {
 	mux.HandleFunc("GET /static/toast.js", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFileFS(w, r, staticFS, "static/toast.js")
 	})
+	// Disable comment submit buttons while the textarea is empty (module;
+	// also imported by partial-submit.js to re-sync after a partial post).
+	mux.HandleFunc("GET /static/comment-submit-disabled.js", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, staticFS, "static/comment-submit-disabled.js")
+	})
+	// beforeunload guard against losing unsaved form input.
+	mux.HandleFunc("GET /static/leave-guard.js", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, staticFS, "static/leave-guard.js")
+	})
 	// Catch-alls: unknown GET/POST paths render the styled 404 page instead
 	// of the mux's plaintext default. They are method-scoped on purpose — a
 	// method-less "/" pattern would match PUT/DELETE too and swallow the

@@ -206,8 +206,10 @@ a {
   text-decoration: none;
 }
 
-a:hover {
-  text-decoration: underline;
+@media (hover: hover) {
+  a:hover {
+    text-decoration: underline;
+  }
 }
 
 .muted {
@@ -313,9 +315,11 @@ a:hover {
   color: var(--text);
 }
 
-.site-title:hover {
-  text-decoration: none;
-  color: var(--accent);
+@media (hover: hover) {
+  .site-title:hover {
+    text-decoration: none;
+    color: var(--accent);
+  }
 }
 
 .site-nav {
@@ -330,8 +334,10 @@ a:hover {
   font-weight: 500;
 }
 
-.site-nav > a:not(.btn):hover {
-  color: var(--text);
+@media (hover: hover) {
+  .site-nav > a:not(.btn):hover {
+    color: var(--text);
+  }
 }
 
 /* Current section tab (Issues/Discussions): underline, not color alone
@@ -379,9 +385,11 @@ a:hover {
   white-space: nowrap;
 }
 
-.btn:hover {
-  background: var(--bg);
-  text-decoration: none;
+@media (hover: hover) {
+  .btn:hover {
+    background: var(--bg);
+    text-decoration: none;
+  }
 }
 
 .btn-primary {
@@ -390,9 +398,11 @@ a:hover {
   border-color: var(--accent-emphasis);
 }
 
-.btn-primary:hover {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
+@media (hover: hover) {
+  .btn-primary:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+  }
 }
 
 .btn-danger {
@@ -401,10 +411,12 @@ a:hover {
   border-color: var(--border);
 }
 
-.btn-danger:hover {
-  color: var(--on-emphasis);
-  background: var(--danger-emphasis);
-  border-color: var(--danger-emphasis);
+@media (hover: hover) {
+  .btn-danger:hover {
+    color: var(--on-emphasis);
+    background: var(--danger-emphasis);
+    border-color: var(--danger-emphasis);
+  }
 }
 
 .btn-quiet {
@@ -413,9 +425,11 @@ a:hover {
   color: var(--text-muted);
 }
 
-.btn-quiet:hover {
-  background: var(--bg);
-  color: var(--text);
+@media (hover: hover) {
+  .btn-quiet:hover {
+    background: var(--bg);
+    color: var(--text);
+  }
 }
 
 .btn-disabled,
@@ -537,13 +551,21 @@ textarea:focus-visible {
   }
 }
 
-a.label-badge:hover {
-  text-decoration: none;
-  filter: brightness(0.95);
+/* The badge grows on keyboard focus too (focus is reachable on every
+   input); the hover half is gated so a tap cannot leave it expanded. */
+.label-badge:focus-visible {
+  max-inline-size: 100%;
 }
 
-.label-badge:is(:hover, :focus-visible) {
-  max-inline-size: 100%;
+@media (hover: hover) {
+  .label-badge:hover {
+    max-inline-size: 100%;
+  }
+
+  a.label-badge:hover {
+    text-decoration: none;
+    filter: brightness(0.95);
+  }
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -571,10 +593,18 @@ a.label-badge:hover {
   border: 1px solid var(--border-muted);
 }
 
-a.category-badge:is(:hover, :focus-visible) {
+a.category-badge:focus-visible {
   text-decoration: none;
   filter: brightness(0.95);
   max-inline-size: 100%;
+}
+
+@media (hover: hover) {
+  a.category-badge:hover {
+    text-decoration: none;
+    filter: brightness(0.95);
+    max-inline-size: 100%;
+  }
 }
 
 /* Answered badge (discussion list + marked comment): same green family as
@@ -612,9 +642,11 @@ a.category-badge:is(:hover, :focus-visible) {
   margin-bottom: -1px;
 }
 
-.tab:hover {
-  color: var(--text);
-  text-decoration: none;
+@media (hover: hover) {
+  .tab:hover {
+    color: var(--text);
+    text-decoration: none;
+  }
 }
 
 .tab-active {
@@ -855,9 +887,12 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   font-weight: 400;
 }
 
+/* Button order everywhere: cancel-type action on the left, confirming
+   action on the right, the row right-aligned (ui-rules.md §1). */
 .form-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 10px;
   margin-top: 8px;
 }
@@ -903,8 +938,10 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   border-top: 1px solid var(--border-muted);
 }
 
-.issue-row:hover {
-  background: var(--surface-hover);
+@media (hover: hover) {
+  .issue-row:hover {
+    background: var(--surface-hover);
+  }
 }
 
 /* The number sits after the title as its own flex item, so it stays
@@ -931,8 +968,10 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   overflow-wrap: anywhere;
 }
 
-.issue-title:hover {
-  color: var(--accent);
+@media (hover: hover) {
+  .issue-title:hover {
+    color: var(--accent);
+  }
 }
 
 /* Registered by search-highlight.js: occurrences of the ?q= term inside
@@ -1152,7 +1191,6 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
 }
 
 .confirm-dialog .form-actions {
-  justify-content: flex-end;
   margin-top: 20px;
 }
 
@@ -1215,8 +1253,8 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
 .toast {
   position: fixed;
   inset: auto;
-  right: 1rem;
-  bottom: calc(1rem + var(--toast-lift, 0px));
+  right: calc(1rem + env(safe-area-inset-right, 0px));
+  bottom: calc(1rem + env(safe-area-inset-bottom, 0px) + var(--toast-lift, 0px));
   margin: 0;
   display: flex;
   align-items: center;
@@ -1274,9 +1312,11 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   cursor: pointer;
 }
 
-.toast-close:hover {
-  color: var(--text);
-  border-color: var(--text-muted);
+@media (hover: hover) {
+  .toast-close:hover {
+    color: var(--text);
+    border-color: var(--text-muted);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1291,14 +1331,21 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   margin-bottom: 8px;
 }
 
+/* The timestamp doubles as the #comment-N link: kept in the muted meta
+   color but permanently underlined so it reads as a link without
+   hovering (ui-rules.md §9). */
 .comment-permalink {
   color: inherit;
-  text-decoration: none;
+  text-decoration: underline;
+  text-decoration-color: var(--text-muted);
+  text-underline-offset: 3px;
 }
 
-.comment-permalink:hover {
-  color: var(--accent);
-  text-decoration: underline;
+@media (hover: hover) {
+  .comment-permalink:hover {
+    color: var(--accent);
+    text-decoration-color: var(--accent);
+  }
 }
 
 /* copy-link button on each comment header: revealed on hover/focus-within
@@ -1321,9 +1368,11 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   cursor: pointer;
 }
 
-.copy-btn:hover {
-  color: var(--accent);
-  border-color: var(--accent);
+@media (hover: hover) {
+  .copy-btn:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
 }
 
 .copy-btn[data-copied] {
@@ -1405,8 +1454,10 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   content: none;
 }
 
-.reply-details > summary:hover {
-  border-color: var(--accent);
+@media (hover: hover) {
+  .reply-details > summary:hover {
+    border-color: var(--accent);
+  }
 }
 
 .reply-details[open] > summary {
@@ -1418,12 +1469,6 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   padding: 12px;
   background: var(--bg);
   border-radius: var(--radius);
-}
-
-/* Right-aligned submit row for comment/thread forms only — the shared
-   .form-actions (auth, delete dialogs, edit forms) keeps its default. */
-.comment-form .form-actions {
-  justify-content: flex-end;
 }
 
 /* One level of nested replies, indented under the parent comment. */
@@ -1450,8 +1495,8 @@ html {
 
 .back-to-top {
   position: fixed;
-  inset-block-end: 1.25rem;
-  inset-inline-end: 1.25rem;
+  inset-block-end: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+  inset-inline-end: calc(1.25rem + env(safe-area-inset-right, 0px));
   z-index: 30;
   padding: 0.45rem 0.8rem;
   border-radius: var(--radius);
@@ -1464,8 +1509,10 @@ html {
   box-shadow: 0 2px 8px rgb(0 0 0 / 0.15);
 }
 
-.back-to-top:hover {
-  border-color: var(--accent);
+@media (hover: hover) {
+  .back-to-top:hover {
+    border-color: var(--accent);
+  }
 }
 
 /* Browsers without scroll-state queries keep the button always visible
@@ -1800,6 +1847,19 @@ html:active-view-transition-type(backward)::view-transition-new(root) {
     width: 100%;
     display: block;
     text-align: center;
+  }
+
+  /* Right-aligned submit buttons sit in the same bottom corner the
+     back-to-top chip occupies: move the chip left on narrow screens and
+     reserve enough bottom room that the last form's actions scroll
+     clear of every fixed element (chip + toast band). */
+  .back-to-top {
+    inset-inline-end: auto;
+    inset-inline-start: calc(1.25rem + env(safe-area-inset-left, 0px));
+  }
+
+  .main-content {
+    padding-block-end: calc(5.5rem + env(safe-area-inset-bottom, 0px));
   }
 }
 

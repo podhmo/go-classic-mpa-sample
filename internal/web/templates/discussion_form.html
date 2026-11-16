@@ -6,6 +6,9 @@
    newly-shown errors via a polite live region (guide
    accessible-error-announcement). Deferred external file. */}}
 <script type="module" src="/static/form-errors.js"></script>
+{{/* Warns on navigation while the form holds unsent input
+   (leave-guard.js). Deferred external file. */}}
+<script src="/static/leave-guard.js" defer></script>
 <div class="page-head">
   <h1>{{.Heading}}</h1>
 </div>
@@ -38,8 +41,8 @@
   </div>
 
   <div class="form-actions">
-    <button type="submit" class="btn btn-primary">{{.SubmitLabel}}</button>
     <a class="btn btn-quiet" href="/discussions">Cancel</a>
+    <button type="submit" class="btn btn-primary">{{.SubmitLabel}}</button>
   </div>
 </form>
 {{end}}

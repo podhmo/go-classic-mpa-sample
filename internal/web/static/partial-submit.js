@@ -13,6 +13,7 @@
 // The submit listener is delegated on document so it also catches forms
 // this script itself swapped in (and future injected forms).
 import { toast } from "./toast.js";
+import { syncCommentSubmit } from "./comment-submit-disabled.js";
 
 // Scoped view transitions (guide scoped-component-transitions): each
 // DOM swap runs inside element.startViewTransition() on the smallest
@@ -271,7 +272,16 @@ async function postPartial(form) {
 
     const added = appended;
     resetPostedForm(form);
-    form.querySelector("textarea")?.focus();
+    // A reply box collapses back to its input bar once the post lands;
+    // focus moves to the bar like the Cancel button does. Top-level
+    // forms stay put and keep focus in the cleared textarea.
+    const details = form.closest("details.reply-details");
+    if (details) {
+      details.open = false;
+      details.querySelector("summary")?.focus();
+    } else {
+      form.querySelector("textarea")?.focus();
+    }
     if (added) {
       // Same highlight a #comment-N anchor would give via :target —
       // DOM-inserted nodes can't be :target, hence the class.
@@ -289,5 +299,8 @@ async function postPartial(form) {
     for (const btn of form.querySelectorAll('button[type="submit"]')) {
       btn.disabled = false;
     }
+    // Re-enabling above would also un-disable an emptied comment form —
+    // let the empty-submit guard re-evaluate against the final state.
+    syncCommentSubmit(form);
   }
 }
