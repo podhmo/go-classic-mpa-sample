@@ -110,7 +110,7 @@
 <li class="card comment{{if .C.IsAnswer}} comment-answer{{end}}" id="thread-{{.C.ID}}">
   <header class="comment-meta">
     {{if .C.IsAnswer}}<span class="badge badge-answer">Answer</span>{{end}}
-    <span class="comment-author">{{authorName .C.Author}} commented</span>
+    <span class="comment-author">{{authorName .C.Author}}</span>
     <a class="comment-permalink" href="#thread-{{.C.ID}}"><time datetime="{{.C.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .C.CreatedAt}}</time> <span class="visually-hidden">(thread {{.C.ID}})</span></a>
     <span class="copy-wrap">
       <button type="button" class="copy-btn" command="--copy-permalink" commandfor="thread-{{.C.ID}}" data-url="/discussions/{{.Discussion.ID}}#thread-{{.C.ID}}" aria-label="Copy link to thread {{.C.ID}}">copy link</button>
@@ -118,8 +118,8 @@
     </span>
   </header>
   <div class="comment-body markdown-body">{{markdown .C.Body}}</div>
+  {{if eq .Discussion.Category.Format "qa"}}
   <div class="comment-actions">
-    {{if eq .Discussion.Category.Format "qa"}}
     <form method="post" action="/discussions/{{.Discussion.ID}}/comments/{{.C.ID}}/answer" class="inline-form" data-partial data-partial-mode="replace" data-partial-target="#thread-{{.C.ID}}" data-partial-announce="Answer updated.">
       {{/* Per-comment controls repeat with identical looks on every row,
          so each gets an accessible name carrying the thread id (the same
@@ -133,15 +133,12 @@
       <button type="submit" class="btn btn-quiet" aria-label="Mark as answer on thread {{.C.ID}}">Mark as answer</button>
       {{end}}
     </form>
-    {{end}}
-    <details class="reply-details"{{if and .ThreadDraftID (eq .ThreadDraftID .C.ID) .CommentError}} open{{end}}>
-      <summary aria-label="Reply to thread {{.C.ID}}">Reply</summary>
-      {{template "discussion_reply_form" .}}
-    </details>
   </div>
+  {{end}}
   <ol class="comment-replies" role="list"{{if not .C.Comments}} hidden{{end}}>
     {{range .C.Comments}}{{template "discussion_reply" (dict "Discussion" $.Discussion "C" .)}}{{end}}
   </ol>
+  {{template "discussion_reply_form" .}}
 </li>
 {{end}}
 
@@ -183,7 +180,7 @@
 {{define "discussion_reply"}}
 <li class="card comment comment-reply" id="comment-{{.C.ID}}">
   <header class="comment-meta">
-    <span class="comment-author">{{authorName .C.Author}} replied</span>
+    <span class="comment-author">{{authorName .C.Author}} commented</span>
     <a class="comment-permalink" href="#comment-{{.C.ID}}"><time datetime="{{.C.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .C.CreatedAt}}</time> <span class="visually-hidden">(comment {{.C.ID}})</span></a>
     <span class="copy-wrap">
       <button type="button" class="copy-btn" command="--copy-permalink" commandfor="comment-{{.C.ID}}" data-url="/discussions/{{.Discussion.ID}}#comment-{{.C.ID}}" aria-label="Copy link to comment {{.C.ID}}">copy link</button>
@@ -198,8 +195,8 @@
 <form method="post" action="/discussions/{{.Discussion.ID}}/comments" class="comment-form reply-form" novalidate data-partial data-partial-target="#thread-{{.C.ID}} .comment-replies">
   <input type="hidden" name="thread_id" value="{{.C.ID}}">
   <div class="field">
-    <label for="reply-body-{{.C.ID}}">Reply to {{authorName .C.Author}}'s thread</label>
-    <textarea id="reply-body-{{.C.ID}}" name="body" rows="3" required data-error="reply-error-{{.C.ID}}" aria-keyshortcuts="Control+Enter Meta+Enter"{{if and .ThreadDraftID (eq .ThreadDraftID .C.ID) .CommentError}} aria-invalid="true" aria-describedby="reply-error-{{.C.ID}} reply-hint-{{.C.ID}}" autofocus{{else}} aria-invalid="false" aria-describedby="reply-hint-{{.C.ID}}"{{end}}>{{if eq .ThreadDraftID .C.ID}}{{.CommentDraft}}{{end}}</textarea>
+    <label for="reply-body-{{.C.ID}}">Add a comment</label>
+    <textarea id="reply-body-{{.C.ID}}" name="body" rows="3" required data-error="reply-error-{{.C.ID}}" aria-keyshortcuts="Control+Enter Meta+Enter" aria-label="Add a comment on thread {{.C.ID}}"{{if and .ThreadDraftID (eq .ThreadDraftID .C.ID) .CommentError}} aria-invalid="true" aria-describedby="reply-error-{{.C.ID}} reply-hint-{{.C.ID}}" autofocus{{else}} aria-invalid="false" aria-describedby="reply-hint-{{.C.ID}}"{{end}}>{{if eq .ThreadDraftID .C.ID}}{{.CommentDraft}}{{end}}</textarea>
     <p class="field-error{{if not (and .ThreadDraftID (eq .ThreadDraftID .C.ID) .CommentError)}} field-error-pending{{end}}" id="reply-error-{{.C.ID}}">{{if eq .ThreadDraftID .C.ID}}{{or .CommentError "Body is required."}}{{else}}Body is required.{{end}}</p>
     <p class="field-hint" id="reply-hint-{{.C.ID}}">Markdown (GFM) supported. Ctrl+Enter (Cmd+Enter on macOS) submits.</p>
   </div>
@@ -208,7 +205,7 @@
 {{end}}
 
 {{define "discussion_comment_form"}}
-<form method="post" action="/discussions/{{.Discussion.ID}}/comments" class="comment-form card" novalidate data-partial data-partial-target="#comments > .comment-list">
+<form method="post" action="/discussions/{{.Discussion.ID}}/comments" class="comment-form card" novalidate data-partial data-partial-target="#comments > .comment-list" data-partial-announce="Thread posted.">
   <div class="field">
     <label for="comment-body">Start a thread</label>
     <textarea id="comment-body" name="body" rows="4" required data-error="comment-error" aria-keyshortcuts="Control+Enter Meta+Enter"{{if and .CommentError (not .ThreadDraftID)}} aria-invalid="true" aria-describedby="comment-error comment-hint" autofocus{{else}} aria-invalid="false" aria-describedby="comment-hint"{{end}}>{{if not .ThreadDraftID}}{{.CommentDraft}}{{end}}</textarea>

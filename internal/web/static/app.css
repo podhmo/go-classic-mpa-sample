@@ -1373,9 +1373,7 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   overflow-wrap: anywhere;
 }
 
-/* Per-comment action row: the qa-only answer toggle and the <details>
-   disclosure wrapping the inline reply form (top-level comments only —
-   one level of nesting, like GitHub Discussions). */
+/* Per-thread action row: currently just the qa-only answer toggle. */
 .comment-actions {
   display: flex;
   align-items: center;
@@ -1384,54 +1382,11 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   font-size: 0.82rem;
 }
 
-.reply-details > summary {
-  display: inline-block;
-  cursor: pointer;
-  color: var(--text-muted);
-  font-weight: 500;
-}
-
-.reply-details > summary:hover {
-  color: var(--accent);
-}
-
-.reply-details[open] > summary {
-  margin-bottom: 8px;
-}
-
-/* <details> open/close animation (guide animate-to-intrinsic-sizes):
-   interpolate-size lets block-size transition 0 ↔ auto, ::details-content
-   is the browser-generated wrapper around everything but the <summary>.
-   content-visibility in the transition keeps the content rendered while
-   the closing animation plays. Unsupported browsers (no ::details-content
-   / interpolate-size) drop these rules and toggle instantly — same UX as
-   before. */
-:root {
-  interpolate-size: allow-keywords;
-}
-
-details.reply-details::details-content {
-  block-size: 0;
-  overflow: clip;
-  transition: block-size 0.22s ease, content-visibility 0.22s ease;
-  /* Separate declaration, not in the shorthand, so older engines keep
-     the working transitions (guide persistent-toast-notifications). */
-  transition-behavior: allow-discrete;
-}
-
-details.reply-details[open]::details-content {
-  block-size: auto;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  details.reply-details::details-content {
-    transition: none;
-  }
-}
-
 .reply-form {
+  margin-top: 12px;
   padding: 12px;
   background: var(--bg);
+  border-radius: var(--radius);
 }
 
 /* One level of nested replies, indented under the parent comment. */

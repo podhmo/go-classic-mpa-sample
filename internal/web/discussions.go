@@ -35,28 +35,17 @@ type discussionListPage struct {
 
 // discussionDetailPage is the view model for GET /discussions/{id}.
 // CommentDraft/CommentError carry a failed thread-post submission back
-// into the form; ThreadDraftID does the same for a failed reply so the
-// <details> on that thread can reopen. CommentCount includes replies,
-// since the heading counts every comment shown on the page.
+// into the form; ThreadDraftID does the same for a failed reply so that
+// thread's reply form keeps the draft and the error.
 type discussionDetailPage struct {
 	Title         string
 	Discussion    *store.Discussion
 	Threads       []*store.DiscussionThread
-	CommentCount  int
 	CommentDraft  string
 	CommentError  string
 	ThreadDraftID int64 // thread ID whose reply failed validation
 	Section       string
 	User          *store.User
-}
-
-// countDiscussionComments counts thread opening posts plus their replies.
-func countDiscussionComments(threads []*store.DiscussionThread) int {
-	n := len(threads)
-	for _, t := range threads {
-		n += len(t.Comments)
-	}
-	return n
 }
 
 // discussionFormPage is the view model for both the new-discussion and
@@ -204,12 +193,11 @@ func (h *handler) showDiscussion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.r.renderDiscussionDetail(w, http.StatusOK, discussionDetailPage{
-		Title:        fmt.Sprintf("#%d %s", discussion.ID, discussion.Title),
-		Discussion:   discussion,
-		Threads:      threads,
-		CommentCount: countDiscussionComments(threads),
-		Section:      "discussions",
-		User:         userFromContext(r.Context()),
+		Title:      fmt.Sprintf("#%d %s", discussion.ID, discussion.Title),
+		Discussion: discussion,
+		Threads:    threads,
+		Section:    "discussions",
+		User:       userFromContext(r.Context()),
 	})
 }
 
@@ -324,7 +312,7 @@ func (h *handler) deleteDiscussion(w http.ResponseWriter, r *http.Request) {
 // new thread, or a reply when the hidden thread_id is present — and
 // redirects back to the detail page anchored at the new comment. With
 // X-Partial it answers a fragment instead: the new <li> on success, or the
-// error-marked form (reply form inside its <details>, or the bottom form)
+// error-marked form (the thread's reply form, or the bottom form)
 // on a validation failure (422).
 func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request) {
 	id, ok := parseID(r)
@@ -373,7 +361,7 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 			http.Redirect(w, r, fmt.Sprintf("%s#%s-%d", discussionURL(id), anchor, commentID), http.StatusSeeOther)
 			return
 		case errors.Is(err, store.ErrInvalidThread):
-			errMsg = "Replies can only be added to a thread."
+			errMsg = "Comments can only be added to a thread."
 		case errors.Is(err, store.ErrNotFound):
 			h.notFound(w, r)
 			return
@@ -383,8 +371,8 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	// Re-render the detail page with the error. ThreadDraftID reopens the
-	// <details> on the thread when the failed post was a reply.
+	// Re-render the detail page with the error. ThreadDraftID points the
+	// failed reply's draft and error at that thread's reply form.
 	discussion, err := h.store.GetDiscussion(r.Context(), id)
 	if err != nil {
 		h.discussionError(w, r, err)
@@ -431,7 +419,6 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 		Title:         fmt.Sprintf("#%d %s", discussion.ID, discussion.Title),
 		Discussion:    discussion,
 		Threads:       threads,
-		CommentCount:  countDiscussionComments(threads),
 		CommentDraft:  body,
 		CommentError:  errMsg,
 		ThreadDraftID: threadID,
@@ -442,7 +429,7 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 
 // renderNewDiscussionComment answers a partial POST with the new post's
 // <li>: a reply fragment when threadID is set, a thread fragment
-// otherwise (the latter also carries the collapsed reply form and the qa
+// otherwise (the latter also carries the reply form and the qa
 // answer button, so it needs the parent discussion's category). Either
 // way the fragment starts with the header meta as a data-swap node — the
 // post bumped discussion.updated_at.

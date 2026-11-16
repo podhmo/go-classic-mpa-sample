@@ -113,7 +113,7 @@ func TestDiscussionDetailRendersThreadAndAnswer(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := getBody(t, resp)
-	for _, want := range []string{"top comment", "nested reply", "comment-answer", "badge-answer", "Unmark answer", `name="thread_id"`, "reply-details"} {
+	for _, want := range []string{"top comment", "nested reply", "comment-answer", "badge-answer", "Unmark answer", `name="thread_id"`, "reply-form"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("detail missing %q", want)
 		}
@@ -123,7 +123,7 @@ func TestDiscussionDetailRendersThreadAndAnswer(t *testing.T) {
 	// different action → distinct accessible name).
 	for _, want := range []string{
 		`aria-label="Unmark answer on thread ` + itoa(cid) + `"`,
-		`aria-label="Reply to thread ` + itoa(cid) + `"`,
+		`aria-label="Add a comment on thread ` + itoa(cid) + `"`,
 		`aria-label="Post comment on thread ` + itoa(cid) + `"`,
 	} {
 		if !strings.Contains(body, want) {
@@ -305,23 +305,6 @@ func TestDiscussionCommentValidation(t *testing.T) {
 	}
 	if ts, _ := f.ListDiscussionThreads(t.Context(), d.ID); len(ts) != 0 {
 		t.Fatalf("malformed reply was saved as new thread: %+v", ts)
-	}
-}
-
-func TestDiscussionCommentCountIncludesReplies(t *testing.T) {
-	srv, f := newTestServer(t)
-	d := f.addDiscussion("D", "b", 1, time.Now())
-	cid, _ := f.CreateDiscussionThread(t.Context(), d.ID, "top", 0)
-	if _, err := f.CreateDiscussionComment(t.Context(), d.ID, cid, "reply", 0); err != nil {
-		t.Fatal(err)
-	}
-	resp, err := srv.Client().Get(srv.URL + "/discussions/" + itoa(d.ID))
-	if err != nil {
-		t.Fatal(err)
-	}
-	body := getBody(t, resp)
-	if !strings.Contains(body, `data-comment-count>2<`) {
-		t.Error("heading should count replies too")
 	}
 }
 

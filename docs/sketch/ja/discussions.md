@@ -6,6 +6,11 @@
 > （body/author/is_answer を持つ `discussion_threads`）、返信のみが
 > `discussion_comments`（`thread_id` FK）。詳しくは `../../ja/decisions.md`
 > の「discussion_comments を threads/comments 2 テーブルへ分割」を参照。
+>
+> **変更（2026-11-16）**: 返信フォームの `<details>` 畳み込みをやめ、各スレッドの
+> 返信群の直下に常時表示の "Add a comment" フォームに変えた（本メモの
+> `<details>` reply UX 記述は初版設計）。詳しくは `../../ja/decisions.md` の
+> 「返信フォームをスレッド末尾の常時表示に」を参照。
 
 調査・設計メモ（実装前の検討段階）。`cli-and-web-api.md` / `partial-updates.md` の姉妹編。
 「現状は issue 管理のみだが、GitHub Discussions のような機能を追加してトップのナビゲーションに
@@ -195,8 +200,8 @@ header:  Issues | Discussions        （aria-current 付きタブ）
 - コメントは top-level の `<ol>`、返信は親 `<li>` 内のネスト `<ol>`（1段）。
   `is_answer` コメントには "Answer" バッジ + 強調枠（issues の `:target` ハイライトと
   同じ仕組みを流用できる）。
-- 投稿者表示は issues と同じルール: `Opened by <name>` / `<name> commented` で
-  NULL は "anonymous"。author は作成時に固定。
+- 投稿者表示は issues と同じルール: `Opened by <name>` / スレッドは `<name>` のみ
+  （動詞なし）/ 返信は `<name> commented` で NULL は "anonymous"。author は作成時に固定。
 - **返信フォームは各 top-level コメントの `<details>` 内に畳む**（「Reply」の summary を
   開くとフォーム）。宣言的 HTML だけで GitHub の inline reply box と同じ UX になり、
   JS も専用ページも要らない。別案は `GET /discussions/{id}/comments/{cid}/reply` の
