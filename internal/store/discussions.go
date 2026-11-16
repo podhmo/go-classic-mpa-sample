@@ -346,7 +346,11 @@ func (s *Store) ListDiscussionThreads(ctx context.Context, discussionID int64) (
 		if err != nil {
 			return nil, err
 		}
-		byID[c.ThreadID].Comments = append(byID[c.ThreadID].Comments, c)
+		// A thread created between the two queries is skipped — the
+		// listing is a snapshot of what the first query saw.
+		if t, ok := byID[c.ThreadID]; ok {
+			t.Comments = append(t.Comments, c)
+		}
 	}
 	return out, replies.Err()
 }
