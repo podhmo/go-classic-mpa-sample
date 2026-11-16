@@ -24,3 +24,4 @@ Guides referenced below are in the `modern-web-guidance` catalog (`.agents/skill
   - [ ] **返信の部分投稿後に `<details>` を畳む**: **JS**（partial-submit.js append パスで `.reply-form` 成功時に `details.open=false`）
   - [ ] **入力中の離脱ガード**: **JS**（dirty 時に beforeunload 確認を出す static/ スクリプト。送信成功で解除）
   - [ ] **モバイル対応の残件**: 固定要素（toast/back-to-top）に `env(safe-area-inset-*)` を加味、装飾的 `:hover` を `@media (hover:hover)` でガード統一、狭画面で固定要素が送信ボタン等を覆わない配置の見直し
+  - [ ] **storybook ストーリーの拡充**: 変更予定項目（ボタン配置・狭画面レイアウト等）を目視確認できるよう、不足している状態ストーリーを `internal/web/story_pages.go` に追加する。JS 挙動は verify-ui 側で確認
