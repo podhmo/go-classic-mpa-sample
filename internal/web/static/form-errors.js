@@ -9,6 +9,7 @@
 // Loaded as an ES module so it shares the page's single live region with
 // partial-submit.js via announcer.js.
 import { politeRegion } from "./announcer.js";
+import { bind } from "./dom-hooks.js";
 
 (() => {
   const linkError = (el, shown) => {
@@ -101,8 +102,11 @@ import { politeRegion } from "./announcer.js";
   };
 
   // Start every field at aria-invalid="false" — Firefox and Safari expose
-  // an empty required field as invalid from page load.
-  document.querySelectorAll("input, select, textarea").forEach((el) => syncAria(el));
+  // an empty required field as invalid from page load. Bind via
+  // dom-hooks.js so fields injected by a fragment swap (a re-rendered
+  // 422 form) get the same starting state — the flagged/serverFlagged
+  // WeakSets keep per-field bookkeeping lazy, so no teardown is needed.
+  bind("input, select, textarea", { init: (el) => syncAria(el) });
 
   // Update on blur (show + announce) and input (clear as the user types).
   document.addEventListener("blur", (e) => syncAria(e.target, true), true);

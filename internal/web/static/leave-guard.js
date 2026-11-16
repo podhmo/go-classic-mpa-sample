@@ -5,6 +5,8 @@
 // away anyway; a partial post (data-partial) clears through the form's
 // `reset` event, which only fires on success. Loaded on the form and
 // detail pages; auth forms are short enough to skip the guard.
+import { bind } from "./dom-hooks.js";
+
 const TRACKED = 'textarea, input[type="text"], input[type="checkbox"], input[type="radio"], select';
 
 // Checkboxes/radios keep their rendered `value`; their dirty signal is
@@ -84,30 +86,13 @@ document.addEventListener("submit", (event) => {
   unmark(form);
 });
 
-// Baseline everything already on the page (the script is deferred, so
-// the DOM is complete) — without this the first `input` would snapshot
-// the just-typed value and mark the form clean when it is not.
-for (const form of document.querySelectorAll("form")) snapshot(form);
-
-// Forms injected later (a 422 re-render carries the draft as the new
-// rendered value) get their own baseline.
-new MutationObserver((records) => {
-  for (const rec of records) {
-    for (const node of rec.addedNodes) {
-      if (!(node instanceof Element)) continue;
-      if (node instanceof HTMLFormElement) snapshot(node);
-      for (const form of node.querySelectorAll("form")) snapshot(form);
-    }
-    // Forms detached by a fragment swap (e.g. the 422 re-render replaces
-    // a dirty form with a fresh baseline) must release their dirty count;
-    // otherwise the guard keeps warning after the state is gone.
-    for (const node of rec.removedNodes) {
-      if (!(node instanceof Element)) continue;
-      if (node instanceof HTMLFormElement) unmark(node);
-      for (const form of node.querySelectorAll("form")) unmark(form);
-    }
-  }
-}).observe(document.body, { childList: true, subtree: true });
+// Attach via the shared lifecycle registry: every present and injected
+// form gets a baseline at attach time — a 422 re-render carries the
+// draft as the new rendered value — and detach releases its dirty
+// count, so a swapped-out dirty form cannot leak a warning. The initial
+// attach pass is what stops the first `input` from snapshotting the
+// just-typed value and marking the form clean when it is not.
+bind("form", { init: snapshot, teardown: unmark });
 
 window.addEventListener("beforeunload", (event) => {
   if (dirtyCount === 0) return;

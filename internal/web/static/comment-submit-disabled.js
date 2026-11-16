@@ -4,11 +4,13 @@
 // Progressive enhancement: without this module the same forms validate
 // and post normally.
 //
-// Reacting to delegated `input` covers every keystroke, and a
-// MutationObserver syncs the initial state of forms partial-submit.js
-// swaps in (a 422 re-render) — a fresh form starts disabled only if it
-// is actually empty, so a swapped-in form carrying the rejected draft
-// stays submittable.
+// Reacting to delegated `input` covers every keystroke, and dom-hooks.js
+// attach runs the initial sync of forms partial-submit.js swaps in (a
+// 422 re-render) — a fresh form starts disabled only if it is actually
+// empty, so a swapped-in form carrying the rejected draft stays
+// submittable.
+import { bind } from "./dom-hooks.js";
+
 const COMMENT_FORM = "form.comment-form";
 
 export function syncCommentSubmit(form) {
@@ -25,18 +27,6 @@ document.addEventListener("input", (event) => {
   if (form) syncCommentSubmit(form);
 });
 
-for (const form of document.querySelectorAll(COMMENT_FORM)) {
-  syncCommentSubmit(form);
-}
-
-new MutationObserver((records) => {
-  for (const rec of records) {
-    for (const node of rec.addedNodes) {
-      if (!(node instanceof Element)) continue;
-      if (node.matches(COMMENT_FORM)) syncCommentSubmit(node);
-      for (const form of node.querySelectorAll(COMMENT_FORM)) {
-        syncCommentSubmit(form);
-      }
-    }
-  }
-}).observe(document.body, { childList: true, subtree: true });
+// Stateless sync: only attach is needed — a detached form's button
+// leaves with it.
+bind(COMMENT_FORM, { init: syncCommentSubmit });

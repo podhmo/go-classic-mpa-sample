@@ -26,3 +26,4 @@ Guides referenced below are in the `modern-web-guidance` catalog (`.agents/skill
   - [x] **モバイル対応の残件**: 固定要素（toast/back-to-top）に `env(safe-area-inset-*)` を加味、装飾的 `:hover` を `@media (hover:hover)` でガード統一、狭画面で固定要素が送信ボタン等を覆わない配置の見直し
   - [x] **storybook ストーリーの拡充**: 変更予定項目（ボタン配置・狭画面レイアウト等）を目視確認できるよう、不足している状態ストーリーを `internal/web/story_pages.go` に追加する。JS 挙動は verify-ui 側で確認
   - [x] **コメント permalink を判別可能にする**: `.comment-permalink` が `color: inherit; text-decoration: none` で本文と同色無下線（hover でしか判別できない）→ リンクと分かる表現に直す（ui-rules.md §9、2026-11-16 決定）
+- [x] **クライアント JS のライフサイクル統合**: 共有 registry `dom-hooks.js`（1本の MutationObserver + `bind(selector, {init, teardown})`）に attach/detach 追従を集約し、detail/form ページの script タグをページ種別エントリ1本に畳む（decisions.md 2026-11-16 参照）
