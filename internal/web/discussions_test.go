@@ -156,8 +156,8 @@ func TestPartialSetCommentAnswerContract(t *testing.T) {
 	// The moved mark: c2's <li> is marked, c1's is re-rendered unmarked —
 	// and the header meta rides along since marking bumps updated_at.
 	for _, want := range []string{
-		`class="card comment" id="comment-` + itoa(c1) + `"`,
-		`class="card comment comment-answer" id="comment-` + itoa(c2) + `"`,
+		`class="card comment" id="thread-` + itoa(c1) + `"`,
+		`class="card comment comment-answer" id="thread-` + itoa(c2) + `"`,
 		`aria-label="Unmark answer on comment ` + itoa(c2) + `"`,
 		`class="issue-meta" id="discussion-meta"`,
 	} {
@@ -409,8 +409,8 @@ func TestPartialCommentContract(t *testing.T) {
 	resp = postFormWithHeaders(t, srv.URL+"/discussions/"+itoa(qa.ID)+"/comments",
 		url.Values{"body": {"classic"}}, nil)
 	getBody(t, resp)
-	if resp.StatusCode != http.StatusSeeOther || !strings.Contains(resp.Header.Get("Location"), "#comment-") {
-		t.Errorf("normal POST status = %d location = %q, want 303 #comment-", resp.StatusCode, resp.Header.Get("Location"))
+	if resp.StatusCode != http.StatusSeeOther || !strings.Contains(resp.Header.Get("Location"), "#thread-") {
+		t.Errorf("normal POST status = %d location = %q, want 303 #thread-", resp.StatusCode, resp.Header.Get("Location"))
 	}
 }
 

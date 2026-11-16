@@ -105,20 +105,22 @@
 {{end}}
 
 {{define "discussion_comment"}}
-<li class="card comment{{if .C.IsAnswer}} comment-answer{{end}}" id="comment-{{.C.ID}}">
+{{/* Threads get a thread-N anchor namespace: thread and reply ids come
+   from separate tables, so sharing comment-N would collide. */}}
+<li class="card comment{{if .C.IsAnswer}} comment-answer{{end}}" id="thread-{{.C.ID}}">
   <header class="comment-meta">
     {{if .C.IsAnswer}}<span class="badge badge-answer">Answer</span>{{end}}
     <span class="comment-author">{{authorName .C.Author}} commented</span>
-    <a class="comment-permalink" href="#comment-{{.C.ID}}"><time datetime="{{.C.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .C.CreatedAt}}</time> <span class="visually-hidden">(comment {{.C.ID}})</span></a>
+    <a class="comment-permalink" href="#thread-{{.C.ID}}"><time datetime="{{.C.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .C.CreatedAt}}</time> <span class="visually-hidden">(comment {{.C.ID}})</span></a>
     <span class="copy-wrap">
-      <button type="button" class="copy-btn" command="--copy-permalink" commandfor="comment-{{.C.ID}}" data-url="/discussions/{{.Discussion.ID}}#comment-{{.C.ID}}" aria-label="Copy link to comment {{.C.ID}}">copy link</button>
+      <button type="button" class="copy-btn" command="--copy-permalink" commandfor="thread-{{.C.ID}}" data-url="/discussions/{{.Discussion.ID}}#thread-{{.C.ID}}" aria-label="Copy link to comment {{.C.ID}}">copy link</button>
       <span class="copy-tip" role="status"></span>
     </span>
   </header>
   <div class="comment-body markdown-body">{{markdown .C.Body}}</div>
   <div class="comment-actions">
     {{if eq .Discussion.Category.Format "qa"}}
-    <form method="post" action="/discussions/{{.Discussion.ID}}/comments/{{.C.ID}}/answer" class="inline-form" data-partial data-partial-mode="replace" data-partial-target="#comment-{{.C.ID}}" data-partial-announce="Answer updated.">
+    <form method="post" action="/discussions/{{.Discussion.ID}}/comments/{{.C.ID}}/answer" class="inline-form" data-partial data-partial-mode="replace" data-partial-target="#thread-{{.C.ID}}" data-partial-announce="Answer updated.">
       {{/* Per-comment controls repeat with identical looks on every row,
          so each gets an accessible name carrying the comment id (the same
          pattern the copy-link button already uses). The visible label
@@ -193,7 +195,7 @@
 {{end}}
 
 {{define "discussion_reply_form"}}
-<form method="post" action="/discussions/{{.Discussion.ID}}/comments" class="comment-form reply-form" novalidate data-partial data-partial-target="#comment-{{.C.ID}} .comment-replies">
+<form method="post" action="/discussions/{{.Discussion.ID}}/comments" class="comment-form reply-form" novalidate data-partial data-partial-target="#thread-{{.C.ID}} .comment-replies">
   <input type="hidden" name="thread_id" value="{{.C.ID}}">
   <div class="field">
     <label for="reply-body-{{.C.ID}}">Reply to {{authorName .C.Author}}</label>

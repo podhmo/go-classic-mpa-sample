@@ -151,7 +151,7 @@ The CLI reads its own variables: `ISSUES_DB` for local mode,
 | GET    | `/discussions/{id}`                   | Detail: category, threads with their replies |
 | GET/POST | `/discussions/{id}/edit`            | Edit form → 303 to detail                        |
 | GET/POST | `/discussions/{id}/delete`          | GET confirm page / POST delete → 303 to list     |
-| POST   | `/discussions/{id}/comments`          | New thread, or reply (`thread_id`) → 303 to `#comment-N` |
+| POST   | `/discussions/{id}/comments`          | New thread, or reply (`thread_id`) → 303 to `#thread-N`/`#comment-N` |
 | POST   | `/discussions/{id}/comments/{cid}/answer` | Mark/unmark a thread as the Q&A answer (qa only) → 303 |
 | GET    | `/static/*`                           | Embedded CSS/JS assets (explicitly registered)   |
 

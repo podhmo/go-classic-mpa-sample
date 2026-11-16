@@ -366,7 +366,11 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 				h.renderNewDiscussionComment(w, r, id, threadID, commentID, body)
 				return
 			}
-			http.Redirect(w, r, fmt.Sprintf("%s#comment-%d", discussionURL(id), commentID), http.StatusSeeOther)
+			anchor := "comment"
+			if threadID == 0 {
+				anchor = "thread"
+			}
+			http.Redirect(w, r, fmt.Sprintf("%s#%s-%d", discussionURL(id), anchor, commentID), http.StatusSeeOther)
 			return
 		case errors.Is(err, store.ErrInvalidThread):
 			errMsg = "Replies can only be added to a thread."
@@ -524,7 +528,7 @@ func (h *handler) setCommentAnswer(w http.ResponseWriter, r *http.Request) {
 			h.renderAnswerSwap(w, r, id, cid, prevID)
 			return
 		}
-		http.Redirect(w, r, fmt.Sprintf("%s#comment-%d", discussionURL(id), cid), http.StatusSeeOther)
+		http.Redirect(w, r, fmt.Sprintf("%s#thread-%d", discussionURL(id), cid), http.StatusSeeOther)
 	case errors.Is(err, store.ErrNotFound):
 		h.notFound(w, r)
 	case errors.Is(err, store.ErrNotAnswerable):
