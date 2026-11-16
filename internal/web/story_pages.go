@@ -382,14 +382,13 @@ func StoryDiscussionListEmpty() {
 }
 
 // StoryDiscussionDetail renders the Q&A detail page: an answer-marked
-// thread with a nested reply.
+// thread with a reply, plus a second thread with a reply chain.
 func StoryDiscussionDetail() {
 	renderDiscussionDetail(http.StatusOK, discussionDetailPage{
-		Title:        "#2 How do custom labels get their color?",
-		Discussion:   storyDiscussion,
-		Threads:      storyDThreads,
-		CommentCount: countDiscussionComments(storyDThreads),
-		Section:      "discussions",
+		Title:      "#2 How do custom labels get their color?",
+		Discussion: storyDiscussion,
+		Threads:    storyDThreads,
+		Section:    "discussions",
 	})
 }
 

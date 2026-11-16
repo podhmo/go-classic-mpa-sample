@@ -308,23 +308,6 @@ func TestDiscussionCommentValidation(t *testing.T) {
 	}
 }
 
-func TestDiscussionCommentCountIncludesReplies(t *testing.T) {
-	srv, f := newTestServer(t)
-	d := f.addDiscussion("D", "b", 1, time.Now())
-	cid, _ := f.CreateDiscussionThread(t.Context(), d.ID, "top", 0)
-	if _, err := f.CreateDiscussionComment(t.Context(), d.ID, cid, "reply", 0); err != nil {
-		t.Fatal(err)
-	}
-	resp, err := srv.Client().Get(srv.URL + "/discussions/" + itoa(d.ID))
-	if err != nil {
-		t.Fatal(err)
-	}
-	body := getBody(t, resp)
-	if !strings.Contains(body, `data-comment-count>2<`) {
-		t.Error("heading should count replies too")
-	}
-}
-
 // The partial-update contract (docs/sketch/ja/partial-updates.md): a POST
 // carrying X-Partial: 1 gets back just the fragment — the new comment's
 // <li> on success, the error-marked form on a validation failure (422) —

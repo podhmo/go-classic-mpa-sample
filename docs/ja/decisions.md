@@ -458,5 +458,6 @@
 - **`<details>` 畳み込みを廃止**: 従来は各スレッドに `<details class="reply-details"><summary>Reply</summary>` で返信フォームを畳んでいたが、新規コメントの入口が「Reply」表記＋コメント群の上部という形で分かりにくかった。返信群の直下に常時表示のフォームを置き、ラベルは "Add a comment"（送信ボタンは "Comment"）。
 - **`<details>` 関連 CSS を全削除**: `.reply-details` summary スタイルと `::details-content` アニメーション（`:root { interpolate-size: allow-keywords }` 含む）は対象要素が消えたので丸ごと撤去。`.reply-form` に `margin-top`/`border-radius` を追加してスレッドカード内で返信群と同じ inset 見た目に揃えた。
 - **`ThreadDraftID` は残す**: reopen する `<details>` は無くなったが、失敗した返信のドラフトとエラー表示を「そのスレッドのフォーム」に戻すために引き続き使う。
+- **"Comments (N)" 見出しも削除**: スレッド＋返信の合計カウントは「何を数えているか」が分かりにくく、GitHub Discussions にも見出し自体がない。`discussionDetailPage.CommentCount` と `countDiscussionComments` を撤去（issues 側の `data-comment-count` は残す）。
 - **accessible name は従来パターンで一意化**: textarea は `aria-label="Add a comment on thread N"`（可視ラベル "Add a comment" はその部分文字列 = WCAG 2.5.3 を満たす）、ボタンは `aria-label="Post comment on thread N"`。
 - **検証**: `go test ./...`、`go vet`、`gofmt` 全パス。実画面で返信フォームが各スレッド末尾に常時表示されることを確認。

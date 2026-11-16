@@ -36,28 +36,16 @@ type discussionListPage struct {
 // discussionDetailPage is the view model for GET /discussions/{id}.
 // CommentDraft/CommentError carry a failed thread-post submission back
 // into the form; ThreadDraftID does the same for a failed reply so that
-// thread's reply form keeps the draft and the error. CommentCount
-// includes replies, since the heading counts every comment shown on
-// the page.
+// thread's reply form keeps the draft and the error.
 type discussionDetailPage struct {
 	Title         string
 	Discussion    *store.Discussion
 	Threads       []*store.DiscussionThread
-	CommentCount  int
 	CommentDraft  string
 	CommentError  string
 	ThreadDraftID int64 // thread ID whose reply failed validation
 	Section       string
 	User          *store.User
-}
-
-// countDiscussionComments counts thread opening posts plus their replies.
-func countDiscussionComments(threads []*store.DiscussionThread) int {
-	n := len(threads)
-	for _, t := range threads {
-		n += len(t.Comments)
-	}
-	return n
 }
 
 // discussionFormPage is the view model for both the new-discussion and
@@ -205,12 +193,11 @@ func (h *handler) showDiscussion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.r.renderDiscussionDetail(w, http.StatusOK, discussionDetailPage{
-		Title:        fmt.Sprintf("#%d %s", discussion.ID, discussion.Title),
-		Discussion:   discussion,
-		Threads:      threads,
-		CommentCount: countDiscussionComments(threads),
-		Section:      "discussions",
-		User:         userFromContext(r.Context()),
+		Title:      fmt.Sprintf("#%d %s", discussion.ID, discussion.Title),
+		Discussion: discussion,
+		Threads:    threads,
+		Section:    "discussions",
+		User:       userFromContext(r.Context()),
 	})
 }
 
@@ -432,7 +419,6 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 		Title:         fmt.Sprintf("#%d %s", discussion.ID, discussion.Title),
 		Discussion:    discussion,
 		Threads:       threads,
-		CommentCount:  countDiscussionComments(threads),
 		CommentDraft:  body,
 		CommentError:  errMsg,
 		ThreadDraftID: threadID,

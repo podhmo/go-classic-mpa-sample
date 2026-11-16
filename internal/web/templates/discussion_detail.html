@@ -53,8 +53,6 @@
 </article>
 
 <section id="comments" class="comments">
-  <h2>Comments<span class="comment-count"{{if not .CommentCount}} hidden{{end}}> (<span data-comment-count>{{.CommentCount}}</span>)</span></h2>
-
   {{/* The list and the empty note render unconditionally but hidden as
      needed, so partial-submit.js can insert into an empty list by just
      unhiding it. Each li comes from the discussion_comment define — the
