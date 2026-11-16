@@ -462,3 +462,14 @@
 - **スレッドのヘッダは `<name>` のみ、返信は "commented"**: 「スレッドを立てた投稿」に動詞を付けるのは不自然なのでスレッドは投稿者名だけ。返信は GitHub と同じく "commented" に統一（"replied" 表記は廃止）。
 - **accessible name は従来パターンで一意化**: textarea は `aria-label="Add a comment on thread N"`（可視ラベル "Add a comment" はその部分文字列 = WCAG 2.5.3 を満たす）、ボタンは `aria-label="Post comment on thread N"`。
 - **検証**: `go test ./...`、`go vet`、`gofmt` 全パス。実画面で返信フォームが各スレッド末尾に常時表示されることを確認。
+
+## 返信フォームを折り畳みインプットに（2026-11-16、`devin/reply-accordion` ブランチ）
+
+- **背景**: 常時表示の返信フォームは最初から強調され過ぎている（GitHub の "Write a reply" と同じ問題意識）。初期状態では畳み、クリックで開く形に戻す — ただし前回の「Reply」トグル表記はやめ、GitHub と同じく畳まれた1行インプット風にする。
+- **no-JS で実現**: `<details class="reply-details"><summary class="reply-collapsed">Add a comment</summary>` を返信群の直下に置き、summary を枠線つき単一行（`list-style: none` + `::marker`/`::-webkit-details-marker` 消去 + `cursor: text` + muted 色）に整形して「クリックすると開く入力欄」に見せる。`[open] > summary { display:none }` で開いた後は summary を隠し、本物のフォームが入れ替わる。開閉自体は JavaScript 不要（フォーカス移行だけ下記の小さな JS 拡張を使う）。
+- **ヒント行は開いたフォーム内に残す**: "Markdown (GFM) supported. Ctrl+Enter …" は畳まれた状態では見えず、開いた状態では見える — この両方を満たすのでテキスト自体は削除しない。
+- **送信ボタンは右寄せ**: Comment / Start thread の両フォームのボタンを `.form-actions { display:flex; justify-content:flex-end }` で右寄せ。
+- **`ThreadDraftID` が再び活きる**: `<details>` が復活したので、失敗した返信は `open` 属性で当該スレッドのフォームを開いた状態で再描画する（ドラフト＋エラー表示を保持）。
+- **底部の "Start a thread" フォームは畳まない**: GitHub の Write ボックスに相当する新規スレッド作成は常時表示のまま（ボタン右寄せのみ適用）。
+- **開いたとき textarea にフォーカスを移す**: `[open] > summary` は `display:none` で消えるため、クリック後フォーカスが隠れた summary（→body）に残り、もう一回クリックが必要になる。`partial-submit.js` に `toggle`（capture）リスナーを追加し、`.reply-details` が開いたら内部 textarea を `focus()` する — no-JS 時も開閉自体は動く（プログレッシブ強化）。
+- **検証**: `go test ./...`、`go vet`、`gofmt` 全パス。実画面で折り畳み表示・開閉・エラー時の open 復元を確認。

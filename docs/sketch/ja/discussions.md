@@ -11,6 +11,12 @@
 > 返信群の直下に常時表示の "Add a comment" フォームに変えた（本メモの
 > `<details>` reply UX 記述は初版設計）。詳しくは `../../ja/decisions.md` の
 > 「返信フォームをスレッド末尾の常時表示に」を参照。
+>
+> **変更（2026-11-16）**: 上記の常時表示は強調され過ぎだったため、`<details>` に
+> 戻した — ただし summary は「Reply」トグルではなく畳まれた1行インプット風
+> （GitHub の "Write a reply" 相当、「Add a comment」とだけ書かれた枠線付きの
+> バー）。開くと本物のフォームに入れ替わる。詳しくは `../../ja/decisions.md` の
+> 「返信フォームを折り畳みインプットに」を参照。
 
 調査・設計メモ（実装前の検討段階）。`cli-and-web-api.md` / `partial-updates.md` の姉妹編。
 「現状は issue 管理のみだが、GitHub Discussions のような機能を追加してトップのナビゲーションに
@@ -202,11 +208,14 @@ header:  Issues | Discussions        （aria-current 付きタブ）
   同じ仕組みを流用できる）。
 - 投稿者表示は issues と同じルール: `Opened by <name>` / スレッドは `<name>` のみ
   （動詞なし）/ 返信は `<name> commented` で NULL は "anonymous"。author は作成時に固定。
-- **返信フォームは各 top-level コメントの `<details>` 内に畳む**（「Reply」の summary を
-  開くとフォーム）。宣言的 HTML だけで GitHub の inline reply box と同じ UX になり、
-  JS も専用ページも要らない。別案は `GET /discussions/{id}/comments/{cid}/reply` の
-  専用フォームページ — こちらは「返信先コンテキストを1画面で見せる」利点があるが、
-  ページ遷移が増える。details 方式を推奨。
+- **返信フォームは各スレッド末尾の `<details>` 内に畳む**。summary は
+  「Add a comment」とだけ書かれた畳まれた1行インプット風のバーで、クリックで
+  開くと本物のフォームに入れ替わる（`[open] > summary { display:none }`）。
+  宣言的 HTML だけで GitHub の collapsed "Write a reply" input と同じ UX に
+  なり、JS も専用ページも要らない。別案は
+  `GET /discussions/{id}/comments/{cid}/reply` の専用フォームページ — こちらは
+  「返信先コンテキストを1画面で見せる」利点があるが、ページ遷移が増える。
+  details 方式を推奨。
 - コメント投稿後の着地は issues と同じく `303 → /discussions/{id}#comment-{新ID}`。
   返信でも同じアンカー先（返信 `<li>` にも `id="comment-N"` を付ける）。
 

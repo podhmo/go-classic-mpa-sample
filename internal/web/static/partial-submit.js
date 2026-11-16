@@ -76,6 +76,22 @@ document.addEventListener("submit", (event) => {
   postPartial(form);
 });
 
+// The collapsed reply entry is a <summary> that hides once its <details>
+// opens; without this the click would leave focus on the now-hidden
+// summary (or drop it to <body>), forcing a second click before typing.
+// toggle does not bubble — capture on document. Progressive enhancement:
+// with JS off the details still opens, the user just clicks the field.
+document.addEventListener(
+  "toggle",
+  (event) => {
+    const details = event.target;
+    if (!(details instanceof HTMLDetailsElement) || !details.open ||
+        !details.classList.contains("reply-details")) return;
+    details.querySelector("textarea")?.focus();
+  },
+  true
+);
+
 // A failed POST gets a visible note, not just a live-region announcement
 // — sighted users must see that nothing was saved. role="alert" makes it
 // its own live region, so announce() is not needed for this path.
