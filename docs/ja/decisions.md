@@ -473,3 +473,9 @@
 - **底部の "Start a thread" フォームは畳まない**: GitHub の Write ボックスに相当する新規スレッド作成は常時表示のまま（ボタン右寄せのみ適用）。
 - **開いたとき textarea にフォーカスを移す**: `[open] > summary` は `display:none` で消えるため、クリック後フォーカスが隠れた summary（→body）に残り、もう一回クリックが必要になる。`partial-submit.js` に `toggle`（capture）リスナーを追加し、`.reply-details` が開いたら内部 textarea を `focus()` する — no-JS 時も開閉自体は動く（プログレッシブ強化）。
 - **検証**: `go test ./...`、`go vet`、`gofmt` 全パス。実画面で折り畳み表示・開閉・エラー時の open 復元を確認。
+
+## 返信フォームに Cancel 収納ボタン（2026-11-16、`devin/reply-cancel` ブランチ）
+
+- **背景**: GitHub の reply box のように、一度開いたコメント入力を Cancel で畳み戻せるようにする。`<details>` を内部から畳む HTML 原生手段は存在しないため、フォーム内に `<button type="button" data-reply-cancel>Cancel</button>` を置き、`partial-submit.js` の委譲クリックリスナーが `details.open=false` にして summary（折り畳みバー）にフォーカスを戻す。無 JS 時はボタンが無反応でフォームは開いたまま — 従来動作と同じで機能損失なし。
+- **右寄せの適用範囲を修正**: 前 PR で `.form-actions { justify-content:flex-end }` をグローバルに足しており、ログイン・削除確認・issue/discussion 編集フォームなど共有 `.form-actions` のボタンも右寄せになっていた。`.comment-form .form-actions` に限定して他画面へ影響しないように戻す。
+- **検証**: `go test ./internal/web/`、`go vet`、`gofmt` 全パス。実画面で Cancel クリック→折り畳みバーに戻ることを確認。

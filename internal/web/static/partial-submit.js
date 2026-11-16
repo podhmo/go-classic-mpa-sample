@@ -92,6 +92,19 @@ document.addEventListener(
   true
 );
 
+// Cancel collapses the open reply box back to the input bar and returns
+// focus to it (the bar reappears once open is removed). Without JS the
+// button is inert and the box simply stays open — same as before it
+// existed.
+document.addEventListener("click", (event) => {
+  const btn = event.target.closest?.("[data-reply-cancel]");
+  if (!btn) return;
+  const details = btn.closest("details.reply-details");
+  if (!details) return;
+  details.open = false;
+  details.querySelector("summary")?.focus();
+});
+
 // A failed POST gets a visible note, not just a live-region announcement
 // — sighted users must see that nothing was saved. role="alert" makes it
 // its own live region, so announce() is not needed for this path.

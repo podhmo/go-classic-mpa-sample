@@ -1420,9 +1420,9 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   border-radius: var(--radius);
 }
 
-/* Right-aligned submit row for comment/thread forms. */
-.form-actions {
-  display: flex;
+/* Right-aligned submit row for comment/thread forms only — the shared
+   .form-actions (auth, delete dialogs, edit forms) keeps its default. */
+.comment-form .form-actions {
   justify-content: flex-end;
 }
 
