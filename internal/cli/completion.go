@@ -49,7 +49,7 @@ _issues_completions() {
 	# Flag words complete anywhere; values of flags that take one are left
 	# to the shell's file completion.
 	if [[ "$cur" == -* ]]; then
-		COMPREPLY=( $(compgen -W "--db --server --token --json --template --state --search --sort --limit --page --label --category --answered --title --body --body-file --comments --parent --comment --unmark --user --method --field --raw-field --web" -- "$cur") )
+		COMPREPLY=( $(compgen -W "--db --server --token --json --template --state --search --sort --limit --page --label --category --answered --title --body --body-file --comments --thread --unmark --user --method --field --raw-field --web" -- "$cur") )
 		return 0
 	fi
 
