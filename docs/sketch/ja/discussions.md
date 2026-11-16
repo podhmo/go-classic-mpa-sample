@@ -6,6 +6,11 @@
 > （body/author/is_answer を持つ `discussion_threads`）、返信のみが
 > `discussion_comments`（`thread_id` FK）。詳しくは `../../ja/decisions.md`
 > の「discussion_comments を threads/comments 2 テーブルへ分割」を参照。
+>
+> **変更（2026-11-16）**: 返信フォームの `<details>` 畳み込みをやめ、各スレッドの
+> 返信群の直下に常時表示の "Add a comment" フォームに変えた（本メモの
+> `<details>` reply UX 記述は初版設計）。詳しくは `../../ja/decisions.md` の
+> 「返信フォームをスレッド末尾の常時表示に」を参照。
 
 調査・設計メモ（実装前の検討段階）。`cli-and-web-api.md` / `partial-updates.md` の姉妹編。
 「現状は issue 管理のみだが、GitHub Discussions のような機能を追加してトップのナビゲーションに

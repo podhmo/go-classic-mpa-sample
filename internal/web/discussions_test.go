@@ -113,7 +113,7 @@ func TestDiscussionDetailRendersThreadAndAnswer(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := getBody(t, resp)
-	for _, want := range []string{"top comment", "nested reply", "comment-answer", "badge-answer", "Unmark answer", `name="thread_id"`, "reply-details"} {
+	for _, want := range []string{"top comment", "nested reply", "comment-answer", "badge-answer", "Unmark answer", `name="thread_id"`, "reply-form"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("detail missing %q", want)
 		}
@@ -123,7 +123,7 @@ func TestDiscussionDetailRendersThreadAndAnswer(t *testing.T) {
 	// different action → distinct accessible name).
 	for _, want := range []string{
 		`aria-label="Unmark answer on thread ` + itoa(cid) + `"`,
-		`aria-label="Reply to thread ` + itoa(cid) + `"`,
+		`aria-label="Add a comment on thread ` + itoa(cid) + `"`,
 		`aria-label="Post comment on thread ` + itoa(cid) + `"`,
 	} {
 		if !strings.Contains(body, want) {

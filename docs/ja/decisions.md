@@ -452,3 +452,11 @@
 - **ID 空間が分かれた副作用**: 返信の id と同じ値の thread id が別 discussion 内に存在し得るので「返信への返信」を ID だけで誤検出/拒否できない。API 面ではスレッド id しか渡せない経路だけ残すので問題にならない。
 - **API**: `GET /discussions/{id}` は `"threads"` を返し、新規に `POST .../threads`、`POST .../threads/{tid}/comments`、`POST .../threads/{tid}/answer`。HTML ルートは据え置き（`POST /discussions/{id}/comments`、同 `{cid}/answer` で cid=thread id）だが hidden フィールドは `parent_id` → `thread_id`。CLI も `--parent`/`--comment` → `--thread`。
 - **検証**: `go test ./...`（store に `TestMigrationV5` で v4→v5 の id 保持・返信付け替え・is_answer 継承を確認済み）、`go vet`、`gofmt` 全パス。
+
+## 返信フォームをスレッド末尾の常時表示に（2026-11-16、`devin/reply-form-bottom` ブランチ）
+
+- **`<details>` 畳み込みを廃止**: 従来は各スレッドに `<details class="reply-details"><summary>Reply</summary>` で返信フォームを畳んでいたが、新規コメントの入口が「Reply」表記＋コメント群の上部という形で分かりにくかった。返信群の直下に常時表示のフォームを置き、ラベルは "Add a comment"（送信ボタンは "Comment"）。
+- **`<details>` 関連 CSS を全削除**: `.reply-details` summary スタイルと `::details-content` アニメーション（`:root { interpolate-size: allow-keywords }` 含む）は対象要素が消えたので丸ごと撤去。`.reply-form` に `margin-top`/`border-radius` を追加してスレッドカード内で返信群と同じ inset 見た目に揃えた。
+- **`ThreadDraftID` は残す**: reopen する `<details>` は無くなったが、失敗した返信のドラフトとエラー表示を「そのスレッドのフォーム」に戻すために引き続き使う。
+- **accessible name は従来パターンで一意化**: textarea は `aria-label="Add a comment on thread N"`（可視ラベル "Add a comment" はその部分文字列 = WCAG 2.5.3 を満たす）、ボタンは `aria-label="Post comment on thread N"`。
+- **検証**: `go test ./...`、`go vet`、`gofmt` 全パス。実画面で返信フォームが各スレッド末尾に常時表示されることを確認。
