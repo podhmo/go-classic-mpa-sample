@@ -273,17 +273,25 @@ func (s *Store) UpdateDiscussion(ctx context.Context, id int64, in DiscussionInp
 	if err := checkAffected(res); err != nil {
 		return err
 	}
+	var cleared int64
 	if format != CategoryFormatQA {
-		if _, err := tx.ExecContext(ctx,
+		res, err := tx.ExecContext(ctx,
 			"UPDATE discussion_threads SET is_answer = 0 WHERE discussion_id = ? AND is_answer = 1",
-			id); err != nil {
+			id)
+		if err != nil {
 			return err
 		}
+		cleared, _ = res.RowsAffected()
 	}
 	if err := tx.Commit(); err != nil {
 		return err
 	}
 	s.notify(events.Change{Topic: events.DiscussionTopic(id), Kind: events.KindEdit, Target: id})
+	if cleared > 0 {
+		// Marks vanished from threads the article swap does not touch —
+		// tell watchers to rebuild the thread list, not just the card.
+		s.notify(events.Change{Topic: events.DiscussionTopic(id), Kind: events.KindResync, Target: id})
+	}
 	return nil
 }
 
