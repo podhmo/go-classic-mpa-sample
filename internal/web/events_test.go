@@ -114,4 +114,17 @@ func TestIssueCommentsFragment(t *testing.T) {
 	if strings.Contains(string(body), `id="comment-1"`) {
 		t.Fatal("comment-1 should be filtered out by ?ids=2")
 	}
+
+	// No ids = the resync path: the whole list must come back.
+	resp2, err := srv.Client().Get(srv.URL + "/issues/" + itoa(issue.ID) + "/fragments/comments")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp2.Body.Close()
+	body2, _ := io.ReadAll(resp2.Body)
+	for _, want := range []string{`id="comment-1"`, `id="comment-2"`} {
+		if !strings.Contains(string(body2), want) {
+			t.Fatalf("resync fragment missing %s", want)
+		}
+	}
 }

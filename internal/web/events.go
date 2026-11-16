@@ -158,8 +158,9 @@ func (h *handler) issueCommentsFragment(w http.ResponseWriter, r *http.Request) 
 		h.internalError(w, r, err)
 		return
 	}
-	out := comments[:0]
+	out := comments
 	if filtered {
+		out = comments[:0]
 		for _, c := range comments {
 			if ids[c.ID] {
 				out = append(out, c)
@@ -213,8 +214,9 @@ func (h *handler) discussionThreadsFragment(w http.ResponseWriter, r *http.Reque
 		h.internalError(w, r, err)
 		return
 	}
-	out := threads[:0]
+	out := threads
 	if filtered {
+		out = threads[:0]
 		for _, t := range threads {
 			if ids[t.ID] {
 				out = append(out, t)
@@ -266,8 +268,9 @@ func (h *handler) discussionRepliesFragment(w http.ResponseWriter, r *http.Reque
 		h.notFound(w, r)
 		return
 	}
-	out := thread.Comments[:0]
+	out := thread.Comments
 	if filtered {
+		out = thread.Comments[:0]
 		for _, c := range thread.Comments {
 			if ids[c.ID] {
 				out = append(out, c)
