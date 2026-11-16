@@ -361,7 +361,7 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 			http.Redirect(w, r, fmt.Sprintf("%s#%s-%d", discussionURL(id), anchor, commentID), http.StatusSeeOther)
 			return
 		case errors.Is(err, store.ErrInvalidThread):
-			errMsg = "Replies can only be added to a thread."
+			errMsg = "Comments can only be added to a thread."
 		case errors.Is(err, store.ErrNotFound):
 			h.notFound(w, r)
 			return

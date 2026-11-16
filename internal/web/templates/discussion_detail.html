@@ -60,7 +60,7 @@
   <ol class="comment-list" role="list"{{if not .Threads}} hidden{{end}}>
     {{range .Threads}}{{template "discussion_comment" (dict "Discussion" $.Discussion "C" . "ThreadDraftID" $.ThreadDraftID "CommentDraft" $.CommentDraft "CommentError" $.CommentError)}}{{end}}
   </ol>
-  <p class="muted" data-empty-note{{if .Threads}} hidden{{end}}>No comments yet.</p>
+  <p class="muted" data-empty-note{{if .Threads}} hidden{{end}}>No threads yet.</p>
 
   {{template "discussion_comment_form" .}}
 </section>

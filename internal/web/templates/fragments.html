@@ -205,7 +205,7 @@
 {{end}}
 
 {{define "discussion_comment_form"}}
-<form method="post" action="/discussions/{{.Discussion.ID}}/comments" class="comment-form card" novalidate data-partial data-partial-target="#comments > .comment-list">
+<form method="post" action="/discussions/{{.Discussion.ID}}/comments" class="comment-form card" novalidate data-partial data-partial-target="#comments > .comment-list" data-partial-announce="Thread posted.">
   <div class="field">
     <label for="comment-body">Start a thread</label>
     <textarea id="comment-body" name="body" rows="4" required data-error="comment-error" aria-keyshortcuts="Control+Enter Meta+Enter"{{if and .CommentError (not .ThreadDraftID)}} aria-invalid="true" aria-describedby="comment-error comment-hint" autofocus{{else}} aria-invalid="false" aria-describedby="comment-hint"{{end}}>{{if not .ThreadDraftID}}{{.CommentDraft}}{{end}}</textarea>
