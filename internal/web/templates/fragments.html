@@ -138,7 +138,10 @@
   <ol class="comment-replies" role="list"{{if not .C.Comments}} hidden{{end}}>
     {{range .C.Comments}}{{template "discussion_reply" (dict "Discussion" $.Discussion "C" .)}}{{end}}
   </ol>
-  {{template "discussion_reply_form" .}}
+  <details class="reply-details"{{if and .ThreadDraftID (eq .ThreadDraftID .C.ID) .CommentError}} open{{end}}>
+    <summary class="reply-collapsed" aria-label="Add a comment on thread {{.C.ID}}">Add a comment</summary>
+    {{template "discussion_reply_form" .}}
+  </details>
 </li>
 {{end}}
 
@@ -200,7 +203,9 @@
     <p class="field-error{{if not (and .ThreadDraftID (eq .ThreadDraftID .C.ID) .CommentError)}} field-error-pending{{end}}" id="reply-error-{{.C.ID}}">{{if eq .ThreadDraftID .C.ID}}{{or .CommentError "Body is required."}}{{else}}Body is required.{{end}}</p>
     <p class="field-hint" id="reply-hint-{{.C.ID}}">Markdown (GFM) supported. Ctrl+Enter (Cmd+Enter on macOS) submits.</p>
   </div>
-  <button type="submit" class="btn btn-primary" aria-label="Post comment on thread {{.C.ID}}">Comment</button>
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary" aria-label="Post comment on thread {{.C.ID}}">Comment</button>
+  </div>
 </form>
 {{end}}
 
@@ -212,6 +217,8 @@
     <p class="field-error{{if or (not .CommentError) .ThreadDraftID}} field-error-pending{{end}}" id="comment-error">{{or .CommentError "Body is required."}}</p>
     <p class="field-hint" id="comment-hint">Markdown (GFM) supported. Raw HTML is not rendered. Ctrl+Enter (Cmd+Enter on macOS) submits.{{if .User}} Posting as @{{.User.Name}}.{{else}} Posting as anonymous — <a href="/login?next=/discussions/{{.Discussion.ID}}">log in</a> to attach your name.{{end}}</p>
   </div>
-  <button type="submit" class="btn btn-primary">Start thread</button>
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary">Start thread</button>
+  </div>
 </form>
 {{end}}

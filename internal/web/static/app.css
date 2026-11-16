@@ -1382,11 +1382,48 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   font-size: 0.82rem;
 }
 
+/* Collapsed reply entry: a <summary> styled as a quiet single-line
+   input. Opening the <details> swaps it for the real form — no JS.
+   Once open, the summary hides so the textarea takes its place. */
+.reply-details > summary {
+  display: block;
+  margin-top: 12px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  cursor: text;
+  list-style: none;
+}
+
+.reply-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.reply-details > summary::marker {
+  content: none;
+}
+
+.reply-details > summary:hover {
+  border-color: var(--accent);
+}
+
+.reply-details[open] > summary {
+  display: none;
+}
+
 .reply-form {
   margin-top: 12px;
   padding: 12px;
   background: var(--bg);
   border-radius: var(--radius);
+}
+
+/* Right-aligned submit row for comment/thread forms. */
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 /* One level of nested replies, indented under the parent comment. */
