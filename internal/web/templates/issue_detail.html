@@ -13,7 +13,7 @@
 
 {{template "issue_article" .}}
 
-<section id="comments" class="comments">
+<section id="comments" class="comments" data-live-kind="issue" data-live-events="/issues/{{.Issue.ID}}/events" data-live-fragments="/issues/{{.Issue.ID}}/fragments" data-live-list="/issues">
   <h2>Comments<span class="comment-count"{{if not .Comments}} hidden{{end}}> (<span data-comment-count>{{len .Comments}}</span>)</span></h2>
 
   {{/* The list and the empty note render unconditionally but hidden as

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/podhmo/go-classic-mpa-sample/internal/events"
 )
 
 const (
@@ -175,7 +177,11 @@ func (s *Store) CreateIssue(ctx context.Context, in IssueInput, authorID int64) 
 	if err := setIssueLabels(ctx, tx, id, in.LabelIDs); err != nil {
 		return 0, err
 	}
-	return id, tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	s.notify(events.Change{Topic: events.IssuesTopic, Kind: events.KindNew, Target: id})
+	return id, nil
 }
 
 // UpdateIssue replaces title/body/labels and bumps UpdatedAt. Returns
@@ -199,7 +205,11 @@ func (s *Store) UpdateIssue(ctx context.Context, id int64, in IssueInput) error 
 	if err := setIssueLabels(ctx, tx, id, in.LabelIDs); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.notify(events.Change{Topic: events.IssueTopic(id), Kind: events.KindEdit, Target: id})
+	return nil
 }
 
 // SetIssueStatus sets status to StatusOpen or StatusClosed. Returns
@@ -219,7 +229,11 @@ func (s *Store) SetIssueStatus(ctx context.Context, id int64, status string) err
 	if err != nil {
 		return err
 	}
-	return checkAffected(res)
+	if err := checkAffected(res); err != nil {
+		return err
+	}
+	s.notify(events.Change{Topic: events.IssueTopic(id), Kind: events.KindStatus, Target: id})
+	return nil
 }
 
 // DeleteIssue removes the issue along with its comments and label links.
@@ -229,7 +243,12 @@ func (s *Store) DeleteIssue(ctx context.Context, id int64) error {
 	if err != nil {
 		return err
 	}
-	return checkAffected(res)
+	if err := checkAffected(res); err != nil {
+		return err
+	}
+	s.notify(events.Change{Topic: events.IssueTopic(id), Kind: events.KindDelete, Target: id})
+	s.notify(events.Change{Topic: events.IssuesTopic, Kind: events.KindDelete, Target: id})
+	return nil
 }
 
 // ListComments returns comments for an issue in chronological order.
@@ -289,7 +308,11 @@ func (s *Store) CreateComment(ctx context.Context, issueID int64, body string, a
 	if err != nil {
 		return 0, err
 	}
-	return id, tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	s.notify(events.Change{Topic: events.IssueTopic(issueID), Kind: events.KindComment, Target: id})
+	return id, nil
 }
 
 // ListLabels returns all labels ordered by name.

@@ -11,38 +11,9 @@
   </ol>
 </nav>
 
-<article class="card issue-detail">
-  <header class="issue-detail-head">
-    <div class="issue-title-row">
-      <a class="category-badge" href="/discussions?category={{.Discussion.Category.Slug}}">{{.Discussion.Category.Name}}</a>
-      <h1>{{.Discussion.Title}} <span class="issue-num">#{{.Discussion.ID}}</span></h1>
-    </div>
-    {{template "discussion_meta" .Discussion}}
-  </header>
+{{template "discussion_article" .}}
 
-  {{if .Discussion.Body}}
-  <div class="issue-body markdown-body">{{markdown .Discussion.Body}}</div>
-  {{else}}
-  <div class="issue-body issue-body-empty"><em>No description provided.</em></div>
-  {{end}}
-
-  <div class="issue-actions">
-    <a class="btn" href="/discussions/{{.Discussion.ID}}/edit">Edit</a>
-    <button type="button" class="btn btn-danger delete-open" commandfor="delete-dialog" command="show-modal">Delete</button>
-    <a class="btn btn-danger delete-fallback" href="/discussions/{{.Discussion.ID}}/delete">Delete</a>
-  </div>
-
-  <dialog id="delete-dialog" class="confirm-dialog" closedby="any" aria-labelledby="delete-dialog-title" aria-describedby="delete-dialog-desc">
-    <h2 id="delete-dialog-title">Delete discussion #{{.Discussion.ID}}?</h2>
-    <p id="delete-dialog-desc">This permanently removes <strong>{{.Discussion.Title}}</strong> and all of its comments. This action cannot be undone.</p>
-    <form method="post" action="/discussions/{{.Discussion.ID}}/delete" class="form-actions">
-      <button type="button" class="btn" commandfor="delete-dialog" command="close" autofocus>Cancel</button>
-      <button type="submit" class="btn btn-danger">Delete discussion</button>
-    </form>
-  </dialog>
-</article>
-
-<section id="comments" class="comments">
+<section id="comments" class="comments" data-live-kind="discussion" data-live-events="/discussions/{{.Discussion.ID}}/events" data-live-fragments="/discussions/{{.Discussion.ID}}/fragments" data-live-list="/discussions">
   {{/* The list and the empty note render unconditionally but hidden as
      needed, so partial-submit.js can insert into an empty list by just
      unhiding it. Each li comes from the discussion_comment define — the

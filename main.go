@@ -25,6 +25,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/podhmo/go-classic-mpa-sample/internal/events"
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 	"github.com/podhmo/go-classic-mpa-sample/internal/web"
 )
@@ -82,13 +83,22 @@ func main() {
 		log.Fatalf("check api tokens: %v", err)
 	}
 
+	// Live updates: one hub shared by both ends of the channel — the store
+	// publishes every committed mutation, the web layer's SSE endpoints
+	// broadcast it to open detail pages (docs/sketch/ja/live-updates.md).
+	hub := events.NewHub()
+	st.SetListener(hub.Publish)
+
 	srv := &http.Server{
 		Addr:              *addr,
-		Handler:           web.New(st, web.WithAPIToken(*apiToken), web.WithAPIEnabled(*apiToken != "" || hasAPITokens)),
+		Handler:           web.New(st, web.WithAPIToken(*apiToken), web.WithAPIEnabled(*apiToken != "" || hasAPITokens), web.WithHub(hub)),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      15 * time.Second,
-		IdleTimeout:       60 * time.Second,
+		// WriteTimeout covers SSE too, but each events handler lifts its
+		// own write deadline via ResponseController — a global 15s cap is
+		// still right for ordinary responses.
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

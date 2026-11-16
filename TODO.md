@@ -27,4 +27,4 @@ Guides referenced below are in the `modern-web-guidance` catalog (`.agents/skill
   - [x] **storybook ストーリーの拡充**: 変更予定項目（ボタン配置・狭画面レイアウト等）を目視確認できるよう、不足している状態ストーリーを `internal/web/story_pages.go` に追加する。JS 挙動は verify-ui 側で確認
   - [x] **コメント permalink を判別可能にする**: `.comment-permalink` が `color: inherit; text-decoration: none` で本文と同色無下線（hover でしか判別できない）→ リンクと分かる表現に直す（ui-rules.md §9、2026-11-16 決定）
 - [x] **クライアント JS のライフサイクル統合**: 共有 registry `dom-hooks.js`（1本の MutationObserver + `bind(selector, {init, teardown})`）に attach/detach 追従を集約し、detail/form ページの script タグをページ種別エントリ1本に畳む（decisions.md 2026-11-16 参照）
-- [ ] **他者コメントのリアルタイム反映（SSE push）**: `GET /{issues,discussions}/{id}/events` + store 層 emitter + `live-updates.js` + fragment GET エンドポイント。設計は `docs/sketch/ja/live-updates.md`（`WriteTimeout` 解除・static ルート登録が前提）。Phase 1 は comment/thread/reply の live append のみ
+- [x] **他者コメントのリアルタイム反映（SSE push）**: `GET /{issues,discussions}/{id}/events` + store 層 emitter + `live-updates.js` + fragment GET エンドポイント。設計は `docs/sketch/ja/live-updates.md`。comment/thread/reply の live append に加え status/answer/edit/delete/resync も対応。一覧ページ側の未読表示・presence は未実装

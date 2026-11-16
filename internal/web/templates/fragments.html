@@ -78,6 +78,15 @@
 {{template "issue_comment" .Comment}}
 {{end}}
 
+{{define "issue_comments_update"}}
+{{/* Live-update GET /issues/{id}/fragments/comments response: the header
+   meta rides as a data-swap node (a new comment bumped updated_at),
+   followed by every comment <li> to upsert — ?ids= picks a subset, no
+   parameter means the whole list (resync). */}}
+{{template "issue_meta" .Issue}}
+{{range .Comments}}{{template "issue_comment" .}}{{end}}
+{{end}}
+
 {{define "issue_comment"}}
 <li class="card comment" id="comment-{{.ID}}">
   <header class="comment-meta">
@@ -104,6 +113,42 @@
     <button type="submit" class="btn btn-primary">Comment</button>
   </div>
 </form>
+{{end}}
+
+{{define "discussion_article"}}
+{{/* The whole discussion card, extracted so both the detail page and the
+   live-update article fragment render the same markup — the discussion
+   counterpart of issue_article (title/body/category change on edit). */}}
+<article class="card issue-detail">
+  <header class="issue-detail-head">
+    <div class="issue-title-row">
+      <a class="category-badge" href="/discussions?category={{.Discussion.Category.Slug}}">{{.Discussion.Category.Name}}</a>
+      <h1>{{.Discussion.Title}} <span class="issue-num">#{{.Discussion.ID}}</span></h1>
+    </div>
+    {{template "discussion_meta" .Discussion}}
+  </header>
+
+  {{if .Discussion.Body}}
+  <div class="issue-body markdown-body">{{markdown .Discussion.Body}}</div>
+  {{else}}
+  <div class="issue-body issue-body-empty"><em>No description provided.</em></div>
+  {{end}}
+
+  <div class="issue-actions">
+    <a class="btn" href="/discussions/{{.Discussion.ID}}/edit">Edit</a>
+    <button type="button" class="btn btn-danger delete-open" commandfor="delete-dialog" command="show-modal">Delete</button>
+    <a class="btn btn-danger delete-fallback" href="/discussions/{{.Discussion.ID}}/delete">Delete</a>
+  </div>
+
+  <dialog id="delete-dialog" class="confirm-dialog" closedby="any" aria-labelledby="delete-dialog-title" aria-describedby="delete-dialog-desc">
+    <h2 id="delete-dialog-title">Delete discussion #{{.Discussion.ID}}?</h2>
+    <p id="delete-dialog-desc">This permanently removes <strong>{{.Discussion.Title}}</strong> and all of its comments. This action cannot be undone.</p>
+    <form method="post" action="/discussions/{{.Discussion.ID}}/delete" class="form-actions">
+      <button type="button" class="btn" commandfor="delete-dialog" command="close" autofocus>Cancel</button>
+      <button type="submit" class="btn btn-danger">Delete discussion</button>
+    </form>
+  </dialog>
+</article>
 {{end}}
 
 {{define "discussion_comment"}}
@@ -180,6 +225,23 @@
    client's replace mode. */}}
 {{template "discussion_meta" .Discussion}}
 {{range .Comments}}{{template "discussion_comment" (dict "Discussion" $.Discussion "C" .)}}{{end}}
+{{end}}
+
+{{define "discussion_threads_update"}}
+{{/* Live-update GET /discussions/{id}/fragments/threads response: meta
+   swap node plus the thread <li>s to upsert (?ids= picks a subset — e.g.
+   an answer move fetches the two changed threads). */}}
+{{template "discussion_meta" .Discussion}}
+{{range .Threads}}{{template "discussion_comment" (dict "Discussion" $.Discussion "C" .)}}{{end}}
+{{end}}
+
+{{define "discussion_replies_update"}}
+{{/* Live-update GET /discussions/{id}/fragments/replies response: meta
+   swap node plus the reply <li>s of one thread, for appending pushed
+   replies without re-rendering (and clobbering) the thread's open reply
+   form. */}}
+{{template "discussion_meta" .Discussion}}
+{{range .Comments}}{{template "discussion_reply" (dict "Discussion" $.Discussion "C" .)}}{{end}}
 {{end}}
 
 {{define "discussion_reply"}}

@@ -12,6 +12,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	"github.com/podhmo/go-classic-mpa-sample/internal/events"
 )
 
 // ErrInvalidCategory reports a discussion input referencing a category
@@ -239,7 +241,11 @@ func (s *Store) CreateDiscussion(ctx context.Context, in DiscussionInput, author
 	if err != nil {
 		return 0, err
 	}
-	return id, tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	s.notify(events.Change{Topic: events.DiscussionsTopic, Kind: events.KindNew, Target: id})
+	return id, nil
 }
 
 // UpdateDiscussion replaces title/body/category and bumps UpdatedAt.
@@ -267,14 +273,26 @@ func (s *Store) UpdateDiscussion(ctx context.Context, id int64, in DiscussionInp
 	if err := checkAffected(res); err != nil {
 		return err
 	}
+	var cleared int64
 	if format != CategoryFormatQA {
-		if _, err := tx.ExecContext(ctx,
+		res, err := tx.ExecContext(ctx,
 			"UPDATE discussion_threads SET is_answer = 0 WHERE discussion_id = ? AND is_answer = 1",
-			id); err != nil {
+			id)
+		if err != nil {
 			return err
 		}
+		cleared, _ = res.RowsAffected()
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.notify(events.Change{Topic: events.DiscussionTopic(id), Kind: events.KindEdit, Target: id})
+	if cleared > 0 {
+		// Marks vanished from threads the article swap does not touch —
+		// tell watchers to rebuild the thread list, not just the card.
+		s.notify(events.Change{Topic: events.DiscussionTopic(id), Kind: events.KindResync, Target: id})
+	}
+	return nil
 }
 
 // requireCategory verifies the category exists inside tx and returns its
@@ -296,7 +314,12 @@ func (s *Store) DeleteDiscussion(ctx context.Context, id int64) error {
 	if err != nil {
 		return err
 	}
-	return checkAffected(res)
+	if err := checkAffected(res); err != nil {
+		return err
+	}
+	s.notify(events.Change{Topic: events.DiscussionTopic(id), Kind: events.KindDelete, Target: id})
+	s.notify(events.Change{Topic: events.DiscussionsTopic, Kind: events.KindDelete, Target: id})
+	return nil
 }
 
 // ListDiscussionThreads returns the threads of a discussion in
@@ -388,7 +411,11 @@ func (s *Store) CreateDiscussionThread(ctx context.Context, discussionID int64, 
 	if err != nil {
 		return 0, err
 	}
-	return id, tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	s.notify(events.Change{Topic: events.DiscussionTopic(discussionID), Kind: events.KindThread, Target: id})
+	return id, nil
 }
 
 // CreateDiscussionComment appends a reply to a thread of the discussion.
@@ -437,7 +464,11 @@ func (s *Store) CreateDiscussionComment(ctx context.Context, discussionID, threa
 	if err != nil {
 		return 0, err
 	}
-	return id, tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	s.notify(events.Change{Topic: events.DiscussionTopic(discussionID), Kind: events.KindReply, Target: id, Parent: threadID})
+	return id, nil
 }
 
 // SetThreadAnswer marks (answer=true) or unmarks a thread as the
@@ -479,6 +510,19 @@ func (s *Store) SetThreadAnswer(ctx context.Context, discussionID, threadID int6
 		return ErrNotAnswerable
 	}
 
+	// The change event reports the previous mark holder so the client can
+	// re-render both <li>s (the mark moved). Read it before the update
+	// clears it; marking a fresh thread leaves prev = 0.
+	var prev int64
+	err = tx.QueryRowContext(ctx,
+		"SELECT id FROM discussion_threads WHERE discussion_id = ? AND is_answer = 1",
+		discussionID).Scan(&prev)
+	if errors.Is(err, sql.ErrNoRows) {
+		prev = 0
+	} else if err != nil {
+		return err
+	}
+
 	if answer {
 		// Move the mark: clear the previous answer (at most one row
 		// thanks to the partial unique index), then set the new one.
@@ -504,7 +548,11 @@ func (s *Store) SetThreadAnswer(ctx context.Context, discussionID, threadID int6
 		time.Now().UTC().Unix(), discussionID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.notify(events.Change{Topic: events.DiscussionTopic(discussionID), Kind: events.KindAnswer, Target: threadID, Parent: prev})
+	return nil
 }
 
 func scanDiscussion(s scanner) (*Discussion, error) {
