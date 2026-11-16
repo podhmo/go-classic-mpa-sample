@@ -23,6 +23,7 @@ import (
 var (
 	storyTime  = time.Date(2026, 10, 30, 14, 30, 0, 0, time.UTC)
 	storyTime2 = time.Date(2026, 11, 2, 9, 15, 0, 0, time.UTC)
+	storyTime3 = time.Date(2026, 11, 4, 18, 45, 0, 0, time.UTC)
 
 	storyLabels = []*store.Label{
 		{ID: 1, Name: "bug", Color: "#d73a4a"},
@@ -113,7 +114,13 @@ var (
 				{ID: 3, ThreadID: 1, Body: "That was it — thank you!", CreatedAt: storyTime2},
 			},
 		},
-		{ID: 2, DiscussionID: 2, Body: "Same question on Firefox.", CreatedAt: storyTime2},
+		{ID: 2, DiscussionID: 2, Body: "Same question on Firefox.", CreatedAt: storyTime2,
+			Comments: []*store.DiscussionComment{
+				{ID: 4, ThreadID: 2, Body: "On Firefox the dialog never opens.", CreatedAt: storyTime2},
+				{ID: 5, ThreadID: 2, Body: "That's a known `showModal()` quirk — see #12.", CreatedAt: storyTime3},
+				{ID: 6, ThreadID: 2, Body: "Workaround: fall back to `hidden` toggling.", CreatedAt: storyTime3},
+			},
+		},
 	}
 )
 
