@@ -285,7 +285,7 @@ func StoryIssueDetailCommentError() {
 		Issue:        storyIssue,
 		Comments:     storyComments,
 		CommentDraft: "   ",
-		CommentError: "Comment is required.",
+		CommentError: "Body is required.",
 		Section:      "issues",
 	})
 }
@@ -673,7 +673,7 @@ func StoryIssueCommentFormFragment() {
 	renderFragment("issue_detail", "issue_comment_form", http.StatusUnprocessableEntity, issueDetailPage{
 		Issue:        storyIssue,
 		CommentDraft: "kept as the draft",
-		CommentError: "Comment is required.",
+		CommentError: "Body is required.",
 	})
 }
 

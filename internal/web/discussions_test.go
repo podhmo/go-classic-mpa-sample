@@ -122,9 +122,9 @@ func TestDiscussionDetailRendersThreadAndAnswer(t *testing.T) {
 	// the comment id in its accessible name (accessibility guide: same look,
 	// different action → distinct accessible name).
 	for _, want := range []string{
-		`aria-label="Unmark answer on comment ` + itoa(cid) + `"`,
-		`aria-label="Reply to comment ` + itoa(cid) + `"`,
-		`aria-label="Post reply to comment ` + itoa(cid) + `"`,
+		`aria-label="Unmark answer on thread ` + itoa(cid) + `"`,
+		`aria-label="Reply to thread ` + itoa(cid) + `"`,
+		`aria-label="Post comment on thread ` + itoa(cid) + `"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("per-comment control lacks unique name %q", want)
@@ -158,7 +158,7 @@ func TestPartialSetCommentAnswerContract(t *testing.T) {
 	for _, want := range []string{
 		`class="card comment" id="thread-` + itoa(c1) + `"`,
 		`class="card comment comment-answer" id="thread-` + itoa(c2) + `"`,
-		`aria-label="Unmark answer on comment ` + itoa(c2) + `"`,
+		`aria-label="Unmark answer on thread ` + itoa(c2) + `"`,
 		`class="issue-meta" id="discussion-meta"`,
 	} {
 		if !strings.Contains(body, want) {
@@ -282,7 +282,7 @@ func TestDiscussionCommentValidation(t *testing.T) {
 	if resp.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("empty comment: status = %d, want 422", resp.StatusCode)
 	}
-	if !strings.Contains(body, "Comment is required") {
+	if !strings.Contains(body, "Body is required") {
 		t.Error("expected comment validation error")
 	}
 	if ts, _ := f.ListDiscussionThreads(t.Context(), d.ID); len(ts) != 0 {
@@ -370,7 +370,7 @@ func TestPartialCommentContract(t *testing.T) {
 	if resp.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("partial POST status = %d, want 422", resp.StatusCode)
 	}
-	for _, want := range []string{`class="comment-form`, `aria-invalid="true"`, "Comment is required"} {
+	for _, want := range []string{`class="comment-form`, `aria-invalid="true"`, "Body is required"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("422 form fragment missing %q", want)
 		}

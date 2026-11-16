@@ -256,7 +256,7 @@ func TestFormFeedbackBeforeSubmit(t *testing.T) {
 	}{
 		{"/issues/new", `<p class="field-error field-error-pending" id="f-title-error">Title is required.</p>`},
 		{"/issues/1/edit", `<p class="field-error field-error-pending" id="f-title-error">Title is required.</p>`},
-		{"/issues/1", `<p class="field-error field-error-pending" id="comment-error">Comment is required.</p>`},
+		{"/issues/1", `<p class="field-error field-error-pending" id="comment-error">Body is required.</p>`},
 	} {
 		resp, err := srv.Client().Get(srv.URL + tc.path)
 		if err != nil {
@@ -347,7 +347,7 @@ func TestCreateCommentEmpty(t *testing.T) {
 	if resp.StatusCode != http.StatusUnprocessableEntity && resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 422 or 400", resp.StatusCode)
 	}
-	if !strings.Contains(body, "Comment is required") {
+	if !strings.Contains(body, "Body is required") {
 		t.Error("expected comment validation error")
 	}
 	if !strings.Contains(body, `aria-invalid="true" aria-describedby="comment-error comment-hint" autofocus`) {

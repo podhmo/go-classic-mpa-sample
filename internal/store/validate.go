@@ -60,7 +60,7 @@ func ValidateDiscussionInput(in DiscussionInput) FieldErrors {
 func ValidateCommentBody(body string) string {
 	switch {
 	case body == "":
-		return "Comment is required."
+		return "Body is required."
 	case utf8.RuneCountInString(body) > MaxBodyRunes:
 		return fmt.Sprintf("Comment must be %d characters or fewer.", MaxBodyRunes)
 	}
