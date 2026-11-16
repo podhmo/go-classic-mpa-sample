@@ -38,17 +38,23 @@ rendering **500**, not silently — treat that as the failure signal.
 
 ## What the index shows
 
+- **Filter**: the top search box narrows rows by name/doc/group, live
+  (`?q=` in the URL). `/` focuses it, Esc clears, Enter opens the first
+  match, arrows move between matches.
 - **Print stories** (`internal/web/story_pages.go`, `// +build story`
   tag): each renders one `<html` page with fake data. They are grouped
   under the render helper they end with (`renderIssueList`,
   `renderIssueDetail`, `renderIssueForm`, `renderIssueDelete`,
-  `renderError`) — each group name links to `/grid/<name>`, all variants
-  side by side.
+  `renderError`). Clicking a row previews it (`?s=`, no page reload);
+  the `⊞ grid` pill on each group header previews **all variants side
+  by side** in the same pane (`?g=`).
+- **Toolbar**: above the preview — the current group / story name /
+  `story_pages.go:line`, `open ↗` (raw story in a new tab), `⊞ grid`,
+  and the width switcher (`?w=320|360|768`, responsive checks without
+  resizing the window).
 - **Handler stories** (`StoryHttp*`): replay a real request through the
   app's mux against the fake `storyStore` — recorded status AND headers
   (CSP `script-src 'self'` included). They open in a new tab.
-- **Viewport switcher**: `?w=320|360|768` narrows the iframe — use it to
-  check responsive behavior without resizing a window.
 
 ## Checking a design change
 
@@ -59,14 +65,15 @@ rendering **500**, not silently — treat that as the failure signal.
    when the change is visual.
 3. Pick the right story:
    - Changed an existing page? Open its story (e.g. `?s=StoryIssueList`),
-     then its `/grid/<renderFunc>` to check all data states at once.
+     then its `⊞ grid` (`?g=<renderFunc>`) to check all data states at once.
    - New data state (empty, error, paged, …)? Add a print story in
      `story_pages.go` ending on the existing `renderXxx(status, data)`
      helper — the index picks it up immediately, grouped with its
      siblings.
    - New page/handler? Add a `renderXxx` helper + a `StoryXxx`, and a
      `StoryHttpXxx` if the route itself matters (status, headers).
-4. Check the variants grid at `?w=360` for narrow-viewport regressions.
+4. Check the variants grid at `?w=360` for narrow-viewport regressions
+   (each grid cell renders at that width).
 5. For headers/status replay, open the `StoryHttp*` link (new tab) —
    `curl -I` shows the real status + CSP.
 6. Regression safety net: `cd cmd/storybook && go test ./...` asserts

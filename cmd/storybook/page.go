@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -16,7 +17,10 @@ import (
 // entry is one row of the index page.
 type entry struct {
 	Story
-	Href   string
+	Href   string // where the row's anchor points (serve: ?s=, export: Name.html)
+	Src    string // what the preview iframe loads (serve: /story/, export: Name.html)
+	Grid   string // this story's variants grid, for the toolbar's grid action
+	Hay    string // lowercased haystack the filter matches: name + doc + group
 	Target string // "story" in the static export, "_blank" for served http stories
 	Err    string
 }
@@ -26,7 +30,8 @@ type entry struct {
 // Name and no grid view: they are not variants of one template.
 type group struct {
 	Name    string
-	Href    string // the side-by-side grid view
+	Href    string // where the grid pill points (serve: ?g=, export: grid_X.html)
+	Src     string // the grid document itself (serve: /grid/, export: grid_X.html)
 	Target  string
 	Entries []entry
 }
@@ -75,6 +80,25 @@ func gridRows(g group) []entry {
 	return rows
 }
 
+// matchStory answers whether a story survives the ?q= filter: every
+// whitespace-separated token must appear in the lowercased haystack of
+// name + doc + group.
+func matchStory(s Story, q string) bool {
+	hay := strings.ToLower(s.Name + " " + s.Doc + " " + s.Group)
+	for _, t := range strings.Fields(strings.ToLower(q)) {
+		if !strings.Contains(hay, t) {
+			return false
+		}
+	}
+	return true
+}
+
+// haystack is the searchable text carried on each row's data-haystack
+// attribute; the live filter matches it the same way matchStory does.
+func haystack(s Story) string {
+	return strings.ToLower(s.Name + " " + s.Doc + " " + s.Group)
+}
+
 // chromeTokens is the color-scheme token block shared by indexTmpl and
 // gridTmpl: a neutral light/dark scheme, so the chrome follows the OS
 // theme instead of boxing a dark story in light UI. Stories render
@@ -121,27 +145,40 @@ const chromeTokens = `
 `
 
 var indexTmpl = template.Must(template.New("index").Parse(`<!doctype html>
-<html><head><meta charset="utf-8"><meta name="color-scheme" content="light dark"><title>stories: {{.Dir}}</title>{{if .ScriptTag}}{{.ScriptTag}}{{end}}
+<html><head><meta charset="utf-8"><meta name="color-scheme" content="light dark"><link rel="icon" href="data:,"><title>stories: {{.Dir}}</title>{{if .ScriptTag}}{{.ScriptTag}}{{end}}
 <style>` + chromeTokens + `
-body { margin: 0; display: flex; height: 100vh; height: 100dvh; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); }
-nav { width: 17rem; flex: none; display: flex; flex-direction: column; background: var(--surface); border-right: 1px solid var(--border); }
-nav > header { padding: .75rem .875rem; border-bottom: 1px solid var(--border-muted); }
-.brand { font-size: .85rem; font-weight: 600; }
+body { margin: 0; display: flex; height: 100vh; height: 100dvh; font-family: system-ui, sans-serif; font-size: 14px; background: var(--bg); color: var(--text); }
+nav { width: 19rem; flex: none; display: flex; flex-direction: column; background: var(--surface); border-right: 1px solid var(--border); }
+nav > header { padding: .75rem .875rem .625rem; border-bottom: 1px solid var(--border-muted); }
+.brand { display: flex; align-items: baseline; gap: .5rem; font-size: .85rem; font-weight: 600; }
+.brand .total { font-size: .72rem; font-weight: 400; color: var(--text-muted); }
 .dir { margin-top: .15rem; font-size: .72rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-muted); word-break: break-all; }
 .err { color: var(--danger); }
-.viewport { display: flex; gap: .25rem; margin-top: .625rem; font-size: .78rem; }
-.viewport a { flex: 1; padding: .2rem .4rem; text-align: center; color: var(--text-muted); text-decoration: none; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
-.viewport a:hover { color: var(--accent); border-color: var(--accent); }
-.viewport a.active { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); font-weight: 600; }
-.list { flex: 1; overflow-y: auto; padding: .375rem .5rem .75rem; container-type: scroll-state; }
-.group { display: block; margin-top: .75rem; padding: .25rem .5rem; font-size: .72rem; font-weight: 600; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-muted); text-decoration: none; }
-.group:first-child { margin-top: .375rem; }
-.group:hover { color: var(--accent); }
-.story { display: block; padding: .3rem .5rem; border-radius: 6px; color: inherit; text-decoration: none; line-height: 1.4; overflow-wrap: anywhere; }
+search { display: block; margin-top: .625rem; }
+search form { display: flex; gap: .375rem; }
+#q { flex: 1; min-width: 0; font: inherit; font-size: .82rem; padding: .3rem .55rem; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
+#q::placeholder { color: var(--text-muted); }
+#q:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+.qgo { font: inherit; font-size: .78rem; padding: .3rem .6rem; color: var(--text-muted); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+.qgo:hover { color: var(--accent); border-color: var(--accent); }
+.js .qgo { display: none; }
+.meta { margin-top: .4rem; font-size: .72rem; color: var(--text-muted); }
+.meta:empty { display: none; }
+.list { flex: 1; overflow-y: auto; padding: .25rem .5rem .75rem; container-type: scroll-state; }
+.grp-h { display: flex; align-items: center; gap: .5rem; margin-top: .7rem; padding: .3rem .5rem; position: sticky; top: -.25rem; background: var(--surface); z-index: 2; border-bottom: 1px solid var(--border-muted); }
+.grp:first-child .grp-h { margin-top: .15rem; }
+.grp-name { font-size: .7rem; font-weight: 600; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-muted); letter-spacing: .02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.grp-n { margin-inline-start: auto; font-size: .68rem; color: var(--text-muted); background: var(--bg); border: 1px solid var(--border-muted); border-radius: 999px; padding: 0 .4rem; }
+.gpill { flex: none; font-size: .7rem; padding: .08rem .45rem; color: var(--text-muted); text-decoration: none; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; }
+.gpill:hover { color: var(--accent); border-color: var(--accent); }
+.gpill.active { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); font-weight: 600; }
+.story { display: block; margin-top: .15rem; padding: .3rem .5rem; border-left: 2px solid transparent; border-radius: 0 6px 6px 0; color: inherit; text-decoration: none; font-size: .8rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; line-height: 1.4; overflow-wrap: anywhere; }
 .story:hover { background: var(--surface-hover); }
-.story.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.story:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.story.active { background: var(--accent-soft); border-left-color: var(--accent); color: var(--accent); font-weight: 600; }
 .story .ext { color: var(--text-muted); font-size: .8em; }
-.story small { display: block; font-size: .75rem; font-weight: 400; color: var(--text-muted); }
+.story small { display: block; font-size: .72rem; font-weight: 400; font-family: system-ui, sans-serif; color: var(--text-muted); }
+.none { padding: .75rem .5rem; font-size: .78rem; color: var(--text-muted); }
 .list::before, .list::after { content: ""; display: block; position: sticky; block-size: .5rem; z-index: 1; pointer-events: none; opacity: 0; transition: opacity .2s; }
 .list::before { inset-block-start: 0; margin-block-end: -.5rem; background: radial-gradient(farthest-side at 50% 0, rgb(0 0 0 / .18), transparent); }
 .list::after { inset-block-end: 0; margin-block-start: -.5rem; background: radial-gradient(farthest-side at 50% 100%, rgb(0 0 0 / .18), transparent); }
@@ -153,25 +190,215 @@ nav > header { padding: .75rem .875rem; border-bottom: 1px solid var(--border-mu
   .list::after { animation-direction: reverse; animation-range: calc(100% - 2rem) 100%; }
 }
 @keyframes edge-shadow { to { opacity: 1; } }
-iframe { flex: 1; border: 0; background: var(--surface); }
-iframe.sized { flex: none; margin-inline: auto; border-inline: 1px dashed var(--border); }
+.stage { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg); }
+.bar { display: flex; align-items: center; gap: .5rem; padding: .4rem .75rem; font-size: .78rem; background: var(--surface); border-bottom: 1px solid var(--border); }
+.bar .crumb { font-size: .72rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-muted); }
+.bar .cur { font-size: .8rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar .pos { font-size: .7rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bact { display: flex; gap: .375rem; margin-inline-start: auto; }
+.blink { font-size: .72rem; padding: .15rem .55rem; color: var(--text-muted); text-decoration: none; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; }
+.blink:hover { color: var(--accent); border-color: var(--accent); }
+.blink[hidden] { display: none; }
+.viewport { display: flex; gap: .25rem; margin-inline-start: .5rem; font-size: .72rem; }
+.viewport a { padding: .15rem .45rem; text-align: center; color: var(--text-muted); text-decoration: none; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
+.viewport a:hover { color: var(--accent); border-color: var(--accent); }
+.viewport a.active { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); font-weight: 600; }
+#frame { flex: 1; border: 0; background: var(--surface); }
+#frame.sized { flex: none; margin-inline: auto; border-inline: 1px dashed var(--border); }
 </style></head>
 <body>
 <nav>
 <header>
-<div class="brand">stories</div>
+<div class="brand">stories <span class="total">{{.Total}}</span></div>
 <div class="dir">{{.Dir}}</div>
 {{if .Err}}<small class="err">{{.Err}}</small>{{end}}
-<div class="viewport">{{range .Widths}}<a href="?w={{.}}&s={{$.S}}"{{if eq . $.W}} class="active"{{end}}>{{if .}}{{.}}px{{else}}full{{end}}</a>{{end}}</div>
+<search><form action="" method="get">
+<input id="q" name="q" type="search" value="{{.Q}}" placeholder="filter stories — press /" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="go" aria-label="filter stories">
+{{if .S}}<input type="hidden" name="s" value="{{.S}}">{{end}}{{if .G}}<input type="hidden" name="g" value="{{.G}}">{{end}}{{if .W}}<input type="hidden" name="w" value="{{.W}}">{{end}}
+<button class="qgo" type="submit">filter</button>
+</form></search>
+<div class="meta" id="count">{{if .Q}}{{.Matched}} of {{.Total}} shown{{end}}</div>
 </header>
-<div class="list">
-{{range .Groups}}{{if .Name}}<a class="group" href="{{.Href}}"{{if .Target}} target="{{.Target}}"{{end}} title="variants side by side">{{.Name}} &#10514;</a>{{end}}
-{{range .Entries}}<a class="story{{if eq .Name $.S}} active{{end}}" href="{{.Href}}"{{if .Target}} target="{{.Target}}"{{end}}{{if eq .Name $.S}} aria-current="true"{{end}}>{{.Name}}{{if .IsHTTP}}<span class="ext" title="opens in a new tab">&#8599;</span>{{end}}
+<div class="list" id="list">
+{{range .Groups}}<section class="grp">
+{{if .Name}}<div class="grp-h"><span class="grp-name">{{.Name}}</span><span class="grp-n">{{len .Entries}}</span><a class="gpill{{if eq .Name $.G}} active{{end}}" href="{{.Href}}"{{if .Target}} target="{{.Target}}"{{end}} data-kind="grid" data-src="{{.Src}}" data-name="{{.Name}}" title="all variants side by side">&#8858; grid</a></div>{{end}}
+{{range .Entries}}<a class="story{{if eq .Name $.S}} active{{end}}" href="{{.Href}}"{{if .Target}} target="{{.Target}}"{{end}}{{if .Src}} data-kind="story" data-src="{{.Src}}"{{end}} data-name="{{.Name}}" data-group="{{.Group}}" data-pos="{{.Pos}}" data-grid="{{.Grid}}" data-haystack="{{.Hay}}" title="{{.Pos}}"{{if eq .Name $.S}} aria-current="true"{{end}}>{{.Name}}{{if .IsHTTP}}<span class="ext" title="opens in a new tab">&#8599;</span>{{end}}
 {{if .Doc}}<small>{{.Doc}}</small>{{end}}{{if .Err}}<small class="err">{{.Err}}</small>{{end}}</a>
-{{end}}{{end}}
+{{end}}</section>
+{{end}}{{if .None}}<p class="none">no stories match &#8220;{{.Q}}&#8221;</p>{{end}}
 </div>
 </nav>
-<iframe name="story"{{if .S}} src="/story/{{.S}}"{{else}}{{if .Default}} src="{{.Default}}"{{end}}{{end}}{{if .W}} class="sized" style="width: {{.W}}px"{{end}}></iframe>
+<div class="stage">
+<div class="bar">
+<span class="crumb" id="bg">{{.BarGroup}}</span>
+<strong class="cur" id="bn">{{.BarName}}</strong>
+<span class="pos" id="bp">{{.BarPos}}</span>
+<span class="bact">
+<a class="blink" id="bgrid" href="{{.BarGridHref}}"{{if .BarGridSrc}} data-kind="grid" data-src="{{.BarGridSrc}}" data-name="{{.BarGroup}}"{{else}} hidden{{end}}>&#8858; grid</a>
+<a class="blink" id="braw" href="{{.BarRaw}}" target="_blank" rel="noopener">open &#8599;</a>
+</span>
+<div class="viewport">{{range .Widths}}<a class="wlink{{if eq . $.W}} active{{end}}" href="?w={{.}}&s={{$.S}}&g={{$.G}}&q={{$.Q}}" data-w="{{.}}">{{if .}}{{.}}px{{else}}full{{end}}</a>{{end}}</div>
+</div>
+<iframe name="story" id="frame"{{if .Src}} src="{{.Src}}"{{end}}{{if .Sized}} class="sized" style="width: {{.W}}px"{{end}}></iframe>
+</div>
+<script>
+(function () {
+  document.body.classList.add('js');
+  var frame = document.getElementById('frame');
+  var q = document.getElementById('q');
+  var list = document.getElementById('list');
+  var count = document.getElementById('count');
+  var barG = document.getElementById('bg'), barN = document.getElementById('bn');
+  var barP = document.getElementById('bp'), barRaw = document.getElementById('braw');
+  var barGrid = document.getElementById('bgrid');
+  var rows = [].slice.call(list.querySelectorAll('a.story'));
+  var pills = [].slice.call(list.querySelectorAll('a.gpill'));
+  var wlinks = [].slice.call(document.querySelectorAll('a.wlink'));
+  var cur = { s: '', g: '', w: '' };
+
+  function find(list, name) {
+    for (var i = 0; i < list.length; i++) if (list[i].dataset.name === name) return list[i];
+    return null;
+  }
+  function buildURL() {
+    var p = new URLSearchParams();
+    if (cur.s) p.set('s', cur.s);
+    if (cur.g) p.set('g', cur.g);
+    if (cur.w) p.set('w', cur.w);
+    var t = q.value.trim();
+    if (t) p.set('q', t);
+    var qs = p.toString();
+    return qs ? '?' + qs : location.pathname;
+  }
+  function activate(el, push) {
+    var w = cur.w;
+    if (el.dataset.kind === 'grid') {
+      cur.g = el.dataset.name; cur.s = '';
+      frame.classList.remove('sized'); frame.style.width = '';
+      var src = el.dataset.src + (w ? (el.dataset.src.indexOf('?') < 0 ? '?' : '&') + 'w=' + w : '');
+      if (frame.getAttribute('src') !== src) frame.src = src;
+      barG.textContent = ''; barN.textContent = el.dataset.name; barP.textContent = '';
+      barRaw.href = el.dataset.src;
+      barGrid.hidden = true;
+      pills.forEach(function (p) { p.classList.toggle('active', p.dataset.name === cur.g); });
+      rows.forEach(function (a) { a.classList.remove('active'); a.removeAttribute('aria-current'); });
+    } else {
+      cur.s = el.dataset.name; cur.g = '';
+      frame.classList.toggle('sized', !!w); frame.style.width = w ? w + 'px' : '';
+      if (frame.getAttribute('src') !== el.dataset.src) frame.src = el.dataset.src;
+      barG.textContent = el.dataset.group || ''; barN.textContent = el.dataset.name; barP.textContent = el.dataset.pos || '';
+      barRaw.href = el.dataset.src;
+      if (el.dataset.grid) {
+        barGrid.hidden = false;
+        barGrid.dataset.src = el.dataset.grid; barGrid.dataset.name = el.dataset.group;
+        barGrid.href = '?g=' + el.dataset.group;
+      } else { barGrid.hidden = true; }
+      rows.forEach(function (a) {
+        var on = a.dataset.name === cur.s;
+        a.classList.toggle('active', on);
+        if (on) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current');
+      });
+      pills.forEach(function (p) { p.classList.remove('active'); });
+    }
+    if (push !== false) history.pushState(null, '', buildURL());
+  }
+  function setW(w, push) {
+    cur.w = w || '';
+    wlinks.forEach(function (a) { a.classList.toggle('active', a.dataset.w === cur.w); });
+    if (cur.g) {
+      var el = find(pills, cur.g);
+      if (el) activate(el, false);
+    } else {
+      frame.classList.toggle('sized', !!cur.w);
+      frame.style.width = cur.w ? cur.w + 'px' : '';
+    }
+    if (push !== false) history.pushState(null, '', buildURL());
+  }
+  function applyFilter() {
+    var tokens = q.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    var shown = 0;
+    [].slice.call(list.querySelectorAll('section.grp')).forEach(function (sec) {
+      var vis = 0;
+      [].slice.call(sec.querySelectorAll('a.story')).forEach(function (a) {
+        var ok = tokens.every(function (t) { return a.dataset.haystack.indexOf(t) >= 0; });
+        a.hidden = !ok;
+        if (ok) vis++;
+      });
+      sec.hidden = vis === 0;
+      shown += vis;
+    });
+    count.textContent = tokens.length ? shown + ' of ' + rows.length + ' shown' : '';
+    var p = new URLSearchParams(location.search);
+    if (q.value.trim()) p.set('q', q.value.trim()); else p.delete('q');
+    var qs = p.toString();
+    history.replaceState(null, '', qs ? '?' + qs : location.pathname);
+  }
+  function visibleRows() { return rows.filter(function (a) { return !a.hidden; }); }
+
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest('a[data-src]');
+    if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button) return;
+    e.preventDefault();
+    activate(a);
+  });
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest('a.wlink');
+    if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button) return;
+    e.preventDefault();
+    setW(a.dataset.w);
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === '/' && document.activeElement !== q && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) {
+      e.preventDefault(); q.focus(); q.select();
+    }
+  });
+  q.addEventListener('input', applyFilter);
+  q.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { q.value = ''; applyFilter(); }
+    else if (e.key === 'Enter') {
+      e.preventDefault();
+      var a = visibleRows()[0];
+      if (a) { if (a.dataset.src) activate(a); else a.click(); }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      var v = visibleRows();
+      if (v[0]) v[0].focus();
+    }
+  });
+  q.form.addEventListener('submit', function (e) { e.preventDefault(); });
+  list.addEventListener('keydown', function (e) {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    var v = visibleRows();
+    var i = v.indexOf(document.activeElement);
+    if (i < 0) return;
+    e.preventDefault();
+    var n = v[i + (e.key === 'ArrowDown' ? 1 : -1)];
+    if (n) n.focus();
+  });
+  window.addEventListener('popstate', function () {
+    var p = new URLSearchParams(location.search);
+    if (q.value !== (p.get('q') || '')) { q.value = p.get('q') || ''; applyFilter(); }
+    cur.w = p.get('w') || '';
+    wlinks.forEach(function (a) { a.classList.toggle('active', a.dataset.w === cur.w); });
+    if (p.get('g')) { var el = find(pills, p.get('g')); if (el) activate(el, false); }
+    else if (p.get('s')) { var el2 = find(rows, p.get('s')); if (el2 && el2.dataset.src) activate(el2, false); }
+  });
+  list.addEventListener('scroll', function () {
+    try { sessionStorage.setItem('sb_scroll', list.scrollTop); } catch (e) {}
+  });
+
+  // Boot: a static export answers ?s/?g/?w/?q only through this script —
+  // there is no server to render the selection — so the params are
+  // applied here. Under -http the same assignments are idempotent.
+  var p = new URLSearchParams(location.search);
+  if (p.get('q') && q.value !== p.get('q')) { q.value = p.get('q'); }
+  if (q.value.trim()) applyFilter();
+  cur.w = p.get('w') || '';
+  if (p.get('g')) { var el = find(pills, p.get('g')); if (el) activate(el, false); }
+  else if (p.get('s')) { var el2 = find(rows, p.get('s')); if (el2 && el2.dataset.src) activate(el2, false); }
+  try { var y = sessionStorage.getItem('sb_scroll'); if (y) list.scrollTop = +y; } catch (e) {}
+})();
+</script>
 </body></html>
 `))
 
@@ -179,16 +406,17 @@ iframe.sized { flex: none; margin-inline: auto; border-inline: 1px dashed var(--
 // template edit can be checked against every data state at once. Each
 // variant is an iframe at the chosen width (?w=, flexible when unset).
 var gridTmpl = template.Must(template.New("grid").Parse(`<!doctype html>
-<html><head><meta charset="utf-8"><meta name="color-scheme" content="light dark"><title>{{.Name}} variants</title>{{if .ScriptTag}}{{.ScriptTag}}{{end}}
+<html><head><meta charset="utf-8"><meta name="color-scheme" content="light dark"><link rel="icon" href="data:,"><title>{{.Name}} variants</title>{{if .ScriptTag}}{{.ScriptTag}}{{end}}
 <style>` + chromeTokens + `
 body { margin: 0; display: flex; flex-direction: column; height: 100vh; height: 100dvh; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); }
-header { display: flex; gap: .875rem; align-items: baseline; padding: .5rem .875rem; background: var(--surface); border-bottom: 1px solid var(--border); }
-header .back { color: var(--text-muted); text-decoration: none; font-size: .85rem; }
-header .back:hover { color: var(--accent); }
-header strong { font-size: .85rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+header { display: flex; gap: .75rem; align-items: center; padding: .4rem .75rem; background: var(--surface); border-bottom: 1px solid var(--border); }
+header .back { font-size: .72rem; padding: .15rem .55rem; color: var(--text-muted); text-decoration: none; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; }
+header .back:hover { color: var(--accent); border-color: var(--accent); }
+header strong { font-size: .8rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+header .count { font-size: .72rem; color: var(--text-muted); }
 header .viewport { margin-inline-start: auto; }
-.viewport { display: flex; gap: .25rem; font-size: .78rem; }
-.viewport a { padding: .2rem .4rem; text-align: center; color: var(--text-muted); text-decoration: none; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
+.viewport { display: flex; gap: .25rem; font-size: .72rem; }
+.viewport a { padding: .15rem .45rem; text-align: center; color: var(--text-muted); text-decoration: none; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
 .viewport a:hover { color: var(--accent); border-color: var(--accent); }
 .viewport a.active { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); font-weight: 600; }
 .row { flex: 1; display: flex; overflow-x: auto; }
@@ -196,14 +424,17 @@ figure { flex: 1 1 0; min-width: 0; margin: 0; display: flex; flex-direction: co
 figure.sized { flex: none; }
 figure + figure { border-left: 1px solid var(--border); }
 figure iframe { flex: 1; border: 0; width: 100%; }
-figcaption { padding: .3rem .6rem; font-size: .72rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-muted); border-top: 1px solid var(--border-muted); }
+figcaption { display: flex; align-items: baseline; gap: .5rem; padding: .3rem .6rem; font-size: .72rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-muted); border-top: 1px solid var(--border-muted); }
+figcaption a { color: inherit; text-decoration: none; }
+figcaption a:hover { color: var(--accent); }
+figcaption .go { margin-inline-start: auto; font-size: .85em; }
 </style></head>
 <body>
-<header><a class="back" href="{{.Index}}"{{if .IndexTarget}} target="{{.IndexTarget}}"{{end}}>&#8592; index</a><strong>{{.Name}}</strong>
+<header><a class="back" href="{{.Index}}"{{if .IndexTarget}} target="{{.IndexTarget}}"{{end}}>&#8592; index</a><strong>{{.Name}}</strong><span class="count">{{len .Stories}} variants</span>
 <div class="viewport">{{range .Widths}}<a href="?w={{.}}"{{if eq . $.W}} class="active"{{end}}>{{if .}}{{.}}px{{else}}flex{{end}}</a>{{end}}</div>
 </header>
 <div class="row">
-{{range .Stories}}<figure{{if $.W}} class="sized"{{end}}><iframe src="{{.Href}}"{{if $.W}} style="width: {{$.W}}px"{{end}}></iframe><figcaption>{{.Name}}</figcaption></figure>
+{{range .Stories}}<figure{{if $.W}} class="sized"{{end}}><iframe src="{{.Src}}"{{if $.W}} style="width: {{$.W}}px"{{end}}></iframe><figcaption><a href="{{$.Index}}?s={{.Name}}"{{if $.IndexTarget}} target="{{$.IndexTarget}}"{{end}} title="show in the index">{{.Name}}</a><a class="go" href="{{.Src}}" target="_blank" rel="noopener" title="open raw">&#8599;</a></figcaption></figure>
 {{end}}</div>
 </body></html>
 `))
@@ -258,7 +489,11 @@ func (b *Book) Export(ctx context.Context, dir string, stories []Story) error {
 	var errs []error
 	entries := make([]entry, len(stories))
 	for i, s := range stories {
-		entries[i] = entry{Story: s, Href: s.Name + ".html", Target: "story"}
+		e := entry{Story: s, Href: s.Name + ".html", Src: s.Name + ".html", Target: "story", Hay: haystack(s)}
+		if s.Group != "" {
+			e.Grid = "grid_" + s.Group + ".html"
+		}
+		entries[i] = e
 		res, err := b.Render(ctx, s.Name)
 		if err != nil {
 			entries[i].Err = firstLine(err.Error())
@@ -277,6 +512,7 @@ func (b *Book) Export(ctx context.Context, dir string, stories []Story) error {
 			continue
 		}
 		groups[i].Href = "grid_" + groups[i].Name + ".html"
+		groups[i].Src = groups[i].Href
 		groups[i].Target = "story"
 		f, err := os.Create(filepath.Join(dir, groups[i].Href))
 		if err != nil {
@@ -300,14 +536,26 @@ func (b *Book) Export(ctx context.Context, dir string, stories []Story) error {
 		return err
 	}
 	defer f.Close()
-	def := ""
-	for _, e := range entries {
-		if !e.IsHTTP() {
-			def = e.Href
+	var def *entry
+	for i := range entries {
+		if !entries[i].IsHTTP() {
+			def = &entries[i]
 			break
 		}
 	}
-	if err := indexTmpl.Execute(f, map[string]any{"Dir": b.Dir, "Groups": groups, "Default": def}); err != nil {
+	td := map[string]any{"Dir": b.Dir, "Groups": groups, "Total": len(stories), "Widths": []string{"", "320", "360", "768"}}
+	if def != nil {
+		td["Src"] = def.Src
+		td["BarGroup"] = def.Group
+		td["BarName"] = def.Name
+		td["BarPos"] = def.Pos
+		td["BarRaw"] = def.Src
+		if def.Group != "" {
+			td["BarGridHref"] = "?g=" + def.Group
+			td["BarGridSrc"] = def.Grid
+		}
+	}
+	if err := indexTmpl.Execute(f, td); err != nil {
 		return err
 	}
 	// The snapshot mirrors the static source: a fresh copy drops assets
@@ -428,60 +676,120 @@ func (b *Book) Handler() http.Handler {
 			return
 		}
 		wpx := r.URL.Query().Get("w")
-		entries := make([]entry, len(stories))
-		for i, s := range stories {
+		q := r.URL.Query().Get("q")
+		state := ""
+		if wpx != "" {
+			state += "&w=" + wpx
+		}
+		if q != "" {
+			state += "&q=" + url.QueryEscape(q)
+		}
+		var entries []entry
+		for _, s := range stories {
+			if q != "" && !matchStory(s, q) {
+				continue
+			}
 			if s.IsHTTP() {
 				// Handler stories replay the app's real response headers,
 				// which can include frame-ancestors 'none' / X-Frame-Options:
 				// DENY — they may not render inside the iframe, so they
 				// open in a new tab with the headers intact.
-				entries[i] = entry{Story: s, Href: "/story/" + s.Name, Target: "_blank"}
+				entries = append(entries, entry{Story: s, Href: "/story/" + s.Name, Target: "_blank", Hay: haystack(s)})
 				continue
 			}
-			href := "?s=" + s.Name
-			if wpx != "" {
-				href += "&w=" + wpx
+			e := entry{Story: s, Href: "?s=" + s.Name + state, Src: "/story/" + s.Name, Hay: haystack(s)}
+			if s.Group != "" {
+				e.Grid = "/grid/" + s.Group
 			}
-			entries[i] = entry{Story: s, Href: href}
+			entries = append(entries, e)
 		}
 		// ?s=<Name> selects the previewed story so width switching (a full
 		// index reload) keeps it; an unknown or missing name falls back to
 		// the first non-HTTP entry.
 		sel := r.URL.Query().Get("s")
-		known := false
-		for _, s := range stories {
-			if s.Name == sel && !s.IsHTTP() {
-				known = true
+		var selEntry *entry
+		for i := range entries {
+			if entries[i].Name == sel && !entries[i].IsHTTP() {
+				selEntry = &entries[i]
 				break
 			}
 		}
-		if !known {
+		if selEntry == nil {
 			sel = ""
-			for _, s := range stories {
-				if !s.IsHTTP() {
-					sel = s.Name
+			for i := range entries {
+				if !entries[i].IsHTTP() {
+					sel = entries[i].Name
+					selEntry = &entries[i]
 					break
+				}
+			}
+			if selEntry == nil {
+				// The filter may hide every story; still preview a valid one.
+				for _, s := range stories {
+					if !s.IsHTTP() {
+						sel = s.Name
+						selEntry = &entry{Story: s, Src: "/story/" + s.Name}
+						break
+					}
 				}
 			}
 		}
 		groups := groupEntries(entries)
+		// ?g=<renderFunc> previews the variants grid inside the index
+		// frame, the same pane stories render in; the grid page itself
+		// stays reachable for a full-width compare.
+		g := r.URL.Query().Get("g")
+		src := ""
+		if g != "" {
+			for _, gr := range groups {
+				if gr.Name == g {
+					src = "/grid/" + g
+					if wpx != "" {
+						src += "?w=" + wpx
+					}
+				}
+			}
+			if src == "" {
+				g = ""
+			}
+		}
 		for i := range groups {
 			if groups[i].Name == "" {
 				continue
 			}
-			groups[i].Href = "/grid/" + groups[i].Name
-			if wpx != "" {
-				groups[i].Href += "?w=" + wpx
-			}
+			groups[i].Href = "?g=" + groups[i].Name + state
+			groups[i].Src = "/grid/" + groups[i].Name
 		}
-		if err := indexTmpl.Execute(w, map[string]any{
+		td := map[string]any{
 			"Dir":       b.Dir,
 			"Groups":    groups,
 			"S":         sel,
+			"G":         g,
 			"W":         wpx,
+			"Q":         q,
+			"Total":     len(stories),
+			"Matched":   len(entries),
+			"None":      q != "" && len(entries) == 0,
 			"Widths":    []string{"", "320", "360", "768"},
 			"ScriptTag": b.ScriptTag(),
-		}); err != nil {
+		}
+		if g != "" {
+			td["Src"] = src
+			td["BarName"] = g
+			td["BarRaw"] = "/grid/" + g
+		} else if selEntry != nil {
+			td["Src"] = selEntry.Src
+			td["Sized"] = wpx != ""
+			td["BarGroup"] = selEntry.Group
+			td["BarName"] = selEntry.Name
+			td["BarPos"] = selEntry.Pos
+			td["BarRaw"] = selEntry.Src
+			if selEntry.Group != "" {
+				td["BarGridHref"] = "?g=" + selEntry.Group + state
+				td["BarGridSrc"] = "/grid/" + selEntry.Group
+			}
+		}
+		if err := indexTmpl.Execute(w, td); err != nil {
 			slog.ErrorContext(r.Context(), "index", "err", err)
 		}
 	})
@@ -495,7 +803,7 @@ func (b *Book) Handler() http.Handler {
 		var entries []entry
 		for _, s := range stories {
 			if s.Group == name && !s.IsHTTP() {
-				entries = append(entries, entry{Story: s, Href: "/story/" + s.Name})
+				entries = append(entries, entry{Story: s, Src: "/story/" + s.Name})
 			}
 		}
 		if len(entries) == 0 {

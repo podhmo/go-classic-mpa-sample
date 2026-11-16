@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -133,12 +134,45 @@ func TestHandler(t *testing.T) {
 	body := rec.Body.String()
 	for _, want := range []string{
 		`href="?s=` + aPrint + `"`,
-		`target="_blank"`,           // http stories open in a new tab
-		`?w=360`,                    // viewport widths
-		`href="/grid/` + grid + `"`, // a variants grid per render function
+		`target="_blank"`,               // http stories open in a new tab
+		`?w=360`,                        // viewport widths
+		`href="?g=` + grid + `"`,        // a grid pill per render function
+		`data-src="/grid/` + grid + `"`, // ...carrying the grid document
+		`data-src="/story/` + aPrint + `"`,
+		`type="search"`, // the story filter
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("index misses %s", want)
+		}
+	}
+
+	// ?g previews the grid inside the index frame; ?q filters the nav
+	// down to matching stories.
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/?g="+grid, nil))
+	if !strings.Contains(rec.Body.String(), `src="/grid/`+grid+`"`) {
+		t.Error("?g should preview the grid in the index frame")
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/?q="+url.QueryEscape(aPrint+" nomatch"), nil))
+	if !strings.Contains(rec.Body.String(), "no stories match") {
+		t.Error("a filter matching nothing should say so")
+	}
+	other := ""
+	for _, s := range stories {
+		if !s.IsHTTP() && s.Name != aPrint && !matchStory(s, aPrint) {
+			other = s.Name
+			break
+		}
+	}
+	if other != "" {
+		rec = httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/?q="+aPrint, nil))
+		if !strings.Contains(rec.Body.String(), `data-name="`+aPrint+`"`) {
+			t.Errorf("filtered index drops %s", aPrint)
+		}
+		if strings.Contains(rec.Body.String(), `data-name="`+other+`"`) {
+			t.Errorf("filtered index keeps non-matching %s", other)
 		}
 	}
 
