@@ -200,8 +200,8 @@ header:  Issues | Discussions        （aria-current 付きタブ）
 - コメントは top-level の `<ol>`、返信は親 `<li>` 内のネスト `<ol>`（1段）。
   `is_answer` コメントには "Answer" バッジ + 強調枠（issues の `:target` ハイライトと
   同じ仕組みを流用できる）。
-- 投稿者表示は issues と同じルール: `Opened by <name>` / `<name> commented` で
-  NULL は "anonymous"。author は作成時に固定。
+- 投稿者表示は issues と同じルール: `Opened by <name>` / スレッドは `<name>` のみ
+  （動詞なし）/ 返信は `<name> replied` で NULL は "anonymous"。author は作成時に固定。
 - **返信フォームは各 top-level コメントの `<details>` 内に畳む**（「Reply」の summary を
   開くとフォーム）。宣言的 HTML だけで GitHub の inline reply box と同じ UX になり、
   JS も専用ページも要らない。別案は `GET /discussions/{id}/comments/{cid}/reply` の

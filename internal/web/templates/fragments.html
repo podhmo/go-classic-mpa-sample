@@ -110,7 +110,7 @@
 <li class="card comment{{if .C.IsAnswer}} comment-answer{{end}}" id="thread-{{.C.ID}}">
   <header class="comment-meta">
     {{if .C.IsAnswer}}<span class="badge badge-answer">Answer</span>{{end}}
-    <span class="comment-author">{{authorName .C.Author}} commented</span>
+    <span class="comment-author">{{authorName .C.Author}}</span>
     <a class="comment-permalink" href="#thread-{{.C.ID}}"><time datetime="{{.C.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .C.CreatedAt}}</time> <span class="visually-hidden">(thread {{.C.ID}})</span></a>
     <span class="copy-wrap">
       <button type="button" class="copy-btn" command="--copy-permalink" commandfor="thread-{{.C.ID}}" data-url="/discussions/{{.Discussion.ID}}#thread-{{.C.ID}}" aria-label="Copy link to thread {{.C.ID}}">copy link</button>
