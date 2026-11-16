@@ -8,3 +8,4 @@ import "./form-errors.js";
 import "./partial-submit.js";
 import "./comment-submit-disabled.js";
 import "./leave-guard.js";
+import "./live-updates.js";

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/podhmo/go-classic-mpa-sample/internal/api"
+	"github.com/podhmo/go-classic-mpa-sample/internal/events"
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
@@ -68,6 +69,7 @@ type Option func(*config)
 type config struct {
 	apiToken   string
 	apiEnabled bool
+	hub        *events.Hub
 }
 
 // WithAPIToken mounts the JSON API (docs/sketch/ja/cli-and-web-api.md)
@@ -92,13 +94,26 @@ func WithAPIEnabled(on bool) Option {
 	return func(c *config) { c.apiEnabled = on }
 }
 
+// WithHub supplies the change hub the /{issues,discussions}/{id}/events
+// SSE endpoints broadcast from. It must be the same hub the store
+// publishes to — main wires both sides via
+// (*store.Store).SetListener(hub.Publish). Callers that skip the option
+// (tests, the storybook) get a private quiet hub: the endpoints exist
+// but never emit.
+func WithHub(hub *events.Hub) Option {
+	return func(c *config) { c.hub = hub }
+}
+
 // New returns the root http.Handler for the application.
 func New(st Store, opts ...Option) http.Handler {
 	var cfg config
 	for _, o := range opts {
 		o(&cfg)
 	}
-	h := &handler{store: st, r: NewRenderer()}
+	if cfg.hub == nil {
+		cfg.hub = events.NewHub()
+	}
+	h := &handler{store: st, r: NewRenderer(), hub: cfg.hub}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", h.home)
@@ -127,6 +142,15 @@ func New(st Store, opts ...Option) http.Handler {
 	mux.HandleFunc("POST /discussions/{id}/delete", h.deleteDiscussion)
 	mux.HandleFunc("POST /discussions/{id}/comments", h.createDiscussionComment)
 	mux.HandleFunc("POST /discussions/{id}/comments/{cid}/answer", h.setCommentAnswer)
+	// Live updates (docs/sketch/ja/live-updates.md): SSE change channels
+	// plus the fragment endpoints live-updates.js refetches after a hint.
+	mux.HandleFunc("GET /issues/{id}/events", h.issueEvents)
+	mux.HandleFunc("GET /issues/{id}/fragments/comments", h.issueCommentsFragment)
+	mux.HandleFunc("GET /issues/{id}/fragments/article", h.issueArticleFragment)
+	mux.HandleFunc("GET /discussions/{id}/events", h.discussionEvents)
+	mux.HandleFunc("GET /discussions/{id}/fragments/threads", h.discussionThreadsFragment)
+	mux.HandleFunc("GET /discussions/{id}/fragments/replies", h.discussionRepliesFragment)
+	mux.HandleFunc("GET /discussions/{id}/fragments/article", h.discussionArticleFragment)
 	if cfg.apiEnabled {
 		// Method-scoped subtree patterns: a method-less "/api/v1/" would
 		// conflict with the catch-all "GET /" (more general path, fewer
@@ -198,6 +222,16 @@ func New(st Store, opts ...Option) http.Handler {
 	// a module, fetched only as an import dependency.
 	mux.HandleFunc("GET /static/dom-hooks.js", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFileFS(w, r, staticFS, "static/dom-hooks.js")
+	})
+	// Fragment parsing + scoped-transition helpers shared by
+	// partial-submit.js and live-updates.js (imported, not a script tag).
+	mux.HandleFunc("GET /static/fragments.js", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, staticFS, "static/fragments.js")
+	})
+	// EventSource client that refetches fragments on pushed change hints
+	// (imported by page-detail.js).
+	mux.HandleFunc("GET /static/live-updates.js", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, staticFS, "static/live-updates.js")
 	})
 	// Per-page-type module entries: the single <script type="module"> tag
 	// on the detail pages and the create/edit form pages.
@@ -301,6 +335,7 @@ func securityHeaders(next http.Handler) http.Handler {
 type handler struct {
 	store Store
 	r     *Renderer
+	hub   *events.Hub
 }
 
 var funcMap = template.FuncMap{

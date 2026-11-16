@@ -515,3 +515,16 @@ ui-rules.md の監査 TODO 全7件を実装。個別の判断:
 - **partial-submit.js は無変更**: delegated submit/click/toggle リスナーで注入フォームをカバーできており、要素 attach 時の作業を持たないため。
 - **ページ種別エントリ1本化**: detail ページの script タグ 6本を `page-detail.js` 1本に、form ページの 3本を `page-form.js` 1本に集約。テンプレ側で振る舞いの組み合わせが drift しない。各振る舞いファイルは残り、ui-rules.md のファイル名参照はそのまま有効。
 - **検証**: `go test ./...`、`go vet`、`gofmt` 全パス。
+
+## ライブ更新（SSE）の実装（2026-11-16、`devin/*-live-updates-impl` ブランチ）
+
+`docs/sketch/ja/live-updates.md` の実装。設計どおり SSE + in-process hub + store 層 emitter + invalidation-only イベント。実装時に決めた細部:
+
+- **`internal/events` は契約だけを持つ**: `Change`/`Hub` を置き、store が import する一方向依存。store 側は `SetListener` で emit 関数の注入を受けるので store→web の依存は発生しない。`New(st, opts...)` の呼び出し（storybook・テスト）が増えるのを避けるため hub は `WithHub` Option で注入し、未指定時は静かな private hub（endpoints は立つが emit されない）。
+- **イベントは全種類 emit する**: 設計では Phase 1 を comment/thread/reply に絞っていたが、status/answer/edit/delete も同じ仕組みで済むため揃えた。client は status/edit→`/fragments/article`、answer→`threads?ids=`、delete→恒常 notice、resync→全リスト再構築を実装済み。一覧ページ（`issues`/`discussions` topic）への emit も済んでおり、list 側クライアントは未実装のまま将来対応とする。
+- **answer イベントは Parent に前の answer thread を持つ**: `SetThreadAnswer` が tx 内でクリア前に前の marked thread id を読み、クライアントは2枚の `<li>` を1回の fragment GET で差し替える。
+- **hub のバッファ溢れは resync に畳む**: 購読者が詰まったとき writer を止めない代わりに backlog を捨て `resync` マーカー1件を残す（設計メモの「取りこぼしは resync で回復」の具体化）。購読バッファは32。
+- **reply は thread 全体ではなく reply list だけ差し替える**: `GET /discussions/{id}/fragments/replies?thread=T(&ids=)` — 開いている返信フォームを守る。answer/resync で thread `<li>` 自体が差し替わるときは、開いている `details.reply-details` と textarea 値を client が退避・復元する。
+- **WriteTimeout は per-response で解除**: `http.NewResponseController(w).SetWriteDeadline(time.Time{})` — サーバ全体の 15s 制限は通常レスポンスにはそのまま残す（設計メモの落とし穴1）。
+- **`fragments.js` 新設**: `parseFragment`/`runScopedTransition`/`commonScope` を partial-submit.js から抽出し、live-updates.js と共有 — fragment の解釈（`<template>` parse・scoped transition・`data-swap` 自己対象化）を drift させない。
+- **検証**: `go test ./...`・`go vet`・`gofmt` 全パスに加え、実サーバ + playwright で issue comment・discussion thread・reply の3パスを実ブラウザ確認（他クライアントの投稿が `.comment-new` ハイライト付きで live append される）。
