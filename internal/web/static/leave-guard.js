@@ -27,6 +27,13 @@ function mark(form) {
   dirtyCount++;
 }
 
+// markDirty flags a form dirty without a user input event — used by
+// live-updates.js after restoring a draft onto a swapped-in node, whose
+// attach-time baseline would otherwise already contain the restored text.
+export function markDirty(form) {
+  if (form instanceof HTMLFormElement) mark(form);
+}
+
 function unmark(form) {
   if (!dirtyForms.has(form)) return;
   dirtyForms.delete(form);
