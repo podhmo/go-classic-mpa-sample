@@ -5,7 +5,13 @@
 // away anyway; a partial post (data-partial) clears through the form's
 // `reset` event, which only fires on success. Loaded on the form and
 // detail pages; auth forms are short enough to skip the guard.
-const TRACKED = 'textarea, input[type="text"], select';
+const TRACKED = 'textarea, input[type="text"], input[type="checkbox"], input[type="radio"], select';
+
+// Checkboxes/radios keep their rendered `value`; their dirty signal is
+// `checked` (e.g. label edits on the issue form).
+function fieldState(el) {
+  return el.type === "checkbox" || el.type === "radio" ? el.checked : el.value;
+}
 
 // form -> Map<field, rendered value>; WeakMap so forms swapped out by
 // partial-submit.js drop out with their state.
@@ -27,7 +33,7 @@ function unmark(form) {
 
 function snapshot(form) {
   const values = new Map();
-  for (const el of form.querySelectorAll(TRACKED)) values.set(el, el.value);
+  for (const el of form.querySelectorAll(TRACKED)) values.set(el, fieldState(el));
   baselines.set(form, values);
 }
 
@@ -37,7 +43,7 @@ function resync(form) {
   const values = baselines.get(form);
   let dirty = false;
   for (const [el, rendered] of values) {
-    if (el.value !== rendered) {
+    if (fieldState(el) !== rendered) {
       dirty = true;
       break;
     }
