@@ -38,9 +38,10 @@ type Store interface {
 	CreateDiscussion(ctx context.Context, in store.DiscussionInput, authorID int64) (int64, error)
 	UpdateDiscussion(ctx context.Context, id int64, in store.DiscussionInput) error
 	DeleteDiscussion(ctx context.Context, id int64) error
-	ListDiscussionComments(ctx context.Context, discussionID int64) ([]*store.DiscussionComment, error)
-	CreateDiscussionComment(ctx context.Context, discussionID, parentID int64, body string, authorID int64) (int64, error)
-	SetCommentAnswer(ctx context.Context, discussionID, commentID int64, answer bool) error
+	ListDiscussionThreads(ctx context.Context, discussionID int64) ([]*store.DiscussionThread, error)
+	CreateDiscussionThread(ctx context.Context, discussionID int64, body string, authorID int64) (int64, error)
+	CreateDiscussionComment(ctx context.Context, discussionID, threadID int64, body string, authorID int64) (int64, error)
+	SetThreadAnswer(ctx context.Context, discussionID, threadID int64, answer bool) error
 	ListDiscussionCategories(ctx context.Context) ([]*store.DiscussionCategory, error)
 	APITokenUser(ctx context.Context, token string) (*store.User, error)
 }
@@ -74,11 +75,12 @@ func New(st Store, envToken string) http.Handler {
 		"/api/v1/issues/{id}/comments": {"POST": h.createComment},
 		"/api/v1/labels":               {"GET": h.listLabels},
 
-		"/api/v1/discussions":                            {"GET": h.listDiscussions, "POST": h.createDiscussion},
-		"/api/v1/discussions/{id}":                       {"GET": h.getDiscussion, "PATCH": h.updateDiscussion, "DELETE": h.deleteDiscussion},
-		"/api/v1/discussions/{id}/comments":              {"POST": h.createDiscussionComment},
-		"/api/v1/discussions/{id}/comments/{cid}/answer": {"POST": h.setCommentAnswer},
-		"/api/v1/discussion-categories":                  {"GET": h.listDiscussionCategories},
+		"/api/v1/discussions":                             {"GET": h.listDiscussions, "POST": h.createDiscussion},
+		"/api/v1/discussions/{id}":                        {"GET": h.getDiscussion, "PATCH": h.updateDiscussion, "DELETE": h.deleteDiscussion},
+		"/api/v1/discussions/{id}/threads":                {"POST": h.createDiscussionThread},
+		"/api/v1/discussions/{id}/threads/{tid}/comments": {"POST": h.createDiscussionComment},
+		"/api/v1/discussions/{id}/threads/{tid}/answer":   {"POST": h.setThreadAnswer},
+		"/api/v1/discussion-categories":                   {"GET": h.listDiscussionCategories},
 	}
 	for path, methods := range routes {
 		mux.HandleFunc(path, methodDispatch(methods))
@@ -244,10 +246,10 @@ func (h *handler) storeError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusNotFound, "Not found.", nil)
 	case errors.Is(err, store.ErrInvalidCategory):
 		writeError(w, http.StatusUnprocessableEntity, "Unknown discussion category.", map[string]string{"category": "Unknown category."})
-	case errors.Is(err, store.ErrInvalidParent):
-		writeError(w, http.StatusUnprocessableEntity, "Replies can only be added to top-level comments.", map[string]string{"parent_id": "Invalid reply target."})
+	case errors.Is(err, store.ErrInvalidThread):
+		writeError(w, http.StatusUnprocessableEntity, "Replies can only be added to a thread of this discussion.", map[string]string{"thread_id": "Invalid reply target."})
 	case errors.Is(err, store.ErrNotAnswerable):
-		writeError(w, http.StatusUnprocessableEntity, "This comment cannot be marked as the answer.", nil)
+		writeError(w, http.StatusUnprocessableEntity, "This thread cannot be marked as the answer.", nil)
 	default:
 		writeError(w, http.StatusInternalServerError, "Internal server error.", nil)
 	}

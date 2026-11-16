@@ -97,7 +97,7 @@ func discussionList(ctx context.Context, o Options, args []string) error {
 func discussionView(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("discussion view", flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
-	comments := fs.Bool("comments", false, "include comments and replies")
+	comments := fs.Bool("comments", false, "include threads and their replies")
 	jsonFields := fs.String("json", "", "output JSON with the named fields (comma-separated)")
 	tmpl := fs.String("template", "", "render output through a Go text/template")
 	web := fs.Bool("web", false, "open the discussion page in a browser (requires --server)")
@@ -127,9 +127,9 @@ func discussionView(ctx context.Context, o Options, args []string) error {
 	if err != nil {
 		return err
 	}
-	var cs []*store.DiscussionComment
+	var ts []*store.DiscussionThread
 	if *comments {
-		cs, err = b.ListDiscussionComments(ctx, id)
+		ts, err = b.ListDiscussionThreads(ctx, id)
 		if err != nil {
 			return err
 		}
@@ -146,7 +146,7 @@ func discussionView(ctx context.Context, o Options, args []string) error {
 			if err != nil {
 				return err
 			}
-			m["comments"] = discussionCommentViews(cs)
+			m["threads"] = discussionThreadViews(ts)
 			return out(m)
 		}
 		return out(discussionViewJSON(d))
@@ -160,23 +160,29 @@ func discussionView(ctx context.Context, o Options, args []string) error {
 	fmt.Fprintf(o.Stdout, "--\n%s\n", d.Body)
 	if *comments {
 		fmt.Fprintln(o.Stdout, "\ncomments:")
-		for _, c := range cs {
-			printDiscussionComment(o, c, "  ")
-			for _, rep := range c.Replies {
-				printDiscussionComment(o, rep, "    ")
+		for _, t := range ts {
+			printDiscussionThread(o, t, "  ")
+			for _, c := range t.Comments {
+				printDiscussionComment(o, c, "    ")
 			}
 		}
 	}
 	return nil
 }
 
-func printDiscussionComment(o Options, c *store.DiscussionComment, indent string) {
+func printDiscussionThread(o Options, t *store.DiscussionThread, indent string) {
 	answer := ""
-	if c.IsAnswer {
+	if t.IsAnswer {
 		answer = " " + o.paint("32", "[answer]")
 	}
 	fmt.Fprintf(o.Stdout, "%s#%d %s (%s)%s\n%s  %s\n",
-		indent, c.ID, authorName(c.Author), fmtTimeShort(c.CreatedAt), answer,
+		indent, t.ID, authorName(t.Author), fmtTimeShort(t.CreatedAt), answer,
+		indent, strings.ReplaceAll(t.Body, "\n", "\n"+indent+"  "))
+}
+
+func printDiscussionComment(o Options, c *store.DiscussionComment, indent string) {
+	fmt.Fprintf(o.Stdout, "%s#%d %s (%s)\n%s  %s\n",
+		indent, c.ID, authorName(c.Author), fmtTimeShort(c.CreatedAt),
 		indent, strings.ReplaceAll(c.Body, "\n", "\n"+indent+"  "))
 }
 
@@ -317,16 +323,16 @@ func discussionDelete(ctx context.Context, o Options, args []string) error {
 	return nil
 }
 
-// issues discussion comment create N --body B [--parent C]
+// issues discussion comment create N --body B [--thread T]
 func discussionCommentCmd(ctx context.Context, o Options, args []string) error {
 	if len(args) == 0 || args[0] != "create" {
-		return usageError{msg: "usage: issues discussion comment create N --body B [--parent C]"}
+		return usageError{msg: "usage: issues discussion comment create N --body B [--thread T]"}
 	}
 	fs := flag.NewFlagSet("discussion comment create", flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
 	body := fs.String("body", "", "comment body")
 	bodyFile := fs.String("body-file", "", "read body from file (- for stdin)")
-	parent := fs.Int64("parent", 0, "reply to this top-level comment")
+	thread := fs.Int64("thread", 0, "reply to this thread")
 	rest, err := parseLeaf(fs, args[1:], 1)
 	if err != nil {
 		return err
@@ -352,23 +358,28 @@ func discussionCommentCmd(ctx context.Context, o Options, args []string) error {
 	}
 	defer closeQuietly(closer)
 
-	cid, err := b.CreateDiscussionComment(ctx, id, *parent, bodyText, 0)
+	var cid int64
+	if *thread != 0 {
+		cid, err = b.CreateDiscussionComment(ctx, id, *thread, bodyText, 0)
+	} else {
+		cid, err = b.CreateDiscussionThread(ctx, id, bodyText, 0)
+	}
 	if err != nil {
 		return err
 	}
-	if *parent != 0 {
-		fmt.Fprintf(o.Stdout, "created reply #%d on comment #%d of discussion #%d\n", cid, *parent, id)
+	if *thread != 0 {
+		fmt.Fprintf(o.Stdout, "created reply #%d on thread #%d of discussion #%d\n", cid, *thread, id)
 	} else {
-		fmt.Fprintf(o.Stdout, "created comment #%d on discussion #%d\n", cid, id)
+		fmt.Fprintf(o.Stdout, "created thread #%d on discussion #%d\n", cid, id)
 	}
 	return nil
 }
 
-// issues discussion answer N --comment C [--unmark]
+// issues discussion answer N --thread T [--unmark]
 func discussionAnswer(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("discussion answer", flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
-	comment := fs.Int64("comment", 0, "comment to mark as the answer (required)")
+	thread := fs.Int64("thread", 0, "thread to mark as the answer (required)")
 	unmark := fs.Bool("unmark", false, "clear the answer mark instead of setting it")
 	rest, err := parseLeaf(fs, args, 1)
 	if err != nil {
@@ -378,8 +389,8 @@ func discussionAnswer(ctx context.Context, o Options, args []string) error {
 	if err != nil {
 		return err
 	}
-	if *comment < 1 {
-		return usageError{msg: "--comment is required"}
+	if *thread < 1 {
+		return usageError{msg: "--thread is required"}
 	}
 	b, closer, err := o.backend(bf)
 	if err != nil {
@@ -387,13 +398,13 @@ func discussionAnswer(ctx context.Context, o Options, args []string) error {
 	}
 	defer closeQuietly(closer)
 
-	if err := b.SetCommentAnswer(ctx, id, *comment, !*unmark); err != nil {
+	if err := b.SetThreadAnswer(ctx, id, *thread, !*unmark); err != nil {
 		return err
 	}
 	if *unmark {
-		fmt.Fprintf(o.Stdout, "unmarked comment #%d as answer on discussion #%d\n", *comment, id)
+		fmt.Fprintf(o.Stdout, "unmarked thread #%d as answer on discussion #%d\n", *thread, id)
 	} else {
-		fmt.Fprintf(o.Stdout, "marked comment #%d as answer on discussion #%d\n", *comment, id)
+		fmt.Fprintf(o.Stdout, "marked thread #%d as answer on discussion #%d\n", *thread, id)
 	}
 	return nil
 }

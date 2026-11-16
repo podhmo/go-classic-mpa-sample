@@ -109,15 +109,15 @@ func TestListDiscussions(t *testing.T) {
 		t.Fatalf("q=keyboard: total=%d err=%v", total, err)
 	}
 
-	if _, err := s.CreateDiscussionComment(ctx, d1, 0, "no", 0); err != nil {
-		t.Fatalf("comment: %v", err)
+	if _, err := s.CreateDiscussionThread(ctx, d1, "no", 0); err != nil {
+		t.Fatalf("thread: %v", err)
 	}
-	cid, err := s.CreateDiscussionComment(ctx, d2, 0, "the answer", 0)
+	tid, err := s.CreateDiscussionThread(ctx, d2, "the answer", 0)
 	if err != nil {
-		t.Fatalf("comment: %v", err)
+		t.Fatalf("thread: %v", err)
 	}
-	if err := s.SetCommentAnswer(ctx, d2, cid, true); err != nil {
-		t.Fatalf("SetCommentAnswer: %v", err)
+	if err := s.SetThreadAnswer(ctx, d2, tid, true); err != nil {
+		t.Fatalf("SetThreadAnswer: %v", err)
 	}
 	_, total, err = s.ListDiscussions(ctx, DiscussionListFilter{Answered: "yes"})
 	if err != nil || total != 1 {
@@ -139,64 +139,64 @@ func TestListDiscussions(t *testing.T) {
 	}
 }
 
-func TestDiscussionCommentThreading(t *testing.T) {
+func TestDiscussionThreading(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	cat := mustCategory(t, s, "General", "general", CategoryFormatOpen)
 	d1 := mustDiscussion(t, s, cat, "d1")
 	d2 := mustDiscussion(t, s, cat, "d2")
 
-	c1, err := s.CreateDiscussionComment(ctx, d1, 0, "top1", 0)
+	t1, err := s.CreateDiscussionThread(ctx, d1, "top1", 0)
 	if err != nil {
-		t.Fatalf("comment: %v", err)
+		t.Fatalf("thread: %v", err)
 	}
-	if _, err := s.CreateDiscussionComment(ctx, d1, 0, "top2", 0); err != nil {
-		t.Fatalf("comment: %v", err)
+	if _, err := s.CreateDiscussionThread(ctx, d1, "top2", 0); err != nil {
+		t.Fatalf("thread: %v", err)
 	}
-	r1, err := s.CreateDiscussionComment(ctx, d1, c1, "reply to top1", 0)
+	r1, err := s.CreateDiscussionComment(ctx, d1, t1, "reply to top1", 0)
 	if err != nil {
 		t.Fatalf("reply: %v", err)
 	}
 
-	if _, err := s.CreateDiscussionComment(ctx, d1, r1, "nested reply", 0); !errors.Is(err, ErrInvalidParent) {
-		t.Fatalf("reply-to-reply: %v", err)
-	}
-	cOther, err := s.CreateDiscussionComment(ctx, d2, 0, "other", 0)
+	// Threads and comments live in separate id spaces, so a reply's id
+	// can coincide with a thread's — reply-to-reply is expressible only
+	// as a reply to that thread, which the API surface never produces.
+	tOther, err := s.CreateDiscussionThread(ctx, d2, "other", 0)
 	if err != nil {
-		t.Fatalf("comment: %v", err)
+		t.Fatalf("thread: %v", err)
 	}
-	if _, err := s.CreateDiscussionComment(ctx, d1, cOther, "x", 0); !errors.Is(err, ErrInvalidParent) {
-		t.Fatalf("cross-discussion parent: %v", err)
+	if _, err := s.CreateDiscussionComment(ctx, d1, tOther, "x", 0); !errors.Is(err, ErrInvalidThread) {
+		t.Fatalf("cross-discussion thread: %v", err)
 	}
-	if _, err := s.CreateDiscussionComment(ctx, 999, 0, "x", 0); !errors.Is(err, ErrNotFound) {
+	if _, err := s.CreateDiscussionComment(ctx, 999, t1, "x", 0); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("comment on missing discussion: %v", err)
 	}
-
-	comments, err := s.ListDiscussionComments(ctx, d1)
-	if err != nil {
-		t.Fatalf("ListDiscussionComments: %v", err)
+	if _, err := s.CreateDiscussionThread(ctx, 999, "x", 0); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("thread on missing discussion: %v", err)
 	}
-	if len(comments) != 2 {
-		t.Fatalf("top-level count = %d, want 2", len(comments))
+
+	threads, err := s.ListDiscussionThreads(ctx, d1)
+	if err != nil {
+		t.Fatalf("ListDiscussionThreads: %v", err)
+	}
+	if len(threads) != 2 {
+		t.Fatalf("thread count = %d, want 2", len(threads))
 	}
 	var found bool
-	for _, c := range comments {
-		if c.ID == c1 {
+	for _, th := range threads {
+		if th.ID == t1 {
 			found = true
-			if len(c.Replies) != 1 || c.Replies[0].ID != r1 || c.Replies[0].ParentID != c1 {
-				t.Fatalf("thread shape: %+v", c)
+			if len(th.Comments) != 1 || th.Comments[0].ID != r1 || th.Comments[0].ThreadID != t1 {
+				t.Fatalf("thread shape: %+v", th)
 			}
-		}
-		if c.ParentID != 0 {
-			t.Fatalf("reply leaked to top level: %+v", c)
 		}
 	}
 	if !found {
-		t.Fatalf("parent comment missing: %+v", comments)
+		t.Fatalf("thread missing: %+v", threads)
 	}
 }
 
-func TestSetCommentAnswer(t *testing.T) {
+func TestSetThreadAnswer(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	open := mustCategory(t, s, "General", "general", CategoryFormatOpen)
@@ -204,40 +204,40 @@ func TestSetCommentAnswer(t *testing.T) {
 	dOpen := mustDiscussion(t, s, open, "d-open")
 	dQA := mustDiscussion(t, s, qa, "d-qa")
 
-	c1, _ := s.CreateDiscussionComment(ctx, dQA, 0, "c1", 0)
-	c2, _ := s.CreateDiscussionComment(ctx, dQA, 0, "c2", 0)
-	reply, _ := s.CreateDiscussionComment(ctx, dQA, c1, "r1", 0)
-	cOpen, _ := s.CreateDiscussionComment(ctx, dOpen, 0, "c-open", 0)
+	t1, _ := s.CreateDiscussionThread(ctx, dQA, "t1", 0)
+	t2, _ := s.CreateDiscussionThread(ctx, dQA, "t2", 0)
+	reply, _ := s.CreateDiscussionComment(ctx, dQA, t1, "r1", 0)
+	tOpen, _ := s.CreateDiscussionThread(ctx, dOpen, "t-open", 0)
 
-	if err := s.SetCommentAnswer(ctx, dOpen, cOpen, true); !errors.Is(err, ErrNotAnswerable) {
+	if err := s.SetThreadAnswer(ctx, dOpen, tOpen, true); !errors.Is(err, ErrNotAnswerable) {
 		t.Fatalf("answer on open category: %v", err)
 	}
-	if err := s.SetCommentAnswer(ctx, dQA, reply, true); !errors.Is(err, ErrNotAnswerable) {
-		t.Fatalf("answer on reply: %v", err)
+	// A reply id coinciding with a thread id is indistinguishable from
+	// that thread; only a truly missing thread id is a miss.
+	_ = reply
+	if err := s.SetThreadAnswer(ctx, dQA, 999, true); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("answer on missing thread: %v", err)
 	}
-	if err := s.SetCommentAnswer(ctx, dQA, 999, true); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("answer on missing comment: %v", err)
-	}
-	if err := s.SetCommentAnswer(ctx, 999, c1, true); !errors.Is(err, ErrNotFound) {
+	if err := s.SetThreadAnswer(ctx, 999, t1, true); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("answer on missing discussion: %v", err)
 	}
 
-	if err := s.SetCommentAnswer(ctx, dQA, c1, true); err != nil {
-		t.Fatalf("mark c1: %v", err)
+	if err := s.SetThreadAnswer(ctx, dQA, t1, true); err != nil {
+		t.Fatalf("mark t1: %v", err)
 	}
-	if err := s.SetCommentAnswer(ctx, dQA, c2, true); err != nil {
-		t.Fatalf("mark c2: %v", err)
+	if err := s.SetThreadAnswer(ctx, dQA, t2, true); err != nil {
+		t.Fatalf("mark t2: %v", err)
 	}
 	d, err := s.GetDiscussion(ctx, dQA)
 	if err != nil || !d.Answered {
 		t.Fatalf("answered flag: %v %+v", err, d)
 	}
 	var marked int
-	for _, c := range mustListDComments(t, s, dQA) {
-		if c.IsAnswer {
+	for _, th := range mustListDThreads(t, s, dQA) {
+		if th.IsAnswer {
 			marked++
-			if c.ID != c2 {
-				t.Fatalf("wrong comment marked: %d", c.ID)
+			if th.ID != t2 {
+				t.Fatalf("wrong thread marked: %d", th.ID)
 			}
 		}
 	}
@@ -245,7 +245,7 @@ func TestSetCommentAnswer(t *testing.T) {
 		t.Fatalf("marked = %d, want 1", marked)
 	}
 
-	if err := s.SetCommentAnswer(ctx, dQA, c2, false); err != nil {
+	if err := s.SetThreadAnswer(ctx, dQA, t2, false); err != nil {
 		t.Fatalf("unmark: %v", err)
 	}
 	d, _ = s.GetDiscussion(ctx, dQA)
@@ -261,8 +261,8 @@ func TestUpdateDiscussionToOpenCategoryClearsAnswers(t *testing.T) {
 	qa := mustCategory(t, s, "Q&A", "qa", CategoryFormatQA)
 	d := mustDiscussion(t, s, qa, "d")
 
-	cid, _ := s.CreateDiscussionComment(ctx, d, 0, "the fix", 0)
-	if err := s.SetCommentAnswer(ctx, d, cid, true); err != nil {
+	tid, _ := s.CreateDiscussionThread(ctx, d, "the fix", 0)
+	if err := s.SetThreadAnswer(ctx, d, tid, true); err != nil {
 		t.Fatalf("mark: %v", err)
 	}
 	if err := s.UpdateDiscussion(ctx, d, DiscussionInput{Title: "d", CategoryID: open}); err != nil {
@@ -275,20 +275,20 @@ func TestUpdateDiscussionToOpenCategoryClearsAnswers(t *testing.T) {
 	if got.Answered {
 		t.Fatal("answer mark stranded after move to open category")
 	}
-	for _, c := range mustListDComments(t, s, d) {
-		if c.IsAnswer {
-			t.Fatalf("is_answer flag left on comment %d", c.ID)
+	for _, th := range mustListDThreads(t, s, d) {
+		if th.IsAnswer {
+			t.Fatalf("is_answer flag left on thread %d", th.ID)
 		}
 	}
 }
 
-func mustListDComments(t *testing.T, s *Store, discussionID int64) []*DiscussionComment {
+func mustListDThreads(t *testing.T, s *Store, discussionID int64) []*DiscussionThread {
 	t.Helper()
-	cs, err := s.ListDiscussionComments(context.Background(), discussionID)
+	ts, err := s.ListDiscussionThreads(context.Background(), discussionID)
 	if err != nil {
-		t.Fatalf("ListDiscussionComments: %v", err)
+		t.Fatalf("ListDiscussionThreads: %v", err)
 	}
-	return cs
+	return ts
 }
 
 func TestDeleteDiscussionCascadesComments(t *testing.T) {
@@ -296,20 +296,24 @@ func TestDeleteDiscussionCascadesComments(t *testing.T) {
 	ctx := context.Background()
 	cat := mustCategory(t, s, "Q&A", "qa", CategoryFormatQA)
 	d := mustDiscussion(t, s, cat, "d")
-	c1, _ := s.CreateDiscussionComment(ctx, d, 0, "c1", 0)
-	if _, err := s.CreateDiscussionComment(ctx, d, c1, "r1", 0); err != nil {
+	t1, _ := s.CreateDiscussionThread(ctx, d, "t1", 0)
+	if _, err := s.CreateDiscussionComment(ctx, d, t1, "r1", 0); err != nil {
 		t.Fatalf("reply: %v", err)
 	}
 	if err := s.DeleteDiscussion(ctx, d); err != nil {
 		t.Fatalf("DeleteDiscussion: %v", err)
 	}
-	var n int
+	var threads, replies int
 	if err := s.db.QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM discussion_comments WHERE discussion_id = ?", d).Scan(&n); err != nil {
-		t.Fatalf("count: %v", err)
+		"SELECT COUNT(*) FROM discussion_threads WHERE discussion_id = ?", d).Scan(&threads); err != nil {
+		t.Fatalf("count threads: %v", err)
 	}
-	if n != 0 {
-		t.Fatalf("comments left after delete: %d", n)
+	if err := s.db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM discussion_comments WHERE thread_id = ?", t1).Scan(&replies); err != nil {
+		t.Fatalf("count comments: %v", err)
+	}
+	if threads != 0 || replies != 0 {
+		t.Fatalf("rows left after delete: %d threads, %d comments", threads, replies)
 	}
 }
 
@@ -321,8 +325,8 @@ func TestDiscussionCommentBumpsUpdatedAt(t *testing.T) {
 
 	before, _ := s.GetDiscussion(ctx, d)
 	time.Sleep(1100 * time.Millisecond) // unix-second granularity
-	if _, err := s.CreateDiscussionComment(ctx, d, 0, "activity", 0); err != nil {
-		t.Fatalf("comment: %v", err)
+	if _, err := s.CreateDiscussionThread(ctx, d, "activity", 0); err != nil {
+		t.Fatalf("thread: %v", err)
 	}
 	after, _ := s.GetDiscussion(ctx, d)
 	if !after.UpdatedAt.After(before.UpdatedAt) {

@@ -64,34 +64,34 @@ func TestClientDiscussionLifecycle(t *testing.T) {
 		}
 	}
 
-	cid, err := c.CreateDiscussionComment(ctx, id, 0, "the answer", 0)
+	tid, err := c.CreateDiscussionThread(ctx, id, "the answer", 0)
 	if err != nil {
-		t.Fatalf("CreateDiscussionComment: %v", err)
+		t.Fatalf("CreateDiscussionThread: %v", err)
 	}
-	rid, err := c.CreateDiscussionComment(ctx, id, cid, "a reply", 0)
+	rid, err := c.CreateDiscussionComment(ctx, id, tid, "a reply", 0)
 	if err != nil {
 		t.Fatalf("CreateDiscussionComment reply: %v", err)
 	}
-	cs, err := c.ListDiscussionComments(ctx, id)
+	ts, err := c.ListDiscussionThreads(ctx, id)
 	if err != nil {
-		t.Fatalf("ListDiscussionComments: %v", err)
+		t.Fatalf("ListDiscussionThreads: %v", err)
 	}
-	if len(cs) != 1 || cs[0].ID != cid || len(cs[0].Replies) != 1 || cs[0].Replies[0].ID != rid {
-		t.Fatalf("ListDiscussionComments = %+v", cs)
+	if len(ts) != 1 || ts[0].ID != tid || len(ts[0].Comments) != 1 || ts[0].Comments[0].ID != rid {
+		t.Fatalf("ListDiscussionThreads = %+v", ts)
 	}
-	if cs[0].Replies[0].ParentID != cid {
-		t.Fatalf("reply parent = %d, want %d", cs[0].Replies[0].ParentID, cid)
+	if ts[0].Comments[0].ThreadID != tid {
+		t.Fatalf("reply thread = %d, want %d", ts[0].Comments[0].ThreadID, tid)
 	}
 
-	if err := c.SetCommentAnswer(ctx, id, cid, true); err != nil {
-		t.Fatalf("SetCommentAnswer: %v", err)
+	if err := c.SetThreadAnswer(ctx, id, tid, true); err != nil {
+		t.Fatalf("SetThreadAnswer: %v", err)
 	}
 	d, _ = c.GetDiscussion(ctx, id)
 	if !d.Answered {
-		t.Fatal("discussion not answered after SetCommentAnswer")
+		t.Fatal("discussion not answered after SetThreadAnswer")
 	}
-	if err := c.SetCommentAnswer(ctx, id, cid, false); err != nil {
-		t.Fatalf("SetCommentAnswer unmark: %v", err)
+	if err := c.SetThreadAnswer(ctx, id, tid, false); err != nil {
+		t.Fatalf("SetThreadAnswer unmark: %v", err)
 	}
 
 	if err := c.UpdateDiscussion(ctx, id, store.DiscussionInput{

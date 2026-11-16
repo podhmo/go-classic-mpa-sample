@@ -444,3 +444,11 @@
 - **スクリプトは `<head>` の同期 script に移動**: `defer`/`module` では遷移保留中の pagereveal より後に実行されることがありリスナー未登録のままパリティを取りこぼす（実測で `pagereveal` 未捕捉を確認）。`<head>` の通常 `<script src>` なら解析中に必ず登録される。全ページで load しても副作用は pagereveal/pageswap への no-op リスナーのみ。
 - **speculation rules との関係**: 一覧の `prefetch` は再現中の一因と誤認して一時無効化して試したが、inline opt-in 後は prefetch 有りでも `vt.types` 付きで遷移が走ることを確認し、`Speculation-Rules` ヘッダーは維持（両立する）。
 - **検証**: Chromium 156 headed で一覧→詳細 `pv:forward` / 詳細→一覧 `pv:backward` の type 付与と `:active-view-transition-type(forward|backward)` 一致を確認、アニメーション 8s 化の一時改修でスライド中の両ページ同居をスクリーンショット確認（前進: 旧リスト左→新詳細右から / 後退: 逆）。最終形は 0.22s ＋計装なしに戻してあり console エラー 0。
+
+## discussion_comments を threads/comments 2 テーブルへ分割（2026-11-16、discussion-thread-tables ブランチ）
+
+- **GitHub Discussions のモデルに合わせて `discussions` 1—N `discussion_threads` 1—N `discussion_comments` に変更**: 従来は `discussion_comments.parent_id` の self-FK で「top-level=スレッド先頭」を暗黙に表していたが、thread を明示した `discussion_threads` テーブルを新設。スレッド自体が開始投稿（body/author/is_answer を持つ）で、`discussion_comments` は返信のみ `thread_id` でぶら下げる。`ErrInvalidParent` → `ErrInvalidThread`、`SetCommentAnswer` → `SetThreadAnswer`。
+- **migrateV5 はデータを保持して移行**: `parent_id IS NULL` の行を id そのまま `discussion_threads` にコピー、コメント表は `discussion_comments_new`（`thread_id` 列）を作って `parent_id`→`thread_id` に写し替え DROP/RENAME。孤立した返信（親のない行）は捨てられる — ここまでは integrity 破損した行だけ。is_answer 部分 UNIQUE index も `discussion_threads` 側へ移動。
+- **ID 空間が分かれた副作用**: 返信の id と同じ値の thread id が別 discussion 内に存在し得るので「返信への返信」を ID だけで誤検出/拒否できない。API 面ではスレッド id しか渡せない経路だけ残すので問題にならない。
+- **API**: `GET /discussions/{id}` は `"threads"` を返し、新規に `POST .../threads`、`POST .../threads/{tid}/comments`、`POST .../threads/{tid}/answer`。HTML ルートは据え置き（`POST /discussions/{id}/comments`、同 `{cid}/answer` で cid=thread id）だが hidden フィールドは `parent_id` → `thread_id`。CLI も `--parent`/`--comment` → `--thread`。
+- **検証**: `go test ./...`（store に `TestMigrationV5` で v4→v5 の id 保持・返信付け替え・is_answer 継承を確認済み）、`go vet`、`gofmt` 全パス。

@@ -1,7 +1,7 @@
 // Discussion routes: /discussions mirror the /issues handlers (same PRG
 // pattern), minus any state transition — discussions never close. The two
 // differences the design memo (docs/sketch/ja/discussions.md) calls out are
-// a required single category, one-level threaded comments, and the qa-only
+// a required single category, one-level comment threads, and the qa-only
 // answer mark.
 package web
 
@@ -34,27 +34,27 @@ type discussionListPage struct {
 }
 
 // discussionDetailPage is the view model for GET /discussions/{id}.
-// CommentDraft/CommentError carry a failed comment submission back into the
-// form; ReplyDraftID does the same for a failed reply so the <details> on
-// that comment can reopen. CommentCount includes replies, since the heading
-// counts every comment shown on the page.
+// CommentDraft/CommentError carry a failed thread-post submission back
+// into the form; ThreadDraftID does the same for a failed reply so the
+// <details> on that thread can reopen. CommentCount includes replies,
+// since the heading counts every comment shown on the page.
 type discussionDetailPage struct {
-	Title        string
-	Discussion   *store.Discussion
-	Comments     []*store.DiscussionComment
-	CommentCount int
-	CommentDraft string
-	CommentError string
-	ReplyDraftID int64 // parent comment ID whose reply failed validation
-	Section      string
-	User         *store.User
+	Title         string
+	Discussion    *store.Discussion
+	Threads       []*store.DiscussionThread
+	CommentCount  int
+	CommentDraft  string
+	CommentError  string
+	ThreadDraftID int64 // thread ID whose reply failed validation
+	Section       string
+	User          *store.User
 }
 
-// countDiscussionComments counts top-level comments plus their replies.
-func countDiscussionComments(comments []*store.DiscussionComment) int {
-	n := len(comments)
-	for _, c := range comments {
-		n += len(c.Replies)
+// countDiscussionComments counts thread opening posts plus their replies.
+func countDiscussionComments(threads []*store.DiscussionThread) int {
+	n := len(threads)
+	for _, t := range threads {
+		n += len(t.Comments)
 	}
 	return n
 }
@@ -198,7 +198,7 @@ func (h *handler) showDiscussion(w http.ResponseWriter, r *http.Request) {
 		h.discussionError(w, r, err)
 		return
 	}
-	comments, err := h.store.ListDiscussionComments(r.Context(), id)
+	threads, err := h.store.ListDiscussionThreads(r.Context(), id)
 	if err != nil {
 		h.internalError(w, r, err)
 		return
@@ -206,8 +206,8 @@ func (h *handler) showDiscussion(w http.ResponseWriter, r *http.Request) {
 	h.r.renderDiscussionDetail(w, http.StatusOK, discussionDetailPage{
 		Title:        fmt.Sprintf("#%d %s", discussion.ID, discussion.Title),
 		Discussion:   discussion,
-		Comments:     comments,
-		CommentCount: countDiscussionComments(comments),
+		Threads:      threads,
+		CommentCount: countDiscussionComments(threads),
 		Section:      "discussions",
 		User:         userFromContext(r.Context()),
 	})
@@ -321,7 +321,7 @@ func (h *handler) deleteDiscussion(w http.ResponseWriter, r *http.Request) {
 }
 
 // createDiscussionComment validates POST /discussions/{id}/comments — a
-// top-level comment, or a reply when the hidden parent_id is present — and
+// new thread, or a reply when the hidden thread_id is present — and
 // redirects back to the detail page anchored at the new comment. With
 // X-Partial it answers a fragment instead: the new <li> on success, or the
 // error-marked form (reply form inside its <details>, or the bottom form)
@@ -337,13 +337,13 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 	}
 	body := strings.TrimSpace(r.PostFormValue("body"))
 	partial := wantsPartial(r)
-	var parentID int64
+	var threadID int64
 	var errMsg string
-	if v := r.PostFormValue("parent_id"); v != "" {
-		// A present but malformed parent_id must not degrade to a
-		// top-level comment — the poster asked for a reply.
-		if pid, err := strconv.ParseInt(v, 10, 64); err == nil && pid > 0 {
-			parentID = pid
+	if v := r.PostFormValue("thread_id"); v != "" {
+		// A present but malformed thread_id must not degrade to a
+		// new thread — the poster asked for a reply.
+		if tid, err := strconv.ParseInt(v, 10, 64); err == nil && tid > 0 {
+			threadID = tid
 		} else {
 			errMsg = "Invalid reply target."
 		}
@@ -353,17 +353,23 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 	}
 
 	if errMsg == "" {
-		commentID, err := h.store.CreateDiscussionComment(r.Context(), id, parentID, body, authorIDFromContext(r.Context()))
+		var commentID int64
+		var err error
+		if threadID == 0 {
+			commentID, err = h.store.CreateDiscussionThread(r.Context(), id, body, authorIDFromContext(r.Context()))
+		} else {
+			commentID, err = h.store.CreateDiscussionComment(r.Context(), id, threadID, body, authorIDFromContext(r.Context()))
+		}
 		switch {
 		case err == nil:
 			if partial {
-				h.renderNewDiscussionComment(w, r, id, parentID, commentID, body)
+				h.renderNewDiscussionComment(w, r, id, threadID, commentID, body)
 				return
 			}
 			http.Redirect(w, r, fmt.Sprintf("%s#comment-%d", discussionURL(id), commentID), http.StatusSeeOther)
 			return
-		case errors.Is(err, store.ErrInvalidParent):
-			errMsg = "Replies can only be added to top-level comments."
+		case errors.Is(err, store.ErrInvalidThread):
+			errMsg = "Replies can only be added to a thread."
 		case errors.Is(err, store.ErrNotFound):
 			h.notFound(w, r)
 			return
@@ -373,39 +379,39 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	// Re-render the detail page with the error. ReplyDraftID reopens the
-	// <details> on the parent comment when the failed post was a reply.
+	// Re-render the detail page with the error. ThreadDraftID reopens the
+	// <details> on the thread when the failed post was a reply.
 	discussion, err := h.store.GetDiscussion(r.Context(), id)
 	if err != nil {
 		h.discussionError(w, r, err)
 		return
 	}
-	comments, err := h.store.ListDiscussionComments(r.Context(), id)
+	threads, err := h.store.ListDiscussionThreads(r.Context(), id)
 	if err != nil {
 		h.internalError(w, r, err)
 		return
 	}
-	// When the failed reply's parent is not a displayed top-level comment
-	// (a nested reply, or a comment of another discussion), no per-comment
-	// form can hold the draft — drop ReplyDraftID so the bottom comment
-	// form keeps the text instead of losing it.
-	var parent *store.DiscussionComment
-	if parentID != 0 {
-		for _, c := range comments {
-			if c.ID == parentID {
-				parent = c
+	// When the failed reply's thread is not among the displayed threads
+	// (another discussion's thread), no per-thread form can hold the draft
+	// — drop ThreadDraftID so the bottom comment form keeps the text
+	// instead of losing it.
+	var thread *store.DiscussionThread
+	if threadID != 0 {
+		for _, t := range threads {
+			if t.ID == threadID {
+				thread = t
 				break
 			}
 		}
-		if parent == nil {
-			parentID = 0
+		if thread == nil {
+			threadID = 0
 		}
 	}
 	if partial {
-		if parent != nil {
+		if thread != nil {
 			h.r.renderFragment(w, "discussion_detail", "discussion_reply_form", http.StatusUnprocessableEntity,
-				dict("Discussion", discussion, "C", parent,
-					"ReplyDraftID", parentID, "CommentDraft", body, "CommentError", errMsg))
+				dict("Discussion", discussion, "C", thread,
+					"ThreadDraftID", threadID, "CommentDraft", body, "CommentError", errMsg))
 			return
 		}
 		h.r.renderFragment(w, "discussion_detail", "discussion_comment_form", http.StatusUnprocessableEntity,
@@ -418,49 +424,57 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 		return
 	}
 	h.r.renderDiscussionDetail(w, http.StatusUnprocessableEntity, discussionDetailPage{
-		Title:        fmt.Sprintf("#%d %s", discussion.ID, discussion.Title),
-		Discussion:   discussion,
-		Comments:     comments,
-		CommentCount: countDiscussionComments(comments),
-		CommentDraft: body,
-		CommentError: errMsg,
-		ReplyDraftID: parentID,
-		Section:      "discussions",
-		User:         userFromContext(r.Context()),
+		Title:         fmt.Sprintf("#%d %s", discussion.ID, discussion.Title),
+		Discussion:    discussion,
+		Threads:       threads,
+		CommentCount:  countDiscussionComments(threads),
+		CommentDraft:  body,
+		CommentError:  errMsg,
+		ThreadDraftID: threadID,
+		Section:       "discussions",
+		User:          userFromContext(r.Context()),
 	})
 }
 
-// renderNewDiscussionComment answers a partial POST with the new comment's
-// <li>: a reply fragment when parentID is set, a top-level comment
-// fragment otherwise (the latter also carries the collapsed reply form and
-// the qa answer button, so it needs the parent discussion's category).
-// Either way the fragment starts with the header meta as a data-swap
-// node — the post bumped discussion.updated_at.
-func (h *handler) renderNewDiscussionComment(w http.ResponseWriter, r *http.Request, id, parentID, commentID int64, body string) {
-	comment := &store.DiscussionComment{
-		ID:           commentID,
-		DiscussionID: id,
-		ParentID:     parentID,
-		Body:         body,
-		Author:       userFromContext(r.Context()),
-		CreatedAt:    time.Now(),
-	}
+// renderNewDiscussionComment answers a partial POST with the new post's
+// <li>: a reply fragment when threadID is set, a thread fragment
+// otherwise (the latter also carries the collapsed reply form and the qa
+// answer button, so it needs the parent discussion's category). Either
+// way the fragment starts with the header meta as a data-swap node — the
+// post bumped discussion.updated_at.
+func (h *handler) renderNewDiscussionComment(w http.ResponseWriter, r *http.Request, id, threadID, commentID int64, body string) {
 	discussion, err := h.store.GetDiscussion(r.Context(), id)
 	if err != nil {
 		h.discussionError(w, r, err)
 		return
 	}
-	if parentID != 0 {
+	if threadID != 0 {
+		comment := &store.DiscussionComment{
+			ID:        commentID,
+			ThreadID:  threadID,
+			Body:      body,
+			Author:    userFromContext(r.Context()),
+			CreatedAt: time.Now(),
+		}
 		h.r.renderFragment(w, "discussion_detail", "discussion_reply_append", http.StatusOK,
-			dict("Discussion", discussion, "Comment", comment))
+			dict("Discussion", discussion, "C", comment))
 		return
 	}
+	thread := &store.DiscussionThread{
+		ID:           commentID,
+		DiscussionID: id,
+		Body:         body,
+		Author:       userFromContext(r.Context()),
+		CreatedAt:    time.Now(),
+	}
 	h.r.renderFragment(w, "discussion_detail", "discussion_comment_append", http.StatusOK,
-		dict("Discussion", discussion, "C", comment))
+		dict("Discussion", discussion, "C", thread))
 }
 
 // setCommentAnswer handles POST /discussions/{id}/comments/{cid}/answer.
-// The target state arrives as a hidden field ("1" to mark, "0" to unmark) —
+// The {cid} segment names the thread — a thread is the only markable
+// post, so the route predating the rename still reads naturally. The
+// target state arrives as a hidden field ("1" to mark, "0" to unmark) —
 // the same hidden-field toggle pattern as setStatus.
 func (h *handler) setCommentAnswer(w http.ResponseWriter, r *http.Request) {
 	id, ok := parseID(r)
@@ -492,18 +506,18 @@ func (h *handler) setCommentAnswer(w http.ResponseWriter, r *http.Request) {
 	// post-mutation by the time the response renders.
 	var prevID int64
 	if wantsPartial(r) {
-		cs, err := h.store.ListDiscussionComments(r.Context(), id)
+		ts, err := h.store.ListDiscussionThreads(r.Context(), id)
 		if err != nil {
 			h.internalError(w, r, err)
 			return
 		}
-		for _, c := range cs {
-			if c.IsAnswer {
-				prevID = c.ID
+		for _, t := range ts {
+			if t.IsAnswer {
+				prevID = t.ID
 			}
 		}
 	}
-	err = h.store.SetCommentAnswer(r.Context(), id, cid, answer)
+	err = h.store.SetThreadAnswer(r.Context(), id, cid, answer)
 	switch {
 	case err == nil:
 		if wantsPartial(r) {
@@ -515,15 +529,15 @@ func (h *handler) setCommentAnswer(w http.ResponseWriter, r *http.Request) {
 		h.notFound(w, r)
 	case errors.Is(err, store.ErrNotAnswerable):
 		h.renderError(w, r, http.StatusUnprocessableEntity, "Cannot mark as answer",
-			"Only top-level comments on a Q&A discussion can be marked as the answer.")
+			"Only threads on a Q&A discussion can be marked as the answer.")
 	default:
 		h.internalError(w, r, err)
 	}
 }
 
 // renderAnswerSwap answers a partial answer-mark POST with every <li>
-// that changed: the toggled comment plus, when the mark moved, the
-// comment that carried it before (prevID, 0 when nothing was marked).
+// that changed: the toggled thread plus, when the mark moved, the
+// thread that carried it before (prevID, 0 when nothing was marked).
 // Each <li> self-targets by id in the client's replace swap.
 func (h *handler) renderAnswerSwap(w http.ResponseWriter, r *http.Request, id, cid, prevID int64) {
 	discussion, err := h.store.GetDiscussion(r.Context(), id)
@@ -531,15 +545,15 @@ func (h *handler) renderAnswerSwap(w http.ResponseWriter, r *http.Request, id, c
 		h.discussionError(w, r, err)
 		return
 	}
-	cs, err := h.store.ListDiscussionComments(r.Context(), id)
+	ts, err := h.store.ListDiscussionThreads(r.Context(), id)
 	if err != nil {
 		h.internalError(w, r, err)
 		return
 	}
-	var nodes []*store.DiscussionComment
-	for _, c := range cs {
-		if c.ID == cid || (prevID != 0 && c.ID == prevID) {
-			nodes = append(nodes, c)
+	var nodes []*store.DiscussionThread
+	for _, t := range ts {
+		if t.ID == cid || (prevID != 0 && t.ID == prevID) {
+			nodes = append(nodes, t)
 		}
 	}
 	if len(nodes) == 0 {

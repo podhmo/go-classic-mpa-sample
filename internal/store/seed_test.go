@@ -88,8 +88,8 @@ func TestSeedDemoData(t *testing.T) {
 		if d.Answered {
 			anyAnswered = true
 		}
-		for _, c := range mustListDComments(t, s, d.ID) {
-			if len(c.Replies) > 0 {
+		for _, th := range mustListDThreads(t, s, d.ID) {
+			if len(th.Comments) > 0 {
 				anyThreaded = true
 			}
 		}

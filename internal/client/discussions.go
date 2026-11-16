@@ -64,20 +64,20 @@ func (c *Client) GetDiscussion(ctx context.Context, id int64) (*store.Discussion
 	return discussionFromDTO(res.Discussion), nil
 }
 
-// ListDiscussionComments reads comments off the detail endpoint — like
-// ListComments there is no dedicated comments GET. A missing discussion
+// ListDiscussionThreads reads threads off the detail endpoint — like
+// ListComments there is no dedicated GET. A missing discussion
 // surfaces as *Error{Status:404} where the local backend returns an
 // empty list and no error.
-func (c *Client) ListDiscussionComments(ctx context.Context, discussionID int64) ([]*store.DiscussionComment, error) {
+func (c *Client) ListDiscussionThreads(ctx context.Context, discussionID int64) ([]*store.DiscussionThread, error) {
 	var res struct {
-		Comments []api.DiscussionComment `json:"comments"`
+		Threads []api.DiscussionThread `json:"threads"`
 	}
 	if err := c.do(ctx, "GET", "/discussions/"+fmt.Sprint(discussionID), nil, &res); err != nil {
 		return nil, err
 	}
-	out := make([]*store.DiscussionComment, 0, len(res.Comments))
-	for _, cm := range res.Comments {
-		out = append(out, discussionCommentFromDTO(cm, discussionID))
+	out := make([]*store.DiscussionThread, 0, len(res.Threads))
+	for _, t := range res.Threads {
+		out = append(out, discussionThreadFromDTO(t, discussionID))
 	}
 	return out, nil
 }
@@ -107,21 +107,34 @@ func (c *Client) DeleteDiscussion(ctx context.Context, id int64) error {
 	return c.do(ctx, "DELETE", "/discussions/"+fmt.Sprint(id), nil, nil)
 }
 
-func (c *Client) CreateDiscussionComment(ctx context.Context, discussionID, parentID int64, body string, _ int64) (int64, error) {
+func (c *Client) CreateDiscussionThread(ctx context.Context, discussionID int64, body string, _ int64) (int64, error) {
+	var res struct {
+		Thread api.DiscussionThread `json:"thread"`
+	}
+	err := c.do(ctx, "POST", "/discussions/"+fmt.Sprint(discussionID)+"/threads",
+		map[string]any{"body": body}, &res)
+	if err != nil {
+		return 0, err
+	}
+	return res.Thread.ID, nil
+}
+
+func (c *Client) CreateDiscussionComment(ctx context.Context, discussionID, threadID int64, body string, _ int64) (int64, error) {
 	var res struct {
 		Comment api.DiscussionComment `json:"comment"`
 	}
-	err := c.do(ctx, "POST", "/discussions/"+fmt.Sprint(discussionID)+"/comments",
-		map[string]any{"body": body, "parent_id": parentID}, &res)
+	err := c.do(ctx, "POST",
+		"/discussions/"+fmt.Sprint(discussionID)+"/threads/"+fmt.Sprint(threadID)+"/comments",
+		map[string]any{"body": body}, &res)
 	if err != nil {
 		return 0, err
 	}
 	return res.Comment.ID, nil
 }
 
-func (c *Client) SetCommentAnswer(ctx context.Context, discussionID, commentID int64, answer bool) error {
+func (c *Client) SetThreadAnswer(ctx context.Context, discussionID, threadID int64, answer bool) error {
 	return c.do(ctx, "POST",
-		"/discussions/"+fmt.Sprint(discussionID)+"/comments/"+fmt.Sprint(commentID)+"/answer",
+		"/discussions/"+fmt.Sprint(discussionID)+"/threads/"+fmt.Sprint(threadID)+"/answer",
 		map[string]any{"answer": answer}, nil)
 }
 
@@ -153,17 +166,25 @@ func discussionFromDTO(d api.Discussion) *store.Discussion {
 	}
 }
 
-func discussionCommentFromDTO(c api.DiscussionComment, discussionID int64) *store.DiscussionComment {
-	out := &store.DiscussionComment{
-		ID: c.ID, DiscussionID: discussionID, ParentID: c.ParentID,
-		IsAnswer: c.IsAnswer, Body: c.Body,
+func discussionThreadFromDTO(t api.DiscussionThread, discussionID int64) *store.DiscussionThread {
+	out := &store.DiscussionThread{
+		ID: t.ID, DiscussionID: discussionID,
+		IsAnswer: t.IsAnswer, Body: t.Body,
+		Author:    userFromDTO(t.Author),
+		CreatedAt: parseTime(t.CreatedAt),
+	}
+	for _, c := range t.Comments {
+		out.Comments = append(out.Comments, discussionCommentFromDTO(c, t.ID))
+	}
+	return out
+}
+
+func discussionCommentFromDTO(c api.DiscussionComment, threadID int64) *store.DiscussionComment {
+	return &store.DiscussionComment{
+		ID: c.ID, ThreadID: threadID, Body: c.Body,
 		Author:    userFromDTO(c.Author),
 		CreatedAt: parseTime(c.CreatedAt),
 	}
-	for _, rep := range c.Replies {
-		out.Replies = append(out.Replies, discussionCommentFromDTO(rep, discussionID))
-	}
-	return out
 }
 
 func categoryFromDTO(c api.DiscussionCategory) store.DiscussionCategory {

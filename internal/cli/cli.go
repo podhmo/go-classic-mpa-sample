@@ -9,8 +9,8 @@
 //	issues comment create N --body B
 //	issues label list
 //	issues discussion list|view|create|edit|delete
-//	issues discussion comment create N --body B [--parent C]
-//	issues discussion answer N --comment C [--unmark]
+//	issues discussion comment create N --body B [--thread T]
+//	issues discussion answer N --thread T [--unmark]
 //	issues auth token --user NAME | token list | token revoke  (local mode only)
 //	issues api <path> [-X METHOD] [-f k=v]... [-F k=v]...       (remote mode only)
 //	issues completion bash|zsh|fish
@@ -53,9 +53,10 @@ type Backend interface {
 	CreateDiscussion(ctx context.Context, in store.DiscussionInput, authorID int64) (int64, error)
 	UpdateDiscussion(ctx context.Context, id int64, in store.DiscussionInput) error
 	DeleteDiscussion(ctx context.Context, id int64) error
-	ListDiscussionComments(ctx context.Context, discussionID int64) ([]*store.DiscussionComment, error)
-	CreateDiscussionComment(ctx context.Context, discussionID, parentID int64, body string, authorID int64) (int64, error)
-	SetCommentAnswer(ctx context.Context, discussionID, commentID int64, answer bool) error
+	ListDiscussionThreads(ctx context.Context, discussionID int64) ([]*store.DiscussionThread, error)
+	CreateDiscussionThread(ctx context.Context, discussionID int64, body string, authorID int64) (int64, error)
+	CreateDiscussionComment(ctx context.Context, discussionID, threadID int64, body string, authorID int64) (int64, error)
+	SetThreadAnswer(ctx context.Context, discussionID, threadID int64, answer bool) error
 	ListDiscussionCategories(ctx context.Context) ([]*store.DiscussionCategory, error)
 }
 
@@ -188,8 +189,8 @@ Commands:
   comment create N --body B
   label list
   discussion list|view|create|edit|delete
-  discussion comment create N --body B [--parent C]
-  discussion answer N --comment C [--unmark]
+  discussion comment create N --body B [--thread T]
+  discussion answer N --thread T [--unmark]
   auth token --user NAME     issue a per-user API token (local mode only)
   auth token list [--user NAME]      list issued tokens (local mode only)
   auth token revoke (ID|--token T)   revoke a token (local mode only)

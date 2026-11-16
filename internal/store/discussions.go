@@ -1,7 +1,9 @@
 // Discussions: GitHub Discussions-style open conversations (schema version
-// 3, see migrations in store.go). Unlike issues, discussions never close —
-// a Q&A-category discussion reports "answered" through a marked comment
-// instead. Design: docs/sketch/ja/discussions.md (案B: 並列テーブル).
+// 5, see migrations in store.go). Unlike issues, discussions never close —
+// a Q&A-category discussion reports "answered" through a marked thread
+// instead. A discussion holds threads; a thread is its opening post plus
+// a flat list of comment replies. Design: docs/sketch/ja/discussions.md
+// (案B: 並列テーブル), restructured per docs/ja/decisions.md.
 package store
 
 import (
@@ -16,15 +18,13 @@ import (
 // that does not exist (e.g. a hand-crafted POST).
 var ErrInvalidCategory = errors.New("store: unknown discussion category")
 
-// ErrInvalidParent reports a comment reply whose parent is missing, belongs
-// to another discussion, or is itself a reply — only top-level comments may
-// be replied to (one level of nesting, like GitHub).
-var ErrInvalidParent = errors.New("store: reply target is not a top-level comment of this discussion")
+// ErrInvalidThread reports a comment reply whose target thread is missing
+// or belongs to another discussion.
+var ErrInvalidThread = errors.New("store: reply target is not a thread of this discussion")
 
-// ErrNotAnswerable reports an answer mark on a comment that cannot be the
-// answer: the discussion's category is not qa-format, or the comment is a
-// reply rather than a top-level comment.
-var ErrNotAnswerable = errors.New("store: comment cannot be marked as answer")
+// ErrNotAnswerable reports an answer mark on a thread of a discussion
+// whose category is not qa-format.
+var ErrNotAnswerable = errors.New("store: thread cannot be marked as answer")
 
 const (
 	CategoryFormatOpen = "open"
@@ -41,8 +41,8 @@ type DiscussionCategory struct {
 	Format      string // CategoryFormatOpen or CategoryFormatQA
 }
 
-// Discussion is one conversation thread. Answered reports whether any of
-// its comments is marked as the answer (only meaningful for qa categories).
+// Discussion is one conversation. Answered reports whether any of
+// its threads is marked as the answer (only meaningful for qa categories).
 type Discussion struct {
 	ID        int64
 	Title     string
@@ -54,18 +54,28 @@ type Discussion struct {
 	Answered  bool
 }
 
-// DiscussionComment is a comment on a discussion. A zero ParentID is a
-// top-level comment; replies carry their parent's ID (one level only).
-// Replies is populated by ListDiscussionComments on top-level comments.
-type DiscussionComment struct {
+// DiscussionThread is one conversation thread inside a discussion. The
+// thread itself is the opening post (body/author/is_answer live here);
+// Comments holds its replies, populated by ListDiscussionThreads. Only
+// threads — never replies — can be marked as the answer, so the schema
+// keeps one level of nesting by construction.
+type DiscussionThread struct {
 	ID           int64
 	DiscussionID int64
-	ParentID     int64 // 0 = top-level
 	IsAnswer     bool
 	Body         string
 	CreatedAt    time.Time
 	Author       *User // nil for an anonymous post
-	Replies      []*DiscussionComment
+	Comments     []*DiscussionComment
+}
+
+// DiscussionComment is a reply inside a thread.
+type DiscussionComment struct {
+	ID        int64
+	ThreadID  int64
+	Body      string
+	CreatedAt time.Time
+	Author    *User // nil for an anonymous post
 }
 
 // DiscussionInput carries validated form values for create/update.
@@ -79,7 +89,7 @@ type DiscussionInput struct {
 // defaults documented per field.
 type DiscussionListFilter struct {
 	CategorySlug string // "" means all categories
-	Answered     string // "", "yes" (has an answer comment), or "no"
+	Answered     string // "", "yes" (has an answer thread), or "no"
 	Query        string // case-insensitive substring match on title OR body
 	Sort         string // "newest" (default, created_at DESC) or "oldest" (ASC)
 	Page         int    // 1-based; values < 1 are clamped to 1
@@ -176,11 +186,11 @@ func (s *Store) ListDiscussions(ctx context.Context, f DiscussionListFilter) ([]
 
 // discussionAnsweredCond is the EXISTS predicate behind Discussion.Answered
 // and the ?answered= filter: a discussion is answered when one of its
-// comments carries is_answer = 1. The schema's partial unique index keeps
+// threads carries is_answer = 1. The schema's partial unique index keeps
 // that at most one row per discussion.
 const discussionAnsweredCond = `EXISTS (
-	SELECT 1 FROM discussion_comments dc
-	WHERE dc.discussion_id = d.id AND dc.is_answer = 1
+	SELECT 1 FROM discussion_threads dt
+	WHERE dt.discussion_id = d.id AND dt.is_answer = 1
 )`
 
 // GetDiscussion returns one discussion with Category and Answered, or
@@ -259,7 +269,7 @@ func (s *Store) UpdateDiscussion(ctx context.Context, id int64, in DiscussionInp
 	}
 	if format != CategoryFormatQA {
 		if _, err := tx.ExecContext(ctx,
-			"UPDATE discussion_comments SET is_answer = 0 WHERE discussion_id = ? AND is_answer = 1",
+			"UPDATE discussion_threads SET is_answer = 0 WHERE discussion_id = ? AND is_answer = 1",
 			id); err != nil {
 			return err
 		}
@@ -289,59 +299,62 @@ func (s *Store) DeleteDiscussion(ctx context.Context, id int64) error {
 	return checkAffected(res)
 }
 
-// ListDiscussionComments returns the comments of a discussion grouped into
-// threads: top-level comments in chronological order, each with its replies
-// (chronological) attached in Replies. Reply rows never appear at top level.
-func (s *Store) ListDiscussionComments(ctx context.Context, discussionID int64) ([]*DiscussionComment, error) {
+// ListDiscussionThreads returns the threads of a discussion in
+// chronological order, each with its comments (chronological) attached.
+func (s *Store) ListDiscussionThreads(ctx context.Context, discussionID int64) ([]*DiscussionThread, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT c.id, c.discussion_id, c.parent_id, c.is_answer, c.body, c.created_at,
+		`SELECT t.id, t.discussion_id, t.is_answer, t.body, t.created_at,
 			u.id, u.name, u.created_at
-			FROM discussion_comments c LEFT JOIN users u ON u.id = c.author_id
-			WHERE c.discussion_id = ? ORDER BY c.created_at ASC, c.id ASC`,
+			FROM discussion_threads t LEFT JOIN users u ON u.id = t.author_id
+			WHERE t.discussion_id = ? ORDER BY t.created_at ASC, t.id ASC`,
 		discussionID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var flat []*DiscussionComment
+	var out []*DiscussionThread
+	byID := map[int64]*DiscussionThread{}
 	for rows.Next() {
-		c, err := scanDiscussionComment(rows)
+		t, err := scanDiscussionThread(rows)
 		if err != nil {
 			return nil, err
 		}
-		flat = append(flat, c)
+		out = append(out, t)
+		byID[t.ID] = t
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	if len(out) == 0 {
+		return out, nil
+	}
 
-	// Fold the flat chronological list into one-level threads. A reply
-	// whose parent is somehow absent (should not happen under the store's
-	// validation) is surfaced as top-level rather than dropped.
-	byID := make(map[int64]*DiscussionComment, len(flat))
-	for _, c := range flat {
-		byID[c.ID] = c
+	replies, err := s.db.QueryContext(ctx,
+		`SELECT c.id, c.thread_id, c.body, c.created_at,
+			u.id, u.name, u.created_at
+			FROM discussion_comments c LEFT JOIN users u ON u.id = c.author_id
+			WHERE c.thread_id IN (SELECT id FROM discussion_threads WHERE discussion_id = ?)
+			ORDER BY c.created_at ASC, c.id ASC`,
+		discussionID)
+	if err != nil {
+		return nil, err
 	}
-	var out []*DiscussionComment
-	for _, c := range flat {
-		if c.ParentID != 0 {
-			if parent := byID[c.ParentID]; parent != nil {
-				parent.Replies = append(parent.Replies, c)
-				continue
-			}
+	defer replies.Close()
+	for replies.Next() {
+		c, err := scanDiscussionComment(replies)
+		if err != nil {
+			return nil, err
 		}
-		out = append(out, c)
+		byID[c.ThreadID].Comments = append(byID[c.ThreadID].Comments, c)
 	}
-	return out, nil
+	return out, replies.Err()
 }
 
-// CreateDiscussionComment appends a comment — or, when parentID is nonzero,
-// a reply to that top-level comment. Returns ErrNotFound if the discussion
-// is missing and ErrInvalidParent when the parent is not a top-level
-// comment of this discussion. authorID is the posting user's ID, or 0 for
-// an anonymous post.
-func (s *Store) CreateDiscussionComment(ctx context.Context, discussionID, parentID int64, body string, authorID int64) (int64, error) {
+// CreateDiscussionThread opens a thread on the discussion — the post a
+// "comment" form submits. Returns ErrNotFound if the discussion is
+// missing. authorID is the posting user's ID, or 0 for an anonymous post.
+func (s *Store) CreateDiscussionThread(ctx context.Context, discussionID int64, body string, authorID int64) (int64, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
@@ -356,26 +369,61 @@ func (s *Store) CreateDiscussionComment(ctx context.Context, discussionID, paren
 	if err != nil {
 		return 0, err
 	}
-	if parentID != 0 {
-		var pid int64
-		err = tx.QueryRowContext(ctx,
-			"SELECT id FROM discussion_comments WHERE id = ? AND discussion_id = ? AND parent_id IS NULL",
-			parentID, discussionID).Scan(&pid)
-		if errors.Is(err, sql.ErrNoRows) {
-			return 0, ErrInvalidParent
-		}
-		if err != nil {
-			return 0, err
-		}
-	}
 	now := time.Now().UTC().Unix()
 	res, err := tx.ExecContext(ctx,
-		"INSERT INTO discussion_comments(discussion_id, parent_id, body, created_at, author_id) VALUES(?, ?, ?, ?, ?)",
-		discussionID, nullID(parentID), body, now, nullID(authorID))
+		"INSERT INTO discussion_threads(discussion_id, body, created_at, author_id) VALUES(?, ?, ?, ?)",
+		discussionID, body, now, nullID(authorID))
 	if err != nil {
 		return 0, err
 	}
-	// A new comment or reply is activity on the discussion, so bump its
+	if _, err := tx.ExecContext(ctx,
+		"UPDATE discussions SET updated_at = ? WHERE id = ?", now, discussionID); err != nil {
+		return 0, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	return id, tx.Commit()
+}
+
+// CreateDiscussionComment appends a reply to a thread of the discussion.
+// Returns ErrNotFound if the discussion is missing and ErrInvalidThread
+// when the thread does not belong to this discussion. authorID is the
+// posting user's ID, or 0 for an anonymous post.
+func (s *Store) CreateDiscussionComment(ctx context.Context, discussionID, threadID int64, body string, authorID int64) (int64, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	var exists int
+	err = tx.QueryRowContext(ctx, "SELECT 1 FROM discussions WHERE id = ?", discussionID).Scan(&exists)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	if err != nil {
+		return 0, err
+	}
+	var tid int64
+	err = tx.QueryRowContext(ctx,
+		"SELECT id FROM discussion_threads WHERE id = ? AND discussion_id = ?",
+		threadID, discussionID).Scan(&tid)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrInvalidThread
+	}
+	if err != nil {
+		return 0, err
+	}
+	now := time.Now().UTC().Unix()
+	res, err := tx.ExecContext(ctx,
+		"INSERT INTO discussion_comments(thread_id, body, created_at, author_id) VALUES(?, ?, ?, ?)",
+		threadID, body, now, nullID(authorID))
+	if err != nil {
+		return 0, err
+	}
+	// A new thread or reply is activity on the discussion, so bump its
 	// updated_at with the comment's timestamp — the same rule issues use.
 	if _, err := tx.ExecContext(ctx,
 		"UPDATE discussions SET updated_at = ? WHERE id = ?", now, discussionID); err != nil {
@@ -388,14 +436,14 @@ func (s *Store) CreateDiscussionComment(ctx context.Context, discussionID, paren
 	return id, tx.Commit()
 }
 
-// SetCommentAnswer marks (answer=true) or unmarks a top-level comment as
-// the discussion's answer, then bumps the discussion's updated_at — the
+// SetThreadAnswer marks (answer=true) or unmarks a thread as the
+// discussion's answer, then bumps the discussion's updated_at — the
 // mark is activity, the same rule comment posting follows. Only qa-format
 // categories support answers. Returns ErrNotFound when the discussion or
-// comment is missing, and ErrNotAnswerable when the category is not qa or
-// the comment is a reply. Marking a second comment moves the mark; unmarking
-// a comment that is not marked is a no-op.
-func (s *Store) SetCommentAnswer(ctx context.Context, discussionID, commentID int64, answer bool) error {
+// thread is missing (a reply's id also lands here — comments are never
+// answerable), and ErrNotAnswerable when the category is not qa. Marking
+// a second thread moves the mark; unmarking an unmarked thread is a no-op.
+func (s *Store) SetThreadAnswer(ctx context.Context, discussionID, threadID int64, answer bool) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -413,25 +461,12 @@ func (s *Store) SetCommentAnswer(ctx context.Context, discussionID, commentID in
 	if err != nil {
 		return err
 	}
-	var isTopLevel int
+	var isThread int
 	err = tx.QueryRowContext(ctx,
-		"SELECT 1 FROM discussion_comments WHERE id = ? AND discussion_id = ? AND parent_id IS NULL",
-		commentID, discussionID).Scan(&isTopLevel)
+		"SELECT 1 FROM discussion_threads WHERE id = ? AND discussion_id = ?",
+		threadID, discussionID).Scan(&isThread)
 	if errors.Is(err, sql.ErrNoRows) {
-		// Distinguish "comment is a reply" from "comment does not exist":
-		// a reply is a real comment of this discussion, so 422-style
-		// ErrNotAnswerable fits better than a 404.
-		var exists int
-		err2 := tx.QueryRowContext(ctx,
-			"SELECT 1 FROM discussion_comments WHERE id = ? AND discussion_id = ?",
-			commentID, discussionID).Scan(&exists)
-		if err2 == nil {
-			return ErrNotAnswerable
-		}
-		if errors.Is(err2, sql.ErrNoRows) {
-			return ErrNotFound
-		}
-		return err2
+		return ErrNotFound
 	}
 	if err != nil {
 		return err
@@ -444,19 +479,19 @@ func (s *Store) SetCommentAnswer(ctx context.Context, discussionID, commentID in
 		// Move the mark: clear the previous answer (at most one row
 		// thanks to the partial unique index), then set the new one.
 		if _, err := tx.ExecContext(ctx,
-			"UPDATE discussion_comments SET is_answer = 0 WHERE discussion_id = ? AND is_answer = 1",
+			"UPDATE discussion_threads SET is_answer = 0 WHERE discussion_id = ? AND is_answer = 1",
 			discussionID); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx,
-			"UPDATE discussion_comments SET is_answer = 1 WHERE id = ?",
-			commentID); err != nil {
+			"UPDATE discussion_threads SET is_answer = 1 WHERE id = ?",
+			threadID); err != nil {
 			return err
 		}
 	} else {
 		if _, err := tx.ExecContext(ctx,
-			"UPDATE discussion_comments SET is_answer = 0 WHERE id = ?",
-			commentID); err != nil {
+			"UPDATE discussion_threads SET is_answer = 0 WHERE id = ?",
+			threadID); err != nil {
 			return err
 		}
 	}
@@ -487,19 +522,30 @@ func scanDiscussion(s scanner) (*Discussion, error) {
 	return &d, nil
 }
 
-func scanDiscussionComment(s scanner) (*DiscussionComment, error) {
-	var c DiscussionComment
+func scanDiscussionThread(s scanner) (*DiscussionThread, error) {
+	var t DiscussionThread
 	var ts int64
-	var pid sql.NullInt64
 	var aid sql.NullInt64
 	var aname sql.NullString
 	var acreated sql.NullInt64
-	if err := s.Scan(&c.ID, &c.DiscussionID, &pid, &c.IsAnswer, &c.Body, &ts,
+	if err := s.Scan(&t.ID, &t.DiscussionID, &t.IsAnswer, &t.Body, &ts,
 		&aid, &aname, &acreated); err != nil {
 		return nil, err
 	}
-	if pid.Valid {
-		c.ParentID = pid.Int64
+	t.CreatedAt = time.Unix(ts, 0).UTC()
+	t.Author = scanUser(aid, aname, acreated)
+	return &t, nil
+}
+
+func scanDiscussionComment(s scanner) (*DiscussionComment, error) {
+	var c DiscussionComment
+	var ts int64
+	var aid sql.NullInt64
+	var aname sql.NullString
+	var acreated sql.NullInt64
+	if err := s.Scan(&c.ID, &c.ThreadID, &c.Body, &ts,
+		&aid, &aname, &acreated); err != nil {
+		return nil, err
 	}
 	c.CreatedAt = time.Unix(ts, 0).UTC()
 	c.Author = scanUser(aid, aname, acreated)
