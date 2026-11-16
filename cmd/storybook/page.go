@@ -22,6 +22,7 @@ type entry struct {
 	Grid   string // this story's variants grid, for the toolbar's grid action
 	Hay    string // lowercased haystack the filter matches: name + doc + group
 	Target string // "story" in the static export, "_blank" for served http stories
+	Hidden bool   // a non-match under ?q=: rendered but hidden so JS can restore it
 	Err    string
 }
 
@@ -33,6 +34,7 @@ type group struct {
 	Href    string // where the grid pill points (serve: ?g=, export: grid_X.html)
 	Src     string // the grid document itself (serve: /grid/, export: grid_X.html)
 	Target  string
+	Hidden  bool // every entry filtered out under ?q=
 	Entries []entry
 }
 
@@ -174,6 +176,7 @@ search form { display: flex; gap: .375rem; }
 .gpill.active { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); font-weight: 600; }
 .story { display: block; margin-top: .15rem; padding: .3rem .5rem; border-left: 2px solid transparent; border-radius: 0 6px 6px 0; color: inherit; text-decoration: none; font-size: .8rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; line-height: 1.4; overflow-wrap: anywhere; }
 .story:hover { background: var(--surface-hover); }
+.story[hidden], .grp[hidden] { display: none; }
 .story:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .story.active { background: var(--accent-soft); border-left-color: var(--accent); color: var(--accent); font-weight: 600; }
 .story .ext { color: var(--text-muted); font-size: .8em; }
@@ -220,12 +223,12 @@ search form { display: flex; gap: .375rem; }
 <div class="meta" id="count">{{if .Q}}{{.Matched}} of {{.Total}} shown{{end}}</div>
 </header>
 <div class="list" id="list">
-{{range .Groups}}<section class="grp">
+{{range .Groups}}<section class="grp"{{if .Hidden}} hidden{{end}}>
 {{if .Name}}<div class="grp-h"><span class="grp-name">{{.Name}}</span><span class="grp-n">{{len .Entries}}</span><a class="gpill{{if eq .Name $.G}} active{{end}}" href="{{.Href}}"{{if .Target}} target="{{.Target}}"{{end}} data-kind="grid" data-src="{{.Src}}" data-name="{{.Name}}" title="all variants side by side">&#8858; grid</a></div>{{end}}
-{{range .Entries}}<a class="story{{if eq .Name $.S}} active{{end}}" href="{{.Href}}"{{if .Target}} target="{{.Target}}"{{end}}{{if .Src}} data-kind="story" data-src="{{.Src}}"{{end}} data-name="{{.Name}}" data-group="{{.Group}}" data-pos="{{.Pos}}" data-grid="{{.Grid}}" data-haystack="{{.Hay}}" title="{{.Pos}}"{{if eq .Name $.S}} aria-current="true"{{end}}>{{.Name}}{{if .IsHTTP}}<span class="ext" title="opens in a new tab">&#8599;</span>{{end}}
+{{range .Entries}}<a class="story{{if eq .Name $.S}} active{{end}}" href="{{.Href}}"{{if .Target}} target="{{.Target}}"{{end}}{{if .Src}} data-kind="story" data-src="{{.Src}}"{{end}} data-name="{{.Name}}" data-group="{{.Group}}" data-pos="{{.Pos}}" data-grid="{{.Grid}}" data-haystack="{{.Hay}}" title="{{.Pos}}"{{if eq .Name $.S}} aria-current="true"{{end}}{{if .Hidden}} hidden{{end}}>{{.Name}}{{if .IsHTTP}}<span class="ext" title="opens in a new tab">&#8599;</span>{{end}}
 {{if .Doc}}<small>{{.Doc}}</small>{{end}}{{if .Err}}<small class="err">{{.Err}}</small>{{end}}</a>
 {{end}}</section>
-{{end}}{{if .None}}<p class="none">no stories match &#8220;{{.Q}}&#8221;</p>{{end}}
+{{end}}<p class="none" id="nonemsg"{{if not .None}} hidden{{end}}>no stories match &#8220;{{.Q}}&#8221;</p>
 </div>
 </nav>
 <div class="stage">
@@ -234,7 +237,7 @@ search form { display: flex; gap: .375rem; }
 <strong class="cur" id="bn">{{.BarName}}</strong>
 <span class="pos" id="bp">{{.BarPos}}</span>
 <span class="bact">
-<a class="blink" id="bgrid" href="{{.BarGridHref}}"{{if .BarGridSrc}} data-kind="grid" data-src="{{.BarGridSrc}}" data-name="{{.BarGroup}}"{{else}} hidden{{end}}>&#8858; grid</a>
+<a class="blink" id="bgrid" href="{{.BarGridHref}}" data-kind="grid"{{if .BarGridSrc}} data-src="{{.BarGridSrc}}" data-name="{{.BarGroup}}"{{else}} hidden{{end}}>&#8858; grid</a>
 <a class="blink" id="braw" href="{{.BarRaw}}" target="_blank" rel="noopener">open &#8599;</a>
 </span>
 <div class="viewport">{{range .Widths}}<a class="wlink{{if eq . $.W}} active{{end}}" href="?w={{.}}&s={{$.S}}&g={{$.G}}&q={{$.Q}}" data-w="{{.}}">{{if .}}{{.}}px{{else}}full{{end}}</a>{{end}}</div>
@@ -248,6 +251,7 @@ search form { display: flex; gap: .375rem; }
   var q = document.getElementById('q');
   var list = document.getElementById('list');
   var count = document.getElementById('count');
+  var nonemsg = document.getElementById('nonemsg');
   var barG = document.getElementById('bg'), barN = document.getElementById('bn');
   var barP = document.getElementById('bp'), barRaw = document.getElementById('braw');
   var barGrid = document.getElementById('bgrid');
@@ -328,6 +332,8 @@ search form { display: flex; gap: .375rem; }
       shown += vis;
     });
     count.textContent = tokens.length ? shown + ' of ' + rows.length + ' shown' : '';
+    nonemsg.hidden = shown > 0;
+    if (!nonemsg.hidden) nonemsg.textContent = 'no stories match \u201c' + q.value.trim() + '\u201d';
     var p = new URLSearchParams(location.search);
     if (q.value.trim()) p.set('q', q.value.trim()); else p.delete('q');
     var qs = p.toString();
@@ -684,22 +690,29 @@ func (b *Book) Handler() http.Handler {
 		if q != "" {
 			state += "&q=" + url.QueryEscape(q)
 		}
+		// Non-matching stories are rendered with a hidden marker rather
+		// than omitted: no-JS readers still get the filtered view, and
+		// the live filter can un-hide rows when the query changes.
 		var entries []entry
+		matched := 0
 		for _, s := range stories {
-			if q != "" && !matchStory(s, q) {
-				continue
-			}
+			e := entry{Story: s, Hay: haystack(s), Hidden: q != "" && !matchStory(s, q)}
 			if s.IsHTTP() {
 				// Handler stories replay the app's real response headers,
 				// which can include frame-ancestors 'none' / X-Frame-Options:
 				// DENY — they may not render inside the iframe, so they
 				// open in a new tab with the headers intact.
-				entries = append(entries, entry{Story: s, Href: "/story/" + s.Name, Target: "_blank", Hay: haystack(s)})
-				continue
+				e.Href = "/story/" + s.Name
+				e.Target = "_blank"
+			} else {
+				e.Href = "?s=" + s.Name + state
+				e.Src = "/story/" + s.Name
+				if s.Group != "" {
+					e.Grid = "/grid/" + s.Group
+				}
 			}
-			e := entry{Story: s, Href: "?s=" + s.Name + state, Src: "/story/" + s.Name, Hay: haystack(s)}
-			if s.Group != "" {
-				e.Grid = "/grid/" + s.Group
+			if !e.Hidden {
+				matched++
 			}
 			entries = append(entries, e)
 		}
@@ -735,6 +748,16 @@ func (b *Book) Handler() http.Handler {
 			}
 		}
 		groups := groupEntries(entries)
+		for i := range groups {
+			visible := false
+			for _, e := range groups[i].Entries {
+				if !e.Hidden {
+					visible = true
+					break
+				}
+			}
+			groups[i].Hidden = !visible
+		}
 		// ?g=<renderFunc> previews the variants grid inside the index
 		// frame, the same pane stories render in; the grid page itself
 		// stays reachable for a full-width compare.
@@ -768,8 +791,8 @@ func (b *Book) Handler() http.Handler {
 			"W":         wpx,
 			"Q":         q,
 			"Total":     len(stories),
-			"Matched":   len(entries),
-			"None":      q != "" && len(entries) == 0,
+			"Matched":   matched,
+			"None":      q != "" && matched == 0,
 			"Widths":    []string{"", "320", "360", "768"},
 			"ScriptTag": b.ScriptTag(),
 		}
@@ -811,12 +834,17 @@ func (b *Book) Handler() http.Handler {
 			return
 		}
 		if err := gridTmpl.Execute(w, map[string]any{
-			"Index":     "/",
-			"Name":      name,
-			"Stories":   entries,
-			"W":         r.URL.Query().Get("w"),
-			"Widths":    []string{"", "320", "360", "768"},
-			"ScriptTag": b.ScriptTag(),
+			"Index": "/",
+			// The grid also renders inside the index's preview iframe
+			// (?g=): its index/story links must leave the frame, not
+			// nest a second index inside it. Standalone, _top is the
+			// same tab anyway.
+			"IndexTarget": "_top",
+			"Name":        name,
+			"Stories":     entries,
+			"W":           r.URL.Query().Get("w"),
+			"Widths":      []string{"", "320", "360", "768"},
+			"ScriptTag":   b.ScriptTag(),
 		}); err != nil {
 			slog.ErrorContext(r.Context(), "grid", "err", err)
 		}

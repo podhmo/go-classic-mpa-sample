@@ -168,11 +168,20 @@ func TestHandler(t *testing.T) {
 	if other != "" {
 		rec = httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/?q="+aPrint, nil))
-		if !strings.Contains(rec.Body.String(), `data-name="`+aPrint+`"`) {
+		body = rec.Body.String()
+		if !strings.Contains(body, `data-name="`+aPrint+`"`) {
 			t.Errorf("filtered index drops %s", aPrint)
 		}
-		if strings.Contains(rec.Body.String(), `data-name="`+other+`"`) {
-			t.Errorf("filtered index keeps non-matching %s", other)
+		// Non-matching rows stay in the DOM (hidden) so the client-side
+		// filter can restore them when the query changes.
+		i := strings.Index(body, `data-name="`+other+`"`)
+		if i < 0 {
+			t.Errorf("filtered index omits non-matching %s", other)
+		} else {
+			end := strings.Index(body[i:], ">")
+			if end < 0 || !strings.HasSuffix(body[i:i+end], " hidden") {
+				t.Errorf("non-matching %s is not marked hidden", other)
+			}
 		}
 	}
 
