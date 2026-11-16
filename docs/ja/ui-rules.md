@@ -115,6 +115,75 @@
   以上**に引き上げ。
 - [正] **英文 UI**。ボタンは動詞、見出し・ラベルは名詞形で統一。
 
+## 10. アクセシビリティ・キーボード操作
+
+- [正] **リンクとボタンの使い分け**: 画面遷移は `<a>`、状態変更は
+  `<form>` + `<button>`（Cancel が `<a>`、送信が `<button>` の構造を
+  全フォームで維持する）。
+- [正] **フォーカスリング**: `:focus-visible` で全対話要素に 2px
+  アウトライン。スキップリンクを `<body>` 先頭に置く。
+- [正] **アイコン・装飾は alt 空 or `aria-hidden`** でアクセシビリティ
+  ツリーから外す。繰り返し出るボタンの accessible name は対象 ID 込みで
+  一意化する（"Post comment on thread N" パターン。可視ラベルはその
+  部分文字列 = WCAG 2.5.3）。
+- [正] **現在地表示は色だけに頼らない**: `aria-current="page"` +
+  underline・太字の複合（サイトナビ・ステータスタブ・パンくずで共通）。
+
+## 11. 色・テーマ・コントラスト
+
+- [正] **ライト/ダーク両対応**: `light-dark()` + `prefers-color-scheme`
+  メディアクエリのフォールバックの 2 系統で定義する。単一スキームの
+  ハードコード色は使わない。
+- [正] **塗り要素の文字コントラストは 4.5:1 以上を計算で担保**
+  （`--accent-emphasis` / `--danger-emphasis` / `--on-emphasis` 系を使う。
+  リンク用 `--accent` に直接白文字を載せない）。
+- [正] **状態色は形も変える**（Open=中抜きリング、Closed=塗り円の
+  `::before`）。色のみに依存した区別をしない。
+
+## 12. タイポグラフィ・モーション
+
+- [正] **フォントは rem 基準**（OS の text-scale・ブラウザ設定に従う。
+  px 固定しない。iOS Safari のフォーカスズーム対策として入力は
+  `font-size: max(1rem, 1em)`）。
+- [正] **アニメーションは `prefers-reduced-motion` で無効化できる**。
+  view transition・トランジション系は必ず reduce 系メディアクエリの
+  フォールバックを持つ。
+- [正] **長文の扱い**: `overflow-wrap: anywhere`、一覧タイトルは 2 行
+  クランプ、ラベルバッジは ellipsis + hover/focus 展開。
+
+## 13. 操作フィードバック・その他
+
+- [正] **破壊的でない状態変更は `btn-quiet`**（Mark as answer 等）—
+  Primary でも Danger でもない第三の階層。
+- [正] **コピー等の小さなフィードバックは `role="status"` のインライン
+  表示 + 数秒で消去**（toast までは使わない）。
+- [正] **状態変更は POST → 303 → GET（PRG）**。`data-partial` 部分更新の
+  アナウンスは toast / live region の 1 系統に統一（複数 region で競合
+  させない）。
+- [正] **ページネーションは Previous/Next + "Page X of Y"**、端では
+  `btn-disabled` の非リンク表記。
+- [正] **エラーページはコード表示 + 戻り先リンク 1 本**（error.html）。
+
+## 14. モバイル・タッチ
+
+- [正] **タップターゲットは `@media (pointer: coarse)` で 44px 以上**
+  （セクション 9 と同規定。checkbox/radio は除外するが `<label>` 行全体を
+  クリック可能にしてカバーする）。
+- [正] **hover 前提の UI を作らない**: hover で初めて現れる操作は
+  `@media (hover: hover)` でゲートし、タッチ環境では常時表示にする
+  （copy-btn のパターン）。
+- [正] **狭幅はコンテナクエリ / `auto-fit` で自然に積む**（filter-bar・
+  issue-row）。ビューポート基準の 40em ブレークポイントは page-head と
+  issue-actions の縦積み用のみ。
+- [変更予定] **safe-area-inset 未考慮**: 固定要素（toast・back-to-top）
+  がノッチ/ホームインジケータに被りうる → `env(safe-area-inset-*)` を
+  加味する。
+- [変更予定] **sticky hover**: iOS でタップ後に hover スタイルが残る
+  問題。装飾的な `:hover` も `@media (hover: hover)` でガードする
+  方針へ統一する（現状は copy-btn のみガード済み）。
+- [変更予定] **固定要素が狭画面でフォーム送信ボタン等を覆う可能性**
+  （back-to-top/toast）→ 表示位置か表示条件を見直す。
+
 ## N/A（対象外）一覧
 
 該当 UI・機能が存在しないため監査対象外とした項目。将来機能を追加する際の
@@ -140,3 +209,6 @@
 3. **コメント欄が空のとき送信 Disabled**（6-1）
 4. **返信の部分投稿後に `<details>` を畳む**（6-6）
 5. **入力中の離脱ガード**（3-7）
+6. **モバイル対応の残件** — `env(safe-area-inset-*)` の加味、`:hover` の
+   `@media (hover: hover)` ガード統一、狭画面で固定要素が操作を覆わない
+   配置の見直し（セクション 14）
