@@ -276,6 +276,11 @@ CREATE TABLE issues_new (
 INSERT INTO issues_new(id, workspace_id, title, body, status, created_at, updated_at, author_id)
 	SELECT i.id, w.id, i.title, i.body, i.status, i.created_at, i.updated_at, i.author_id
 	FROM issues i, workspaces w WHERE w.slug = 'default';
+-- Preserve AUTOINCREMENT history: DROP removes the old table's
+-- sqlite_sequence row, so copy it to the replacement or a previously
+-- deleted (highest) issue number gets reused.
+UPDATE sqlite_sequence SET seq = MAX(seq, IFNULL((SELECT seq FROM sqlite_sequence WHERE name='issues'), 0))
+	WHERE name='issues_new';
 DROP TABLE issues;
 ALTER TABLE issues_new RENAME TO issues;
 CREATE INDEX idx_issues_workspace_status_created ON issues(workspace_id, status, created_at);
@@ -292,6 +297,8 @@ CREATE TABLE discussions_new (
 INSERT INTO discussions_new(id, workspace_id, category_id, author_id, title, body, created_at, updated_at)
 	SELECT d.id, w.id, d.category_id, d.author_id, d.title, d.body, d.created_at, d.updated_at
 	FROM discussions d, workspaces w WHERE w.slug = 'default';
+UPDATE sqlite_sequence SET seq = MAX(seq, IFNULL((SELECT seq FROM sqlite_sequence WHERE name='discussions'), 0))
+	WHERE name='discussions_new';
 DROP TABLE discussions;
 ALTER TABLE discussions_new RENAME TO discussions;
 CREATE INDEX idx_discussions_workspace_created ON discussions(workspace_id, created_at);
