@@ -422,16 +422,17 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request, ws *stor
 	body := strings.TrimSpace(r.PostFormValue("body"))
 	partial := wantsPartial(r)
 
+	issue, err := h.store.GetIssue(r.Context(), id)
+	if err != nil {
+		h.issueError(w, r, err)
+		return
+	}
+	if !h.requireScope(w, r, ws, issue.WorkspaceID) {
+		return
+	}
+
 	errMsg := store.ValidateCommentBody(body)
 	if errMsg != "" {
-		issue, err := h.store.GetIssue(r.Context(), id)
-		if err != nil {
-			h.issueError(w, r, err)
-			return
-		}
-		if !h.requireScope(w, r, ws, issue.WorkspaceID) {
-			return
-		}
 		// A partial request swaps only the form; no list reload.
 		if partial {
 			h.r.renderFragment(w, "issue_detail", "issue_comment_form", http.StatusUnprocessableEntity, issueDetailPage{
@@ -469,14 +470,7 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request, ws *stor
 	if partial {
 		// The fragment also carries the header meta as a data-swap node —
 		// the comment bumped updated_at, so the stale "Last updated" line
-		// must be re-rendered. GetIssue returns the true post-state.
-		issue, err := h.store.GetIssue(r.Context(), id)
-		if err != nil {
-			h.issueError(w, r, err)
-			return
-		}
-		// The comment <li> shows what the client will see after the swap;
-		// re-fetching the row would only repeat what we set.
+		// must be re-rendered. The issue was fetched pre-write above.
 		h.r.renderFragment(w, "issue_detail", "issue_comment_append", http.StatusOK, dict(
 			"Workspace", ws,
 			"Issue", issue,
