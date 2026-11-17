@@ -18,7 +18,10 @@
   プロジェクトの固有名ではない点は弱み（後述）。
 - 名前は現時点で**未定** — リポジトリ名 `go-classic-mpa-sample` は実験の
   題材を説明する名前であって、アプリ・コマンドの自称ではない。
-- 方向を変えるなら **`bbs` / `bbsd`**（classic な Web の空気 + discussion を
+- 依頼主案の **`zatudan`（サーバ/アプリ名）+ `zat`（CLI 短縮）** も有力。
+  「app に長い名・CLI に短縮」は GitHub→gh、postgres→psql、
+  redis-server→redis-cli と同じ配分。
+- その他: **`bbs` / `bbsd`**（classic な Web の空気 + discussion を
   自然に含む）、日本語枠なら **`fuda` / `madoguchi` / `kakari`**。
 - リポジトリ名・module path は据え置き（意図に沿っているため）。ルート
   `go build` のバイナリ名は module path 末端由来なので、素直な解決は
@@ -139,6 +142,38 @@ issue tracker の initials。`gh` と同じ 2 文字枠。
   短いが、madoguchi の語感は残らない）
 - `kakari`（係）: 「担当者」が CLI に居る感じ。`kakari issue list` で読める。
   6 文字
+
+### 案 F: `zatudan` / `zat`（依頼主案）
+
+アプリの固有名として `zatudan`（雑談／座談）、CLI には短縮の `zat` を
+充てる案。
+
+```sh
+zat issue list
+zat discussion list
+zatudan -addr :8080 -db app.db init     # サーバ側
+```
+
+- 良い点: 固有名としての「らしさ」が一番強い（`kamidana`/`slops` 系の
+  名付け）。雑談と座談の読み違いが効く — 「気軽に話題を持ち込む場」と
+  「議題を囲む場」の二層で、issue（案件）も discussion（雑談）もどちらも
+  「話題」として収まる。衝突も見当たらない。
+- 悪い点: `zatudan` は 7 文字で CLI 名としては長い → 短縮形が必要になる。
+  issue 側の意味づけは「話題」まで引っ張る解釈なので、issue tracker として
+  見ると座ってしまう人もいるかもしれない。
+
+**短縮名はどちらに付けるか**: 前例を見ると「アプリ・サーバ側にフルネーム、
+利用者が日々打つクライアント側に短縮名」が主流（GitHub→`gh`、
+Gitea→`tea`、GitLab→`glab`、postgres→`psql`、redis-server→`redis-cli`）。
+docker/dockerd 型の「クライアントが基準名、サーバが +d」もある。zatudan
+に当てはめると前者、つまり **server=`zatudan` / CLI=`zat`** が自然。
+短縮形は `zat`（3 文字、「ザット」と読める）が第一候補。`zatu`（4 文字）
+`zt`（2 文字・暗号めく）も挙げられる。統一感を優先して `zat`/`zatd`
+（dockerd 型）にする道もある。
+
+環境変数・DB 名の揃え方は 2 通り考えられる: 短縮形に揃える
+（`ZAT_*`・`zat.db`、gh の `GH_*` 式）か、app 名に揃える
+（`ZATUDAN_*`・`zatudan.db`。cli 側だけ `ZAT_*` に分ける手もある）。
 
 ### 却下寄りの候補
 
