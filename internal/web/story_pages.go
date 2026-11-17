@@ -48,32 +48,36 @@ var (
 	storyIssues = []*store.Issue{
 		{
 			ID: 3, Title: "Long unbreakable title Anticonstitutionnellement-supercalifragilisticexpialidocious overflowing the row",
-			Body:      "A very long single-line title to check clamping.",
-			Status:    store.StatusOpen,
-			CreatedAt: storyTime2, UpdatedAt: storyTime2,
+			WorkspaceID: 1,
+			Body:        "A very long single-line title to check clamping.",
+			Status:      store.StatusOpen,
+			CreatedAt:   storyTime2, UpdatedAt: storyTime2,
 			Labels: []store.Label{*storyLabels[0], *storyLabels[3]},
 		},
 		{
 			ID: 2, Title: "Improve responsive layout",
-			Body:      "The filter bar wraps poorly on narrow screens.",
-			Status:    store.StatusOpen,
-			CreatedAt: storyTime, UpdatedAt: storyTime2,
+			WorkspaceID: 1,
+			Body:        "The filter bar wraps poorly on narrow screens.",
+			Status:      store.StatusOpen,
+			CreatedAt:   storyTime, UpdatedAt: storyTime2,
 			Labels: []store.Label{*storyLabels[1]},
 		},
 		{
 			ID: 1, Title: "Fix escaping in titles",
-			Body:      "Done.",
-			Status:    store.StatusClosed,
-			CreatedAt: storyTime, UpdatedAt: storyTime,
+			WorkspaceID: 1,
+			Body:        "Done.",
+			Status:      store.StatusClosed,
+			CreatedAt:   storyTime, UpdatedAt: storyTime,
 			Labels: []store.Label{*storyLabels[0], *storyLabels[2]},
 		},
 	}
 
 	storyIssue = &store.Issue{
 		ID: 2, Title: "Improve responsive layout",
-		Body:      "The **filter bar** wraps poorly on narrow screens.\n\n- [ ] check 360px\n- [ ] check `label` select\n\n> [!NOTE]\n> Single newlines should render as line breaks.",
-		Status:    store.StatusOpen,
-		CreatedAt: storyTime, UpdatedAt: storyTime2,
+		WorkspaceID: 1,
+		Body:        "The **filter bar** wraps poorly on narrow screens.\n\n- [ ] check 360px\n- [ ] check `label` select\n\n> [!NOTE]\n> Single newlines should render as line breaks.",
+		Status:      store.StatusOpen,
+		CreatedAt:   storyTime, UpdatedAt: storyTime2,
 		Labels: []store.Label{*storyLabels[0], *storyLabels[1]},
 	}
 
@@ -92,31 +96,35 @@ var (
 	storyDiscussions = []*store.Discussion{
 		{
 			ID: 3, Title: "Release v0.3 is out",
-			Body:      "Small announcement.",
-			Category:  *storyCategories[0],
-			CreatedAt: storyTime2, UpdatedAt: storyTime2,
+			WorkspaceID: 1,
+			Body:        "Small announcement.",
+			Category:    *storyCategories[0],
+			CreatedAt:   storyTime2, UpdatedAt: storyTime2,
 		},
 		{
 			ID: 2, Title: "How do custom labels get their color?",
-			Body:      "I cannot find where the palette is defined.",
-			Category:  *storyCategories[3],
-			CreatedAt: storyTime, UpdatedAt: storyTime2,
+			WorkspaceID: 1,
+			Body:        "I cannot find where the palette is defined.",
+			Category:    *storyCategories[3],
+			CreatedAt:   storyTime, UpdatedAt: storyTime2,
 			Labels:   []store.Label{*storyDLabels[0]},
 			Answered: true,
 		},
 		{
 			ID: 1, Title: "Idea: keyboard navigation for the filter bar",
-			Body:      "It would be nice to move between filters with arrow keys.",
-			Category:  *storyCategories[2],
-			CreatedAt: storyTime, UpdatedAt: storyTime,
+			WorkspaceID: 1,
+			Body:        "It would be nice to move between filters with arrow keys.",
+			Category:    *storyCategories[2],
+			CreatedAt:   storyTime, UpdatedAt: storyTime,
 		},
 	}
 
 	storyDiscussion = &store.Discussion{
 		ID: 2, Title: "How do custom labels get their color?",
-		Body:      "I cannot find where the **palette** is defined.",
-		Category:  *storyCategories[3],
-		CreatedAt: storyTime, UpdatedAt: storyTime2,
+		WorkspaceID: 1,
+		Body:        "I cannot find where the **palette** is defined.",
+		Category:    *storyCategories[3],
+		CreatedAt:   storyTime, UpdatedAt: storyTime2,
 		Labels:   []store.Label{*storyDLabels[0], *storyArchivedLabels[1]},
 		Answered: true,
 	}
@@ -855,6 +863,7 @@ func StoryIssueCommentFormFragment() {
 		Issue:        storyIssue,
 		CommentDraft: "kept as the draft",
 		CommentError: "Body is required.",
+		Workspace:    storyWorkspace,
 	})
 }
 
@@ -862,14 +871,14 @@ func StoryIssueCommentFormFragment() {
 // <li> — collapsed reply form and qa answer button included.
 func StoryDiscussionCommentFragment() {
 	renderFragment("discussion_detail", "discussion_comment", http.StatusOK,
-		dict("Discussion", storyDiscussion, "C", storyDThreads[1]))
+		dict("Discussion", storyDiscussion, "C", storyDThreads[1], "Workspace", storyWorkspace))
 }
 
 // StoryDiscussionReplyFragment renders the reply <li> appended to the
 // parent's .comment-replies by a partial reply POST.
 func StoryDiscussionReplyFragment() {
 	renderFragment("discussion_detail", "discussion_reply", http.StatusOK,
-		dict("Discussion", storyDiscussion, "C", storyDThreads[0].Comments[0]))
+		dict("Discussion", storyDiscussion, "C", storyDThreads[0].Comments[0], "Workspace", storyWorkspace))
 }
 
 // storyPost builds a urlencoded form POST for the replay stories, body
@@ -887,38 +896,38 @@ func storyPost(target string, form url.Values, partial bool) *http.Request {
 // StoryHttpCreateCommentPartial replays a comment POST with X-Partial:
 // the mux answers the new comment's fragment instead of a 303 redirect.
 func StoryHttpCreateCommentPartial(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, storyPost("/issues/2/comments", url.Values{"body": {"posted via fetch"}}, true))
+	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/issues/2/comments", url.Values{"body": {"posted via fetch"}}, true))
 }
 
 // StoryHttpCreateCommentRedirect replays the same POST without the
 // header — the unchanged full-reload path answering 303 #comment-N.
 func StoryHttpCreateCommentRedirect(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, storyPost("/issues/2/comments", url.Values{"body": {"classic post"}}, false))
+	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/issues/2/comments", url.Values{"body": {"classic post"}}, false))
 }
 
 // StoryHttpCreateCommentPartialError replays a partial post with an
 // empty body: the 422 response is the error-marked form fragment.
 func StoryHttpCreateCommentPartialError(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, storyPost("/issues/2/comments", url.Values{"body": {""}}, true))
+	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/issues/2/comments", url.Values{"body": {""}}, true))
 }
 
 // StoryHttpCreateDiscussionReplyPartial replays a partial reply POST:
 // the fragment carries comment-reply markup for .comment-replies.
 func StoryHttpCreateDiscussionReplyPartial(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, storyPost("/discussions/2/comments", url.Values{"body": {"a reply"}, "thread_id": {"1"}}, true))
+	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/discussions/2/comments", url.Values{"body": {"a reply"}, "thread_id": {"1"}}, true))
 }
 
 // StoryHttpSetStatusPartial replays a partial status toggle: the mux
 // answers the re-rendered issue article — badge, meta and flipped button
 // — that replace mode swaps over .issue-detail.
 func StoryHttpSetStatusPartial(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, storyPost("/issues/2/status", url.Values{"status": {"closed"}}, true))
+	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/issues/2/status", url.Values{"status": {"closed"}}, true))
 }
 
 // StoryHttpSetStatusRedirect replays the same POST without X-Partial —
 // the unchanged 303 PRG path.
 func StoryHttpSetStatusRedirect(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, storyPost("/issues/2/status", url.Values{"status": {"closed"}}, false))
+	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/issues/2/status", url.Values{"status": {"closed"}}, false))
 }
 
 // StoryHttpSetCommentAnswerPartial replays a partial answer mark on the
@@ -926,13 +935,13 @@ func StoryHttpSetStatusRedirect(w http.ResponseWriter, r *http.Request) {
 // two <li>s — the newly marked comment 2 and comment 1 losing the mark —
 // each self-targeting by id.
 func StoryHttpSetCommentAnswerPartial(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, storyPost("/discussions/2/comments/2/answer", url.Values{"answer": {"1"}}, true))
+	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/discussions/2/comments/2/answer", url.Values{"answer": {"1"}}, true))
 }
 
 // StoryHttpSetCommentAnswerRedirect replays the same POST without
 // X-Partial — the unchanged 303 #comment-N path.
 func StoryHttpSetCommentAnswerRedirect(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, storyPost("/discussions/2/comments/2/answer", url.Values{"answer": {"1"}}, false))
+	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/discussions/2/comments/2/answer", url.Values{"answer": {"1"}}, false))
 }
 
 // StoryHttpApp routes the real incoming request through the app's mux.
