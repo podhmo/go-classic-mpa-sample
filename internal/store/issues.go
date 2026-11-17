@@ -176,7 +176,7 @@ func (s *Store) CreateIssue(ctx context.Context, wsID int64, in IssueInput, auth
 	if err != nil {
 		return 0, err
 	}
-	if err := setIssueLabels(ctx, tx, id, in.LabelIDs); err != nil {
+	if err := setIssueLabels(ctx, tx, id, wsID, in.LabelIDs); err != nil {
 		return 0, err
 	}
 	if err := s.commitTx(ctx, tx, events.Change{Topic: events.IssuesTopic, Kind: events.KindNew, Target: id}); err != nil {
@@ -203,7 +203,11 @@ func (s *Store) UpdateIssue(ctx context.Context, id int64, in IssueInput) error 
 	if err := checkAffected(res); err != nil {
 		return err
 	}
-	if err := setIssueLabels(ctx, tx, id, in.LabelIDs); err != nil {
+	var wsID int64
+	if err := tx.QueryRowContext(ctx, "SELECT workspace_id FROM issues WHERE id = ?", id).Scan(&wsID); err != nil {
+		return err
+	}
+	if err := setIssueLabels(ctx, tx, id, wsID, in.LabelIDs); err != nil {
 		return err
 	}
 	if err := s.commitTx(ctx, tx, events.Change{Topic: events.IssueTopic(id), Kind: events.KindEdit, Target: id}); err != nil {
@@ -338,7 +342,7 @@ func (s *Store) attachLabels(ctx context.Context, issues []*Issue) error {
 		ph[i] = "?"
 		args[i] = is.ID
 	}
-	q := `SELECT il.issue_id, l.id, l.name, l.color
+	q := `SELECT il.issue_id, l.id, l.name, l.color, l.kind, COALESCE(l.workspace_id, 0), l.archived
 		FROM issue_labels il JOIN labels l ON l.id = il.label_id
 		WHERE il.issue_id IN (` + strings.Join(ph, ",") + `) ORDER BY l.name`
 	rows, err := s.db.QueryContext(ctx, q, args...)
@@ -349,7 +353,7 @@ func (s *Store) attachLabels(ctx context.Context, issues []*Issue) error {
 	for rows.Next() {
 		var issueID int64
 		var l Label
-		if err := rows.Scan(&issueID, &l.ID, &l.Name, &l.Color); err != nil {
+		if err := rows.Scan(&issueID, &l.ID, &l.Name, &l.Color, &l.Kind, &l.WorkspaceID, &l.Archived); err != nil {
 			return err
 		}
 		if is := byID[issueID]; is != nil {
@@ -360,8 +364,14 @@ func (s *Store) attachLabels(ctx context.Context, issues []*Issue) error {
 }
 
 // setIssueLabels replaces the label set of an issue inside tx.
-func setIssueLabels(ctx context.Context, tx *sql.Tx, issueID int64, labelIDs []int64) error {
-	if _, err := tx.ExecContext(ctx, "DELETE FROM issue_labels WHERE issue_id = ?", issueID); err != nil {
+// Attachments to archived labels survive the replace: they are not
+// selectable in pickers, so an unrelated edit cannot carry them and must
+// not drop them. Only master (workspace_id NULL) and the issue's own
+// workspace labels may be attached.
+func setIssueLabels(ctx context.Context, tx *sql.Tx, issueID, wsID int64, labelIDs []int64) error {
+	if _, err := tx.ExecContext(ctx,
+		"DELETE FROM issue_labels WHERE issue_id = ? AND label_id NOT IN (SELECT id FROM labels WHERE archived = 1)",
+		issueID); err != nil {
 		return err
 	}
 	for _, lid := range labelIDs {
@@ -371,8 +381,9 @@ func setIssueLabels(ctx context.Context, tx *sql.Tx, issueID int64, labelIDs []i
 		// failing with a constraint error.
 		if _, err := tx.ExecContext(ctx,
 			`INSERT OR IGNORE INTO issue_labels(issue_id, label_id)
-				SELECT ?, id FROM labels WHERE id = ? AND kind = '`+KindLabelIssue+`' AND archived = 0`,
-			issueID, lid); err != nil {
+				SELECT ?, id FROM labels WHERE id = ? AND kind = '`+KindLabelIssue+`' AND archived = 0
+				AND (workspace_id IS NULL OR workspace_id = ?)`,
+			issueID, lid, wsID); err != nil {
 			return err
 		}
 	}

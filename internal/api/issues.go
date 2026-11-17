@@ -8,8 +8,10 @@ import (
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
-// GET /api/v1/issues?status=&q=&label=&sort=&page=&per_page=
+// GET /api/v1/issues?status=&q=&label=&label_id=&sort=&page=&per_page=
 // Response: {"issues": [...], "total": N, "page": P, "per_page": PP}
+// label_id filters by exact label id (preferred); label filters by name
+// and is ambiguous when shared and workspace labels share a name.
 func (h *handler) listIssues(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	q := r.URL.Query()
 	f := store.ListFilter{
@@ -19,7 +21,9 @@ func (h *handler) listIssues(w http.ResponseWriter, r *http.Request, ws *store.W
 		Page:    queryInt(r, "page", 1),
 		PerPage: min(queryInt(r, "per_page", defaultPerPage), maxPerPage),
 	}
-	if name := q.Get("label"); name != "" {
+	if lid := q.Get("label_id"); lid != "" {
+		f.LabelID = int64(queryInt(r, "label_id", 0))
+	} else if name := q.Get("label"); name != "" {
 		all, err := h.store.ListLabels(r.Context(), ws.ID, store.KindLabelIssue)
 		if err != nil {
 			h.storeError(w, err)

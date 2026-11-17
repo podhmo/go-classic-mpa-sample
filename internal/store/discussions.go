@@ -259,7 +259,7 @@ func (s *Store) CreateDiscussion(ctx context.Context, wsID int64, in DiscussionI
 	if err != nil {
 		return 0, err
 	}
-	if err := setDiscussionLabels(ctx, tx, id, in.LabelIDs); err != nil {
+	if err := setDiscussionLabels(ctx, tx, id, wsID, in.LabelIDs); err != nil {
 		return 0, err
 	}
 	if err := s.commitTx(ctx, tx, events.Change{Topic: events.DiscussionsTopic, Kind: events.KindNew, Target: id}); err != nil {
@@ -293,7 +293,11 @@ func (s *Store) UpdateDiscussion(ctx context.Context, id int64, in DiscussionInp
 	if err := checkAffected(res); err != nil {
 		return err
 	}
-	if err := setDiscussionLabels(ctx, tx, id, in.LabelIDs); err != nil {
+	var wsID int64
+	if err := tx.QueryRowContext(ctx, "SELECT workspace_id FROM discussions WHERE id = ?", id).Scan(&wsID); err != nil {
+		return err
+	}
+	if err := setDiscussionLabels(ctx, tx, id, wsID, in.LabelIDs); err != nil {
 		return err
 	}
 	changes := []events.Change{{Topic: events.DiscussionTopic(id), Kind: events.KindEdit, Target: id}}
@@ -341,7 +345,7 @@ func (s *Store) attachDiscussionLabels(ctx context.Context, discussions []*Discu
 		ph[i] = "?"
 		args[i] = d.ID
 	}
-	q := `SELECT dl.discussion_id, l.id, l.name, l.color
+	q := `SELECT dl.discussion_id, l.id, l.name, l.color, l.kind, COALESCE(l.workspace_id, 0), l.archived
 		FROM discussion_labels dl JOIN labels l ON l.id = dl.label_id
 		WHERE dl.discussion_id IN (` + strings.Join(ph, ",") + `) ORDER BY l.name`
 	rows, err := s.db.QueryContext(ctx, q, args...)
@@ -352,7 +356,7 @@ func (s *Store) attachDiscussionLabels(ctx context.Context, discussions []*Discu
 	for rows.Next() {
 		var discussionID int64
 		var l Label
-		if err := rows.Scan(&discussionID, &l.ID, &l.Name, &l.Color); err != nil {
+		if err := rows.Scan(&discussionID, &l.ID, &l.Name, &l.Color, &l.Kind, &l.WorkspaceID, &l.Archived); err != nil {
 			return err
 		}
 		if d := byID[discussionID]; d != nil {
@@ -363,17 +367,21 @@ func (s *Store) attachDiscussionLabels(ctx context.Context, discussions []*Discu
 }
 
 // setDiscussionLabels replaces the label set of a discussion inside tx,
-// mirroring setIssueLabels: unknown ids, cross-kind ids and archived
-// labels yield no row and are silently skipped.
-func setDiscussionLabels(ctx context.Context, tx *sql.Tx, discussionID int64, labelIDs []int64) error {
-	if _, err := tx.ExecContext(ctx, "DELETE FROM discussion_labels WHERE discussion_id = ?", discussionID); err != nil {
+// mirroring setIssueLabels: unknown ids, cross-kind ids, out-of-workspace
+// ids and archived labels yield no row and are silently skipped.
+// Attachments to archived labels survive the replace for the same reason.
+func setDiscussionLabels(ctx context.Context, tx *sql.Tx, discussionID, wsID int64, labelIDs []int64) error {
+	if _, err := tx.ExecContext(ctx,
+		"DELETE FROM discussion_labels WHERE discussion_id = ? AND label_id NOT IN (SELECT id FROM labels WHERE archived = 1)",
+		discussionID); err != nil {
 		return err
 	}
 	for _, lid := range labelIDs {
 		if _, err := tx.ExecContext(ctx,
 			`INSERT OR IGNORE INTO discussion_labels(discussion_id, label_id)
-				SELECT ?, id FROM labels WHERE id = ? AND kind = '`+KindLabelDiscussion+`' AND archived = 0`,
-			discussionID, lid); err != nil {
+				SELECT ?, id FROM labels WHERE id = ? AND kind = '`+KindLabelDiscussion+`' AND archived = 0
+				AND (workspace_id IS NULL OR workspace_id = ?)`,
+			discussionID, lid, wsID); err != nil {
 			return err
 		}
 	}

@@ -343,3 +343,82 @@ CREATE TABLE IF NOT EXISTS changes (
 	created_at INTEGER NOT NULL
 );
 `
+
+func TestArchivedLabelSurvivesIssueEdit(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	lid := mustLabel(t, s, "legacy", "#000000")
+	id, err := s.CreateIssue(ctx, 1, IssueInput{Title: "t", LabelIDs: []int64{lid}}, 0)
+	if err != nil {
+		t.Fatalf("CreateIssue: %v", err)
+	}
+	if err := s.ArchiveLabel(ctx, lid, true); err != nil {
+		t.Fatalf("ArchiveLabel: %v", err)
+	}
+
+	// An unrelated edit cannot carry the archived label (pickers hide it),
+	// so the replace must keep the attachment.
+	if err := s.UpdateIssue(ctx, id, IssueInput{Title: "t2"}); err != nil {
+		t.Fatalf("UpdateIssue: %v", err)
+	}
+	i, err := s.GetIssue(ctx, id)
+	if err != nil {
+		t.Fatalf("GetIssue: %v", err)
+	}
+	if len(i.Labels) != 1 || i.Labels[0].Name != "legacy" || !i.Labels[0].Archived {
+		t.Fatalf("labels = %+v", i.Labels)
+	}
+
+	// After a restore the label is selectable again and can be removed.
+	if err := s.ArchiveLabel(ctx, lid, false); err != nil {
+		t.Fatalf("unarchive: %v", err)
+	}
+	if err := s.UpdateIssue(ctx, id, IssueInput{Title: "t3"}); err != nil {
+		t.Fatalf("UpdateIssue 2: %v", err)
+	}
+	i, _ = s.GetIssue(ctx, id)
+	if len(i.Labels) != 0 {
+		t.Fatalf("labels after removal = %+v", i.Labels)
+	}
+}
+
+func TestCrossWorkspaceLabelRejected(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	ws2, err := s.CreateWorkspace(ctx, WorkspaceInput{Slug: "other"})
+	if err != nil {
+		t.Fatalf("CreateWorkspace: %v", err)
+	}
+	other, err := s.CreateLabel(ctx, ws2, KindLabelIssue, LabelInput{Name: "foreign", Color: "#000000"})
+	if err != nil {
+		t.Fatalf("CreateLabel: %v", err)
+	}
+	// A master label stays attachable anywhere.
+	master, err := s.CreateLabel(ctx, 0, KindLabelIssue, LabelInput{Name: "global-x", Color: "#111111"})
+	if err != nil {
+		t.Fatalf("CreateLabel master: %v", err)
+	}
+
+	id, err := s.CreateIssue(ctx, 1, IssueInput{Title: "t", LabelIDs: []int64{other, master}}, 0)
+	if err != nil {
+		t.Fatalf("CreateIssue: %v", err)
+	}
+	i, err := s.GetIssue(ctx, id)
+	if err != nil {
+		t.Fatalf("GetIssue: %v", err)
+	}
+	if len(i.Labels) != 1 || i.Labels[0].Name != "global-x" || i.Labels[0].WorkspaceID != 0 || i.Labels[0].Kind != KindLabelIssue {
+		t.Fatalf("labels = %+v, want only the master label with metadata", i.Labels)
+	}
+
+	// Update path enforces the same scope check via the issue's workspace.
+	if err := s.UpdateIssue(ctx, id, IssueInput{Title: "t", LabelIDs: []int64{other}}); err != nil {
+		t.Fatalf("UpdateIssue: %v", err)
+	}
+	i, _ = s.GetIssue(ctx, id)
+	if len(i.Labels) != 0 {
+		t.Fatalf("labels after update = %+v", i.Labels)
+	}
+}

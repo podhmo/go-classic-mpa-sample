@@ -29,23 +29,10 @@ func (c *Client) ListIssues(ctx context.Context, f store.ListFilter) ([]*store.I
 		q.Set("sort", f.Sort)
 	}
 	if f.LabelID > 0 {
-		labels, err := c.ListLabels(ctx, store.KindLabelIssue)
-		if err != nil {
-			return nil, 0, err
-		}
-		found := false
-		for _, l := range labels {
-			if l.ID == f.LabelID {
-				q.Set("label", l.Name)
-				found = true
-				break
-			}
-		}
-		if !found {
-			// Local semantics: an unknown label matches nothing.
-			// Dropping the filter would return unrelated issues.
-			return []*store.Issue{}, 0, nil
-		}
+		// Filtering by id (not name) keeps an exact match when shared and
+		// workspace labels share a name; an unknown id matches nothing,
+		// same as local semantics.
+		q.Set("label_id", strconv.FormatInt(f.LabelID, 10))
 	}
 
 	return listWindow(ctx, f.Page, f.PerPage,
