@@ -133,7 +133,7 @@ func TestFailedMutationRecordsNoChange(t *testing.T) {
 // never re-runs migrateV1, so migrateV2 must add it — otherwise every
 // commitTx insert fails and all writes roll back.
 func TestMigrateV1DatabaseGainsChangesTable(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "issues.db")
+	path := filepath.Join(t.TempDir(), "zatudan.db")
 	s := mustOpen(t, path)
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
@@ -164,7 +164,7 @@ func TestMigrateV1DatabaseGainsChangesTable(t *testing.T) {
 // miniature: a write through one handle must surface through the other's
 // watcher. This is the path that makes `issues --db` live-update pages.
 func TestWatchChangesAcrossStores(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "issues.db")
+	path := filepath.Join(t.TempDir(), "zatudan.db")
 	server := mustOpen(t, path)
 	cli := mustOpen(t, path)
 	ctx, cancel := context.WithCancel(context.Background())

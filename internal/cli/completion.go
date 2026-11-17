@@ -1,4 +1,4 @@
-// `issues completion <shell>` — print a static completion script, like
+// `zatu completion <shell>` — print a static completion script, like
 // `gh completion`. The grammar is fixed (no dynamic subcommands), so the
 // scripts are literals rather than generated.
 package cli
@@ -9,7 +9,7 @@ import (
 	"fmt"
 )
 
-// issues completion bash|zsh|fish — print the completion script for the
+// zatu completion bash|zsh|fish — print the completion script for the
 // shell; the user pipes it to their shell config.
 func completionCmd(ctx context.Context, o Options, args []string) error {
 	_ = ctx // completions are static; nothing to fetch
@@ -19,7 +19,7 @@ func completionCmd(ctx context.Context, o Options, args []string) error {
 		return err
 	}
 	if len(rest) == 0 {
-		return usageError{msg: "usage: issues completion bash|zsh|fish"}
+		return usageError{msg: "usage: zatu completion bash|zsh|fish"}
 	}
 	switch rest[0] {
 	case "bash":
@@ -34,8 +34,8 @@ func completionCmd(ctx context.Context, o Options, args []string) error {
 	return nil
 }
 
-const completionBash = `# bash completion for issues — eval "$(issues completion bash)" or save to
-# /etc/bash_completion.d/issues
+const completionBash = `# bash completion for zatu — eval "$(zatu completion bash)" or save to
+# /etc/bash_completion.d/zatu
 _issues_completions() {
 	local cur prev
 	cur="${COMP_WORDS[COMP_CWORD]}"
@@ -98,13 +98,13 @@ _issues_completions() {
 	fi
 	return 0
 }
-complete -F _issues_completions issues
+complete -F _issues_completions zatu
 `
 
-const completionZsh = `#compdef issues
-# zsh completion for issues — save as _issues on your fpath, or
-# eval "$(issues completion zsh)" with compinit loaded.
-_issues() {
+const completionZsh = `#compdef zatu
+# zsh completion for zatu — save as _zatu on your fpath, or
+# eval "$(zatu completion zsh)" with compinit loaded.
+_zatu() {
 	local -a commands
 	commands=(
 		'issue:issue list|view|create|edit|close|reopen|delete'
@@ -117,7 +117,7 @@ _issues() {
 		'help:show usage'
 	)
 	if (( CURRENT == 2 )); then
-		_describe -t commands 'issues command' commands
+		_describe -t commands 'zatu command' commands
 		return
 	fi
 	case "$words[2]" in
@@ -147,26 +147,26 @@ _issues() {
 			_describe -t shells 'shell' '(bash zsh fish)' ;;
 	esac
 }
-# Registering via compdef (not just defining _issues) is what makes both
-# eval "$(issues completion zsh)" and an fpath-installed _issues file
+# Registering via compdef (not just defining _zatu) is what makes both
+# eval "$(zatu completion zsh)" and an fpath-installed _zatu file
 # actually hook the command into the completion system.
-compdef _issues issues
+compdef _zatu zatu
 `
 
-const completionFish = `# fish completion for issues — save to ~/.config/fish/completions/issues.fish
-# or: issues completion fish | source
-complete -c issues -f
-complete -c issues -n '__fish_use_subcommand' -a 'issue comment label discussion auth api completion help'
-complete -c issues -n '__fish_seen_subcommand_from issue' -a 'list view create edit close reopen delete'
-complete -c issues -n '__fish_seen_subcommand_from comment' -a 'create'
-complete -c issues -n '__fish_seen_subcommand_from label' -a 'list'
-complete -c issues -n '__fish_seen_subcommand_from discussion' -a 'list view create edit delete comment answer'
-complete -c issues -n '__fish_seen_subcommand_from discussion; and __fish_seen_subcommand_from comment' -a 'create'
-complete -c issues -n '__fish_seen_subcommand_from auth' -a 'token'
-complete -c issues -n '__fish_seen_subcommand_from auth; and __fish_seen_subcommand_from token' -a 'list revoke'
-complete -c issues -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish'
-complete -c issues -l state -x -a 'open closed all'
-complete -c issues -l sort -x -a 'newest oldest'
-complete -c issues -l answered -x -a 'yes no'
-complete -c issues -l method -s X -x -a 'GET POST PATCH PUT DELETE'
+const completionFish = `# fish completion for zatu — save to ~/.config/fish/completions/zatu.fish
+# or: zatu completion fish | source
+complete -c zatu -f
+complete -c zatu -n '__fish_use_subcommand' -a 'issue comment label discussion auth api completion help'
+complete -c zatu -n '__fish_seen_subcommand_from issue' -a 'list view create edit close reopen delete'
+complete -c zatu -n '__fish_seen_subcommand_from comment' -a 'create'
+complete -c zatu -n '__fish_seen_subcommand_from label' -a 'list'
+complete -c zatu -n '__fish_seen_subcommand_from discussion' -a 'list view create edit delete comment answer'
+complete -c zatu -n '__fish_seen_subcommand_from discussion; and __fish_seen_subcommand_from comment' -a 'create'
+complete -c zatu -n '__fish_seen_subcommand_from auth' -a 'token'
+complete -c zatu -n '__fish_seen_subcommand_from auth; and __fish_seen_subcommand_from token' -a 'list revoke'
+complete -c zatu -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish'
+complete -c zatu -l state -x -a 'open closed all'
+complete -c zatu -l sort -x -a 'newest oldest'
+complete -c zatu -l answered -x -a 'yes no'
+complete -c zatu -l method -s X -x -a 'GET POST PATCH PUT DELETE'
 `

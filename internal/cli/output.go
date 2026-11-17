@@ -33,8 +33,8 @@ func authorName(u *store.User) string {
 	return u.Name
 }
 
-// --json output uses the api package's wire field names so `issues issue
-// list --json` and `issues api /issues` speak the same JSON vocabulary.
+// --json output uses the api package's wire field names so `zatu issue
+// list --json` and `zatu api /issues` speak the same JSON vocabulary.
 
 func issueViewJSON(i *store.Issue) api.Issue {
 	out := api.Issue{

@@ -15,7 +15,7 @@ needs that level of proof, run the app and drive a real browser.
 ## Start the app
 
 ```sh
-go run .                    # http://127.0.0.1:8080, db: issues.db
+go run .                    # http://127.0.0.1:8080, db: zatudan.db
 go run . -db /tmp/e2e.db    # scratch DB — demo issues auto-seed on first launch
 ```
 

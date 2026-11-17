@@ -1,20 +1,20 @@
-// Package cli implements the gh-like command surface of the cmd/issues
+// Package cli implements the gh-like command surface of the cmd/zatu
 // binary (docs/sketch/ja/cli-and-web-api.md, Phase 1 and 3). The commands
 // only know the Backend interface: locally it is *store.Store over -db,
 // remotely it is *client.Client over /api/v1 (--server/--token).
 //
 // Command grammar (gh-style):
 //
-//	issues issue list|view|create|edit|close|reopen|delete
-//	issues comment create N --body B
-//	issues label list
-//	issues discussion list|view|create|edit|delete
-//	issues discussion comment create N --body B [--thread T]
-//	issues discussion answer N --thread T [--unmark]
-//	issues workspace list|create SLUG [--name N] [--description D]|delete SLUG
-//	issues auth token --user NAME | token list | token revoke  (local mode only)
-//	issues api <path> [-X METHOD] [-f k=v]... [-F k=v]...       (remote mode only)
-//	issues completion bash|zsh|fish
+//	zatu issue list|view|create|edit|close|reopen|delete
+//	zatu comment create N --body B
+//	zatu label list
+//	zatu discussion list|view|create|edit|delete
+//	zatu discussion comment create N --body B [--thread T]
+//	zatu discussion answer N --thread T [--unmark]
+//	zatu workspace list|create SLUG [--name N] [--description D]|delete SLUG
+//	zatu auth token --user NAME | token list | token revoke  (local mode only)
+//	zatu api <path> [-X METHOD] [-f k=v]... [-F k=v]...       (remote mode only)
+//	zatu completion bash|zsh|fish
 //
 // Exit codes: 0 success / 1 runtime error / 2 usage error.
 package cli
@@ -196,7 +196,7 @@ func (o Options) withDefaults() Options {
 }
 
 func (o Options) printUsage() {
-	fmt.Fprint(o.Stderr, `Usage: issues <command> [<flags>]
+	fmt.Fprint(o.Stderr, `Usage: zatu <command> [<flags>]
 
 Commands:
   issue list|view|create|edit|close|reopen|delete
@@ -217,10 +217,10 @@ Commands:
   help
 
 Backend selection:
-  --server URL   remote mode via /api/v1 (env ISSUES_SERVER); requires --token
-  --token T      Bearer token for remote mode (env ISSUES_TOKEN)
-  --db PATH      local mode, direct SQLite access (env ISSUES_DB, default issues.db)
-  --workspace S  workspace for issue/discussion commands (env ISSUES_WORKSPACE, default "default")
+  --server URL   remote mode via /api/v1 (env ZATUDAN_SERVER); requires --token
+  --token T      Bearer token for remote mode (env ZATUDAN_TOKEN)
+  --db PATH      local mode, direct SQLite access (env ZATUDAN_DB, default zatudan.db)
+  --workspace S  workspace for issue/discussion commands (env ZATUDAN_WORKSPACE, default "default")
 
 Exit codes: 0 ok, 1 error, 2 usage.
 `)
@@ -228,7 +228,7 @@ Exit codes: 0 ok, 1 error, 2 usage.
 
 // backendFlags are the flags every resource command accepts. They are
 // defined per-leaf-command flagset because flag.Parse stops at the first
-// positional argument — `issues issue list --db x` must parse --db itself.
+// positional argument — `zatu issue list --db x` must parse --db itself.
 type backendFlags struct {
 	db     string
 	server string
@@ -238,14 +238,14 @@ type backendFlags struct {
 
 func (o Options) addBackendFlags(fs *flag.FlagSet) *backendFlags {
 	b := &backendFlags{}
-	fs.StringVar(&b.db, "db", o.Getenv("ISSUES_DB"), "SQLite database file for local mode (env ISSUES_DB, default issues.db)")
-	fs.StringVar(&b.server, "server", o.Getenv("ISSUES_SERVER"), "server base URL for remote mode (env ISSUES_SERVER)")
-	fs.StringVar(&b.token, "token", o.Getenv("ISSUES_TOKEN"), "Bearer token for remote mode (env ISSUES_TOKEN)")
-	fs.StringVar(&b.ws, "workspace", o.Getenv("ISSUES_WORKSPACE"), `workspace slug for issue/discussion commands (env ISSUES_WORKSPACE, default "default")`)
+	fs.StringVar(&b.db, "db", o.Getenv("ZATUDAN_DB"), "SQLite database file for local mode (env ZATUDAN_DB, default zatudan.db)")
+	fs.StringVar(&b.server, "server", o.Getenv("ZATUDAN_SERVER"), "server base URL for remote mode (env ZATUDAN_SERVER)")
+	fs.StringVar(&b.token, "token", o.Getenv("ZATUDAN_TOKEN"), "Bearer token for remote mode (env ZATUDAN_TOKEN)")
+	fs.StringVar(&b.ws, "workspace", o.Getenv("ZATUDAN_WORKSPACE"), `workspace slug for issue/discussion commands (env ZATUDAN_WORKSPACE, default "default")`)
 	return b
 }
 
-// dbPath resolves the local database path, defaulting to issues.db like
+// dbPath resolves the local database path, defaulting to zatudan.db like
 // the server's -db flag.
 // wsSlug resolves the workspace scope, defaulting to "default" — the one
 // every fresh database starts with.
@@ -258,12 +258,12 @@ func (b *backendFlags) wsSlug() string {
 
 func (b *backendFlags) dbPath() string {
 	if b.db == "" {
-		return "issues.db"
+		return "zatudan.db"
 	}
 	return b.db
 }
 
-// backend opens the Backend for the given flags: --server/ISSUES_SERVER
+// backend opens the Backend for the given flags: --server/ZATUDAN_SERVER
 // selects remote mode, anything else opens the local database. The
 // returned io.Closer is nil for remote backends.
 func (o Options) backend(ctx context.Context, b *backendFlags) (Backend, io.Closer, error) {

@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// TestAPICommandFields exercises the wire behavior of `issues api`: -f/-F
+// TestAPICommandFields exercises the wire behavior of `zatu api`: -f/-F
 // fields are query parameters on GET and a JSON body on other methods;
 // --template renders the decoded response.
 func TestAPICommandFields(t *testing.T) {
@@ -93,11 +93,11 @@ func TestCompletion(t *testing.T) {
 		t.Fatalf("completion bash: exit %d\n%s", code, out)
 	}
 	code, out, _ = run(t, o, "completion", "zsh")
-	if code != ExitOK || !strings.Contains(out, "compdef _issues issues") {
+	if code != ExitOK || !strings.Contains(out, "compdef _zatu zatu") {
 		t.Fatalf("completion zsh must register via compdef: exit %d\n%s", code, out)
 	}
 	code, out, _ = run(t, o, "completion", "fish")
-	if code != ExitOK || !strings.Contains(out, "complete -c issues") {
+	if code != ExitOK || !strings.Contains(out, "complete -c zatu") {
 		t.Fatalf("completion fish: exit %d\n%s", code, out)
 	}
 	if code, _, _ := run(t, o, "completion"); code != ExitUsage {

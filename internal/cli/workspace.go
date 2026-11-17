@@ -1,4 +1,4 @@
-// `issues workspace` — list/create/delete workspaces. The workspace
+// `zatu workspace` — list/create/delete workspaces. The workspace
 // itself is the argument, so these verbs ignore --workspace.
 package cli
 

@@ -12,10 +12,10 @@ import (
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
-// discussionCmd dispatches `issues discussion <action>`.
+// discussionCmd dispatches `zatu discussion <action>`.
 func discussionCmd(ctx context.Context, o Options, args []string) error {
 	if len(args) == 0 {
-		return usageError{msg: "usage: issues discussion list|view|create|edit|delete|comment|answer"}
+		return usageError{msg: "usage: zatu discussion list|view|create|edit|delete|comment|answer"}
 	}
 	switch args[0] {
 	case "list":
@@ -37,7 +37,7 @@ func discussionCmd(ctx context.Context, o Options, args []string) error {
 	}
 }
 
-// issues discussion list [--category SLUG] [--answered yes|no]
+// zatu discussion list [--category SLUG] [--answered yes|no]
 // [--search Q] [--sort newest|oldest] [--limit N] [--page N] [--json F,...]
 func discussionList(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("discussion list", flag.ContinueOnError)
@@ -93,7 +93,7 @@ func discussionList(ctx context.Context, o Options, args []string) error {
 	return nil
 }
 
-// issues discussion view N [--comments] [--json F,...] [-w]
+// zatu discussion view N [--comments] [--json F,...] [-w]
 func discussionView(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("discussion view", flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
@@ -186,7 +186,7 @@ func printDiscussionComment(o Options, c *store.DiscussionComment, indent string
 		indent, strings.ReplaceAll(c.Body, "\n", "\n"+indent+"  "))
 }
 
-// issues discussion create --title T --category SLUG
+// zatu discussion create --title T --category SLUG
 // [--body B|--body-file -] [-w]
 func discussionCreate(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("discussion create", flag.ContinueOnError)
@@ -207,7 +207,7 @@ func discussionCreate(ctx context.Context, o Options, args []string) error {
 		return usageError{msg: "--category is required"}
 	}
 	if *web && bf.server == "" {
-		return usageError{msg: "-w/--web requires --server (or ISSUES_SERVER)"}
+		return usageError{msg: "-w/--web requires --server (or ZATUDAN_SERVER)"}
 	}
 	bodyText, err := o.readBody(*body, *bodyFile)
 	if err != nil {
@@ -241,7 +241,7 @@ func discussionCreate(ctx context.Context, o Options, args []string) error {
 	return nil
 }
 
-// issues discussion edit N [--title T] [--body B] [--category SLUG]
+// zatu discussion edit N [--title T] [--body B] [--category SLUG]
 func discussionEdit(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("discussion edit", flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
@@ -298,7 +298,7 @@ func discussionEdit(ctx context.Context, o Options, args []string) error {
 	return nil
 }
 
-// issues discussion delete N
+// zatu discussion delete N
 func discussionDelete(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("discussion delete", flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
@@ -323,10 +323,10 @@ func discussionDelete(ctx context.Context, o Options, args []string) error {
 	return nil
 }
 
-// issues discussion comment create N --body B [--thread T]
+// zatu discussion comment create N --body B [--thread T]
 func discussionCommentCmd(ctx context.Context, o Options, args []string) error {
 	if len(args) == 0 || args[0] != "create" {
-		return usageError{msg: "usage: issues discussion comment create N --body B [--thread T]"}
+		return usageError{msg: "usage: zatu discussion comment create N --body B [--thread T]"}
 	}
 	fs := flag.NewFlagSet("discussion comment create", flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
@@ -375,7 +375,7 @@ func discussionCommentCmd(ctx context.Context, o Options, args []string) error {
 	return nil
 }
 
-// issues discussion answer N --thread T [--unmark]
+// zatu discussion answer N --thread T [--unmark]
 func discussionAnswer(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("discussion answer", flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
