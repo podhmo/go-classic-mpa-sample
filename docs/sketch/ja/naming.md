@@ -13,8 +13,11 @@
 
 結論を先に書くと:
 
-- 推薦は **CLI = `mpa`、サーババイナリ = `mpad`**。プロジェクト自身の略称で、
-  slops 記事群が既に「MPA」と自称している。ペア命名は `docker` / `dockerd` 型。
+- 推薦は **CLI = `mpa`、サーババイナリ = `mpad`**。ペア命名は
+  `docker` / `dockerd` 型。ただし `mpa` はアーキテクチャ種別の略語であり、
+  プロジェクトの固有名ではない点は弱み（後述）。
+- 名前は現時点で**未定** — リポジトリ名 `go-classic-mpa-sample` は実験の
+  題材を説明する名前であって、アプリ・コマンドの自称ではない。
 - 方向を変えるなら **`bbs` / `bbsd`**（classic な Web の空気 + discussion を
   自然に含む）、日本語枠なら **`fuda` / `madoguchi` / `kakari`**。
 - リポジトリ名・module path は据え置き（意図に沿っているため）。ルート
@@ -35,7 +38,9 @@
   できる範囲の外部 ES module」として緩和済み。
 - **作者の言い方**（html-sandbox/slops の MPA シリーズ）: 「レガシー風の
   Web アプリ開発を体験する実験場」「古い設計でモダンな機能を全部試す」。
-  記事は `MPA round-N` と自称しており、プロジェクトの通称は既に **MPA**。
+  記事は `MPA round-N` という連載名を持つが、これは MPA（multi-page
+  application）というアーキテクチャ種別への言及であり、プロジェクトの
+  自称ではない — 名前はいまのところ決まっていない。
 - **ドメインの現状**: workspace（≈GitHub リポジトリ）> issues / discussions
   > comments / labels / auth。つまり GitHub のミニチュアであり、CLI は
   その世界の `gh` に相当する。
@@ -78,7 +83,8 @@
 
 ### 案 A: `mpa` / `mpad`（推薦）
 
-プロジェクトの自称そのままを採用する。
+slops 連載の記事タイトルでこのリポジトリを指すのに使われている略称を
+そのまま採用する。
 
 ```sh
 mpa issue list
@@ -88,12 +94,14 @@ mpa api /api/v1/issues -f q=bug
 mpad -addr :8080 -db app.db init     # サーバ側
 ```
 
-- 良い点: 「このアプリの CLI」であることが一目で分かる。slops も AGENTS.md
-  も既に MPA と呼んでおり、齟齬がない。3 文字で短い。env prefix も
-  `MPA_*`（`MPA_DB` / `MPA_SERVER` / `MPA_TOKEN` / `MPA_ADDR` / `MPA_WORKSPACE`
-  …）に自然に揃う。`mpad` は dockerd 型の daemon 命名で読みやすい。
-- 悪い点: 略語なので外から見て意味を持たない。npm 界隈に同名の webpack-mpa
-  CLI がいくつかある（Go バイナリとしては実害薄い）。
+- 良い点: 連載を読んだ人には「このアプリの CLI」と伝わる。3 文字で短い。
+  env prefix も `MPA_*`（`MPA_DB` / `MPA_SERVER` / `MPA_TOKEN` / `MPA_ADDR`
+  / `MPA_WORKSPACE` …）に自然に揃う。`mpad` は dockerd 型の daemon 命名で
+  読みやすい。
+- 悪い点: MPA は multi-page application の一般的略語であり、固有の名前
+  ではない（`spa` という名のバイナリを名付けるようなもの）。プロジェクト
+  外から見て意味を持たず、npm 界隈に同名の webpack-mpa CLI もいくつか
+  ある（Go バイナリとしては実害薄い）。
 
 ### 案 B: `bbs` / `bbsd`
 
