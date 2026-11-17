@@ -77,15 +77,28 @@ CREATE TABLE IF NOT EXISTS comments (
 	body TEXT NOT NULL,
 	created_at INTEGER NOT NULL
 );
+-- Labels are managed data, not constants: workspace_id NULL marks a
+-- shared master row, a set one scopes the label to that workspace. kind
+-- keeps issue and discussion labels as separate pools; archived hides a
+-- label from pickers without unlinking it from existing issues.
 CREATE TABLE IF NOT EXISTS labels (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	name TEXT NOT NULL UNIQUE,
-	color TEXT NOT NULL
+	workspace_id INTEGER REFERENCES workspaces(id) ON DELETE CASCADE,
+	kind TEXT NOT NULL CHECK(kind IN ('issue', 'discussion')),
+	name TEXT NOT NULL,
+	color TEXT NOT NULL,
+	archived INTEGER NOT NULL DEFAULT 0
 );
+` + defaultLabelsDDL + `
 CREATE TABLE IF NOT EXISTS issue_labels (
 	issue_id INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
 	label_id INTEGER NOT NULL REFERENCES labels(id) ON DELETE CASCADE,
 	PRIMARY KEY (issue_id, label_id)
+);
+CREATE TABLE IF NOT EXISTS discussion_labels (
+	discussion_id INTEGER NOT NULL REFERENCES discussions(id) ON DELETE CASCADE,
+	label_id INTEGER NOT NULL REFERENCES labels(id) ON DELETE CASCADE,
+	PRIMARY KEY (discussion_id, label_id)
 );
 CREATE TABLE IF NOT EXISTS discussion_categories (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -123,6 +136,8 @@ CREATE TABLE IF NOT EXISTS discussion_comments (
 CREATE INDEX IF NOT EXISTS idx_issues_workspace_status_created ON issues(workspace_id, status, created_at);
 CREATE INDEX IF NOT EXISTS idx_comments_issue_created ON comments(issue_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_issue_labels_label ON issue_labels(label_id);
+CREATE INDEX IF NOT EXISTS idx_discussion_labels_label ON discussion_labels(label_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_labels_kind_name_ws ON labels(kind, name, COALESCE(workspace_id, 0));
 CREATE UNIQUE INDEX IF NOT EXISTS idx_dthreads_answer ON discussion_threads(discussion_id) WHERE is_answer = 1;
 CREATE INDEX IF NOT EXISTS idx_dthreads_discussion_created ON discussion_threads(discussion_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_dcomments_thread_created ON discussion_comments(thread_id, created_at);
@@ -146,11 +161,31 @@ CREATE TABLE IF NOT EXISTS changes (
 );
 `
 
+// defaultLabelsDDL seeds the shared master labels every database needs.
+// It is part of both the init schema and migrateV3: INSERT ... WHERE NOT
+// EXISTS makes replaying it on a database that already has the row a
+// no-op.
+const defaultLabelsDDL = `
+INSERT INTO labels(workspace_id, kind, name, color)
+	SELECT NULL, 'issue', 'Bug', '#d73a4a'
+	WHERE NOT EXISTS (SELECT 1 FROM labels WHERE kind = 'issue' AND name = 'Bug' AND workspace_id IS NULL);
+INSERT INTO labels(workspace_id, kind, name, color)
+	SELECT NULL, 'issue', 'Documentation', '#1f6feb'
+	WHERE NOT EXISTS (SELECT 1 FROM labels WHERE kind = 'issue' AND name = 'Documentation' AND workspace_id IS NULL);
+INSERT INTO labels(workspace_id, kind, name, color)
+	SELECT NULL, 'issue', 'Enhancement', '#a2eeef'
+	WHERE NOT EXISTS (SELECT 1 FROM labels WHERE kind = 'issue' AND name = 'Enhancement' AND workspace_id IS NULL);
+INSERT INTO labels(workspace_id, kind, name, color)
+	SELECT NULL, 'issue', 'Feature', '#0075ca'
+	WHERE NOT EXISTS (SELECT 1 FROM labels WHERE kind = 'issue' AND name = 'Feature' AND workspace_id IS NULL);
+`
+
 // migrations is the ordered list of schema upgrades: migrations[i] moves a
 // database from PRAGMA user_version i to i+1.
 var migrations = []func(ctx context.Context, tx *sql.Tx) error{
 	migrateV1, // current schema in one shot
 	migrateV2, // changes table — reaches databases already stamped v1
+	migrateV3, // labels gain workspace_id/kind/archived + discussion_labels
 }
 
 // schemaVersion is the user_version a fully migrated database reports.
@@ -197,6 +232,12 @@ func migrate(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("store: database schema version %d is newer than supported %d", version, schemaVersion)
 	}
 	for ; version < schemaVersion; version++ {
+		if rebuildNeedsFKOff[version] {
+			if err := migrateWithFKOff(ctx, db, version); err != nil {
+				return err
+			}
+			continue
+		}
 		tx, err := db.BeginTx(ctx, nil)
 		if err != nil {
 			return err
@@ -213,6 +254,94 @@ func migrate(ctx context.Context, db *sql.DB) error {
 		if err := tx.Commit(); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// migrateV3 turns the constant-era labels table into managed rows: it
+// gains workspace_id (NULL = shared master), kind (issue|discussion) and
+// an archived flag, and its UNIQUE(name) constraint is replaced by
+// uniqueness on (kind, name, workspace) so a workspace label may reuse a
+// master name. The old rows survive as master issue labels; the four
+// former constant labels become master rows via defaultLabelsDDL.
+//
+// rebuildNeedsFKOff marks this migration for migrate(): DROP TABLE labels
+// fires issue_labels' ON DELETE CASCADE even inside a transaction, which
+// would wipe the existing label links. The connection's foreign_keys
+// pragma must be OFF around the rebuild, and PRAGMA foreign_keys is a
+// no-op inside a transaction — so migrate() toggles it on the dedicated
+// connection before BeginTx.
+var rebuildNeedsFKOff = map[int]bool{2: true} // migrations[2] = migrateV3
+
+func migrateV3(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, `
+CREATE TABLE labels_new (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	workspace_id INTEGER REFERENCES workspaces(id) ON DELETE CASCADE,
+	kind TEXT NOT NULL CHECK(kind IN ('issue', 'discussion')),
+	name TEXT NOT NULL,
+	color TEXT NOT NULL,
+	archived INTEGER NOT NULL DEFAULT 0
+);
+INSERT INTO labels_new(id, workspace_id, kind, name, color, archived)
+	SELECT id, NULL, 'issue', name, color, 0 FROM labels;
+-- Preserve AUTOINCREMENT history: DROP removes the old table's
+-- sqlite_sequence row, so copy it to the replacement or a previously
+-- deleted (highest) label id gets reused.
+UPDATE sqlite_sequence SET seq = MAX(seq, IFNULL((SELECT seq FROM sqlite_sequence WHERE name='labels'), 0))
+	WHERE name='labels_new';
+DROP TABLE labels;
+ALTER TABLE labels_new RENAME TO labels;
+CREATE UNIQUE INDEX idx_labels_kind_name_ws ON labels(kind, name, COALESCE(workspace_id, 0));
+CREATE TABLE IF NOT EXISTS discussion_labels (
+	discussion_id INTEGER NOT NULL REFERENCES discussions(id) ON DELETE CASCADE,
+	label_id INTEGER NOT NULL REFERENCES labels(id) ON DELETE CASCADE,
+	PRIMARY KEY (discussion_id, label_id)
+);
+CREATE INDEX IF NOT EXISTS idx_discussion_labels_label ON discussion_labels(label_id);
+`+defaultLabelsDDL)
+	return err
+}
+
+// migrateWithFKOff runs one migration on a dedicated connection with
+// PRAGMA foreign_keys OFF, verifying the result before re-enabling.
+// Used for migrations that DROP a parent table (see rebuildNeedsFKOff).
+func migrateWithFKOff(ctx context.Context, db *sql.DB, version int) error {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	// foreign_keys can only change outside a transaction.
+	if _, err := conn.ExecContext(ctx, "PRAGMA foreign_keys = OFF"); err != nil {
+		return fmt.Errorf("store: disable foreign keys for migration %d: %w", version+1, err)
+	}
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	if err := migrations[version](ctx, tx); err != nil {
+		tx.Rollback()
+		return fmt.Errorf("store: migrate schema to version %d: %w", version+1, err)
+	}
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf("PRAGMA user_version = %d", version+1)); err != nil {
+		tx.Rollback()
+		return fmt.Errorf("store: stamp schema version %d: %w", version+1, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	// FKs stayed off through the tx; check the rebuilt data before
+	// re-enabling, then restore the pragma this connection's DSN set.
+	violations := 0
+	if err := conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM pragma_foreign_key_check").Scan(&violations); err != nil {
+		return fmt.Errorf("store: foreign key check after migration %d: %w", version+1, err)
+	}
+	if violations > 0 {
+		return fmt.Errorf("store: migration to version %d left %d foreign key violations", version+1, violations)
+	}
+	if _, err := conn.ExecContext(ctx, "PRAGMA foreign_keys = ON"); err != nil {
+		return fmt.Errorf("store: re-enable foreign keys: %w", err)
 	}
 	return nil
 }

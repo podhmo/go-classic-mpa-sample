@@ -71,7 +71,7 @@ func commentViews(cs []*store.Comment) []api.Comment {
 func labelViews(labels []*store.Label) []api.Label {
 	out := make([]api.Label, 0, len(labels))
 	for _, l := range labels {
-		out = append(out, api.Label{ID: l.ID, Name: l.Name, Color: l.Color})
+		out = append(out, api.Label{ID: l.ID, Name: l.Name, Color: l.Color, Kind: l.Kind, Archived: l.Archived})
 	}
 	return out
 }

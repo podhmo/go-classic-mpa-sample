@@ -155,6 +155,7 @@ func discussionView(ctx context.Context, o Options, args []string) error {
 	fmt.Fprintf(o.Stdout, "title:\t%s\n", d.Title)
 	fmt.Fprintf(o.Stdout, "category:\t%s (%s)\n", d.Category.Name, d.Category.Slug)
 	fmt.Fprintf(o.Stdout, "answered:\t%s\n", map[bool]string{true: "yes", false: "no"}[d.Answered])
+	fmt.Fprintf(o.Stdout, "labels:\t%s\n", labelNames(d.Labels))
 	fmt.Fprintf(o.Stdout, "author:\t%s\n", authorName(d.Author))
 	fmt.Fprintf(o.Stdout, "updated:\t%s\n", fmtTimeShort(d.UpdatedAt))
 	fmt.Fprintf(o.Stdout, "--\n%s\n", d.Body)
@@ -195,6 +196,8 @@ func discussionCreate(ctx context.Context, o Options, args []string) error {
 	category := fs.String("category", "", "category slug (required)")
 	body := fs.String("body", "", "discussion body")
 	bodyFile := fs.String("body-file", "", "read body from file (- for stdin)")
+	var labels nameFlag
+	fs.Var(&labels, "label", "attach a label by name (repeatable)")
 	web := fs.Bool("web", false, "open the new discussion in a browser (requires --server)")
 	fs.BoolVar(web, "w", false, "shorthand for --web")
 	if _, err := parseLeaf(fs, args, 0); err != nil {
@@ -224,8 +227,13 @@ func discussionCreate(ctx context.Context, o Options, args []string) error {
 	if err != nil {
 		return err
 	}
+	labelIDs, err := resolveLabelIDs(ctx, b, store.KindLabelDiscussion, labels)
+	if err != nil {
+		return err
+	}
 	in := store.DiscussionInput{
 		Title: strings.TrimSpace(*title), Body: strings.TrimSpace(bodyText), CategoryID: categoryID,
+		LabelIDs: labelIDs,
 	}
 	if err := validateDiscussionInput(in); err != nil {
 		return err
@@ -241,13 +249,15 @@ func discussionCreate(ctx context.Context, o Options, args []string) error {
 	return nil
 }
 
-// zatu discussion edit N [--title T] [--body B] [--category SLUG]
+// zatu discussion edit N [--title T] [--body B] [--category SLUG] [--label NAME]...
 func discussionEdit(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("discussion edit", flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
 	title := fs.String("title", "", "new title")
 	body := fs.String("body", "", "new body")
 	category := fs.String("category", "", "new category slug")
+	var labels nameFlag
+	fs.Var(&labels, "label", "replace labels with this name set (repeatable)")
 	rest, err := parseLeaf(fs, args, 1)
 	if err != nil {
 		return err
@@ -267,6 +277,9 @@ func discussionEdit(ctx context.Context, o Options, args []string) error {
 		return err
 	}
 	in := store.DiscussionInput{Title: d.Title, Body: d.Body, CategoryID: d.Category.ID}
+	for _, l := range d.Labels {
+		in.LabelIDs = append(in.LabelIDs, l.ID)
+	}
 	changed := false
 	if *title != "" {
 		in.Title = strings.TrimSpace(*title)
@@ -285,8 +298,15 @@ func discussionEdit(ctx context.Context, o Options, args []string) error {
 		}
 		changed = true
 	}
+	if len(labels) > 0 {
+		in.LabelIDs, err = resolveLabelIDs(ctx, b, store.KindLabelDiscussion, labels)
+		if err != nil {
+			return err
+		}
+		changed = true
+	}
 	if !changed {
-		return usageError{msg: "nothing to update: pass --title, --body or --category"}
+		return usageError{msg: "nothing to update: pass --title, --body, --category or --label"}
 	}
 	if err := validateDiscussionInput(in); err != nil {
 		return err

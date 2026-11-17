@@ -34,6 +34,18 @@
     <p class="field-hint" id="f-body-hint">Markdown (GFM) supported. Raw HTML is not rendered; line breaks are preserved. Ctrl+Enter (Cmd+Enter on macOS) submits.</p>
   </div>
 
+  {{if .Labels}}
+  <fieldset class="field label-picker">
+    <legend>Labels</legend>
+    {{range .Labels}}
+    <label class="label-option" for="label-{{.ID}}">
+      <input type="checkbox" id="label-{{.ID}}" name="label_id" value="{{.ID}}"{{if isChecked .ID $.Input.LabelIDs}} checked{{end}}>
+      <span class="label-badge" style="--label-color: {{.Color}}">{{.Name}}</span>
+    </label>
+    {{end}}
+  </fieldset>
+  {{end}}
+
   <div class="form-actions">
     <a class="btn btn-quiet" href="/w/{{.Workspace.Slug}}/discussions">Cancel</a>
     <button type="submit" class="btn btn-primary">{{.SubmitLabel}}</button>

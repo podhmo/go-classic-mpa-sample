@@ -32,7 +32,7 @@ func buildBinaries(t *testing.T) (serverBin, cliBin string) {
 	cliBin = filepath.Join(dir, "zatu")
 	for target, out := range map[string]string{
 		"../../cmd/zatudan": serverBin,
-		"../../cmd/zatu": cliBin,
+		"../../cmd/zatu":    cliBin,
 	} {
 		b, err := exec.Command("go", "build", "-o", out, target).CombinedOutput()
 		if err != nil {

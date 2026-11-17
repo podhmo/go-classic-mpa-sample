@@ -104,7 +104,7 @@ func TestIssueValidation(t *testing.T) {
 		t.Fatalf("fields = %v, want labels error", out)
 	}
 
-	code, out = do(t, srv, "GET", "/api/v1/labels", "")
+	code, out = do(t, srv, "GET", "/api/v1/w/default/labels", "")
 	if code != http.StatusOK {
 		t.Fatalf("labels = %d", code)
 	}

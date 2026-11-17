@@ -66,7 +66,7 @@ _issues_completions() {
 		;;
 	label)
 		if [ "$COMP_CWORD" -eq 2 ]; then
-			COMPREPLY=( $(compgen -W "list" -- "$cur") )
+			COMPREPLY=( $(compgen -W "list create delete" -- "$cur") )
 		fi
 		;;
 	discussion)
@@ -128,7 +128,7 @@ _zatu() {
 		comment)
 			_describe -t actions 'comment action' '(create)' ;;
 		label)
-			_describe -t actions 'label action' '(list)' ;;
+			_describe -t actions 'label action' '(list create delete)' ;;
 		discussion)
 			if (( CURRENT == 3 )); then
 				_describe -t actions 'discussion action' '(
@@ -159,7 +159,7 @@ complete -c zatu -f
 complete -c zatu -n '__fish_use_subcommand' -a 'issue comment label discussion auth api completion help'
 complete -c zatu -n '__fish_seen_subcommand_from issue' -a 'list view create edit close reopen delete'
 complete -c zatu -n '__fish_seen_subcommand_from comment' -a 'create'
-complete -c zatu -n '__fish_seen_subcommand_from label' -a 'list'
+complete -c zatu -n '__fish_seen_subcommand_from label' -a 'list create delete'
 complete -c zatu -n '__fish_seen_subcommand_from discussion' -a 'list view create edit delete comment answer'
 complete -c zatu -n '__fish_seen_subcommand_from discussion; and __fish_seen_subcommand_from comment' -a 'create'
 complete -c zatu -n '__fish_seen_subcommand_from auth' -a 'token'

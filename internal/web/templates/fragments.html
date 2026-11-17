@@ -125,6 +125,13 @@
       <a class="category-badge" href="/w/{{.Workspace.Slug}}/discussions?category={{.Discussion.Category.Slug}}">{{.Discussion.Category.Name}}</a>
       <h1>{{.Discussion.Title}} <span class="issue-num">#{{.Discussion.ID}}</span></h1>
     </div>
+    {{if .Discussion.Labels}}
+    <div class="issue-labels">
+      {{range .Discussion.Labels}}
+      <span class="label-badge" style="--label-color: {{.Color}}">{{.Name}}</span>
+      {{end}}
+    </div>
+    {{end}}
     {{template "discussion_meta" .Discussion}}
   </header>
 

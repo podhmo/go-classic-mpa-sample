@@ -1,0 +1,21 @@
+{{define "content"}}
+<h1>{{.Heading}}</h1>
+<p class="field-hint">{{.Label.Kind}} label · {{if .Label.WorkspaceID}}workspace{{else}}shared{{end}}{{if .Label.Archived}} · archived{{end}}</p>
+<form method="post" action="{{.Action}}" class="form">
+  <div class="field">
+    <label for="name">Name</label>
+    <input type="text" id="name" name="name" value="{{.Input.Name}}" required maxlength="64" autocomplete="off">
+    {{if .Errors.Name}}<p class="field-error">{{.Errors.Name}}</p>{{end}}
+  </div>
+  <div class="field">
+    <label for="color">Color</label>
+    <input type="color" id="color" name="color" value="{{if .Input.Color}}{{.Input.Color}}{{else}}#0075ca{{end}}" required>
+    {{if .Errors.Color}}<p class="field-error">{{.Errors.Color}}</p>{{end}}
+  </div>
+  {{if .Errors.Other}}<p class="field-error">{{.Errors.Other}}</p>{{end}}
+  <div class="form-actions">
+    <a class="btn btn-quiet" href="/w/{{.Workspace.Slug}}/labels">Cancel</a>
+    <button type="submit" class="btn btn-primary">Save changes</button>
+  </div>
+</form>
+{{end}}

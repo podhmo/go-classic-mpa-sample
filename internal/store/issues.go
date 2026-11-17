@@ -40,13 +40,6 @@ type Comment struct {
 	Author    *User
 }
 
-// Label is a named, colored tag that can be attached to issues.
-type Label struct {
-	ID    int64
-	Name  string
-	Color string // CSS hex color, e.g. "#d73a4a"
-}
-
 // IssueInput carries validated form values for create/update.
 type IssueInput struct {
 	Title    string
@@ -332,25 +325,6 @@ func (s *Store) CreateComment(ctx context.Context, issueID int64, body string, a
 	return id, nil
 }
 
-// ListLabels returns all labels ordered by name.
-func (s *Store) ListLabels(ctx context.Context) ([]*Label, error) {
-	rows, err := s.db.QueryContext(ctx, "SELECT id, name, color FROM labels ORDER BY name")
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var out []*Label
-	for rows.Next() {
-		var l Label
-		if err := rows.Scan(&l.ID, &l.Name, &l.Color); err != nil {
-			return nil, err
-		}
-		out = append(out, &l)
-	}
-	return out, rows.Err()
-}
-
 // attachLabels populates Labels on each issue with a single grouped query.
 func (s *Store) attachLabels(ctx context.Context, issues []*Issue) error {
 	if len(issues) == 0 {
@@ -396,7 +370,8 @@ func setIssueLabels(ctx context.Context, tx *sql.Tx, issueID int64, labelIDs []i
 		// that OR IGNORE skips. Both are silently dropped rather than
 		// failing with a constraint error.
 		if _, err := tx.ExecContext(ctx,
-			"INSERT OR IGNORE INTO issue_labels(issue_id, label_id) SELECT ?, id FROM labels WHERE id = ?",
+			`INSERT OR IGNORE INTO issue_labels(issue_id, label_id)
+				SELECT ?, id FROM labels WHERE id = ? AND kind = '`+KindLabelIssue+`' AND archived = 0`,
 			issueID, lid); err != nil {
 			return err
 		}

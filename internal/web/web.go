@@ -38,7 +38,12 @@ type Store interface {
 	DeleteIssue(ctx context.Context, id int64) error
 	ListComments(ctx context.Context, issueID int64) ([]*store.Comment, error)
 	CreateComment(ctx context.Context, issueID int64, body string, authorID int64) (int64, error)
-	ListLabels(ctx context.Context) ([]*store.Label, error)
+	ListLabels(ctx context.Context, wsID int64, kind string) ([]*store.Label, error)
+	ListArchivedLabels(ctx context.Context, wsID int64, kind string) ([]*store.Label, error)
+	GetLabel(ctx context.Context, id int64) (*store.Label, error)
+	CreateLabel(ctx context.Context, wsID int64, kind string, in store.LabelInput) (int64, error)
+	UpdateLabel(ctx context.Context, id int64, in store.LabelInput) error
+	ArchiveLabel(ctx context.Context, id int64, archived bool) error
 	ListDiscussions(ctx context.Context, wsID int64, f store.DiscussionListFilter) ([]*store.Discussion, int, error)
 	GetDiscussion(ctx context.Context, id int64) (*store.Discussion, error)
 	CreateDiscussion(ctx context.Context, wsID int64, in store.DiscussionInput, authorID int64) (int64, error)
@@ -145,6 +150,14 @@ func New(st Store, opts ...Option) http.Handler {
 	mux.HandleFunc("GET /w/{ws}/issues/{id}/delete", h.scoped(h.confirmDelete))
 	mux.HandleFunc("POST /w/{ws}/issues/{id}/delete", h.scoped(h.deleteIssue))
 	mux.HandleFunc("POST /w/{ws}/issues/{id}/comments", h.scoped(h.createComment))
+	// Label management (docs/ja/decisions.md — labels are DB-managed, not
+	// constants): /w/{ws}/labels administers both the workspace's own
+	// labels and the shared master labels.
+	mux.HandleFunc("GET /w/{ws}/labels", h.scoped(h.listLabels))
+	mux.HandleFunc("POST /w/{ws}/labels", h.scoped(h.createLabel))
+	mux.HandleFunc("GET /w/{ws}/labels/{id}/edit", h.scoped(h.editLabel))
+	mux.HandleFunc("POST /w/{ws}/labels/{id}/edit", h.scoped(h.updateLabel))
+	mux.HandleFunc("POST /w/{ws}/labels/{id}/archive", h.scoped(h.archiveLabel))
 	mux.HandleFunc("GET /w/{ws}/discussions", h.scoped(h.listDiscussions))
 	mux.HandleFunc("GET /w/{ws}/discussions/new", h.scoped(h.newDiscussion))
 	mux.HandleFunc("POST /w/{ws}/discussions", h.scoped(h.createDiscussion))

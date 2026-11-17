@@ -26,10 +26,23 @@ var (
 	storyTime3 = time.Date(2026, 11, 4, 18, 45, 0, 0, time.UTC)
 
 	storyLabels = []*store.Label{
-		{ID: 1, Name: "bug", Color: "#d73a4a"},
-		{ID: 2, Name: "enhancement", Color: "#a2eeef"},
-		{ID: 3, Name: "documentation", Color: "#0075ca"},
-		{ID: 4, Name: "very-long-label-name-for-layout", Color: "#7057ff"},
+		{ID: 1, Name: "bug", Color: "#d73a4a", Kind: store.KindLabelIssue},
+		{ID: 2, Name: "enhancement", Color: "#a2eeef", Kind: store.KindLabelIssue},
+		{ID: 3, Name: "documentation", Color: "#0075ca", Kind: store.KindLabelIssue},
+		{ID: 4, Name: "very-long-label-name-for-layout", Color: "#7057ff", Kind: store.KindLabelIssue, WorkspaceID: 1},
+	}
+
+	// Discussion labels are a separate kind — issue and discussion pickers
+	// draw from different sets. One archived row exercises the management
+	// page's archived section; it stays attached to the discussion that
+	// carries it.
+	storyDLabels = []*store.Label{
+		{ID: 11, Name: "question", Color: "#d876e3", Kind: store.KindLabelDiscussion},
+		{ID: 12, Name: "show-and-tell", Color: "#bfd4f2", Kind: store.KindLabelDiscussion, WorkspaceID: 1},
+	}
+	storyArchivedLabels = []*store.Label{
+		{ID: 13, Name: "wontfix", Color: "#ffffff", Kind: store.KindLabelIssue, Archived: true},
+		{ID: 14, Name: "old-announcement", Color: "#f9d0c4", Kind: store.KindLabelDiscussion, Archived: true},
 	}
 
 	storyIssues = []*store.Issue{
@@ -88,6 +101,7 @@ var (
 			Body:      "I cannot find where the palette is defined.",
 			Category:  *storyCategories[3],
 			CreatedAt: storyTime, UpdatedAt: storyTime2,
+			Labels:   []store.Label{*storyDLabels[0]},
 			Answered: true,
 		},
 		{
@@ -103,6 +117,7 @@ var (
 		Body:      "I cannot find where the **palette** is defined.",
 		Category:  *storyCategories[3],
 		CreatedAt: storyTime, UpdatedAt: storyTime2,
+		Labels:   []store.Label{*storyDLabels[0], *storyArchivedLabels[1]},
 		Answered: true,
 	}
 
@@ -188,6 +203,18 @@ func renderDiscussionForm(status int, data discussionFormPage) {
 func renderDiscussionDelete(status int, data discussionDeletePage) {
 	rec := httptest.NewRecorder()
 	NewRenderer().renderDiscussionDelete(rec, status, data)
+	printRec(rec)
+}
+
+func renderLabels(status int, data labelsPage) {
+	rec := httptest.NewRecorder()
+	NewRenderer().renderLabels(rec, status, data)
+	printRec(rec)
+}
+
+func renderLabelForm(status int, data labelFormPage) {
+	rec := httptest.NewRecorder()
+	NewRenderer().renderLabelForm(rec, status, data)
 	printRec(rec)
 }
 
@@ -463,6 +490,7 @@ func StoryDiscussionFormNew() {
 		Action:      "/discussions",
 		SubmitLabel: "Create discussion",
 		Categories:  storyCategories,
+		Labels:      storyDLabels,
 		Workspace:   storyWorkspace,
 		Section:     "discussions",
 	})
@@ -478,6 +506,7 @@ func StoryDiscussionFormErrors() {
 		SubmitLabel: "Create discussion",
 		Input:       store.DiscussionInput{Body: "title was empty"},
 		Categories:  storyCategories,
+		Labels:      storyDLabels,
 		Errors:      discussionFormErrors{Title: "Title is required.", Category: "Please pick a category."},
 		Workspace:   storyWorkspace,
 		Section:     "discussions",
@@ -491,6 +520,49 @@ func StoryDiscussionDelete() {
 		Discussion: storyDiscussion,
 		Workspace:  storyWorkspace,
 		Section:    "discussions",
+	})
+}
+
+// StoryLabels renders the label management page: both kinds, the
+// shared/workspace scope tags and the archived section.
+func StoryLabels() {
+	renderLabels(http.StatusOK, labelsPage{
+		Title:            "Labels",
+		IssueLabels:      storyLabels,
+		DiscussionLabels: storyDLabels,
+		ArchivedLabels:   storyArchivedLabels,
+		Workspace:        storyWorkspace,
+		Section:          "labels",
+	})
+}
+
+// StoryLabelsCreateError re-renders the management page after a failed
+// create — the draft values stay in the form with the field errors.
+func StoryLabelsCreateError() {
+	renderLabels(http.StatusUnprocessableEntity, labelsPage{
+		Title:            "Labels",
+		IssueLabels:      storyLabels,
+		DiscussionLabels: storyDLabels,
+		ArchivedLabels:   storyArchivedLabels,
+		Input:            store.LabelInput{Name: "bug", Color: "#ff0000"},
+		Kind:             "issue",
+		Scope:            "workspace",
+		Errors:           labelFormErrors{Other: "A label with this name already exists in that scope."},
+		Workspace:        storyWorkspace,
+		Section:          "labels",
+	})
+}
+
+// StoryLabelFormEdit renders the label edit form.
+func StoryLabelFormEdit() {
+	renderLabelForm(http.StatusOK, labelFormPage{
+		Title:     "Edit label bug",
+		Heading:   "Edit label bug",
+		Action:    "/w/default/labels/1/edit",
+		Label:     storyLabels[0],
+		Input:     store.LabelInput{Name: storyLabels[0].Name, Color: storyLabels[0].Color},
+		Workspace: storyWorkspace,
+		Section:   "labels",
 	})
 }
 
@@ -600,8 +672,45 @@ func (s storyStore) CreateComment(ctx context.Context, issueID int64, body strin
 	}
 	return 99, nil
 }
-func (storyStore) ListLabels(ctx context.Context) ([]*store.Label, error) {
-	return storyLabels, nil
+func (storyStore) ListLabels(ctx context.Context, wsID int64, kind string) ([]*store.Label, error) {
+	var out []*store.Label
+	for _, l := range append(append([]*store.Label{}, storyLabels...), storyDLabels...) {
+		if l.Kind == kind && !l.Archived && (l.WorkspaceID == 0 || l.WorkspaceID == wsID) {
+			out = append(out, l)
+		}
+	}
+	return out, nil
+}
+
+func (storyStore) ListArchivedLabels(ctx context.Context, wsID int64, kind string) ([]*store.Label, error) {
+	var out []*store.Label
+	for _, l := range storyArchivedLabels {
+		if l.Kind == kind && (l.WorkspaceID == 0 || l.WorkspaceID == wsID) {
+			out = append(out, l)
+		}
+	}
+	return out, nil
+}
+
+func (storyStore) GetLabel(ctx context.Context, id int64) (*store.Label, error) {
+	for _, l := range append(append(append([]*store.Label{}, storyLabels...), storyDLabels...), storyArchivedLabels...) {
+		if l.ID == id {
+			return l, nil
+		}
+	}
+	return nil, store.ErrNotFound
+}
+
+func (storyStore) CreateLabel(ctx context.Context, wsID int64, kind string, in store.LabelInput) (int64, error) {
+	panic("storybook: CreateLabel not implemented")
+}
+
+func (storyStore) UpdateLabel(ctx context.Context, id int64, in store.LabelInput) error {
+	panic("storybook: UpdateLabel not implemented")
+}
+
+func (storyStore) ArchiveLabel(ctx context.Context, id int64, archived bool) error {
+	panic("storybook: ArchiveLabel not implemented")
 }
 
 func (s storyStore) ListDiscussions(ctx context.Context, wsID int64, f store.DiscussionListFilter) ([]*store.Discussion, int, error) {

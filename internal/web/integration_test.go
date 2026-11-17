@@ -77,7 +77,7 @@ func TestE2EIssueLifecycle(t *testing.T) {
 	if err := st.SeedDemoData(ctx); err != nil {
 		t.Fatalf("SeedDemoData: %v", err)
 	}
-	labels, err := st.ListLabels(ctx)
+	labels, err := st.ListLabels(ctx, 1, store.KindLabelIssue)
 	if err != nil {
 		t.Fatalf("ListLabels: %v", err)
 	}
@@ -405,7 +405,7 @@ func TestE2EListInteractions(t *testing.T) {
 
 	// The label filter keeps the default open status: the Bug-labeled open
 	// seeds are "Crash…" and "Search slows…" only.
-	labels, err := st.ListLabels(ctx)
+	labels, err := st.ListLabels(ctx, 1, store.KindLabelIssue)
 	if err != nil {
 		t.Fatalf("ListLabels: %v", err)
 	}
@@ -666,14 +666,14 @@ func TestAPIMountedWithUserTokensOnly(t *testing.T) {
 	// Mount gated only on the env token would leave the API unreachable.
 	srv := httptest.NewServer(New(st))
 	t.Cleanup(srv.Close)
-	status, _, _ := e2eGet(t, srv, "/api/v1/labels")
+	status, _, _ := e2eGet(t, srv, "/api/v1/w/default/labels")
 	if status != http.StatusNotFound {
 		t.Fatalf("GET /api/v1/labels unmounted = %d, want 404", status)
 	}
 
 	srv2 := httptest.NewServer(New(st, WithAPIEnabled(true)))
 	t.Cleanup(srv2.Close)
-	req, _ := http.NewRequest("GET", srv2.URL+"/api/v1/labels", nil)
+	req, _ := http.NewRequest("GET", srv2.URL+"/api/v1/w/default/labels", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := srv2.Client().Do(req)
 	if err != nil {

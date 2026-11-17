@@ -7,9 +7,11 @@ import (
 	"time"
 )
 
+// mustLabel inserts a workspace-1 issue label; master labels of the same
+// name coexist per the union semantics.
 func mustLabel(t *testing.T, s *Store, name, color string) int64 {
 	t.Helper()
-	res, err := s.db.Exec("INSERT INTO labels(name, color) VALUES(?, ?)", name, color)
+	res, err := s.db.Exec("INSERT INTO labels(workspace_id, kind, name, color) VALUES(1, 'issue', ?, ?)", name, color)
 	if err != nil {
 		t.Fatalf("insert label: %v", err)
 	}
@@ -499,11 +501,27 @@ func TestListLabels(t *testing.T) {
 	mustLabel(t, s, "Alpha", "#ffffff")
 	mustLabel(t, s, "Mid", "#888888")
 
-	ls, err := s.ListLabels(ctx)
+	// ws 1 sees the four schema-seeded master labels unioned with its own.
+	ls, err := s.ListLabels(ctx, 1, KindLabelIssue)
 	if err != nil {
 		t.Fatalf("ListLabels: %v", err)
 	}
-	if len(ls) != 3 || ls[0].Name != "Alpha" || ls[1].Name != "Mid" || ls[2].Name != "Zeta" {
-		t.Fatalf("not sorted by name: %+v", ls)
+	want := []string{"Alpha", "Bug", "Documentation", "Enhancement", "Feature", "Mid", "Zeta"}
+	if len(ls) != len(want) {
+		t.Fatalf("ListLabels = %d rows, want %d: %+v", len(ls), len(want), ls)
+	}
+	for i, l := range ls {
+		if l.Name != want[i] {
+			t.Fatalf("not sorted by name: %+v", ls)
+		}
+	}
+
+	// Another workspace sees only master labels — ws-1 rows stay scoped.
+	ls2, err := s.ListLabels(ctx, 2, KindLabelIssue)
+	if err != nil {
+		t.Fatalf("ListLabels ws2: %v", err)
+	}
+	if len(ls2) != 4 {
+		t.Fatalf("ListLabels ws2 = %d rows, want 4 master labels: %+v", len(ls2), ls2)
 	}
 }

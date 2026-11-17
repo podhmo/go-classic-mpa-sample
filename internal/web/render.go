@@ -30,7 +30,7 @@ func NewRenderer() *Renderer {
 func parsePages() map[string]*template.Template {
 	names := []string{"issues", "issue_detail", "issue_form", "issue_delete", "error", "auth_form",
 		"discussions", "discussion_detail", "discussion_form", "discussion_delete",
-		"workspaces", "workspace_form", "workspace_delete"}
+		"workspaces", "workspace_form", "workspace_delete", "labels", "label_form"}
 	// The detail pages also parse fragments.html: its defines power both
 	// their inline markup and the standalone partial-update responses.
 	fragments := map[string]bool{"issue_detail": true, "discussion_detail": true}
@@ -129,6 +129,16 @@ func (r *Renderer) renderWorkspaceList(w http.ResponseWriter, status int, data w
 // renderWorkspaceForm renders the new-workspace form.
 func (r *Renderer) renderWorkspaceForm(w http.ResponseWriter, status int, data workspaceFormPage) {
 	r.execute(w, "workspace_form", status, data)
+}
+
+// renderLabels renders GET /w/{ws}/labels.
+func (r *Renderer) renderLabels(w http.ResponseWriter, status int, data labelsPage) {
+	r.execute(w, "labels", status, data)
+}
+
+// renderLabelForm renders the label edit form.
+func (r *Renderer) renderLabelForm(w http.ResponseWriter, status int, data labelFormPage) {
+	r.execute(w, "label_form", status, data)
 }
 
 // renderWorkspaceDelete renders the workspace delete confirmation page.

@@ -71,7 +71,7 @@ func issueList(ctx context.Context, o Options, args []string) error {
 		Sort: *sort, Page: *page, PerPage: *limit,
 	}
 	if *label != "" {
-		ids, err := resolveLabelIDs(ctx, b, []string{*label})
+		ids, err := resolveLabelIDs(ctx, b, store.KindLabelIssue, []string{*label})
 		if err != nil {
 			return err
 		}
@@ -206,7 +206,7 @@ func issueCreate(ctx context.Context, o Options, args []string) error {
 	}
 	defer closeQuietly(closer)
 
-	labelIDs, err := resolveLabelIDs(ctx, b, labels)
+	labelIDs, err := resolveLabelIDs(ctx, b, store.KindLabelIssue, labels)
 	if err != nil {
 		return err
 	}
@@ -273,7 +273,7 @@ func issueEdit(ctx context.Context, o Options, args []string) error {
 		}
 	})
 	if len(labels) > 0 {
-		in.LabelIDs, err = resolveLabelIDs(ctx, b, labels)
+		in.LabelIDs, err = resolveLabelIDs(ctx, b, store.KindLabelIssue, labels)
 		if err != nil {
 			return err
 		}
@@ -371,20 +371,50 @@ func commentCmd(ctx context.Context, o Options, args []string) error {
 	return nil
 }
 
-// zatu label list
+// zatu label list|create|delete
 func labelCmd(ctx context.Context, o Options, args []string) error {
-	if len(args) == 0 || args[0] != "list" {
-		return usageError{msg: "usage: zatu label list"}
+	if len(args) == 0 {
+		return usageError{msg: "usage: zatu label list|create|delete"}
 	}
+	switch args[0] {
+	case "list":
+		return labelList(ctx, o, args[1:])
+	case "create":
+		return labelCreate(ctx, o, args[1:])
+	case "delete":
+		return labelDelete(ctx, o, args[1:])
+	default:
+		return usageError{msg: "usage: zatu label list|create|delete"}
+	}
+}
+
+// labelKindFlag validates the --kind flag shared by the label commands.
+func labelKindFlag(fs *flag.FlagSet) *string {
+	return fs.String("kind", "issue", "label kind: issue|discussion")
+}
+
+func checkKind(k string) error {
+	if k != store.KindLabelIssue && k != store.KindLabelDiscussion {
+		return usageError{msg: fmt.Sprintf("--kind must be issue|discussion, got %q", k)}
+	}
+	return nil
+}
+
+// zatu label list [--kind issue|discussion]
+func labelList(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("label list", flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
+	kind := labelKindFlag(fs)
 	jsonFields := fs.String("json", "", "output JSON with the named fields (comma-separated)")
 	tmpl := fs.String("template", "", "render output through a Go text/template")
-	if _, err := parseLeaf(fs, args[1:], 0); err != nil {
+	if _, err := parseLeaf(fs, args, 0); err != nil {
 		return err
 	}
 	if *jsonFields != "" && *tmpl != "" {
 		return usageError{msg: "--json and --template are mutually exclusive"}
+	}
+	if err := checkKind(*kind); err != nil {
+		return err
 	}
 	b, closer, err := o.backend(ctx, bf)
 	if err != nil {
@@ -392,7 +422,7 @@ func labelCmd(ctx context.Context, o Options, args []string) error {
 	}
 	defer closeQuietly(closer)
 
-	labels, err := b.ListLabels(ctx)
+	labels, err := b.ListLabels(ctx, *kind)
 	if err != nil {
 		return err
 	}
@@ -403,8 +433,113 @@ func labelCmd(ctx context.Context, o Options, args []string) error {
 		return writeTemplate(o.Stdout, labelViews(labels), *tmpl)
 	}
 	for _, l := range labels {
-		fmt.Fprintf(o.Stdout, "%s\t%s\n", l.Name, l.Color)
+		scope := "workspace"
+		if l.WorkspaceID == 0 {
+			scope = "shared"
+		}
+		fmt.Fprintf(o.Stdout, "%s\t%s\t%s\n", l.Name, l.Color, scope)
 	}
+	return nil
+}
+
+// zatu label create NAME --color HEX [--kind K] [--shared]
+// Creating a name that matches an archived label restores it with the
+// new color — that is the unarchive path (there is no `label restore`).
+func labelCreate(ctx context.Context, o Options, args []string) error {
+	fs := flag.NewFlagSet("label create", flag.ContinueOnError)
+	bf := o.addBackendFlags(fs)
+	kind := labelKindFlag(fs)
+	color := fs.String("color", "", "label color as #RRGGBB (required)")
+	shared := fs.Bool("shared", false, "create a shared label visible in every workspace")
+	rest, err := parseLeaf(fs, args, 1)
+	if err != nil {
+		return err
+	}
+	if len(rest) == 0 {
+		return usageError{msg: "missing label name"}
+	}
+	if *color == "" {
+		return usageError{msg: "--color is required"}
+	}
+	if err := checkKind(*kind); err != nil {
+		return err
+	}
+	in := store.LabelInput{Name: strings.TrimSpace(rest[0]), Color: strings.TrimSpace(*color)}
+	if fe := store.ValidateLabelInput(in); len(fe) > 0 {
+		keys := make([]string, 0, len(fe))
+		for k := range fe {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		parts := make([]string, 0, len(keys))
+		for _, k := range keys {
+			parts = append(parts, k+": "+fe[k])
+		}
+		return fmt.Errorf("invalid input: %s", strings.Join(parts, "; "))
+	}
+	b, closer, err := o.backend(ctx, bf)
+	if err != nil {
+		return err
+	}
+	defer closeQuietly(closer)
+	id, err := b.CreateLabel(ctx, *kind, in, *shared)
+	if err != nil {
+		return err
+	}
+	scope := "workspace"
+	if *shared {
+		scope = "shared"
+	}
+	fmt.Fprintf(o.Stdout, "created %s label #%d %q\n", scope, id, in.Name)
+	return nil
+}
+
+// zatu label delete NAME [--kind K] — archives the label: it leaves
+// pickers and filters but stays attached to issues/discussions that
+// already carry it.
+func labelDelete(ctx context.Context, o Options, args []string) error {
+	fs := flag.NewFlagSet("label delete", flag.ContinueOnError)
+	bf := o.addBackendFlags(fs)
+	kind := labelKindFlag(fs)
+	rest, err := parseLeaf(fs, args, 1)
+	if err != nil {
+		return err
+	}
+	if len(rest) == 0 {
+		return usageError{msg: "missing label name"}
+	}
+	if err := checkKind(*kind); err != nil {
+		return err
+	}
+	b, closer, err := o.backend(ctx, bf)
+	if err != nil {
+		return err
+	}
+	defer closeQuietly(closer)
+	labels, err := b.ListLabels(ctx, *kind)
+	if err != nil {
+		return err
+	}
+	name := rest[0]
+	// Prefer this workspace's own label when the name exists in both
+	// scopes — the union shows both, and archiving the shared row is the
+	// less reversible, wider-reaching choice.
+	var target *store.Label
+	for _, l := range labels {
+		if l.Name != name {
+			continue
+		}
+		if target == nil || l.WorkspaceID != 0 {
+			target = l
+		}
+	}
+	if target == nil {
+		return fmt.Errorf("unknown %s label: %s", *kind, name)
+	}
+	if err := b.ArchiveLabel(ctx, target.ID, true); err != nil {
+		return err
+	}
+	fmt.Fprintf(o.Stdout, "archived label #%d %q\n", target.ID, name)
 	return nil
 }
 

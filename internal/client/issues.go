@@ -29,7 +29,7 @@ func (c *Client) ListIssues(ctx context.Context, f store.ListFilter) ([]*store.I
 		q.Set("sort", f.Sort)
 	}
 	if f.LabelID > 0 {
-		labels, err := c.ListLabels(ctx)
+		labels, err := c.ListLabels(ctx, store.KindLabelIssue)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -152,21 +152,6 @@ func (c *Client) CreateComment(ctx context.Context, issueID int64, body string, 
 	return res.Comment.ID, nil
 }
 
-func (c *Client) ListLabels(ctx context.Context) ([]*store.Label, error) {
-	var res struct {
-		Labels []api.Label `json:"labels"`
-	}
-	if err := c.do(ctx, "GET", "/labels", nil, &res); err != nil {
-		return nil, err
-	}
-	out := make([]*store.Label, 0, len(res.Labels))
-	for _, l := range res.Labels {
-		l := l
-		out = append(out, &store.Label{ID: l.ID, Name: l.Name, Color: l.Color})
-	}
-	return out, nil
-}
-
 func issueFromDTO(i api.Issue) *store.Issue {
 	out := &store.Issue{
 		ID: i.ID, Title: i.Title, Body: i.Body, Status: i.Status,
@@ -174,7 +159,7 @@ func issueFromDTO(i api.Issue) *store.Issue {
 		CreatedAt: parseTime(i.CreatedAt), UpdatedAt: parseTime(i.UpdatedAt),
 	}
 	for _, l := range i.Labels {
-		out.Labels = append(out.Labels, store.Label{ID: l.ID, Name: l.Name, Color: l.Color})
+		out.Labels = append(out.Labels, labelFromDTO(l))
 	}
 	return out
 }

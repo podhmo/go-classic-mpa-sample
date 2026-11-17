@@ -22,13 +22,6 @@ type seedIssue struct {
 	comments []seedComment
 }
 
-var seedLabels = []Label{
-	{Name: "Bug", Color: "#d73a4a"},
-	{Name: "Documentation", Color: "#1f6feb"},
-	{Name: "Enhancement", Color: "#a2eeef"},
-	{Name: "Feature", Color: "#0075ca"},
-}
-
 var seedIssues = []seedIssue{
 	{
 		title:  "Crash when opening an empty project",
@@ -108,12 +101,13 @@ Possible directions: an FTS5 virtual table, a trigram index, or simply capping t
 	},
 }
 
-// SeedDemoData inserts the default labels plus demo issues/comments, but only
-// when the issues table is empty; the issue part is a no-op otherwise. The
-// demo account is seeded independently so a database that already has issues
-// (e.g. one upgraded to v2) still gets a way to log in. The discussion side
-// follows the same rule: categories are seeded when their table is empty,
-// demo discussions when theirs is.
+// SeedDemoData inserts demo issues/comments, but only when the issues
+// table is empty; the issue part is a no-op otherwise. The demo account is
+// seeded independently so a database that already has issues still gets a
+// way to log in. The discussion side follows the same rule: categories are
+// seeded when their table is empty, demo discussions when theirs is.
+// (Labels are not seeded here — the four default master labels are schema
+// data, inserted by defaultLabelsDDL on every database.)
 func (s *Store) SeedDemoData(ctx context.Context) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -162,24 +156,33 @@ func (s *Store) SeedDemoData(ctx context.Context) error {
 	return tx.Commit()
 }
 
-// seedIssuesAndLabels inserts the default labels and demo issues/comments
-// inside tx.
+// seedIssuesAndLabels inserts the demo issues/comments inside tx,
+// resolving label names against the master label rows the schema created.
 func seedIssuesAndLabels(ctx context.Context, tx *sql.Tx) error {
 	wsID, err := seedWorkspaceID(ctx, tx)
 	if err != nil {
 		return err
 	}
-	labelIDs := make(map[string]int64, len(seedLabels))
-	for _, l := range seedLabels {
-		res, err := tx.ExecContext(ctx, "INSERT INTO labels(name, color) VALUES(?, ?)", l.Name, l.Color)
-		if err != nil {
+	labelIDs := map[string]int64{}
+	rows, err := tx.QueryContext(ctx,
+		"SELECT id, name FROM labels WHERE kind = '"+KindLabelIssue+"' AND workspace_id IS NULL AND archived = 0")
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var id int64
+		var name string
+		if err := rows.Scan(&id, &name); err != nil {
+			rows.Close()
 			return err
 		}
-		id, err := res.LastInsertId()
-		if err != nil {
-			return err
-		}
-		labelIDs[l.Name] = id
+		labelIDs[name] = id
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if err := rows.Err(); err != nil {
+		return err
 	}
 
 	now := time.Now().UTC()
@@ -200,8 +203,14 @@ func seedIssuesAndLabels(ctx context.Context, tx *sql.Tx) error {
 			return err
 		}
 		for _, name := range si.labels {
+			// A master label an operator renamed or deleted is skipped —
+			// the demo issue still lands, just without that label.
+			lid, ok := labelIDs[name]
+			if !ok {
+				continue
+			}
 			if _, err := tx.ExecContext(ctx,
-				"INSERT INTO issue_labels(issue_id, label_id) VALUES(?, ?)", id, labelIDs[name]); err != nil {
+				"INSERT INTO issue_labels(issue_id, label_id) VALUES(?, ?)", id, lid); err != nil {
 				return err
 			}
 		}

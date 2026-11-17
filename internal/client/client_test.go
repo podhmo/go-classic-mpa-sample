@@ -144,7 +144,7 @@ func TestClientLabels(t *testing.T) {
 	if err := st.SeedDemoData(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	labels, err := c.ListLabels(context.Background())
+	labels, err := c.ListLabels(context.Background(), store.KindLabelIssue)
 	if err != nil {
 		t.Fatalf("ListLabels: %v", err)
 	}

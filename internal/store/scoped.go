@@ -106,8 +106,63 @@ func (sc *ScopedStore) CreateComment(ctx context.Context, issueID int64, body st
 	return sc.s.CreateComment(ctx, issueID, body, authorID)
 }
 
-func (sc *ScopedStore) ListLabels(ctx context.Context) ([]*Label, error) {
-	return sc.s.ListLabels(ctx)
+// ListLabels returns the labels of kind visible in this workspace: master
+// rows plus its own. Kind is ""-safe — pass KindLabelIssue/Discussion.
+func (sc *ScopedStore) ListLabels(ctx context.Context, kind string) ([]*Label, error) {
+	return sc.s.ListLabels(ctx, sc.wsID, kind)
+}
+
+// ListArchivedLabels is the archived counterpart of ListLabels.
+func (sc *ScopedStore) ListArchivedLabels(ctx context.Context, kind string) ([]*Label, error) {
+	return sc.s.ListArchivedLabels(ctx, sc.wsID, kind)
+}
+
+// inScopeLabel is ErrNotFound when id names a label of another workspace;
+// master labels (WorkspaceID 0) are in scope from any workspace.
+func (sc *ScopedStore) inScopeLabel(ctx context.Context, id int64) error {
+	l, err := sc.s.GetLabel(ctx, id)
+	if err != nil {
+		return err
+	}
+	if l.WorkspaceID != 0 && l.WorkspaceID != sc.wsID {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (sc *ScopedStore) GetLabel(ctx context.Context, id int64) (*Label, error) {
+	l, err := sc.s.GetLabel(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if l.WorkspaceID != 0 && l.WorkspaceID != sc.wsID {
+		return nil, ErrNotFound
+	}
+	return l, nil
+}
+
+// CreateLabel adds a label to this workspace, or to the shared master
+// data when master is true.
+func (sc *ScopedStore) CreateLabel(ctx context.Context, kind string, in LabelInput, master bool) (int64, error) {
+	wsID := sc.wsID
+	if master {
+		wsID = 0
+	}
+	return sc.s.CreateLabel(ctx, wsID, kind, in)
+}
+
+func (sc *ScopedStore) UpdateLabel(ctx context.Context, id int64, in LabelInput) error {
+	if err := sc.inScopeLabel(ctx, id); err != nil {
+		return err
+	}
+	return sc.s.UpdateLabel(ctx, id, in)
+}
+
+func (sc *ScopedStore) ArchiveLabel(ctx context.Context, id int64, archived bool) error {
+	if err := sc.inScopeLabel(ctx, id); err != nil {
+		return err
+	}
+	return sc.s.ArchiveLabel(ctx, id, archived)
 }
 
 func (sc *ScopedStore) ListDiscussions(ctx context.Context, f DiscussionListFilter) ([]*Discussion, int, error) {
