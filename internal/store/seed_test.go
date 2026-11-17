@@ -13,7 +13,7 @@ func TestSeedDemoData(t *testing.T) {
 		t.Fatalf("SeedDemoData: %v", err)
 	}
 
-	issues, total, err := s.ListIssues(ctx, ListFilter{Status: "all", PerPage: 100})
+	issues, total, err := s.ListIssues(ctx, 1, ListFilter{Status: "all", PerPage: 100})
 	if err != nil {
 		t.Fatalf("ListIssues: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestSeedDemoData(t *testing.T) {
 	if len(cats) != 4 {
 		t.Fatalf("seeded %d categories, want 4", len(cats))
 	}
-	ds, dtotal, err := s.ListDiscussions(ctx, DiscussionListFilter{})
+	ds, dtotal, err := s.ListDiscussions(ctx, 1, DiscussionListFilter{})
 	if err != nil {
 		t.Fatalf("ListDiscussions: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestSeedDemoData(t *testing.T) {
 	if err := s.SeedDemoData(ctx); err != nil {
 		t.Fatalf("second SeedDemoData: %v", err)
 	}
-	_, total2, err := s.ListIssues(ctx, ListFilter{Status: "all", PerPage: 100})
+	_, total2, err := s.ListIssues(ctx, 1, ListFilter{Status: "all", PerPage: 100})
 	if err != nil {
 		t.Fatalf("ListIssues: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestSeedDemoData(t *testing.T) {
 	if len(labels2) != len(labels) {
 		t.Fatalf("label count changed: %d -> %d", len(labels), len(labels2))
 	}
-	_, dtotal2, err := s.ListDiscussions(ctx, DiscussionListFilter{})
+	_, dtotal2, err := s.ListDiscussions(ctx, 1, DiscussionListFilter{})
 	if err != nil {
 		t.Fatalf("ListDiscussions: %v", err)
 	}
@@ -124,13 +124,13 @@ func TestSeedDemoData(t *testing.T) {
 	}
 
 	s2 := newTestStore(t)
-	if _, err := s2.CreateIssue(ctx, IssueInput{Title: "existing"}, 0); err != nil {
+	if _, err := s2.CreateIssue(ctx, 1, IssueInput{Title: "existing"}, 0); err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
 	if err := s2.SeedDemoData(ctx); err != nil {
 		t.Fatalf("SeedDemoData on non-empty: %v", err)
 	}
-	_, n, err := s2.ListIssues(ctx, ListFilter{Status: "all"})
+	_, n, err := s2.ListIssues(ctx, 1, ListFilter{Status: "all"})
 	if err != nil {
 		t.Fatalf("ListIssues: %v", err)
 	}
@@ -173,7 +173,7 @@ func TestSeedCategories(t *testing.T) {
 		t.Fatalf("seeded %d categories, want 4", len(cats))
 	}
 
-	if _, total, err := s.ListDiscussions(ctx, DiscussionListFilter{}); err != nil {
+	if _, total, err := s.ListDiscussions(ctx, 1, DiscussionListFilter{}); err != nil {
 		t.Fatalf("ListDiscussions: %v", err)
 	} else if total != 0 {
 		t.Fatalf("SeedCategories also created %d discussions", total)

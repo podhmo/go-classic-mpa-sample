@@ -44,6 +44,7 @@ type authFormPage struct {
 	PasswordError string
 	OtherLabel    string // footer link: "Log in" ↔ "Register"
 	OtherURL      string
+	Workspace     *store.Workspace
 	Section       string
 	User          *store.User
 }

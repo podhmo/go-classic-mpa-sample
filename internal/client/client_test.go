@@ -22,7 +22,7 @@ func newFixture(t *testing.T, token string) (*Client, *store.Store) {
 	t.Cleanup(func() { st.Close() })
 	srv := httptest.NewServer(api.New(st, token))
 	t.Cleanup(srv.Close)
-	return New(srv.URL, token), st
+	return New(srv.URL, token).In("default"), st
 }
 
 func TestClientIssueLifecycle(t *testing.T) {
@@ -157,7 +157,7 @@ func TestClientLabels(t *testing.T) {
 // clearing through PATCH.
 func TestClientUnknownLabelFilter(t *testing.T) {
 	c, st := newFixture(t, "env-tok")
-	st.CreateIssue(context.Background(), store.IssueInput{Title: "x"}, 0)
+	st.CreateIssue(context.Background(), 1, store.IssueInput{Title: "x"}, 0)
 
 	got, _, err := c.ListIssues(context.Background(),
 		store.ListFilter{Status: "all", LabelID: 9999})
@@ -172,7 +172,7 @@ func TestClientUnknownLabelFilter(t *testing.T) {
 func TestClientUpdateClearsLabels(t *testing.T) {
 	c, st := newFixture(t, "env-tok")
 	st.SeedDemoData(context.Background())
-	id, err := st.CreateIssue(context.Background(),
+	id, err := st.CreateIssue(context.Background(), 1,
 		store.IssueInput{Title: "labeled", LabelIDs: []int64{1}}, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -194,7 +194,7 @@ func TestClientUpdateClearsLabels(t *testing.T) {
 func TestClientPaginationAboveCap(t *testing.T) {
 	c, st := newFixture(t, "env-tok")
 	for i := 0; i < 250; i++ {
-		if _, err := st.CreateIssue(context.Background(),
+		if _, err := st.CreateIssue(context.Background(), 1,
 			store.IssueInput{Title: "bulk"}, 0); err != nil {
 			t.Fatal(err)
 		}

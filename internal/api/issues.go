@@ -10,7 +10,7 @@ import (
 
 // GET /api/v1/issues?status=&q=&label=&sort=&page=&per_page=
 // Response: {"issues": [...], "total": N, "page": P, "per_page": PP}
-func (h *handler) listIssues(w http.ResponseWriter, r *http.Request) {
+func (h *handler) listIssues(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	q := r.URL.Query()
 	f := store.ListFilter{
 		Status:  q.Get("status"),
@@ -36,7 +36,7 @@ func (h *handler) listIssues(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	issues, total, err := h.store.ListIssues(r.Context(), f)
+	issues, total, err := h.store.ListIssues(r.Context(), ws.ID, f)
 	if err != nil {
 		h.storeError(w, err)
 		return
@@ -52,7 +52,7 @@ func (h *handler) listIssues(w http.ResponseWriter, r *http.Request) {
 
 // GET /api/v1/issues/{id} — one call returns the issue with labels plus
 // its comments, matching the HTML detail page's shape.
-func (h *handler) getIssue(w http.ResponseWriter, r *http.Request) {
+func (h *handler) getIssue(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := h.pathID(w, r, "id")
 	if !ok {
 		return
@@ -60,6 +60,9 @@ func (h *handler) getIssue(w http.ResponseWriter, r *http.Request) {
 	issue, err := h.store.GetIssue(r.Context(), id)
 	if err != nil {
 		h.storeError(w, err)
+		return
+	}
+	if !h.requireScope(w, ws, issue.WorkspaceID) {
 		return
 	}
 	comments, err := h.store.ListComments(r.Context(), id)
@@ -82,7 +85,7 @@ type issueBody struct {
 }
 
 // POST /api/v1/issues {"title", "body", "label_ids"|"labels"} → 201
-func (h *handler) createIssue(w http.ResponseWriter, r *http.Request) {
+func (h *handler) createIssue(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	var in issueBody
 	if !decodeBody(w, r, &in) {
 		return
@@ -103,7 +106,7 @@ func (h *handler) createIssue(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", fields(fe))
 		return
 	}
-	id, err := h.store.CreateIssue(r.Context(), input, actorID(r))
+	id, err := h.store.CreateIssue(r.Context(), ws.ID, input, actorID(r))
 	if err != nil {
 		h.storeError(w, err)
 		return
@@ -118,7 +121,7 @@ func (h *handler) createIssue(w http.ResponseWriter, r *http.Request) {
 
 // PATCH /api/v1/issues/{id} — only fields present in the body are updated;
 // absent fields keep their current values.
-func (h *handler) updateIssue(w http.ResponseWriter, r *http.Request) {
+func (h *handler) updateIssue(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := h.pathID(w, r, "id")
 	if !ok {
 		return
@@ -130,6 +133,9 @@ func (h *handler) updateIssue(w http.ResponseWriter, r *http.Request) {
 	issue, err := h.store.GetIssue(r.Context(), id)
 	if err != nil {
 		h.storeError(w, err)
+		return
+	}
+	if !h.requireScope(w, ws, issue.WorkspaceID) {
 		return
 	}
 	input := store.IssueInput{Title: issue.Title, Body: issue.Body}
@@ -173,7 +179,7 @@ func (h *handler) updateIssue(w http.ResponseWriter, r *http.Request) {
 // POST /api/v1/issues/{id}/status {"status": "open"|"closed"} → 200.
 // Status change stays a POST (not PATCH) so the wire mirrors the HTML app's
 // explicit action endpoint.
-func (h *handler) setIssueStatus(w http.ResponseWriter, r *http.Request) {
+func (h *handler) setIssueStatus(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := h.pathID(w, r, "id")
 	if !ok {
 		return
@@ -186,6 +192,14 @@ func (h *handler) setIssueStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.Status != store.StatusOpen && in.Status != store.StatusClosed {
 		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", map[string]string{"status": "Status must be \"open\" or \"closed\"."})
+		return
+	}
+	issue0, err := h.store.GetIssue(r.Context(), id)
+	if err != nil {
+		h.storeError(w, err)
+		return
+	}
+	if !h.requireScope(w, ws, issue0.WorkspaceID) {
 		return
 	}
 	if err := h.store.SetIssueStatus(r.Context(), id, in.Status); err != nil {
@@ -201,9 +215,17 @@ func (h *handler) setIssueStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 // DELETE /api/v1/issues/{id} → 204
-func (h *handler) deleteIssue(w http.ResponseWriter, r *http.Request) {
+func (h *handler) deleteIssue(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := h.pathID(w, r, "id")
 	if !ok {
+		return
+	}
+	issue, err := h.store.GetIssue(r.Context(), id)
+	if err != nil {
+		h.storeError(w, err)
+		return
+	}
+	if !h.requireScope(w, ws, issue.WorkspaceID) {
 		return
 	}
 	if err := h.store.DeleteIssue(r.Context(), id); err != nil {
@@ -214,7 +236,7 @@ func (h *handler) deleteIssue(w http.ResponseWriter, r *http.Request) {
 }
 
 // POST /api/v1/issues/{id}/comments {"body"} → 201
-func (h *handler) createComment(w http.ResponseWriter, r *http.Request) {
+func (h *handler) createComment(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := h.pathID(w, r, "id")
 	if !ok {
 		return
@@ -232,8 +254,12 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request) {
 	}
 	// GetIssue keeps a missing issue a 404 rather than a dangling comment
 	// (the store also FK-guards, but the error would be generic).
-	if _, err := h.store.GetIssue(r.Context(), id); err != nil {
+	issue0, err := h.store.GetIssue(r.Context(), id)
+	if err != nil {
 		h.storeError(w, err)
+		return
+	}
+	if !h.requireScope(w, ws, issue0.WorkspaceID) {
 		return
 	}
 	cid, err := h.store.CreateComment(r.Context(), id, body, actorID(r))

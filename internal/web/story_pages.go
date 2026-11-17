@@ -203,6 +203,7 @@ func StoryIssueList() {
 		TotalPages: 1,
 		RangeStart: 1,
 		RangeEnd:   len(storyIssues),
+		Workspace:  storyWorkspace,
 		Section:    "issues",
 	})
 }
@@ -216,6 +217,7 @@ func StoryIssueListEmpty() {
 		Page:            1,
 		TotalPages:      0,
 		HasActiveFilter: true,
+		Workspace:       storyWorkspace,
 		Section:         "issues",
 	})
 }
@@ -233,6 +235,7 @@ func StoryIssueListPaged() {
 		RangeStart:      41,
 		RangeEnd:        60,
 		HasActiveFilter: true,
+		Workspace:       storyWorkspace,
 		Section:         "issues",
 	})
 }
@@ -251,6 +254,7 @@ func StoryIssueListSearch() {
 		RangeStart:      1,
 		RangeEnd:        len(storyIssues),
 		HasActiveFilter: true,
+		Workspace:       storyWorkspace,
 		Section:         "issues",
 	})
 }
@@ -258,10 +262,11 @@ func StoryIssueListSearch() {
 // StoryIssueDetail renders the issue detail page with comments.
 func StoryIssueDetail() {
 	renderIssueDetail(http.StatusOK, issueDetailPage{
-		Title:    "#2 Improve responsive layout",
-		Issue:    storyIssue,
-		Comments: storyComments,
-		Section:  "issues",
+		Title:     "#2 Improve responsive layout",
+		Issue:     storyIssue,
+		Comments:  storyComments,
+		Workspace: storyWorkspace,
+		Section:   "issues",
 	})
 }
 
@@ -277,10 +282,11 @@ func StoryIssueDetailLong() {
 		})
 	}
 	renderIssueDetail(http.StatusOK, issueDetailPage{
-		Title:    "#2 Improve responsive layout",
-		Issue:    storyIssue,
-		Comments: comments,
-		Section:  "issues",
+		Title:     "#2 Improve responsive layout",
+		Issue:     storyIssue,
+		Comments:  comments,
+		Workspace: storyWorkspace,
+		Section:   "issues",
 	})
 }
 
@@ -293,6 +299,7 @@ func StoryIssueDetailCommentError() {
 		Comments:     storyComments,
 		CommentDraft: "   ",
 		CommentError: "Body is required.",
+		Workspace:    storyWorkspace,
 		Section:      "issues",
 	})
 }
@@ -301,9 +308,10 @@ func StoryIssueDetailCommentError() {
 // empty list state plus the bottom comment form's initial state.
 func StoryIssueDetailEmpty() {
 	renderIssueDetail(http.StatusOK, issueDetailPage{
-		Title:   "#2 Improve responsive layout",
-		Issue:   storyIssue,
-		Section: "issues",
+		Title:     "#2 Improve responsive layout",
+		Issue:     storyIssue,
+		Workspace: storyWorkspace,
+		Section:   "issues",
 	})
 }
 
@@ -315,6 +323,7 @@ func StoryIssueFormNew() {
 		Action:      "/issues",
 		SubmitLabel: "Create issue",
 		Labels:      storyLabels,
+		Workspace:   storyWorkspace,
 		Section:     "issues",
 	})
 }
@@ -329,6 +338,7 @@ func StoryIssueFormErrors() {
 		Input:       store.IssueInput{Body: "title was empty"},
 		Labels:      storyLabels,
 		Errors:      issueFormErrors{Title: "Title is required."},
+		Workspace:   storyWorkspace,
 		Section:     "issues",
 	})
 }
@@ -342,6 +352,7 @@ func StoryIssueFormEdit() {
 		SubmitLabel: "Save changes",
 		Input:       store.IssueInput{Title: storyIssue.Title, Body: storyIssue.Body, LabelIDs: []int64{1, 2}},
 		Labels:      storyLabels,
+		Workspace:   storyWorkspace,
 		Section:     "issues",
 	})
 }
@@ -349,9 +360,10 @@ func StoryIssueFormEdit() {
 // StoryIssueDelete renders the delete confirmation page.
 func StoryIssueDelete() {
 	renderIssueDelete(http.StatusOK, issueDeletePage{
-		Title:   "Delete issue #2",
-		Issue:   storyIssue,
-		Section: "issues",
+		Title:     "Delete issue #2",
+		Issue:     storyIssue,
+		Workspace: storyWorkspace,
+		Section:   "issues",
 	})
 }
 
@@ -374,6 +386,7 @@ func StoryDiscussionList() {
 		TotalPages:  1,
 		RangeStart:  1,
 		RangeEnd:    len(storyDiscussions),
+		Workspace:   storyWorkspace,
 		Section:     "discussions",
 	})
 }
@@ -387,6 +400,7 @@ func StoryDiscussionListEmpty() {
 		Filter:          store.DiscussionListFilter{CategorySlug: "qa", Answered: "yes", Query: "zzz", Page: 1, PerPage: perPage},
 		Page:            1,
 		HasActiveFilter: true,
+		Workspace:       storyWorkspace,
 		Section:         "discussions",
 	})
 }
@@ -398,6 +412,7 @@ func StoryDiscussionDetail() {
 		Title:      "#2 How do custom labels get their color?",
 		Discussion: storyDiscussion,
 		Threads:    storyDThreads,
+		Workspace:  storyWorkspace,
 		Section:    "discussions",
 	})
 }
@@ -414,6 +429,7 @@ func StoryDiscussionDetailReplyOpen() {
 		ThreadDraftID: 1,
 		CommentDraft:  "   ",
 		CommentError:  "Body is required.",
+		Workspace:     storyWorkspace,
 		Section:       "discussions",
 	})
 }
@@ -434,6 +450,7 @@ func StoryDiscussionDetailLong() {
 		Title:      "#2 How do custom labels get their color?",
 		Discussion: storyDiscussion,
 		Threads:    threads,
+		Workspace:  storyWorkspace,
 		Section:    "discussions",
 	})
 }
@@ -446,6 +463,7 @@ func StoryDiscussionFormNew() {
 		Action:      "/discussions",
 		SubmitLabel: "Create discussion",
 		Categories:  storyCategories,
+		Workspace:   storyWorkspace,
 		Section:     "discussions",
 	})
 }
@@ -461,6 +479,7 @@ func StoryDiscussionFormErrors() {
 		Input:       store.DiscussionInput{Body: "title was empty"},
 		Categories:  storyCategories,
 		Errors:      discussionFormErrors{Title: "Title is required.", Category: "Please pick a category."},
+		Workspace:   storyWorkspace,
 		Section:     "discussions",
 	})
 }
@@ -470,6 +489,7 @@ func StoryDiscussionDelete() {
 	renderDiscussionDelete(http.StatusOK, discussionDeletePage{
 		Title:      "Delete discussion #2",
 		Discussion: storyDiscussion,
+		Workspace:  storyWorkspace,
 		Section:    "discussions",
 	})
 }
@@ -532,7 +552,7 @@ func cloneDComments(src []*store.DiscussionComment) []*store.DiscussionComment {
 	return out
 }
 
-func (storyStore) ListIssues(ctx context.Context, f store.ListFilter) ([]*store.Issue, int, error) {
+func (storyStore) ListIssues(ctx context.Context, wsID int64, f store.ListFilter) ([]*store.Issue, int, error) {
 	return storyIssues, len(storyIssues), nil
 }
 func (s storyStore) GetIssue(ctx context.Context, id int64) (*store.Issue, error) {
@@ -541,7 +561,7 @@ func (s storyStore) GetIssue(ctx context.Context, id int64) (*store.Issue, error
 	}
 	return nil, store.ErrNotFound
 }
-func (storyStore) CreateIssue(ctx context.Context, in store.IssueInput, authorID int64) (int64, error) {
+func (s storyStore) CreateIssue(ctx context.Context, wsID int64, in store.IssueInput, authorID int64) (int64, error) {
 	return 99, nil
 }
 func (storyStore) UpdateIssue(ctx context.Context, id int64, in store.IssueInput) error {
@@ -584,7 +604,7 @@ func (storyStore) ListLabels(ctx context.Context) ([]*store.Label, error) {
 	return storyLabels, nil
 }
 
-func (s storyStore) ListDiscussions(ctx context.Context, f store.DiscussionListFilter) ([]*store.Discussion, int, error) {
+func (s storyStore) ListDiscussions(ctx context.Context, wsID int64, f store.DiscussionListFilter) ([]*store.Discussion, int, error) {
 	out := make([]*store.Discussion, len(storyDiscussions))
 	for i, d := range storyDiscussions {
 		dd := *d
@@ -612,7 +632,7 @@ func (s storyStore) answered(discussionID int64) bool {
 	}
 	return false
 }
-func (storyStore) CreateDiscussion(ctx context.Context, in store.DiscussionInput, authorID int64) (int64, error) {
+func (s storyStore) CreateDiscussion(ctx context.Context, wsID int64, in store.DiscussionInput, authorID int64) (int64, error) {
 	return 99, nil
 }
 func (storyStore) UpdateDiscussion(ctx context.Context, id int64, in store.DiscussionInput) error {
@@ -813,4 +833,31 @@ func StoryHttpSetCommentAnswerRedirect(w http.ResponseWriter, r *http.Request) {
 // without a database.
 func StoryHttpApp(w http.ResponseWriter, r *http.Request) {
 	New(newStoryStore()).ServeHTTP(w, r)
+}
+
+// The storybook runs in the single "default" workspace; management
+// endpoints are read-only fixtures (create/delete panic like other
+// mutating methods do here).
+var storyWorkspace = &store.Workspace{ID: 1, Slug: "default", Name: "default", Description: "Storybook workspace."}
+
+func (storyStore) ListWorkspaces(ctx context.Context) ([]*store.Workspace, error) {
+	return []*store.Workspace{storyWorkspace}, nil
+}
+func (storyStore) WorkspaceBySlug(ctx context.Context, slug string) (*store.Workspace, error) {
+	if slug == storyWorkspace.Slug {
+		return storyWorkspace, nil
+	}
+	return nil, store.ErrNotFound
+}
+func (storyStore) WorkspaceByID(ctx context.Context, id int64) (*store.Workspace, error) {
+	if id == storyWorkspace.ID {
+		return storyWorkspace, nil
+	}
+	return nil, store.ErrNotFound
+}
+func (storyStore) CreateWorkspace(ctx context.Context, in store.WorkspaceInput) (int64, error) {
+	panic("storybook: CreateWorkspace not implemented")
+}
+func (storyStore) DeleteWorkspace(ctx context.Context, slug string) error {
+	panic("storybook: DeleteWorkspace not implemented")
 }

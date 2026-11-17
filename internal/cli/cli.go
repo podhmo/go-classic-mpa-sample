@@ -11,6 +11,7 @@
 //	issues discussion list|view|create|edit|delete
 //	issues discussion comment create N --body B [--thread T]
 //	issues discussion answer N --thread T [--unmark]
+//	issues workspace list|create SLUG [--name N] [--description D]|delete SLUG
 //	issues auth token --user NAME | token list | token revoke  (local mode only)
 //	issues api <path> [-X METHOD] [-f k=v]... [-F k=v]...       (remote mode only)
 //	issues completion bash|zsh|fish
@@ -58,6 +59,12 @@ type Backend interface {
 	CreateDiscussionComment(ctx context.Context, discussionID, threadID int64, body string, authorID int64) (int64, error)
 	SetThreadAnswer(ctx context.Context, discussionID, threadID int64, answer bool) error
 	ListDiscussionCategories(ctx context.Context) ([]*store.DiscussionCategory, error)
+
+	// Workspace management is unscoped — the same backend serves them
+	// regardless of which workspace it was opened for.
+	ListWorkspaces(ctx context.Context) ([]*store.Workspace, error)
+	CreateWorkspace(ctx context.Context, in store.WorkspaceInput) (int64, error)
+	DeleteWorkspace(ctx context.Context, slug string) error
 }
 
 // TokenStore is the extra contract "auth token" needs. Token management
@@ -85,8 +92,8 @@ type Options struct {
 
 	// Factory seams for tests (and for keeping package cli independent of
 	// *store.Store's concrete type). Defaults hit the real implementations.
-	OpenLocal      func(dbPath string) (Backend, io.Closer, error)
-	OpenRemote     func(server, token string) (Backend, error)
+	OpenLocal      func(ctx context.Context, dbPath, ws string) (Backend, io.Closer, error)
+	OpenRemote     func(server, token, ws string) (Backend, error)
 	OpenTokenStore func(dbPath string) (TokenStore, error)
 	OpenBrowser    func(url string) error
 }
@@ -122,6 +129,8 @@ func Run(ctx context.Context, o Options) int {
 		err = completionCmd(ctx, o, args[1:])
 	case "discussion":
 		err = discussionCmd(ctx, o, args[1:])
+	case "workspace":
+		err = workspaceCmd(ctx, o, args[1:])
 	default:
 		err = usageError{msg: fmt.Sprintf("unknown command %q", args[0])}
 	}
@@ -157,17 +166,22 @@ func (o Options) withDefaults() Options {
 		o.Getenv = os.Getenv
 	}
 	if o.OpenLocal == nil {
-		o.OpenLocal = func(dbPath string) (Backend, io.Closer, error) {
+		o.OpenLocal = func(ctx context.Context, dbPath, ws string) (Backend, io.Closer, error) {
 			st, err := store.Open(dbPath)
 			if err != nil {
 				return nil, nil, err
 			}
-			return st, st, nil
+			be, err := st.In(ctx, ws)
+			if err != nil {
+				st.Close()
+				return nil, nil, err
+			}
+			return be, st, nil
 		}
 	}
 	if o.OpenRemote == nil {
-		o.OpenRemote = func(server, token string) (Backend, error) {
-			return client.New(server, token), nil
+		o.OpenRemote = func(server, token, ws string) (Backend, error) {
+			return client.New(server, token).In(ws), nil
 		}
 	}
 	if o.OpenTokenStore == nil {
@@ -194,6 +208,9 @@ Commands:
   auth token --user NAME     issue a per-user API token (local mode only)
   auth token list [--user NAME]      list issued tokens (local mode only)
   auth token revoke (ID|--token T)   revoke a token (local mode only)
+  workspace list             list workspaces
+  workspace create SLUG      create a workspace [--name N] [--description D]
+  workspace delete SLUG      delete a workspace and its contents
   api <path>                 raw call to /api/v1 (remote mode only)
                              [-X METHOD] [-f name=value]... [-F name=value]...
   completion bash|zsh|fish   print a shell completion script
@@ -203,6 +220,7 @@ Backend selection:
   --server URL   remote mode via /api/v1 (env ISSUES_SERVER); requires --token
   --token T      Bearer token for remote mode (env ISSUES_TOKEN)
   --db PATH      local mode, direct SQLite access (env ISSUES_DB, default issues.db)
+  --workspace S  workspace for issue/discussion commands (env ISSUES_WORKSPACE, default "default")
 
 Exit codes: 0 ok, 1 error, 2 usage.
 `)
@@ -215,6 +233,7 @@ type backendFlags struct {
 	db     string
 	server string
 	token  string
+	ws     string
 }
 
 func (o Options) addBackendFlags(fs *flag.FlagSet) *backendFlags {
@@ -222,11 +241,21 @@ func (o Options) addBackendFlags(fs *flag.FlagSet) *backendFlags {
 	fs.StringVar(&b.db, "db", o.Getenv("ISSUES_DB"), "SQLite database file for local mode (env ISSUES_DB, default issues.db)")
 	fs.StringVar(&b.server, "server", o.Getenv("ISSUES_SERVER"), "server base URL for remote mode (env ISSUES_SERVER)")
 	fs.StringVar(&b.token, "token", o.Getenv("ISSUES_TOKEN"), "Bearer token for remote mode (env ISSUES_TOKEN)")
+	fs.StringVar(&b.ws, "workspace", o.Getenv("ISSUES_WORKSPACE"), `workspace slug for issue/discussion commands (env ISSUES_WORKSPACE, default "default")`)
 	return b
 }
 
 // dbPath resolves the local database path, defaulting to issues.db like
 // the server's -db flag.
+// wsSlug resolves the workspace scope, defaulting to "default" — the one
+// every fresh database starts with.
+func (b *backendFlags) wsSlug() string {
+	if b.ws == "" {
+		return store.DefaultWorkspaceSlug
+	}
+	return b.ws
+}
+
 func (b *backendFlags) dbPath() string {
 	if b.db == "" {
 		return "issues.db"
@@ -237,13 +266,20 @@ func (b *backendFlags) dbPath() string {
 // backend opens the Backend for the given flags: --server/ISSUES_SERVER
 // selects remote mode, anything else opens the local database. The
 // returned io.Closer is nil for remote backends.
-func (o Options) backend(b *backendFlags) (Backend, io.Closer, error) {
+func (o Options) backend(ctx context.Context, b *backendFlags) (Backend, io.Closer, error) {
+	return o.backendIn(ctx, b, b.wsSlug())
+}
+
+// backendIn opens the Backend scoped to an explicit workspace slug; ws==""
+// means unscoped (workspace management verbs must work even when no
+// workspace exists — e.g. after deleting default).
+func (o Options) backendIn(ctx context.Context, b *backendFlags, ws string) (Backend, io.Closer, error) {
 	if b.server != "" {
 		warnPlaintext(o.Stderr, b.server, b.token)
-		be, err := o.OpenRemote(b.server, b.token)
+		be, err := o.OpenRemote(b.server, b.token, ws)
 		return be, nil, err
 	}
-	return o.OpenLocal(b.dbPath())
+	return o.OpenLocal(ctx, b.dbPath(), ws)
 }
 
 // warnPlaintext warns when an API token is about to travel over

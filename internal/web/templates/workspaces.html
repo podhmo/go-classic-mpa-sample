@@ -1,0 +1,26 @@
+{{define "content"}}
+<div class="page-head">
+  <h1>Workspaces</h1>
+  <a class="btn" href="/workspaces/new">New workspace</a>
+</div>
+{{if .Workspaces}}
+<ul class="workspace-list">
+  {{range .Workspaces}}
+  <li class="workspace-row">
+    <div class="workspace-main">
+      <a class="workspace-slug" href="/w/{{.Slug}}/issues">w/{{.Slug}}</a>
+      {{if ne .Name .Slug}}<span class="workspace-name">{{.Name}}</span>{{end}}
+      {{if .Description}}<p class="workspace-desc">{{.Description}}</p>{{end}}
+    </div>
+    <div class="workspace-meta">
+      <span>{{.IssueCount}} issues</span>
+      <span>{{.DiscussionCount}} discussions</span>
+      <a href="/w/{{.Slug}}/delete">Delete</a>
+    </div>
+  </li>
+  {{end}}
+</ul>
+{{else}}
+<p class="empty-state">No workspaces yet.</p>
+{{end}}
+{{end}}

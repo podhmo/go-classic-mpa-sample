@@ -30,7 +30,7 @@ func TestDiscussionLifecycle(t *testing.T) {
 		t.Fatalf("categories = %d %v", code, out)
 	}
 
-	code, out = do(t, srv, "POST", "/api/v1/discussions",
+	code, out = do(t, srv, "POST", "/api/v1/w/default/discussions",
 		fmt.Sprintf(`{"title":"how?","body":"details","category":"%s"}`, qaSlug))
 	if code != http.StatusCreated {
 		t.Fatalf("create discussion = %d (%v)", code, out)
@@ -41,33 +41,33 @@ func TestDiscussionLifecycle(t *testing.T) {
 		t.Fatalf("category = %v", d["category"])
 	}
 
-	code, out = do(t, srv, "POST", fmt.Sprintf("/api/v1/discussions/%d/threads", did), `{"body":"try this"}`)
+	code, out = do(t, srv, "POST", fmt.Sprintf("/api/v1/w/default/discussions/%d/threads", did), `{"body":"try this"}`)
 	if code != http.StatusCreated {
 		t.Fatalf("thread = %d", code)
 	}
 	tid := int64(out["thread"].(map[string]any)["id"].(float64))
-	code, out = do(t, srv, "POST", fmt.Sprintf("/api/v1/discussions/%d/threads/%d/comments", did, tid),
+	code, out = do(t, srv, "POST", fmt.Sprintf("/api/v1/w/default/discussions/%d/threads/%d/comments", did, tid),
 		`{"body":"it worked"}`)
 	if code != http.StatusCreated {
 		t.Fatalf("reply = %d %v", code, out)
 	}
 	rid := int64(out["comment"].(map[string]any)["id"].(float64))
 	// A comment id is not a thread: nesting a reply under a reply is 422.
-	code, _ = do(t, srv, "POST", fmt.Sprintf("/api/v1/discussions/%d/threads/%d/comments", did, rid),
+	code, _ = do(t, srv, "POST", fmt.Sprintf("/api/v1/w/default/discussions/%d/threads/%d/comments", did, rid),
 		`{"body":"nested"}`)
 	if code != http.StatusUnprocessableEntity {
 		t.Fatalf("nested reply = %d, want 422", code)
 	}
 
-	code, out = do(t, srv, "POST", fmt.Sprintf("/api/v1/discussions/%d/threads/%d/answer", did, tid), `{}`)
+	code, out = do(t, srv, "POST", fmt.Sprintf("/api/v1/w/default/discussions/%d/threads/%d/answer", did, tid), `{}`)
 	if code != http.StatusUnprocessableEntity || out["error"].(map[string]any)["fields"].(map[string]any)["answer"] == nil {
 		t.Fatalf("empty answer body = %d %v", code, out)
 	}
-	code, _ = do(t, srv, "POST", fmt.Sprintf("/api/v1/discussions/%d/threads/%d/answer", did, tid), `{"answer":true}`)
+	code, _ = do(t, srv, "POST", fmt.Sprintf("/api/v1/w/default/discussions/%d/threads/%d/answer", did, tid), `{"answer":true}`)
 	if code != http.StatusNoContent {
 		t.Fatalf("answer = %d, want 204", code)
 	}
-	code, out = do(t, srv, "GET", fmt.Sprintf("/api/v1/discussions/%d", did), "")
+	code, out = do(t, srv, "GET", fmt.Sprintf("/api/v1/w/default/discussions/%d", did), "")
 	if out["discussion"].(map[string]any)["answered"] != true {
 		t.Fatalf("answered = %v", out["discussion"])
 	}
@@ -76,7 +76,7 @@ func TestDiscussionLifecycle(t *testing.T) {
 		t.Fatalf("thread tree = %v", t0)
 	}
 
-	code, out = do(t, srv, "GET", "/api/v1/discussions?answered=yes", "")
+	code, out = do(t, srv, "GET", "/api/v1/w/default/discussions?answered=yes", "")
 	found := false
 	for _, d := range out["discussions"].([]any) {
 		if int64(d.(map[string]any)["id"].(float64)) == did {
@@ -87,11 +87,11 @@ func TestDiscussionLifecycle(t *testing.T) {
 		t.Fatalf("answered=yes missing discussion %d: %v", did, out)
 	}
 
-	code, out = do(t, srv, "PATCH", fmt.Sprintf("/api/v1/discussions/%d", did), `{"title":"renamed"}`)
+	code, out = do(t, srv, "PATCH", fmt.Sprintf("/api/v1/w/default/discussions/%d", did), `{"title":"renamed"}`)
 	if code != http.StatusOK || out["discussion"].(map[string]any)["title"] != "renamed" {
 		t.Fatalf("patch = %d %v", code, out)
 	}
-	code, _ = do(t, srv, "DELETE", fmt.Sprintf("/api/v1/discussions/%d", did), "")
+	code, _ = do(t, srv, "DELETE", fmt.Sprintf("/api/v1/w/default/discussions/%d", did), "")
 	if code != http.StatusNoContent {
 		t.Fatalf("delete = %d", code)
 	}

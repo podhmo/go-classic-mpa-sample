@@ -65,7 +65,7 @@ func (c *Client) listIssuesPage(ctx context.Context, q url.Values) ([]*store.Iss
 		Issues []api.Issue `json:"issues"`
 		Total  int         `json:"total"`
 	}
-	if err := c.do(ctx, "GET", "/issues?"+q.Encode(), nil, &res); err != nil {
+	if err := c.do(ctx, "GET", c.wsPath("issues")+"?"+q.Encode(), nil, &res); err != nil {
 		return nil, 0, err
 	}
 	issues := make([]*store.Issue, 0, len(res.Issues))
@@ -79,7 +79,7 @@ func (c *Client) GetIssue(ctx context.Context, id int64) (*store.Issue, error) {
 	var res struct {
 		Issue api.Issue `json:"issue"`
 	}
-	if err := c.do(ctx, "GET", "/issues/"+fmt.Sprint(id), nil, &res); err != nil {
+	if err := c.do(ctx, "GET", c.wsPath("issues/")+fmt.Sprint(id), nil, &res); err != nil {
 		return nil, err
 	}
 	return issueFromDTO(res.Issue), nil
@@ -93,7 +93,7 @@ func (c *Client) ListComments(ctx context.Context, issueID int64) ([]*store.Comm
 	var res struct {
 		Comments []api.Comment `json:"comments"`
 	}
-	if err := c.do(ctx, "GET", "/issues/"+fmt.Sprint(issueID), nil, &res); err != nil {
+	if err := c.do(ctx, "GET", c.wsPath("issues/")+fmt.Sprint(issueID), nil, &res); err != nil {
 		return nil, err
 	}
 	out := make([]*store.Comment, 0, len(res.Comments))
@@ -109,7 +109,7 @@ func (c *Client) CreateIssue(ctx context.Context, in store.IssueInput, _ int64) 
 	var res struct {
 		Issue api.Issue `json:"issue"`
 	}
-	err := c.do(ctx, "POST", "/issues", map[string]any{
+	err := c.do(ctx, "POST", c.wsPath("issues"), map[string]any{
 		"title": in.Title, "body": in.Body, "label_ids": in.LabelIDs,
 	}, &res)
 	if err != nil {
@@ -126,25 +126,25 @@ func (c *Client) UpdateIssue(ctx context.Context, id int64, in store.IssueInput)
 		// agree that nil LabelIDs clears the labels.
 		labelIDs = []int64{}
 	}
-	return c.do(ctx, "PATCH", "/issues/"+fmt.Sprint(id), map[string]any{
+	return c.do(ctx, "PATCH", c.wsPath("issues/")+fmt.Sprint(id), map[string]any{
 		"title": in.Title, "body": in.Body, "label_ids": labelIDs,
 	}, nil)
 }
 
 func (c *Client) SetIssueStatus(ctx context.Context, id int64, status string) error {
-	return c.do(ctx, "POST", "/issues/"+fmt.Sprint(id)+"/status",
+	return c.do(ctx, "POST", c.wsPath("issues/")+fmt.Sprint(id)+"/status",
 		map[string]any{"status": status}, nil)
 }
 
 func (c *Client) DeleteIssue(ctx context.Context, id int64) error {
-	return c.do(ctx, "DELETE", "/issues/"+fmt.Sprint(id), nil, nil)
+	return c.do(ctx, "DELETE", c.wsPath("issues/")+fmt.Sprint(id), nil, nil)
 }
 
 func (c *Client) CreateComment(ctx context.Context, issueID int64, body string, _ int64) (int64, error) {
 	var res struct {
 		Comment api.Comment `json:"comment"`
 	}
-	err := c.do(ctx, "POST", "/issues/"+fmt.Sprint(issueID)+"/comments",
+	err := c.do(ctx, "POST", c.wsPath("issues/")+fmt.Sprint(issueID)+"/comments",
 		map[string]any{"body": body}, &res)
 	if err != nil {
 		return 0, err

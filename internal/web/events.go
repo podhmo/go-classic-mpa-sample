@@ -25,28 +25,36 @@ import (
 const sseHeartbeat = 25 * time.Second
 
 // issueEvents streams changes for one issue as text/event-stream.
-func (h *handler) issueEvents(w http.ResponseWriter, r *http.Request) {
+func (h *handler) issueEvents(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := parseID(r)
 	if !ok {
 		h.notFound(w, r)
 		return
 	}
-	if _, err := h.store.GetIssue(r.Context(), id); err != nil {
+	i, err := h.store.GetIssue(r.Context(), id)
+	if err != nil {
 		h.issueError(w, r, err)
+		return
+	}
+	if !h.requireScope(w, r, ws, i.WorkspaceID) {
 		return
 	}
 	h.streamEvents(w, r, events.IssueTopic(id))
 }
 
 // discussionEvents streams changes for one discussion.
-func (h *handler) discussionEvents(w http.ResponseWriter, r *http.Request) {
+func (h *handler) discussionEvents(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := parseID(r)
 	if !ok {
 		h.notFound(w, r)
 		return
 	}
-	if _, err := h.store.GetDiscussion(r.Context(), id); err != nil {
+	d, err := h.store.GetDiscussion(r.Context(), id)
+	if err != nil {
 		h.discussionError(w, r, err)
+		return
+	}
+	if !h.requireScope(w, r, ws, d.WorkspaceID) {
 		return
 	}
 	h.streamEvents(w, r, events.DiscussionTopic(id))
@@ -137,7 +145,7 @@ func parseIDSet(r *http.Request) (map[int64]bool, bool, error) {
 // ?ids= filters to those comments, otherwise the whole list (resync).
 // The fragment leads with the issue meta as a data-swap node — a new
 // comment bumps updated_at.
-func (h *handler) issueCommentsFragment(w http.ResponseWriter, r *http.Request) {
+func (h *handler) issueCommentsFragment(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := parseID(r)
 	if !ok {
 		h.notFound(w, r)
@@ -151,6 +159,9 @@ func (h *handler) issueCommentsFragment(w http.ResponseWriter, r *http.Request) 
 	issue, err := h.store.GetIssue(r.Context(), id)
 	if err != nil {
 		h.issueError(w, r, err)
+		return
+	}
+	if !h.requireScope(w, r, ws, issue.WorkspaceID) {
 		return
 	}
 	comments, err := h.store.ListComments(r.Context(), id)
@@ -168,12 +179,12 @@ func (h *handler) issueCommentsFragment(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	h.r.renderFragment(w, "issue_detail", "issue_comments_update", http.StatusOK,
-		dict("Issue", issue, "Comments", out))
+		dict("Issue", issue, "Comments", out, "Workspace", ws))
 }
 
 // issueArticleFragment serves GET /issues/{id}/fragments/article — the
 // whole issue card for status/edit live swaps.
-func (h *handler) issueArticleFragment(w http.ResponseWriter, r *http.Request) {
+func (h *handler) issueArticleFragment(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := parseID(r)
 	if !ok {
 		h.notFound(w, r)
@@ -184,16 +195,20 @@ func (h *handler) issueArticleFragment(w http.ResponseWriter, r *http.Request) {
 		h.issueError(w, r, err)
 		return
 	}
+	if !h.requireScope(w, r, ws, issue.WorkspaceID) {
+		return
+	}
 	h.r.renderFragment(w, "issue_detail", "issue_article", http.StatusOK, issueDetailPage{
-		Issue: issue,
-		User:  userFromContext(r.Context()),
+		Issue:     issue,
+		Workspace: ws,
+		User:      userFromContext(r.Context()),
 	})
 }
 
 // discussionThreadsFragment serves GET /discussions/{id}/fragments/threads
 // — ?ids= picks specific threads (also how answer-move swaps fetch the two
 // changed <li>s), no ids returns the whole list.
-func (h *handler) discussionThreadsFragment(w http.ResponseWriter, r *http.Request) {
+func (h *handler) discussionThreadsFragment(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := parseID(r)
 	if !ok {
 		h.notFound(w, r)
@@ -207,6 +222,9 @@ func (h *handler) discussionThreadsFragment(w http.ResponseWriter, r *http.Reque
 	discussion, err := h.store.GetDiscussion(r.Context(), id)
 	if err != nil {
 		h.discussionError(w, r, err)
+		return
+	}
+	if !h.requireScope(w, r, ws, discussion.WorkspaceID) {
 		return
 	}
 	threads, err := h.store.ListDiscussionThreads(r.Context(), id)
@@ -224,14 +242,14 @@ func (h *handler) discussionThreadsFragment(w http.ResponseWriter, r *http.Reque
 		}
 	}
 	h.r.renderFragment(w, "discussion_detail", "discussion_threads_update", http.StatusOK,
-		dict("Discussion", discussion, "Threads", out))
+		dict("Discussion", discussion, "Threads", out, "Workspace", ws))
 }
 
 // discussionRepliesFragment serves
 // GET /discussions/{id}/fragments/replies?thread=T(&ids=…): the reply
 // <li>s of one thread, for appending pushed replies without touching the
 // thread's open reply form.
-func (h *handler) discussionRepliesFragment(w http.ResponseWriter, r *http.Request) {
+func (h *handler) discussionRepliesFragment(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := parseID(r)
 	if !ok {
 		h.notFound(w, r)
@@ -250,6 +268,9 @@ func (h *handler) discussionRepliesFragment(w http.ResponseWriter, r *http.Reque
 	discussion, err := h.store.GetDiscussion(r.Context(), id)
 	if err != nil {
 		h.discussionError(w, r, err)
+		return
+	}
+	if !h.requireScope(w, r, ws, discussion.WorkspaceID) {
 		return
 	}
 	threads, err := h.store.ListDiscussionThreads(r.Context(), id)
@@ -278,12 +299,12 @@ func (h *handler) discussionRepliesFragment(w http.ResponseWriter, r *http.Reque
 		}
 	}
 	h.r.renderFragment(w, "discussion_detail", "discussion_replies_update", http.StatusOK,
-		dict("Discussion", discussion, "Comments", out))
+		dict("Discussion", discussion, "Comments", out, "Workspace", ws))
 }
 
 // discussionArticleFragment serves GET /discussions/{id}/fragments/article
 // — the whole discussion card for edit live swaps.
-func (h *handler) discussionArticleFragment(w http.ResponseWriter, r *http.Request) {
+func (h *handler) discussionArticleFragment(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := parseID(r)
 	if !ok {
 		h.notFound(w, r)
@@ -294,8 +315,12 @@ func (h *handler) discussionArticleFragment(w http.ResponseWriter, r *http.Reque
 		h.discussionError(w, r, err)
 		return
 	}
+	if !h.requireScope(w, r, ws, discussion.WorkspaceID) {
+		return
+	}
 	h.r.renderFragment(w, "discussion_detail", "discussion_article", http.StatusOK, discussionDetailPage{
 		Discussion: discussion,
+		Workspace:  ws,
 		User:       userFromContext(r.Context()),
 	})
 }

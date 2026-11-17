@@ -26,6 +26,7 @@ type issueListPage struct {
 	RangeEnd        int
 	HasActiveFilter bool
 	Section         string
+	Workspace       *store.Workspace
 	User            *store.User
 }
 
@@ -39,6 +40,7 @@ type issueDetailPage struct {
 	CommentDraft string
 	CommentError string
 	Section      string
+	Workspace    *store.Workspace
 	User         *store.User
 }
 
@@ -53,6 +55,7 @@ type issueFormPage struct {
 	Labels      []*store.Label
 	Errors      issueFormErrors
 	Section     string
+	Workspace   *store.Workspace
 	User        *store.User
 }
 
@@ -66,18 +69,19 @@ func (e issueFormErrors) any() bool { return e.Title != "" || e.Body != "" }
 
 // issueDeletePage is the view model for the delete confirmation page.
 type issueDeletePage struct {
-	Title   string
-	Issue   *store.Issue
-	Section string
-	User    *store.User
+	Title     string
+	Issue     *store.Issue
+	Section   string
+	Workspace *store.Workspace
+	User      *store.User
 }
 
 // listIssues handles GET /issues: status tabs, keyword search, label
 // filtering, sorting and pagination.
-func (h *handler) listIssues(w http.ResponseWriter, r *http.Request) {
+func (h *handler) listIssues(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	f := parseListFilter(r)
 
-	issues, total, err := h.store.ListIssues(r.Context(), f)
+	issues, total, err := h.store.ListIssues(r.Context(), ws.ID, f)
 	if err != nil {
 		h.internalError(w, r, err)
 		return
@@ -89,7 +93,7 @@ func (h *handler) listIssues(w http.ResponseWriter, r *http.Request) {
 	totalPages := (total + perPage - 1) / perPage
 	if total > 0 && f.Page > totalPages {
 		f.Page = totalPages
-		issues, total, err = h.store.ListIssues(r.Context(), f)
+		issues, total, err = h.store.ListIssues(r.Context(), ws.ID, f)
 		if err != nil {
 			h.internalError(w, r, err)
 			return
@@ -112,8 +116,9 @@ func (h *handler) listIssues(w http.ResponseWriter, r *http.Request) {
 		TotalPages: totalPages,
 		HasActiveFilter: f.Query != "" || f.LabelID != 0 ||
 			f.Status != store.StatusOpen || f.Sort != "",
-		Section: "issues",
-		User:    userFromContext(r.Context()),
+		Section:   "issues",
+		Workspace: ws,
+		User:      userFromContext(r.Context()),
 	}
 	if total > 0 {
 		data.RangeStart = (f.Page-1)*perPage + 1
@@ -129,7 +134,7 @@ func (h *handler) listIssues(w http.ResponseWriter, r *http.Request) {
 }
 
 // newIssue renders the empty create form.
-func (h *handler) newIssue(w http.ResponseWriter, r *http.Request) {
+func (h *handler) newIssue(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	labels, err := h.store.ListLabels(r.Context())
 	if err != nil {
 		h.internalError(w, r, err)
@@ -138,16 +143,17 @@ func (h *handler) newIssue(w http.ResponseWriter, r *http.Request) {
 	h.r.renderIssueForm(w, http.StatusOK, issueFormPage{
 		Title:       "New issue",
 		Heading:     "New issue",
-		Action:      "/issues",
+		Action:      "/w/" + ws.Slug + "/issues",
 		SubmitLabel: "Create issue",
 		Labels:      labels,
 		Section:     "issues",
+		Workspace:   ws,
 		User:        userFromContext(r.Context()),
 	})
 }
 
 // createIssue validates POST /issues and redirects to the new issue.
-func (h *handler) createIssue(w http.ResponseWriter, r *http.Request) {
+func (h *handler) createIssue(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	if !h.parseForm(w, r) {
 		return
 	}
@@ -161,26 +167,27 @@ func (h *handler) createIssue(w http.ResponseWriter, r *http.Request) {
 		h.r.renderIssueForm(w, http.StatusUnprocessableEntity, issueFormPage{
 			Title:       "New issue",
 			Heading:     "New issue",
-			Action:      "/issues",
+			Action:      "/w/" + ws.Slug + "/issues",
 			SubmitLabel: "Create issue",
 			Input:       in,
 			Labels:      labels,
 			Errors:      errs,
 			Section:     "issues",
+			Workspace:   ws,
 			User:        userFromContext(r.Context()),
 		})
 		return
 	}
-	id, err := h.store.CreateIssue(r.Context(), in, authorIDFromContext(r.Context()))
+	id, err := h.store.CreateIssue(r.Context(), ws.ID, in, authorIDFromContext(r.Context()))
 	if err != nil {
 		h.internalError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, issueURL(id), http.StatusSeeOther)
+	http.Redirect(w, r, issueURL(ws, id), http.StatusSeeOther)
 }
 
 // showIssue renders the detail page including comments and the comment form.
-func (h *handler) showIssue(w http.ResponseWriter, r *http.Request) {
+func (h *handler) showIssue(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := parseID(r)
 	if !ok {
 		h.notFound(w, r)
@@ -189,6 +196,9 @@ func (h *handler) showIssue(w http.ResponseWriter, r *http.Request) {
 	issue, err := h.store.GetIssue(r.Context(), id)
 	if err != nil {
 		h.issueError(w, r, err)
+		return
+	}
+	if !h.requireScope(w, r, ws, issue.WorkspaceID) {
 		return
 	}
 	comments, err := h.store.ListComments(r.Context(), id)
@@ -197,16 +207,17 @@ func (h *handler) showIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.r.renderIssueDetail(w, http.StatusOK, issueDetailPage{
-		Title:    fmt.Sprintf("#%d %s", issue.ID, issue.Title),
-		Issue:    issue,
-		Comments: comments,
-		Section:  "issues",
-		User:     userFromContext(r.Context()),
+		Title:     fmt.Sprintf("#%d %s", issue.ID, issue.Title),
+		Issue:     issue,
+		Comments:  comments,
+		Section:   "issues",
+		Workspace: ws,
+		User:      userFromContext(r.Context()),
 	})
 }
 
 // editIssue renders the edit form populated with the current values.
-func (h *handler) editIssue(w http.ResponseWriter, r *http.Request) {
+func (h *handler) editIssue(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := parseID(r)
 	if !ok {
 		h.notFound(w, r)
@@ -215,6 +226,9 @@ func (h *handler) editIssue(w http.ResponseWriter, r *http.Request) {
 	issue, err := h.store.GetIssue(r.Context(), id)
 	if err != nil {
 		h.issueError(w, r, err)
+		return
+	}
+	if !h.requireScope(w, r, ws, issue.WorkspaceID) {
 		return
 	}
 	labels, err := h.store.ListLabels(r.Context())
@@ -233,17 +247,18 @@ func (h *handler) editIssue(w http.ResponseWriter, r *http.Request) {
 	h.r.renderIssueForm(w, http.StatusOK, issueFormPage{
 		Title:       fmt.Sprintf("Edit issue #%d", issue.ID),
 		Heading:     fmt.Sprintf("Edit issue #%d", issue.ID),
-		Action:      issueURL(id) + "/edit",
+		Action:      issueURL(ws, id) + "/edit",
 		SubmitLabel: "Save changes",
 		Input:       in,
 		Labels:      labels,
 		Section:     "issues",
+		Workspace:   ws,
 		User:        userFromContext(r.Context()),
 	})
 }
 
 // updateIssue validates POST /issues/{id}/edit and redirects to the detail.
-func (h *handler) updateIssue(w http.ResponseWriter, r *http.Request) {
+func (h *handler) updateIssue(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := parseID(r)
 	if !ok {
 		h.notFound(w, r)
@@ -251,8 +266,12 @@ func (h *handler) updateIssue(w http.ResponseWriter, r *http.Request) {
 	}
 	// Fetch the issue up front so ANY POST to a missing issue — including
 	// one that fails validation — is a 404 rather than a 422 edit form.
-	if _, err := h.store.GetIssue(r.Context(), id); err != nil {
+	issue, err := h.store.GetIssue(r.Context(), id)
+	if err != nil {
 		h.issueError(w, r, err)
+		return
+	}
+	if !h.requireScope(w, r, ws, issue.WorkspaceID) {
 		return
 	}
 	if !h.parseForm(w, r) {
@@ -268,12 +287,13 @@ func (h *handler) updateIssue(w http.ResponseWriter, r *http.Request) {
 		h.r.renderIssueForm(w, http.StatusUnprocessableEntity, issueFormPage{
 			Title:       fmt.Sprintf("Edit issue #%d", id),
 			Heading:     fmt.Sprintf("Edit issue #%d", id),
-			Action:      issueURL(id) + "/edit",
+			Action:      issueURL(ws, id) + "/edit",
 			SubmitLabel: "Save changes",
 			Input:       in,
 			Labels:      labels,
 			Errors:      errs,
 			Section:     "issues",
+			Workspace:   ws,
 			User:        userFromContext(r.Context()),
 		})
 		return
@@ -282,16 +302,24 @@ func (h *handler) updateIssue(w http.ResponseWriter, r *http.Request) {
 		h.issueError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, issueURL(id), http.StatusSeeOther)
+	http.Redirect(w, r, issueURL(ws, id), http.StatusSeeOther)
 }
 
 // setStatus handles POST /issues/{id}/status. The target status arrives as a
 // hidden form field rendered by the detail page ("closed" on an open issue,
 // "open" on a closed one).
-func (h *handler) setStatus(w http.ResponseWriter, r *http.Request) {
+func (h *handler) setStatus(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := parseID(r)
 	if !ok {
 		h.notFound(w, r)
+		return
+	}
+	issue0, err := h.store.GetIssue(r.Context(), id)
+	if err != nil {
+		h.issueError(w, r, err)
+		return
+	}
+	if !h.requireScope(w, r, ws, issue0.WorkspaceID) {
 		return
 	}
 	if !h.parseForm(w, r) {
@@ -318,17 +346,18 @@ func (h *handler) setStatus(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.r.renderFragment(w, "issue_detail", "issue_article", http.StatusOK, issueDetailPage{
-			Issue: issue,
-			User:  userFromContext(r.Context()),
+			Issue:     issue,
+			Workspace: ws,
+			User:      userFromContext(r.Context()),
 		})
 		return
 	}
-	http.Redirect(w, r, issueURL(id), http.StatusSeeOther)
+	http.Redirect(w, r, issueURL(ws, id), http.StatusSeeOther)
 }
 
 // confirmDelete renders the delete confirmation page. Being a GET, it must
 // never delete anything itself.
-func (h *handler) confirmDelete(w http.ResponseWriter, r *http.Request) {
+func (h *handler) confirmDelete(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := parseID(r)
 	if !ok {
 		h.notFound(w, r)
@@ -339,19 +368,31 @@ func (h *handler) confirmDelete(w http.ResponseWriter, r *http.Request) {
 		h.issueError(w, r, err)
 		return
 	}
+	if !h.requireScope(w, r, ws, issue.WorkspaceID) {
+		return
+	}
 	h.r.renderIssueDelete(w, http.StatusOK, issueDeletePage{
-		Title:   fmt.Sprintf("Delete issue #%d", issue.ID),
-		Issue:   issue,
-		Section: "issues",
-		User:    userFromContext(r.Context()),
+		Title:     fmt.Sprintf("Delete issue #%d", issue.ID),
+		Issue:     issue,
+		Section:   "issues",
+		Workspace: ws,
+		User:      userFromContext(r.Context()),
 	})
 }
 
 // deleteIssue performs the deletion and returns to the list.
-func (h *handler) deleteIssue(w http.ResponseWriter, r *http.Request) {
+func (h *handler) deleteIssue(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := parseID(r)
 	if !ok {
 		h.notFound(w, r)
+		return
+	}
+	issue0, err := h.store.GetIssue(r.Context(), id)
+	if err != nil {
+		h.issueError(w, r, err)
+		return
+	}
+	if !h.requireScope(w, r, ws, issue0.WorkspaceID) {
 		return
 	}
 	if !h.parseForm(w, r) {
@@ -361,7 +402,7 @@ func (h *handler) deleteIssue(w http.ResponseWriter, r *http.Request) {
 		h.issueError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, "/issues", http.StatusSeeOther)
+	http.Redirect(w, r, "/w/"+ws.Slug+"/issues", http.StatusSeeOther)
 }
 
 // createComment validates POST /issues/{id}/comments and redirects back to
@@ -369,7 +410,7 @@ func (h *handler) deleteIssue(w http.ResponseWriter, r *http.Request) {
 // X-Partial gets a fragment instead: the new comment's <li> on success, or
 // the error-marked form on a validation failure (422) — the same defines
 // the detail page uses, so the DOM swap is markup-identical to a reload.
-func (h *handler) createComment(w http.ResponseWriter, r *http.Request) {
+func (h *handler) createComment(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := parseID(r)
 	if !ok {
 		h.notFound(w, r)
@@ -381,19 +422,24 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request) {
 	body := strings.TrimSpace(r.PostFormValue("body"))
 	partial := wantsPartial(r)
 
+	issue, err := h.store.GetIssue(r.Context(), id)
+	if err != nil {
+		h.issueError(w, r, err)
+		return
+	}
+	if !h.requireScope(w, r, ws, issue.WorkspaceID) {
+		return
+	}
+
 	errMsg := store.ValidateCommentBody(body)
 	if errMsg != "" {
-		issue, err := h.store.GetIssue(r.Context(), id)
-		if err != nil {
-			h.issueError(w, r, err)
-			return
-		}
 		// A partial request swaps only the form; no list reload.
 		if partial {
 			h.r.renderFragment(w, "issue_detail", "issue_comment_form", http.StatusUnprocessableEntity, issueDetailPage{
 				Issue:        issue,
 				CommentDraft: body,
 				CommentError: errMsg,
+				Workspace:    ws,
 				User:         userFromContext(r.Context()),
 			})
 			return
@@ -410,6 +456,7 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request) {
 			CommentDraft: body,
 			CommentError: errMsg,
 			Section:      "issues",
+			Workspace:    ws,
 			User:         userFromContext(r.Context()),
 		})
 		return
@@ -423,15 +470,14 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request) {
 	if partial {
 		// The fragment also carries the header meta as a data-swap node —
 		// the comment bumped updated_at, so the stale "Last updated" line
-		// must be re-rendered. GetIssue returns the true post-state.
-		issue, err := h.store.GetIssue(r.Context(), id)
+		// must be re-rendered from the post-write issue.
+		issue, err = h.store.GetIssue(r.Context(), id)
 		if err != nil {
 			h.issueError(w, r, err)
 			return
 		}
-		// The comment <li> shows what the client will see after the swap;
-		// re-fetching the row would only repeat what we set.
 		h.r.renderFragment(w, "issue_detail", "issue_comment_append", http.StatusOK, dict(
+			"Workspace", ws,
 			"Issue", issue,
 			"Comment", &store.Comment{
 				ID:        commentID,
@@ -443,7 +489,7 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request) {
 		))
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("%s#comment-%d", issueURL(id), commentID), http.StatusSeeOther)
+	http.Redirect(w, r, fmt.Sprintf("%s#comment-%d", issueURL(ws, id), commentID), http.StatusSeeOther)
 }
 
 // issueError maps store.ErrNotFound to a 404 page and delegates everything
@@ -456,8 +502,8 @@ func (h *handler) issueError(w http.ResponseWriter, r *http.Request, err error) 
 	h.internalError(w, r, err)
 }
 
-func issueURL(id int64) string {
-	return fmt.Sprintf("/issues/%d", id)
+func issueURL(ws *store.Workspace, id int64) string {
+	return fmt.Sprintf("/w/%s/issues/%d", ws.Slug, id)
 }
 
 // validateIssueInput extracts and validates the issue form fields. It only
@@ -482,9 +528,10 @@ func isChecked(id int64, ids []int64) bool {
 	return slices.Contains(ids, id)
 }
 
-// issuesURL builds /issues URLs carrying the current filter state, so
-// pagination, tabs and label links preserve active filters.
-func issuesURL(f store.ListFilter) string {
+// issuesURL builds the workspace's issue-list URLs carrying the current
+// filter state, so pagination, tabs and label links preserve active
+// filters.
+func issuesURL(ws *store.Workspace, f store.ListFilter) string {
 	v := url.Values{}
 	// "open" is the default filter, so keep URLs clean by omitting it.
 	if f.Status != "" && f.Status != store.StatusOpen {
@@ -503,29 +550,29 @@ func issuesURL(f store.ListFilter) string {
 		v.Set("page", strconv.Itoa(f.Page))
 	}
 	if enc := v.Encode(); enc != "" {
-		return "/issues?" + enc
+		return "/w/" + ws.Slug + "/issues?" + enc
 	}
-	return "/issues"
+	return "/w/" + ws.Slug + "/issues"
 }
 
 // listURL keeps the filter but moves to another page.
-func listURL(f store.ListFilter, page int) string {
+func listURL(ws *store.Workspace, f store.ListFilter, page int) string {
 	f.Page = page
-	return issuesURL(f)
+	return issuesURL(ws, f)
 }
 
 // statusURL keeps the filter but switches the status tab and resets paging.
-func statusURL(f store.ListFilter, status string) string {
+func statusURL(ws *store.Workspace, f store.ListFilter, status string) string {
 	f.Status = status
 	f.Page = 1
-	return issuesURL(f)
+	return issuesURL(ws, f)
 }
 
 // labelURL keeps the filter but selects a label and resets paging.
-func labelURL(f store.ListFilter, labelID int64) string {
+func labelURL(ws *store.Workspace, f store.ListFilter, labelID int64) string {
 	f.LabelID = labelID
 	f.Page = 1
-	return issuesURL(f)
+	return issuesURL(ws, f)
 }
 
 // parseListFilter reads and normalizes the list query parameters.

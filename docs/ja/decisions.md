@@ -541,3 +541,15 @@ podhmo からの改善要望（grid と story のリンク誤押・見た目・s
 - **export も同じ UX**: 静的 index.html ではサーバがいない代わりに、同じ inline script が URLSearchParams から `?s/?g/?w/?q` を読んで選択を適用する。`data-src` が serve（`/story/X`）と export（`X.html`）で差を吸収する。
 - **story ページへの chrome 注入はしない**: プレビュー中の story 名・アクションは index 側ツールバーに置く方針 — story ドキュメントを汚すとスクリーンショット用途（PR 添付・ドキュメント用スナップショット）に chrome が写り込むため。export の story html はバイト単位で素のまま。
 - **検証**: `cd cmd/storybook && go test ./...` パス（index 構造・`?g` プレビュー・`?q` フィルタのサーバ側検査を追加）。served（:6006）と静的 export（python http.server）の両方で Playwright により story/grid 切替・フィルタ・キーボード・幅切替・popstate を実ブラウザ確認。
+
+## workspace の実装（2026-11-17、`devin/*-workspaces-impl` ブランチ）
+
+`docs/sketch/ja/workspaces.md`（PR #85）の実装。issues/discussions は必ず workspace（GitHub リポジトリ相当）に所属する。設計からの変更点・決め事を記す。
+
+- **非 GET の workspace 不一致は 404**: スケッチでは「`/w/{別ws}/issues/{id}` への POST は別 ws へ 303/302 で誘導」案だったが、PUT/PATCH/DELETE を勝手に別 workspace に再送するのは危険（別 workspace 上で mutation を再生してしまう）。GET/HEAD は canonical パスへ 302、それ以外のメソッドは素直に 404 に倒した。
+- **既存 URL 保持は 307/302 リダイレクト**: `/issues`, `/issues/{id}` 等は方法ごとに登録して canonical `/w/{slug}/...` へ。`GET`/`HEAD` → 302、それ以外 → 307 でメソッド・body 維持。これらの legacy ルートは「メソッド付き」で登録する必要がある — メソッドなし `/issues/{rest...}` は catch-all `GET /` とコンフリクトする（ServeMux の「より一般的なパスでより少ないメソッド」判定）。GET/POST/PUT/PATCH/DELETE を列挙。
+- **CLI 側の `--workspace` はバックエンド組み立て時に注入**: `cli.Backend` の既存メソッドシグネチャは変えず、`store.In(ctx, slug)` が返す `ScopedStore` / `client.Client.In(slug)`（URL に `/w/{slug}` を埋める薄いラッパ）でスコープを作る。env は `ISSUES_WORKSPACE`、既定 `"default"`。
+- **migration v6 は親テーブルの再構築なので FK 一時停止が要る**: `DROP TABLE issues/discussions` は暗黙 DELETE で子（comments, issue_labels, discussion_threads, discussion_comments）の `ON DELETE CASCADE` が発火し中身を消す。`PRAGMA foreign_keys=OFF` はトランザクション内では効かないため、専用 conn 上で OFF → tx → `pragma_foreign_key_check` で検証 → ON、という `migrateWithFKOff` を `migrate()` から版指定で呼ぶ（`rebuildNeedsFKOff`）。
+- **workspace 管理の web ルートは2階層**: `GET|POST /workspaces` + `GET /workspaces/new`（管理一覧・作成）は workspace 非依存、`GET|POST /w/{slug}/delete`（削除）は `scoped()` 経由で対象 ws を解決。`{ws}` は「削除される側」。
+- **そのまま採用した設計**: 採番はグローバル維持（issue #N は全 workspace で一意）、`workspaces(slug UNIQUE)` + `issues/discussions.workspace_id NOT NULL ON DELETE CASCADE`、`EnsureDefaultWorkspace` は「workspaces が空のときだけ default を INSERT」（init/起動時の冪等な保証）、最後の1件は `ErrLastWorkspace` → 422、label/category/user はグローバルのまま、ws 間移動・per-ws 採番・per-ws label は future work。
+- **検証**: `go test ./...` / `go vet` / `gofmt` 全パス + 実サーバ手動確認（`/`→`/w/default/issues` 302、`/issues` legacy 302、ws 作成→削除→最後の1件拒否 422、`/w/beta/issues/1` で他 ws の issue に GET→canonical 302、`issues workspace list|create|delete` と `--workspace` スコープの CLI、旧 `/api/v1/issues` は 404）。

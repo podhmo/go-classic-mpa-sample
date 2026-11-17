@@ -6,6 +6,7 @@ package store
 
 import (
 	"fmt"
+	"regexp"
 	"unicode/utf8"
 )
 
@@ -51,6 +52,32 @@ func ValidateDiscussionInput(in DiscussionInput) FieldErrors {
 			errs = FieldErrors{}
 		}
 		errs["category"] = "Category is required."
+	}
+	return errs
+}
+
+// workspaceSlugRE is the identity rule for workspaces — the slug is the
+// URL path segment and API key, so it stays lowercase ASCII.
+var workspaceSlugRE = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,62}$`)
+
+// ValidateWorkspaceInput validates a WorkspaceInput value. Slug is
+// required and must match the slug pattern; name defaults to the slug at
+// insert time so it is optional here; description is plain text.
+func ValidateWorkspaceInput(in WorkspaceInput) FieldErrors {
+	var errs FieldErrors
+	switch {
+	case in.Slug == "":
+		errs = FieldErrors{"slug": "Slug is required."}
+	case !workspaceSlugRE.MatchString(in.Slug):
+		errs = FieldErrors{"slug": "Slug must match " + workspaceSlugRE.String() + "."}
+	case utf8.RuneCountInString(in.Name) > MaxTitleRunes:
+		errs = FieldErrors{"name": fmt.Sprintf("Name must be %d characters or fewer.", MaxTitleRunes)}
+	}
+	if utf8.RuneCountInString(in.Description) > MaxBodyRunes {
+		if errs == nil {
+			errs = FieldErrors{}
+		}
+		errs["description"] = fmt.Sprintf("Description must be %d characters or fewer.", MaxBodyRunes)
 	}
 	return errs
 }

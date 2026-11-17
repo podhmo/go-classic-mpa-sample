@@ -93,6 +93,7 @@ var migrations = []func(ctx context.Context, tx *sql.Tx) error{
 	migrateV3, // discussions: categories, discussions, discussion_comments
 	migrateV4, // api_tokens: per-user Bearer tokens for /api/v1
 	migrateV5, // discussion_threads split out of discussion_comments
+	migrateV6, // workspaces: workspaces table + workspace_id on issues/discussions
 }
 
 // schemaVersion is the user_version a fully migrated database reports.
@@ -235,6 +236,77 @@ CREATE INDEX idx_dcomments_thread_created
 	return err
 }
 
+// migrateV6 adds the workspaces schema (docs/sketch/ja/workspaces.md): a
+// workspaces table plus a NOT NULL workspace_id FK on issues and
+// discussions. SQLite forbids adding a REFERENCES column with a non-NULL
+// default while foreign keys are enabled, so both tables are rebuilt —
+// the same pattern migrateV5 used on discussion_comments — and every
+// existing row is placed in the freshly created 'default' workspace.
+// ON DELETE CASCADE makes deleting a workspace carry its contents away,
+// like a GitHub repository deletion.
+//
+// rebuildNeedsFKOff marks this migration for migrate(): DROP TABLE on a
+// parent fires its children's ON DELETE CASCADE even inside a
+// transaction (SQLite's implicit DELETE), which would wipe comments and
+// threads. The connection's foreign_keys pragma must be OFF around the
+// rebuild, and PRAGMA foreign_keys is a no-op inside a transaction — so
+// migrate() toggles it on the dedicated connection before BeginTx.
+var rebuildNeedsFKOff = map[int]bool{5: true} // migrations[5] = migrateV6
+func migrateV6(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, `
+CREATE TABLE workspaces (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	slug TEXT NOT NULL UNIQUE,
+	name TEXT NOT NULL,
+	description TEXT NOT NULL DEFAULT '',
+	created_at INTEGER NOT NULL
+);
+INSERT INTO workspaces(slug, name, description, created_at)
+	VALUES('default', 'default', 'Default workspace.', CAST(strftime('%s','now') AS INTEGER));
+CREATE TABLE issues_new (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+	title TEXT NOT NULL,
+	body TEXT NOT NULL DEFAULT '',
+	status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'closed')),
+	created_at INTEGER NOT NULL,
+	updated_at INTEGER NOT NULL,
+	author_id INTEGER REFERENCES users(id)
+);
+INSERT INTO issues_new(id, workspace_id, title, body, status, created_at, updated_at, author_id)
+	SELECT i.id, w.id, i.title, i.body, i.status, i.created_at, i.updated_at, i.author_id
+	FROM issues i, workspaces w WHERE w.slug = 'default';
+-- Preserve AUTOINCREMENT history: DROP removes the old table's
+-- sqlite_sequence row, so copy it to the replacement or a previously
+-- deleted (highest) issue number gets reused.
+UPDATE sqlite_sequence SET seq = MAX(seq, IFNULL((SELECT seq FROM sqlite_sequence WHERE name='issues'), 0))
+	WHERE name='issues_new';
+DROP TABLE issues;
+ALTER TABLE issues_new RENAME TO issues;
+CREATE INDEX idx_issues_workspace_status_created ON issues(workspace_id, status, created_at);
+CREATE TABLE discussions_new (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+	category_id INTEGER NOT NULL REFERENCES discussion_categories(id),
+	author_id INTEGER REFERENCES users(id),
+	title TEXT NOT NULL,
+	body TEXT NOT NULL DEFAULT '',
+	created_at INTEGER NOT NULL,
+	updated_at INTEGER NOT NULL
+);
+INSERT INTO discussions_new(id, workspace_id, category_id, author_id, title, body, created_at, updated_at)
+	SELECT d.id, w.id, d.category_id, d.author_id, d.title, d.body, d.created_at, d.updated_at
+	FROM discussions d, workspaces w WHERE w.slug = 'default';
+UPDATE sqlite_sequence SET seq = MAX(seq, IFNULL((SELECT seq FROM sqlite_sequence WHERE name='discussions'), 0))
+	WHERE name='discussions_new';
+DROP TABLE discussions;
+ALTER TABLE discussions_new RENAME TO discussions;
+CREATE INDEX idx_discussions_workspace_created ON discussions(workspace_id, created_at);
+CREATE INDEX idx_discussions_workspace_category_created ON discussions(workspace_id, category_id, created_at);
+`)
+	return err
+}
+
 // migrate applies every schema version the database is missing, stamping
 // PRAGMA user_version after each. Each version runs in its own
 // transaction, so a failed migration leaves the database at the last good
@@ -249,6 +321,12 @@ func migrate(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("store: database schema version %d is newer than supported %d", version, schemaVersion)
 	}
 	for ; version < schemaVersion; version++ {
+		if rebuildNeedsFKOff[version] {
+			if err := migrateWithFKOff(ctx, db, version); err != nil {
+				return err
+			}
+			continue
+		}
 		tx, err := db.BeginTx(ctx, nil)
 		if err != nil {
 			return err
@@ -265,6 +343,50 @@ func migrate(ctx context.Context, db *sql.DB) error {
 		if err := tx.Commit(); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// migrateWithFKOff runs migrations[version] on a dedicated connection
+// with foreign_keys disabled, then verifies with PRAGMA foreign_key_check
+// before re-enabling. Needed when a migration rebuilds a parent table:
+// the implicit DELETE in DROP TABLE would cascade into children.
+func migrateWithFKOff(ctx context.Context, db *sql.DB, version int) error {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	// foreign_keys can only change outside a transaction.
+	if _, err := conn.ExecContext(ctx, "PRAGMA foreign_keys = OFF"); err != nil {
+		return fmt.Errorf("store: disable foreign keys for migration %d: %w", version+1, err)
+	}
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	if err := migrations[version](ctx, tx); err != nil {
+		tx.Rollback()
+		return fmt.Errorf("store: migrate schema to version %d: %w", version+1, err)
+	}
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf("PRAGMA user_version = %d", version+1)); err != nil {
+		tx.Rollback()
+		return fmt.Errorf("store: stamp schema version %d: %w", version+1, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	// FKs stayed off through the tx; check the rebuilt data before
+	// re-enabling, then restore the pragma this connection's DSN set.
+	violations := 0
+	if err := conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM pragma_foreign_key_check").Scan(&violations); err != nil {
+		return fmt.Errorf("store: foreign key check after migration %d: %w", version+1, err)
+	}
+	if violations > 0 {
+		return fmt.Errorf("store: migration to version %d left %d foreign key violations", version+1, violations)
+	}
+	if _, err := conn.ExecContext(ctx, "PRAGMA foreign_keys = ON"); err != nil {
+		return fmt.Errorf("store: re-enable foreign keys: %w", err)
 	}
 	return nil
 }

@@ -12,7 +12,7 @@ import (
 
 // GET /api/v1/discussions?category=&answered=&q=&sort=&page=&per_page=
 // Response: {"discussions": [...], "total": N, "page": P, "per_page": PP}
-func (h *handler) listDiscussions(w http.ResponseWriter, r *http.Request) {
+func (h *handler) listDiscussions(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	q := r.URL.Query()
 	f := store.DiscussionListFilter{
 		CategorySlug: q.Get("category"),
@@ -22,7 +22,7 @@ func (h *handler) listDiscussions(w http.ResponseWriter, r *http.Request) {
 		Page:         queryInt(r, "page", 1),
 		PerPage:      min(queryInt(r, "per_page", defaultPerPage), maxPerPage),
 	}
-	discussions, total, err := h.store.ListDiscussions(r.Context(), f)
+	discussions, total, err := h.store.ListDiscussions(r.Context(), ws.ID, f)
 	if err != nil {
 		h.storeError(w, err)
 		return
@@ -39,7 +39,7 @@ func (h *handler) listDiscussions(w http.ResponseWriter, r *http.Request) {
 // GET /api/v1/discussions/{id} → {"discussion": {...}, "threads": [...]}
 // Each thread — itself the opening post — nests its replies under
 // "comments".
-func (h *handler) getDiscussion(w http.ResponseWriter, r *http.Request) {
+func (h *handler) getDiscussion(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := h.pathID(w, r, "id")
 	if !ok {
 		return
@@ -47,6 +47,9 @@ func (h *handler) getDiscussion(w http.ResponseWriter, r *http.Request) {
 	d, err := h.store.GetDiscussion(r.Context(), id)
 	if err != nil {
 		h.storeError(w, err)
+		return
+	}
+	if !h.requireScope(w, ws, d.WorkspaceID) {
 		return
 	}
 	threads, err := h.store.ListDiscussionThreads(r.Context(), id)
@@ -69,7 +72,7 @@ type discussionBody struct {
 }
 
 // POST /api/v1/discussions {"title","body","category_id"|"category"} → 201
-func (h *handler) createDiscussion(w http.ResponseWriter, r *http.Request) {
+func (h *handler) createDiscussion(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	var in discussionBody
 	if !decodeBody(w, r, &in) {
 		return
@@ -91,7 +94,7 @@ func (h *handler) createDiscussion(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", fields(fe))
 		return
 	}
-	id, err := h.store.CreateDiscussion(r.Context(), input, actorID(r))
+	id, err := h.store.CreateDiscussion(r.Context(), ws.ID, input, actorID(r))
 	if err != nil {
 		h.storeError(w, err)
 		return
@@ -106,7 +109,7 @@ func (h *handler) createDiscussion(w http.ResponseWriter, r *http.Request) {
 
 // PATCH /api/v1/discussions/{id} — partial update, same semantics as the
 // issue PATCH.
-func (h *handler) updateDiscussion(w http.ResponseWriter, r *http.Request) {
+func (h *handler) updateDiscussion(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := h.pathID(w, r, "id")
 	if !ok {
 		return
@@ -118,6 +121,9 @@ func (h *handler) updateDiscussion(w http.ResponseWriter, r *http.Request) {
 	d, err := h.store.GetDiscussion(r.Context(), id)
 	if err != nil {
 		h.storeError(w, err)
+		return
+	}
+	if !h.requireScope(w, ws, d.WorkspaceID) {
 		return
 	}
 	input := store.DiscussionInput{Title: d.Title, Body: d.Body, CategoryID: d.Category.ID}
@@ -156,9 +162,17 @@ func (h *handler) updateDiscussion(w http.ResponseWriter, r *http.Request) {
 }
 
 // DELETE /api/v1/discussions/{id} → 204
-func (h *handler) deleteDiscussion(w http.ResponseWriter, r *http.Request) {
+func (h *handler) deleteDiscussion(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := h.pathID(w, r, "id")
 	if !ok {
+		return
+	}
+	d, err := h.store.GetDiscussion(r.Context(), id)
+	if err != nil {
+		h.storeError(w, err)
+		return
+	}
+	if !h.requireScope(w, ws, d.WorkspaceID) {
 		return
 	}
 	if err := h.store.DeleteDiscussion(r.Context(), id); err != nil {
@@ -170,7 +184,7 @@ func (h *handler) deleteDiscussion(w http.ResponseWriter, r *http.Request) {
 
 // POST /api/v1/discussions/{id}/threads {"body"} → 201 — opens a thread
 // on the discussion (the post a "comment" form submits).
-func (h *handler) createDiscussionThread(w http.ResponseWriter, r *http.Request) {
+func (h *handler) createDiscussionThread(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := h.pathID(w, r, "id")
 	if !ok {
 		return
@@ -184,6 +198,14 @@ func (h *handler) createDiscussionThread(w http.ResponseWriter, r *http.Request)
 	body := strings.TrimSpace(in.Body)
 	if msg := store.ValidateCommentBody(body); msg != "" {
 		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", map[string]string{"body": msg})
+		return
+	}
+	d, err := h.store.GetDiscussion(r.Context(), id)
+	if err != nil {
+		h.storeError(w, err)
+		return
+	}
+	if !h.requireScope(w, ws, d.WorkspaceID) {
 		return
 	}
 	tid, err := h.store.CreateDiscussionThread(r.Context(), id, body, actorID(r))
@@ -201,7 +223,7 @@ func (h *handler) createDiscussionThread(w http.ResponseWriter, r *http.Request)
 
 // POST /api/v1/discussions/{id}/threads/{tid}/comments {"body"} → 201 —
 // appends a reply to the thread.
-func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request) {
+func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := h.pathID(w, r, "id")
 	if !ok {
 		return
@@ -221,8 +243,12 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", map[string]string{"body": msg})
 		return
 	}
-	if _, err := h.store.GetDiscussion(r.Context(), id); err != nil {
+	d0, err := h.store.GetDiscussion(r.Context(), id)
+	if err != nil {
 		h.storeError(w, err)
+		return
+	}
+	if !h.requireScope(w, ws, d0.WorkspaceID) {
 		return
 	}
 	cid, err := h.store.CreateDiscussionComment(r.Context(), id, tid, body, actorID(r))
@@ -266,7 +292,7 @@ func findDiscussionComment(t *store.DiscussionThread, id int64) *store.Discussio
 // POST /api/v1/discussions/{id}/threads/{tid}/answer {"answer": bool} → 204.
 // answer is required: an omitted field would decode as false and silently
 // clear the mark.
-func (h *handler) setThreadAnswer(w http.ResponseWriter, r *http.Request) {
+func (h *handler) setThreadAnswer(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := h.pathID(w, r, "id")
 	if !ok {
 		return
@@ -283,6 +309,14 @@ func (h *handler) setThreadAnswer(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.Answer == nil {
 		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", map[string]string{"answer": "Answer is required."})
+		return
+	}
+	d, err := h.store.GetDiscussion(r.Context(), id)
+	if err != nil {
+		h.storeError(w, err)
+		return
+	}
+	if !h.requireScope(w, ws, d.WorkspaceID) {
 		return
 	}
 	if err := h.store.SetThreadAnswer(r.Context(), id, tid, *in.Answer); err != nil {

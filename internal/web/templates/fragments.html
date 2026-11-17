@@ -18,7 +18,7 @@
     {{if .Issue.Labels}}
     <div class="issue-labels">
       {{range .Issue.Labels}}
-      <a class="label-badge" style="--label-color: {{.Color}}" href="/issues?status=all&amp;label={{.ID}}">{{.Name}}</a>
+      <a class="label-badge" style="--label-color: {{.Color}}" href="/w/{{$.Workspace.Slug}}/issues?status=all&amp;label={{.ID}}">{{.Name}}</a>
       {{end}}
     </div>
     {{end}}
@@ -32,26 +32,26 @@
   {{end}}
 
   <div class="issue-actions">
-    <a class="btn" href="/issues/{{.Issue.ID}}/edit">Edit</a>
+    <a class="btn" href="/w/{{.Workspace.Slug}}/issues/{{.Issue.ID}}/edit">Edit</a>
     {{if eq .Issue.Status "open"}}
-    <form method="post" action="/issues/{{.Issue.ID}}/status" class="inline-form" data-partial data-partial-mode="replace" data-partial-target=".issue-detail" data-partial-announce="Issue closed.">
+    <form method="post" action="/w/{{.Workspace.Slug}}/issues/{{.Issue.ID}}/status" class="inline-form" data-partial data-partial-mode="replace" data-partial-target=".issue-detail" data-partial-announce="Issue closed.">
       <input type="hidden" name="status" value="closed">
       <button type="submit" class="btn">Close issue</button>
     </form>
     {{else}}
-    <form method="post" action="/issues/{{.Issue.ID}}/status" class="inline-form" data-partial data-partial-mode="replace" data-partial-target=".issue-detail" data-partial-announce="Issue reopened.">
+    <form method="post" action="/w/{{.Workspace.Slug}}/issues/{{.Issue.ID}}/status" class="inline-form" data-partial data-partial-mode="replace" data-partial-target=".issue-detail" data-partial-announce="Issue reopened.">
       <input type="hidden" name="status" value="open">
       <button type="submit" class="btn">Reopen issue</button>
     </form>
     {{end}}
     <button type="button" class="btn btn-danger delete-open" commandfor="delete-dialog" command="show-modal">Delete</button>
-    <a class="btn btn-danger delete-fallback" href="/issues/{{.Issue.ID}}/delete">Delete</a>
+    <a class="btn btn-danger delete-fallback" href="/w/{{.Workspace.Slug}}/issues/{{.Issue.ID}}/delete">Delete</a>
   </div>
 
   <dialog id="delete-dialog" class="confirm-dialog" closedby="any" aria-labelledby="delete-dialog-title" aria-describedby="delete-dialog-desc">
     <h2 id="delete-dialog-title">Delete issue #{{.Issue.ID}}?</h2>
     <p id="delete-dialog-desc">This permanently removes <strong>{{.Issue.Title}}</strong> and all of its comments. This action cannot be undone.</p>
-    <form method="post" action="/issues/{{.Issue.ID}}/delete" class="form-actions">
+    <form method="post" action="/w/{{.Workspace.Slug}}/issues/{{.Issue.ID}}/delete" class="form-actions">
       <button type="button" class="btn" commandfor="delete-dialog" command="close" autofocus>Cancel</button>
       <button type="submit" class="btn btn-danger">Delete issue</button>
     </form>
@@ -102,12 +102,12 @@
 {{end}}
 
 {{define "issue_comment_form"}}
-<form method="post" action="/issues/{{.Issue.ID}}/comments" class="comment-form card" novalidate data-partial data-partial-target="#comments > .comment-list">
+<form method="post" action="/w/{{.Workspace.Slug}}/issues/{{.Issue.ID}}/comments" class="comment-form card" novalidate data-partial data-partial-target="#comments > .comment-list">
   <div class="field">
     <label for="comment-body">Add a comment</label>
     <textarea id="comment-body" name="body" rows="4" required data-error="comment-error" aria-keyshortcuts="Control+Enter Meta+Enter"{{if .CommentError}} aria-invalid="true" aria-describedby="comment-error comment-hint" autofocus{{else}} aria-invalid="false" aria-describedby="comment-hint"{{end}}>{{.CommentDraft}}</textarea>
     <p class="field-error{{if not .CommentError}} field-error-pending{{end}}" id="comment-error">{{or .CommentError "Body is required."}}</p>
-    <p class="field-hint" id="comment-hint">Markdown (GFM) supported. Raw HTML is not rendered. Ctrl+Enter (Cmd+Enter on macOS) submits.{{if .User}} Posting as @{{.User.Name}}.{{else}} Posting as anonymous — <a href="/login?next=/issues/{{.Issue.ID}}">log in</a> to attach your name.{{end}}</p>
+    <p class="field-hint" id="comment-hint">Markdown (GFM) supported. Raw HTML is not rendered. Ctrl+Enter (Cmd+Enter on macOS) submits.{{if .User}} Posting as @{{.User.Name}}.{{else}} Posting as anonymous — <a href="/login?next=/w/{{.Workspace.Slug}}/issues/{{.Issue.ID}}">log in</a> to attach your name.{{end}}</p>
   </div>
   <div class="form-actions">
     <button type="submit" class="btn btn-primary">Comment</button>
@@ -122,7 +122,7 @@
 <article class="card issue-detail">
   <header class="issue-detail-head">
     <div class="issue-title-row">
-      <a class="category-badge" href="/discussions?category={{.Discussion.Category.Slug}}">{{.Discussion.Category.Name}}</a>
+      <a class="category-badge" href="/w/{{.Workspace.Slug}}/discussions?category={{.Discussion.Category.Slug}}">{{.Discussion.Category.Name}}</a>
       <h1>{{.Discussion.Title}} <span class="issue-num">#{{.Discussion.ID}}</span></h1>
     </div>
     {{template "discussion_meta" .Discussion}}
@@ -135,15 +135,15 @@
   {{end}}
 
   <div class="issue-actions">
-    <a class="btn" href="/discussions/{{.Discussion.ID}}/edit">Edit</a>
+    <a class="btn" href="/w/{{.Workspace.Slug}}/discussions/{{.Discussion.ID}}/edit">Edit</a>
     <button type="button" class="btn btn-danger delete-open" commandfor="delete-dialog" command="show-modal">Delete</button>
-    <a class="btn btn-danger delete-fallback" href="/discussions/{{.Discussion.ID}}/delete">Delete</a>
+    <a class="btn btn-danger delete-fallback" href="/w/{{.Workspace.Slug}}/discussions/{{.Discussion.ID}}/delete">Delete</a>
   </div>
 
   <dialog id="delete-dialog" class="confirm-dialog" closedby="any" aria-labelledby="delete-dialog-title" aria-describedby="delete-dialog-desc">
     <h2 id="delete-dialog-title">Delete discussion #{{.Discussion.ID}}?</h2>
     <p id="delete-dialog-desc">This permanently removes <strong>{{.Discussion.Title}}</strong> and all of its comments. This action cannot be undone.</p>
-    <form method="post" action="/discussions/{{.Discussion.ID}}/delete" class="form-actions">
+    <form method="post" action="/w/{{.Workspace.Slug}}/discussions/{{.Discussion.ID}}/delete" class="form-actions">
       <button type="button" class="btn" commandfor="delete-dialog" command="close" autofocus>Cancel</button>
       <button type="submit" class="btn btn-danger">Delete discussion</button>
     </form>
@@ -160,14 +160,14 @@
     <span class="comment-author">{{authorName .C.Author}}</span>
     <a class="comment-permalink" href="#thread-{{.C.ID}}"><time datetime="{{.C.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .C.CreatedAt}}</time> <span class="visually-hidden">(thread {{.C.ID}})</span></a>
     <span class="copy-wrap">
-      <button type="button" class="copy-btn" command="--copy-permalink" commandfor="thread-{{.C.ID}}" data-url="/discussions/{{.Discussion.ID}}#thread-{{.C.ID}}" aria-label="Copy link to thread {{.C.ID}}">copy link</button>
+      <button type="button" class="copy-btn" command="--copy-permalink" commandfor="thread-{{.C.ID}}" data-url="/w/{{.Workspace.Slug}}/discussions/{{.Discussion.ID}}#thread-{{.C.ID}}" aria-label="Copy link to thread {{.C.ID}}">copy link</button>
       <span class="copy-tip" role="status"></span>
     </span>
   </header>
   <div class="comment-body markdown-body">{{markdown .C.Body}}</div>
   {{if eq .Discussion.Category.Format "qa"}}
   <div class="comment-actions">
-    <form method="post" action="/discussions/{{.Discussion.ID}}/comments/{{.C.ID}}/answer" class="inline-form" data-partial data-partial-mode="replace" data-partial-target="#thread-{{.C.ID}}" data-partial-announce="Answer updated.">
+    <form method="post" action="/w/{{.Workspace.Slug}}/discussions/{{.Discussion.ID}}/comments/{{.C.ID}}/answer" class="inline-form" data-partial data-partial-mode="replace" data-partial-target="#thread-{{.C.ID}}" data-partial-announce="Answer updated.">
       {{/* Per-comment controls repeat with identical looks on every row,
          so each gets an accessible name carrying the thread id (the same
          pattern the copy-link button already uses). The visible label
@@ -183,7 +183,7 @@
   </div>
   {{end}}
   <ol class="comment-replies" role="list"{{if not .C.Comments}} hidden{{end}}>
-    {{range .C.Comments}}{{template "discussion_reply" (dict "Discussion" $.Discussion "C" .)}}{{end}}
+    {{range .C.Comments}}{{template "discussion_reply" (dict "Discussion" $.Discussion "Workspace" $.Workspace "C" .)}}{{end}}
   </ol>
   <details class="reply-details"{{if and .ThreadDraftID (eq .ThreadDraftID .C.ID) .CommentError}} open{{end}}>
     <summary class="reply-collapsed" aria-label="Add a comment on thread {{.C.ID}}">Add a comment</summary>
@@ -207,7 +207,7 @@
 {{/* Append-mode fragment for a top-level comment POST: meta <p> as a
    data-swap node plus the new comment <li>. */}}
 {{template "discussion_meta" .Discussion}}
-{{template "discussion_comment" .}}
+{{template "discussion_comment" (dict "Discussion" $.Discussion "Workspace" $.Workspace "C" .C)}}
 {{end}}
 
 {{define "discussion_reply_append"}}
@@ -224,7 +224,7 @@
    bumps discussion.updated_at). Each node self-targets by its id in the
    client's replace mode. */}}
 {{template "discussion_meta" .Discussion}}
-{{range .Comments}}{{template "discussion_comment" (dict "Discussion" $.Discussion "C" .)}}{{end}}
+{{range .Comments}}{{template "discussion_comment" (dict "Discussion" $.Discussion "Workspace" $.Workspace "C" .)}}{{end}}
 {{end}}
 
 {{define "discussion_threads_update"}}
@@ -232,7 +232,7 @@
    swap node plus the thread <li>s to upsert (?ids= picks a subset — e.g.
    an answer move fetches the two changed threads). */}}
 {{template "discussion_meta" .Discussion}}
-{{range .Threads}}{{template "discussion_comment" (dict "Discussion" $.Discussion "C" .)}}{{end}}
+{{range .Threads}}{{template "discussion_comment" (dict "Discussion" $.Discussion "Workspace" $.Workspace "C" .)}}{{end}}
 {{end}}
 
 {{define "discussion_replies_update"}}
@@ -241,7 +241,7 @@
    replies without re-rendering (and clobbering) the thread's open reply
    form. */}}
 {{template "discussion_meta" .Discussion}}
-{{range .Comments}}{{template "discussion_reply" (dict "Discussion" $.Discussion "C" .)}}{{end}}
+{{range .Comments}}{{template "discussion_reply" (dict "Discussion" $.Discussion "Workspace" $.Workspace "C" .)}}{{end}}
 {{end}}
 
 {{define "discussion_reply"}}
@@ -250,7 +250,7 @@
     <span class="comment-author">{{authorName .C.Author}} commented</span>
     <a class="comment-permalink" href="#comment-{{.C.ID}}"><time datetime="{{.C.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .C.CreatedAt}}</time> <span class="visually-hidden">(comment {{.C.ID}})</span></a>
     <span class="copy-wrap">
-      <button type="button" class="copy-btn" command="--copy-permalink" commandfor="comment-{{.C.ID}}" data-url="/discussions/{{.Discussion.ID}}#comment-{{.C.ID}}" aria-label="Copy link to comment {{.C.ID}}">copy link</button>
+      <button type="button" class="copy-btn" command="--copy-permalink" commandfor="comment-{{.C.ID}}" data-url="/w/{{.Workspace.Slug}}/discussions/{{.Discussion.ID}}#comment-{{.C.ID}}" aria-label="Copy link to comment {{.C.ID}}">copy link</button>
       <span class="copy-tip" role="status"></span>
     </span>
   </header>
@@ -259,7 +259,7 @@
 {{end}}
 
 {{define "discussion_reply_form"}}
-<form method="post" action="/discussions/{{.Discussion.ID}}/comments" class="comment-form reply-form" novalidate data-partial data-partial-target="#thread-{{.C.ID}} .comment-replies">
+<form method="post" action="/w/{{.Workspace.Slug}}/discussions/{{.Discussion.ID}}/comments" class="comment-form reply-form" novalidate data-partial data-partial-target="#thread-{{.C.ID}} .comment-replies">
   <input type="hidden" name="thread_id" value="{{.C.ID}}">
   <div class="field">
     <label for="reply-body-{{.C.ID}}">Add a comment</label>
@@ -275,12 +275,12 @@
 {{end}}
 
 {{define "discussion_comment_form"}}
-<form method="post" action="/discussions/{{.Discussion.ID}}/comments" class="comment-form card" novalidate data-partial data-partial-target="#comments > .comment-list" data-partial-announce="Thread posted.">
+<form method="post" action="/w/{{.Workspace.Slug}}/discussions/{{.Discussion.ID}}/comments" class="comment-form card" novalidate data-partial data-partial-target="#comments > .comment-list" data-partial-announce="Thread posted.">
   <div class="field">
     <label for="comment-body">Start a thread</label>
     <textarea id="comment-body" name="body" rows="4" required data-error="comment-error" aria-keyshortcuts="Control+Enter Meta+Enter"{{if and .CommentError (not .ThreadDraftID)}} aria-invalid="true" aria-describedby="comment-error comment-hint" autofocus{{else}} aria-invalid="false" aria-describedby="comment-hint"{{end}}>{{if not .ThreadDraftID}}{{.CommentDraft}}{{end}}</textarea>
     <p class="field-error{{if or (not .CommentError) .ThreadDraftID}} field-error-pending{{end}}" id="comment-error">{{or .CommentError "Body is required."}}</p>
-    <p class="field-hint" id="comment-hint">Markdown (GFM) supported. Raw HTML is not rendered. Ctrl+Enter (Cmd+Enter on macOS) submits.{{if .User}} Posting as @{{.User.Name}}.{{else}} Posting as anonymous — <a href="/login?next=/discussions/{{.Discussion.ID}}">log in</a> to attach your name.{{end}}</p>
+    <p class="field-hint" id="comment-hint">Markdown (GFM) supported. Raw HTML is not rendered. Ctrl+Enter (Cmd+Enter on macOS) submits.{{if .User}} Posting as @{{.User.Name}}.{{else}} Posting as anonymous — <a href="/login?next=/w/{{.Workspace.Slug}}/discussions/{{.Discussion.ID}}">log in</a> to attach your name.{{end}}</p>
   </div>
   <div class="form-actions">
     <button type="submit" class="btn btn-primary">Start thread</button>

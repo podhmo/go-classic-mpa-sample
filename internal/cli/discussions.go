@@ -65,7 +65,7 @@ func discussionList(ctx context.Context, o Options, args []string) error {
 		return usageError{msg: fmt.Sprintf("--sort must be newest|oldest, got %q", *sortFlag)}
 	}
 
-	b, closer, err := o.backend(bf)
+	b, closer, err := o.backend(ctx, bf)
 	if err != nil {
 		return err
 	}
@@ -117,7 +117,7 @@ func discussionView(ctx context.Context, o Options, args []string) error {
 	if *web {
 		return o.openPage(bf, "/discussions/", id)
 	}
-	b, closer, err := o.backend(bf)
+	b, closer, err := o.backend(ctx, bf)
 	if err != nil {
 		return err
 	}
@@ -214,7 +214,7 @@ func discussionCreate(ctx context.Context, o Options, args []string) error {
 		return err
 	}
 
-	b, closer, err := o.backend(bf)
+	b, closer, err := o.backend(ctx, bf)
 	if err != nil {
 		return err
 	}
@@ -256,7 +256,7 @@ func discussionEdit(ctx context.Context, o Options, args []string) error {
 	if err != nil {
 		return err
 	}
-	b, closer, err := o.backend(bf)
+	b, closer, err := o.backend(ctx, bf)
 	if err != nil {
 		return err
 	}
@@ -310,7 +310,7 @@ func discussionDelete(ctx context.Context, o Options, args []string) error {
 	if err != nil {
 		return err
 	}
-	b, closer, err := o.backend(bf)
+	b, closer, err := o.backend(ctx, bf)
 	if err != nil {
 		return err
 	}
@@ -352,7 +352,7 @@ func discussionCommentCmd(ctx context.Context, o Options, args []string) error {
 		}
 		return fmt.Errorf("invalid comment: %s", msg)
 	}
-	b, closer, err := o.backend(bf)
+	b, closer, err := o.backend(ctx, bf)
 	if err != nil {
 		return err
 	}
@@ -392,7 +392,7 @@ func discussionAnswer(ctx context.Context, o Options, args []string) error {
 	if *thread < 1 {
 		return usageError{msg: "--thread is required"}
 	}
-	b, closer, err := o.backend(bf)
+	b, closer, err := o.backend(ctx, bf)
 	if err != nil {
 		return err
 	}

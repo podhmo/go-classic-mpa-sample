@@ -20,10 +20,10 @@ func TestRootRedirectsToIssues(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusSeeOther {
-		t.Fatalf("status = %d, want 303", resp.StatusCode)
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("status = %d, want 302", resp.StatusCode)
 	}
-	if loc := resp.Header.Get("Location"); loc != "/issues" {
+	if loc := resp.Header.Get("Location"); loc != "/w/default/issues" {
 		t.Fatalf("Location = %q, want /issues", loc)
 	}
 }
@@ -32,7 +32,7 @@ func TestListRendersIssues(t *testing.T) {
 	srv, f := newTestServer(t)
 	seedIssues(t, f)
 
-	resp, err := srv.Client().Get(srv.URL + "/issues")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestListStatusFilter(t *testing.T) {
 	srv, f := newTestServer(t)
 	seedIssues(t, f)
 
-	resp, err := srv.Client().Get(srv.URL + "/issues?status=closed")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues?status=closed")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func TestListQueryFilter(t *testing.T) {
 	srv, f := newTestServer(t)
 	seedIssues(t, f)
 
-	resp, err := srv.Client().Get(srv.URL + "/issues?status=all&q=flaky")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues?status=all&q=flaky")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func TestListLabelFilter(t *testing.T) {
 	srv, f := newTestServer(t)
 	seedIssues(t, f)
 
-	resp, err := srv.Client().Get(srv.URL + "/issues?status=all&label=2")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues?status=all&label=2")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestListPagination(t *testing.T) {
 		f.addIssue("Issue number "+strconv.Itoa(i), "", store.StatusOpen, now.Add(-time.Duration(i)*time.Hour))
 	}
 
-	resp, err := srv.Client().Get(srv.URL + "/issues")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +120,7 @@ func TestListPagination(t *testing.T) {
 	if !strings.Contains(body, "Showing 1–20 of 25 issues") {
 		t.Errorf("expected range header, got:\n%s", body)
 	}
-	if !strings.Contains(body, `href="/issues?page=2&amp;status=open"`) &&
+	if !strings.Contains(body, `href="/w/default/issues?page=2&amp;status=open"`) &&
 		!strings.Contains(body, "page=2") {
 		t.Error("expected a next-page link preserving filters")
 	}
@@ -128,7 +128,7 @@ func TestListPagination(t *testing.T) {
 		t.Error("should not emit a previous link on page 1")
 	}
 
-	resp2, err := srv.Client().Get(srv.URL + "/issues?page=2")
+	resp2, err := srv.Client().Get(srv.URL + "/w/default/issues?page=2")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +140,7 @@ func TestListPagination(t *testing.T) {
 
 func TestShowIssueNotFound(t *testing.T) {
 	srv, _ := newTestServer(t)
-	resp, err := srv.Client().Get(srv.URL + "/issues/999")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues/999")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +152,7 @@ func TestShowIssueNotFound(t *testing.T) {
 
 func TestShowIssueNonNumericID(t *testing.T) {
 	srv, _ := newTestServer(t)
-	resp, err := srv.Client().Get(srv.URL + "/issues/abc")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues/abc")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +167,7 @@ func TestShowIssueRendersDetail(t *testing.T) {
 	is := f.addIssue("Detail title", "line one\nline two", store.StatusOpen, time.Now(), 1)
 	f.comments[is.ID] = append(f.comments[is.ID], &store.Comment{ID: 1, IssueID: is.ID, Body: "first!", CreatedAt: time.Now()})
 
-	resp, err := srv.Client().Get(srv.URL + "/issues/1")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues/1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +186,7 @@ func TestShowIssueRendersMarkdown(t *testing.T) {
 	f.comments[1] = append(f.comments[1], &store.Comment{
 		ID: 1, IssueID: 1, Body: "**bold** comment", CreatedAt: time.Now()})
 
-	resp, err := srv.Client().Get(srv.URL + "/issues/1")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues/1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +203,7 @@ func TestShowIssueRendersMarkdown(t *testing.T) {
 		t.Error("fenced code content should appear escaped inside the block")
 	}
 
-	resp2, err := srv.Client().Get(srv.URL + "/issues/1/edit")
+	resp2, err := srv.Client().Get(srv.URL + "/w/default/issues/1/edit")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +215,7 @@ func TestShowIssueRendersMarkdown(t *testing.T) {
 
 func TestCreateIssueValidationError(t *testing.T) {
 	srv, _ := newTestServer(t)
-	resp := postForm(t, srv.Client(), srv.URL+"/issues", url.Values{
+	resp := postForm(t, srv.Client(), srv.URL+"/w/default/issues", url.Values{
 		"title": {"   "},
 		"body":  {"keep this body"},
 	})
@@ -254,9 +254,9 @@ func TestFormFeedbackBeforeSubmit(t *testing.T) {
 		path    string
 		pending string
 	}{
-		{"/issues/new", `<p class="field-error field-error-pending" id="f-title-error">Title is required.</p>`},
-		{"/issues/1/edit", `<p class="field-error field-error-pending" id="f-title-error">Title is required.</p>`},
-		{"/issues/1", `<p class="field-error field-error-pending" id="comment-error">Body is required.</p>`},
+		{"/w/default/issues/new", `<p class="field-error field-error-pending" id="f-title-error">Title is required.</p>`},
+		{"/w/default/issues/1/edit", `<p class="field-error field-error-pending" id="f-title-error">Title is required.</p>`},
+		{"/w/default/issues/1", `<p class="field-error field-error-pending" id="comment-error">Body is required.</p>`},
 	} {
 		resp, err := srv.Client().Get(srv.URL + tc.path)
 		if err != nil {
@@ -282,7 +282,7 @@ func TestFormFeedbackBeforeSubmit(t *testing.T) {
 
 func TestCreateIssueSuccess(t *testing.T) {
 	srv, _ := newTestServer(t)
-	resp := postForm(t, noRedirectClient(), srv.URL+"/issues", url.Values{
+	resp := postForm(t, noRedirectClient(), srv.URL+"/w/default/issues", url.Values{
 		"title":    {"Brand new issue"},
 		"body":     {"details here"},
 		"label_id": {"1", "3"},
@@ -292,7 +292,7 @@ func TestCreateIssueSuccess(t *testing.T) {
 		t.Fatalf("status = %d, want 303", resp.StatusCode)
 	}
 	loc := resp.Header.Get("Location")
-	if !strings.HasPrefix(loc, "/issues/") || loc == "/issues/new" {
+	if !strings.HasPrefix(loc, "/w/default/issues/") || loc == "/w/default/issues/new" {
 		t.Fatalf("Location = %q, want /issues/{id}", loc)
 	}
 
@@ -312,18 +312,18 @@ func TestCreateComment(t *testing.T) {
 	srv, f := newTestServer(t)
 	f.addIssue("Comment target", "", store.StatusOpen, time.Now())
 
-	resp := postForm(t, noRedirectClient(), srv.URL+"/issues/1/comments", url.Values{
+	resp := postForm(t, noRedirectClient(), srv.URL+"/w/default/issues/1/comments", url.Values{
 		"body": {"hello there"},
 	})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("status = %d, want 303", resp.StatusCode)
 	}
-	if loc := resp.Header.Get("Location"); !strings.HasPrefix(loc, "/issues/1#comment-") {
+	if loc := resp.Header.Get("Location"); !strings.HasPrefix(loc, "/w/default/issues/1#comment-") {
 		t.Fatalf("Location = %q, want /issues/1#comment-…", loc)
 	}
 
-	resp2, err := srv.Client().Get(srv.URL + "/issues/1")
+	resp2, err := srv.Client().Get(srv.URL + "/w/default/issues/1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -340,7 +340,7 @@ func TestCreateCommentEmpty(t *testing.T) {
 	srv, f := newTestServer(t)
 	f.addIssue("Comment target", "", store.StatusOpen, time.Now())
 
-	resp := postForm(t, srv.Client(), srv.URL+"/issues/1/comments", url.Values{
+	resp := postForm(t, srv.Client(), srv.URL+"/w/default/issues/1/comments", url.Values{
 		"body": {""},
 	})
 	body := getBody(t, resp)
@@ -362,7 +362,7 @@ func TestToggleStatus(t *testing.T) {
 	srv, f := newTestServer(t)
 	f.addIssue("Toggle me", "", store.StatusOpen, time.Now())
 
-	resp := postForm(t, noRedirectClient(), srv.URL+"/issues/1/status", url.Values{
+	resp := postForm(t, noRedirectClient(), srv.URL+"/w/default/issues/1/status", url.Values{
 		"status": {"closed"},
 	})
 	resp.Body.Close()
@@ -374,7 +374,7 @@ func TestToggleStatus(t *testing.T) {
 		t.Fatalf("status = %q, want closed", got.Status)
 	}
 
-	resp2 := postForm(t, noRedirectClient(), srv.URL+"/issues/1/status", url.Values{
+	resp2 := postForm(t, noRedirectClient(), srv.URL+"/w/default/issues/1/status", url.Values{
 		"status": {"open"},
 	})
 	resp2.Body.Close()
@@ -392,7 +392,7 @@ func TestPartialSetStatusContract(t *testing.T) {
 	f.addIssue("Toggle me", "", store.StatusOpen, time.Now())
 	partial := map[string]string{"X-Partial": "1"}
 
-	resp := postFormWithHeaders(t, srv.URL+"/issues/1/status",
+	resp := postFormWithHeaders(t, srv.URL+"/w/default/issues/1/status",
 		url.Values{"status": {"closed"}}, partial)
 	body := getBody(t, resp)
 	if resp.StatusCode != http.StatusOK {
@@ -419,7 +419,7 @@ func TestPartialSetStatusContract(t *testing.T) {
 	// A no-op toggle (closed on already-closed) must NOT show a fresh
 	// timestamp: the store leaves updated_at alone, so the fragment
 	// echoes the stored value — not time.Now().
-	resp2 := postFormWithHeaders(t, srv.URL+"/issues/1/status",
+	resp2 := postFormWithHeaders(t, srv.URL+"/w/default/issues/1/status",
 		url.Values{"status": {"closed"}}, partial)
 	body2 := getBody(t, resp2)
 	if resp2.StatusCode != http.StatusOK {
@@ -438,7 +438,7 @@ func TestPartialSetStatusContract(t *testing.T) {
 func TestSetStatusInvalid(t *testing.T) {
 	srv, f := newTestServer(t)
 	f.addIssue("Bad status", "", store.StatusOpen, time.Now())
-	resp := postForm(t, srv.Client(), srv.URL+"/issues/1/status", url.Values{
+	resp := postForm(t, srv.Client(), srv.URL+"/w/default/issues/1/status", url.Values{
 		"status": {"bogus"},
 	})
 	getBody(t, resp)
@@ -451,7 +451,7 @@ func TestDeleteFlow(t *testing.T) {
 	srv, f := newTestServer(t)
 	f.addIssue("Delete me", "", store.StatusOpen, time.Now())
 
-	resp, err := srv.Client().Get(srv.URL + "/issues/1/delete")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues/1/delete")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -466,12 +466,12 @@ func TestDeleteFlow(t *testing.T) {
 		t.Fatal("GET delete confirm must not delete the issue")
 	}
 
-	resp2 := postForm(t, noRedirectClient(), srv.URL+"/issues/1/delete", url.Values{})
+	resp2 := postForm(t, noRedirectClient(), srv.URL+"/w/default/issues/1/delete", url.Values{})
 	defer resp2.Body.Close()
 	if resp2.StatusCode != http.StatusSeeOther {
 		t.Fatalf("status = %d, want 303", resp2.StatusCode)
 	}
-	if loc := resp2.Header.Get("Location"); loc != "/issues" {
+	if loc := resp2.Header.Get("Location"); loc != "/w/default/issues" {
 		t.Fatalf("Location = %q, want /issues", loc)
 	}
 	if _, err := f.GetIssue(context.Background(), 1); err != store.ErrNotFound {
@@ -486,7 +486,7 @@ func TestDetailDeleteDialog(t *testing.T) {
 	srv, f := newTestServer(t)
 	f.addIssue("Dialog me", "", store.StatusOpen, time.Now())
 
-	resp, err := srv.Client().Get(srv.URL + "/issues/1")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues/1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -496,9 +496,9 @@ func TestDetailDeleteDialog(t *testing.T) {
 		`<dialog id="delete-dialog"`,
 		`closedby="any"`,
 		`aria-labelledby="delete-dialog-title"`,
-		`<form method="post" action="/issues/1/delete"`,
+		`<form method="post" action="/w/default/issues/1/delete"`,
 		`commandfor="delete-dialog" command="close" autofocus`,
-		`href="/issues/1/delete"`,
+		`href="/w/default/issues/1/delete"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("detail missing %q", want)
@@ -514,7 +514,7 @@ func TestEditFlow(t *testing.T) {
 	srv, f := newTestServer(t)
 	f.addIssue("Old title", "old body", store.StatusOpen, time.Now(), 1)
 
-	resp, err := srv.Client().Get(srv.URL + "/issues/1/edit")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues/1/edit")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -526,7 +526,7 @@ func TestEditFlow(t *testing.T) {
 		t.Error("edit form should prefill the body")
 	}
 
-	resp2 := postForm(t, noRedirectClient(), srv.URL+"/issues/1/edit", url.Values{
+	resp2 := postForm(t, noRedirectClient(), srv.URL+"/w/default/issues/1/edit", url.Values{
 		"title":    {"New title"},
 		"body":     {"new body"},
 		"label_id": {"2"},
@@ -535,7 +535,7 @@ func TestEditFlow(t *testing.T) {
 	if resp2.StatusCode != http.StatusSeeOther {
 		t.Fatalf("status = %d, want 303", resp2.StatusCode)
 	}
-	if loc := resp2.Header.Get("Location"); loc != "/issues/1" {
+	if loc := resp2.Header.Get("Location"); loc != "/w/default/issues/1" {
 		t.Fatalf("Location = %q, want /issues/1", loc)
 	}
 	got, _ := f.GetIssue(context.Background(), 1)
@@ -553,7 +553,7 @@ func TestHTMLEscaping(t *testing.T) {
 	f.addIssue(payload, payload, store.StatusOpen, time.Now())
 	f.comments[1] = append(f.comments[1], &store.Comment{ID: 1, IssueID: 1, Body: payload, CreatedAt: time.Now()})
 
-	resp, err := srv.Client().Get(srv.URL + "/issues")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -565,7 +565,7 @@ func TestHTMLEscaping(t *testing.T) {
 		t.Error("list page should contain the escaped payload")
 	}
 
-	resp2, err := srv.Client().Get(srv.URL + "/issues/1")
+	resp2, err := srv.Client().Get(srv.URL + "/w/default/issues/1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -580,7 +580,7 @@ func TestHTMLEscaping(t *testing.T) {
 
 func TestNewIssueFormRenders(t *testing.T) {
 	srv, _ := newTestServer(t)
-	resp, err := srv.Client().Get(srv.URL + "/issues/new")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues/new")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -602,7 +602,7 @@ func TestListOutOfRangePageShowsLastPage(t *testing.T) {
 		f.addIssue("Paged issue "+strconv.Itoa(i), "", store.StatusOpen, now.Add(-time.Duration(i)*time.Hour))
 	}
 
-	resp, err := srv.Client().Get(srv.URL + "/issues?page=99999")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues?page=99999")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -632,7 +632,7 @@ func TestListAbsurdPageFallsBackToFirst(t *testing.T) {
 	}
 
 	// 2^62 would overflow the store's (page-1)*perPage offset arithmetic.
-	resp, err := srv.Client().Get(srv.URL + "/issues?page=4611686018427387904")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues?page=4611686018427387904")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -650,7 +650,7 @@ func TestListAbsurdPageFallsBackToFirst(t *testing.T) {
 
 func TestUpdateIssueMissingIssue404(t *testing.T) {
 	srv, _ := newTestServer(t)
-	resp := postForm(t, srv.Client(), srv.URL+"/issues/999/edit", url.Values{
+	resp := postForm(t, srv.Client(), srv.URL+"/w/default/issues/999/edit", url.Values{
 		"title": {""},
 	})
 	getBody(t, resp)
@@ -663,13 +663,13 @@ func TestDetailLabelLinkUsesStatusAll(t *testing.T) {
 	srv, f := newTestServer(t)
 	f.addIssue("Labeled issue", "", store.StatusClosed, time.Now(), 1)
 
-	resp, err := srv.Client().Get(srv.URL + "/issues/1")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues/1")
 	if err != nil {
 		t.Fatal(err)
 	}
 	body := getBody(t, resp)
 	// The link must reach the closed issue too, so it carries status=all.
-	if !strings.Contains(body, `href="/issues?status=all&amp;label=1"`) {
+	if !strings.Contains(body, `href="/w/default/issues?status=all&amp;label=1"`) {
 		t.Errorf("expected label link with status=all, got:\n%s", body)
 	}
 }
@@ -678,7 +678,7 @@ func TestListLinksOmitDefaultStatus(t *testing.T) {
 	srv, f := newTestServer(t)
 	seedIssues(t, f)
 
-	resp, err := srv.Client().Get(srv.URL + "/issues")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -687,11 +687,11 @@ func TestListLinksOmitDefaultStatus(t *testing.T) {
 	if strings.Contains(body, "status=open") {
 		t.Error("generated links must not carry the redundant status=open")
 	}
-	if !strings.Contains(body, `href="/issues"`) {
+	if !strings.Contains(body, `href="/w/default/issues"`) {
 		t.Error("expected the Open tab link to be bare /issues")
 	}
 
-	resp2, err := srv.Client().Get(srv.URL + "/issues?status=closed")
+	resp2, err := srv.Client().Get(srv.URL + "/w/default/issues?status=closed")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -705,7 +705,7 @@ func TestListA11ySemantics(t *testing.T) {
 	srv, f := newTestServer(t)
 	seedIssues(t, f)
 
-	resp, err := srv.Client().Get(srv.URL + "/issues")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -726,7 +726,7 @@ func TestDetailA11ySemantics(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resp, err := srv.Client().Get(srv.URL + "/issues/1")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues/1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -762,7 +762,7 @@ func TestAuthorRecordedAndDisplayed(t *testing.T) {
 	c := sessionCookie(t, resp)
 
 	form := url.Values{"title": {"authored issue"}, "body": {"with a name"}}
-	req, err := http.NewRequest(http.MethodPost, srv.URL+"/issues", strings.NewReader(form.Encode()))
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/w/default/issues", strings.NewReader(form.Encode()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -781,17 +781,17 @@ func TestAuthorRecordedAndDisplayed(t *testing.T) {
 	}
 
 	f.addIssue("anon issue", "", store.StatusOpen, time.Now(), 2)
-	code, body := getWithCookie(t, srv, "/issues/2", nil)
+	code, body := getWithCookie(t, srv, "/w/default/issues/2", nil)
 	if code != http.StatusOK || !strings.Contains(body, "Opened by anonymous") {
 		t.Error("anonymous post not rendered as anonymous")
 	}
-	code, body = getWithCookie(t, srv, "/issues/1", nil)
+	code, body = getWithCookie(t, srv, "/w/default/issues/1", nil)
 	if code != http.StatusOK || !strings.Contains(body, "Opened by alice") {
 		t.Error("authored issue missing author name")
 	}
 
 	form = url.Values{"body": {"signed comment"}}
-	req, err = http.NewRequest(http.MethodPost, srv.URL+"/issues/1/comments", strings.NewReader(form.Encode()))
+	req, err = http.NewRequest(http.MethodPost, srv.URL+"/w/default/issues/1/comments", strings.NewReader(form.Encode()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -802,7 +802,7 @@ func TestAuthorRecordedAndDisplayed(t *testing.T) {
 		t.Fatalf("POST comment: %v", err)
 	}
 	resp.Body.Close()
-	_, body = getWithCookie(t, srv, "/issues/1", nil)
+	_, body = getWithCookie(t, srv, "/w/default/issues/1", nil)
 	if !strings.Contains(body, "alice commented") {
 		t.Error("comment missing author name")
 	}

@@ -60,7 +60,7 @@ func issueList(ctx context.Context, o Options, args []string) error {
 		return usageError{msg: fmt.Sprintf("--sort must be newest|oldest, got %q", *sort)}
 	}
 
-	b, closer, err := o.backend(bf)
+	b, closer, err := o.backend(ctx, bf)
 	if err != nil {
 		return err
 	}
@@ -118,7 +118,7 @@ func issueView(ctx context.Context, o Options, args []string) error {
 	if *web {
 		return o.openPage(bf, "/issues/", id)
 	}
-	b, closer, err := o.backend(bf)
+	b, closer, err := o.backend(ctx, bf)
 	if err != nil {
 		return err
 	}
@@ -200,7 +200,7 @@ func issueCreate(ctx context.Context, o Options, args []string) error {
 		return err
 	}
 
-	b, closer, err := o.backend(bf)
+	b, closer, err := o.backend(ctx, bf)
 	if err != nil {
 		return err
 	}
@@ -247,7 +247,7 @@ func issueEdit(ctx context.Context, o Options, args []string) error {
 	if err != nil {
 		return err
 	}
-	b, closer, err := o.backend(bf)
+	b, closer, err := o.backend(ctx, bf)
 	if err != nil {
 		return err
 	}
@@ -304,7 +304,7 @@ func issueStateChange(ctx context.Context, o Options, action string, args []stri
 	if err != nil {
 		return err
 	}
-	b, closer, err := o.backend(bf)
+	b, closer, err := o.backend(ctx, bf)
 	if err != nil {
 		return err
 	}
@@ -357,7 +357,7 @@ func commentCmd(ctx context.Context, o Options, args []string) error {
 		}
 		return fmt.Errorf("invalid comment: %s", msg)
 	}
-	b, closer, err := o.backend(bf)
+	b, closer, err := o.backend(ctx, bf)
 	if err != nil {
 		return err
 	}
@@ -386,7 +386,7 @@ func labelCmd(ctx context.Context, o Options, args []string) error {
 	if *jsonFields != "" && *tmpl != "" {
 		return usageError{msg: "--json and --template are mutually exclusive"}
 	}
-	b, closer, err := o.backend(bf)
+	b, closer, err := o.backend(ctx, bf)
 	if err != nil {
 		return err
 	}

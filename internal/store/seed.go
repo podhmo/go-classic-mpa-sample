@@ -165,6 +165,10 @@ func (s *Store) SeedDemoData(ctx context.Context) error {
 // seedIssuesAndLabels inserts the default labels and demo issues/comments
 // inside tx.
 func seedIssuesAndLabels(ctx context.Context, tx *sql.Tx) error {
+	wsID, err := seedWorkspaceID(ctx, tx)
+	if err != nil {
+		return err
+	}
 	labelIDs := make(map[string]int64, len(seedLabels))
 	for _, l := range seedLabels {
 		res, err := tx.ExecContext(ctx, "INSERT INTO labels(name, color) VALUES(?, ?)", l.Name, l.Color)
@@ -186,8 +190,8 @@ func seedIssuesAndLabels(ctx context.Context, tx *sql.Tx) error {
 			updated = now.Add(-si.age + 4*time.Hour).Unix()
 		}
 		res, err := tx.ExecContext(ctx,
-			"INSERT INTO issues(title, body, status, created_at, updated_at) VALUES(?, ?, ?, ?, ?)",
-			si.title, si.body, si.status, created, updated)
+			"INSERT INTO issues(workspace_id, title, body, status, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?)",
+			wsID, si.title, si.body, si.status, created, updated)
 		if err != nil {
 			return err
 		}
@@ -331,11 +335,25 @@ func seedCategories(ctx context.Context, tx *sql.Tx) error {
 	return nil
 }
 
+// seedWorkspaceID picks the workspace demo content lands in — 'default'
+// when it exists, the earliest workspace otherwise (a deleted default
+// stays deleted, but demo content still needs a home).
+func seedWorkspaceID(ctx context.Context, tx *sql.Tx) (int64, error) {
+	var id int64
+	err := tx.QueryRowContext(ctx,
+		"SELECT id FROM workspaces ORDER BY (slug = 'default') DESC, id LIMIT 1").Scan(&id)
+	return id, err
+}
+
 // seedDiscussions inserts demo discussions with threaded comments inside tx
 // (called only when the discussions table is empty). Category rows are
 // resolved by slug so this also works on a database that already had
 // categories.
 func seedDiscussions(ctx context.Context, tx *sql.Tx) error {
+	wsID, err := seedWorkspaceID(ctx, tx)
+	if err != nil {
+		return err
+	}
 	rows, err := tx.QueryContext(ctx, "SELECT id, slug FROM discussion_categories")
 	if err != nil {
 		return err
@@ -361,8 +379,8 @@ func seedDiscussions(ctx context.Context, tx *sql.Tx) error {
 	for _, sd := range seedDiscussionRows {
 		created := now.Add(-sd.age).Unix()
 		res, err := tx.ExecContext(ctx,
-			"INSERT INTO discussions(category_id, title, body, created_at, updated_at) VALUES(?, ?, ?, ?, ?)",
-			catIDs[sd.category], sd.title, sd.body, created, created)
+			"INSERT INTO discussions(workspace_id, category_id, title, body, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?)",
+			wsID, catIDs[sd.category], sd.title, sd.body, created, created)
 		if err != nil {
 			return err
 		}

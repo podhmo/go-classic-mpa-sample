@@ -6,20 +6,20 @@
 <script type="module" src="/static/page-detail.js"></script>
 <nav class="breadcrumb" aria-label="Breadcrumb">
   <ol>
-    <li><a href="/discussions">Discussions</a></li>
+    <li><a href="/w/{{.Workspace.Slug}}/discussions">Discussions</a></li>
     <li><a href="#" aria-current="page">#{{.Discussion.ID}}</a></li>
   </ol>
 </nav>
 
 {{template "discussion_article" .}}
 
-<section id="comments" class="comments" data-live-kind="discussion" data-live-events="/discussions/{{.Discussion.ID}}/events" data-live-fragments="/discussions/{{.Discussion.ID}}/fragments" data-live-list="/discussions">
+<section id="comments" class="comments" data-live-kind="discussion" data-live-events="/w/{{.Workspace.Slug}}/discussions/{{.Discussion.ID}}/events" data-live-fragments="/w/{{.Workspace.Slug}}/discussions/{{.Discussion.ID}}/fragments" data-live-list="/w/{{.Workspace.Slug}}/discussions">
   {{/* The list and the empty note render unconditionally but hidden as
      needed, so partial-submit.js can insert into an empty list by just
      unhiding it. Each li comes from the discussion_comment define — the
      same define the partial-update POST returns standalone. */}}
   <ol class="comment-list" role="list"{{if not .Threads}} hidden{{end}}>
-    {{range .Threads}}{{template "discussion_comment" (dict "Discussion" $.Discussion "C" . "ThreadDraftID" $.ThreadDraftID "CommentDraft" $.CommentDraft "CommentError" $.CommentError)}}{{end}}
+    {{range .Threads}}{{template "discussion_comment" (dict "Discussion" $.Discussion "Workspace" $.Workspace "C" . "ThreadDraftID" $.ThreadDraftID "CommentDraft" $.CommentDraft "CommentError" $.CommentError)}}{{end}}
   </ol>
   <p class="muted" data-empty-note{{if .Threads}} hidden{{end}}>No threads yet.</p>
 

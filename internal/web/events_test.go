@@ -33,7 +33,7 @@ func TestIssueEventsStreamsPublishedChanges(t *testing.T) {
 	srv := httptest.NewServer(New(st, WithHub(hub)))
 	defer srv.Close()
 
-	resp, err := srv.Client().Get(srv.URL + "/issues/" + itoa(issue.ID) + "/events")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues/" + itoa(issue.ID) + "/events")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestIssueEventsStreamsPublishedChanges(t *testing.T) {
 func TestIssueEventsNotFound(t *testing.T) {
 	srv := httptest.NewServer(New(newFakeStore()))
 	defer srv.Close()
-	resp, err := srv.Client().Get(srv.URL + "/issues/999/events")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues/999/events")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestIssueCommentsFragment(t *testing.T) {
 	srv := httptest.NewServer(New(st))
 	defer srv.Close()
 
-	resp, err := srv.Client().Get(srv.URL + "/issues/" + itoa(issue.ID) + "/fragments/comments?ids=2")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues/" + itoa(issue.ID) + "/fragments/comments?ids=2")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestIssueCommentsFragment(t *testing.T) {
 	}
 
 	// No ids = the resync path: the whole list must come back.
-	resp2, err := srv.Client().Get(srv.URL + "/issues/" + itoa(issue.ID) + "/fragments/comments")
+	resp2, err := srv.Client().Get(srv.URL + "/w/default/issues/" + itoa(issue.ID) + "/fragments/comments")
 	if err != nil {
 		t.Fatal(err)
 	}
