@@ -186,10 +186,9 @@ func (s *Store) CreateIssue(ctx context.Context, wsID int64, in IssueInput, auth
 	if err := setIssueLabels(ctx, tx, id, in.LabelIDs); err != nil {
 		return 0, err
 	}
-	if err := tx.Commit(); err != nil {
+	if err := s.commitTx(ctx, tx, events.Change{Topic: events.IssuesTopic, Kind: events.KindNew, Target: id}); err != nil {
 		return 0, err
 	}
-	s.notify(events.Change{Topic: events.IssuesTopic, Kind: events.KindNew, Target: id})
 	return id, nil
 }
 
@@ -214,10 +213,9 @@ func (s *Store) UpdateIssue(ctx context.Context, id int64, in IssueInput) error 
 	if err := setIssueLabels(ctx, tx, id, in.LabelIDs); err != nil {
 		return err
 	}
-	if err := tx.Commit(); err != nil {
+	if err := s.commitTx(ctx, tx, events.Change{Topic: events.IssueTopic(id), Kind: events.KindEdit, Target: id}); err != nil {
 		return err
 	}
-	s.notify(events.Change{Topic: events.IssueTopic(id), Kind: events.KindEdit, Target: id})
 	return nil
 }
 
@@ -227,12 +225,18 @@ func (s *Store) SetIssueStatus(ctx context.Context, id int64, status string) err
 	if status != StatusOpen && status != StatusClosed {
 		return fmt.Errorf("store: invalid status %q", status)
 	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
 	// updated_at is bumped only when the status actually changes; a no-op
 	// post (e.g. closing an already-closed issue) leaves it alone. The
 	// updated_at clause precedes the status assignment so the CASE compares
 	// against the pre-update status. An existing row always matches the
 	// UPDATE, so RowsAffected still reports 0 only when the issue is missing.
-	res, err := s.db.ExecContext(ctx,
+	res, err := tx.ExecContext(ctx,
 		"UPDATE issues SET updated_at = CASE WHEN status != ? THEN ? ELSE updated_at END, status = ? WHERE id = ?",
 		status, time.Now().UTC().Unix(), status, id)
 	if err != nil {
@@ -241,23 +245,28 @@ func (s *Store) SetIssueStatus(ctx context.Context, id int64, status string) err
 	if err := checkAffected(res); err != nil {
 		return err
 	}
-	s.notify(events.Change{Topic: events.IssueTopic(id), Kind: events.KindStatus, Target: id})
-	return nil
+	return s.commitTx(ctx, tx, events.Change{Topic: events.IssueTopic(id), Kind: events.KindStatus, Target: id})
 }
 
 // DeleteIssue removes the issue along with its comments and label links.
 // Returns ErrNotFound if the issue does not exist.
 func (s *Store) DeleteIssue(ctx context.Context, id int64) error {
-	res, err := s.db.ExecContext(ctx, "DELETE FROM issues WHERE id = ?", id)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	res, err := tx.ExecContext(ctx, "DELETE FROM issues WHERE id = ?", id)
 	if err != nil {
 		return err
 	}
 	if err := checkAffected(res); err != nil {
 		return err
 	}
-	s.notify(events.Change{Topic: events.IssueTopic(id), Kind: events.KindDelete, Target: id})
-	s.notify(events.Change{Topic: events.IssuesTopic, Kind: events.KindDelete, Target: id})
-	return nil
+	return s.commitTx(ctx, tx,
+		events.Change{Topic: events.IssueTopic(id), Kind: events.KindDelete, Target: id},
+		events.Change{Topic: events.IssuesTopic, Kind: events.KindDelete, Target: id})
 }
 
 // ListComments returns comments for an issue in chronological order.
@@ -317,10 +326,9 @@ func (s *Store) CreateComment(ctx context.Context, issueID int64, body string, a
 	if err != nil {
 		return 0, err
 	}
-	if err := tx.Commit(); err != nil {
+	if err := s.commitTx(ctx, tx, events.Change{Topic: events.IssueTopic(issueID), Kind: events.KindComment, Target: id}); err != nil {
 		return 0, err
 	}
-	s.notify(events.Change{Topic: events.IssueTopic(issueID), Kind: events.KindComment, Target: id})
 	return id, nil
 }
 

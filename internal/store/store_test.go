@@ -63,7 +63,7 @@ func TestSchemaObjects(t *testing.T) {
 
 	// All application tables plus sqlite_sequence (AUTOINCREMENT
 	// bookkeeping), sorted by name.
-	wantTables := []string{"api_tokens", "comments", "discussion_categories", "discussion_comments", "discussion_threads", "discussions", "issue_labels", "issues", "labels", "sessions", "sqlite_sequence", "users", "workspaces"}
+	wantTables := []string{"api_tokens", "changes", "comments", "discussion_categories", "discussion_comments", "discussion_threads", "discussions", "issue_labels", "issues", "labels", "sessions", "sqlite_sequence", "users", "workspaces"}
 	if !slices.Equal(tables, wantTables) {
 		t.Errorf("tables = %v, want %v", tables, wantTables)
 	}
@@ -98,7 +98,7 @@ func TestAnalyze(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SchemaObjects after ANALYZE: %v", err)
 	}
-	wantTables := []string{"api_tokens", "comments", "discussion_categories", "discussion_comments", "discussion_threads", "discussions", "issue_labels", "issues", "labels", "sessions", "sqlite_sequence", "users", "workspaces"}
+	wantTables := []string{"api_tokens", "changes", "comments", "discussion_categories", "discussion_comments", "discussion_threads", "discussions", "issue_labels", "issues", "labels", "sessions", "sqlite_sequence", "users", "workspaces"}
 	if !slices.Equal(tables, wantTables) {
 		t.Errorf("tables after ANALYZE = %v, want %v", tables, wantTables)
 	}

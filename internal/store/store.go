@@ -10,10 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
-
-	"github.com/podhmo/go-classic-mpa-sample/internal/events"
 
 	_ "modernc.org/sqlite"
 )
@@ -23,32 +20,7 @@ var ErrNotFound = errors.New("store: not found")
 
 // Store wraps the SQLite database handle.
 type Store struct {
-	db    *sql.DB
-	emit  func(events.Change)
-	emitM sync.Mutex
-}
-
-// SetListener registers fn as the single change listener: every mutating
-// method calls it once after its commit succeeds, so a caller wiring the
-// web layer's SSE hub sees writes from every path (HTML forms, /api/v1,
-// the CLI) in one place. Nil disables emission. Replace-not-append by
-// design: one broadcaster owns the fan-out.
-func (s *Store) SetListener(fn func(events.Change)) {
-	s.emitM.Lock()
-	s.emit = fn
-	s.emitM.Unlock()
-}
-
-// notify fires the registered listener, if any. It runs after the
-// mutator's tx committed — never inside it — so a slow listener cannot
-// hold the write open.
-func (s *Store) notify(c events.Change) {
-	s.emitM.Lock()
-	fn := s.emit
-	s.emitM.Unlock()
-	if fn != nil {
-		fn(c)
-	}
+	db *sql.DB
 }
 
 // Timestamps are stored as UTC unix seconds.
@@ -145,6 +117,16 @@ CREATE TABLE IF NOT EXISTS discussion_comments (
 	thread_id INTEGER NOT NULL REFERENCES discussion_threads(id) ON DELETE CASCADE,
 	author_id INTEGER REFERENCES users(id),
 	body TEXT NOT NULL,
+	created_at INTEGER NOT NULL
+);
+-- Cross-process change hints (commitTx writes, WatchChanges tails → SSE
+-- hub). Volatile by design; PurgeChanges bounds the table.
+CREATE TABLE IF NOT EXISTS changes (
+	seq INTEGER PRIMARY KEY AUTOINCREMENT,
+	topic TEXT NOT NULL,
+	kind TEXT NOT NULL,
+	target INTEGER NOT NULL,
+	parent INTEGER NOT NULL DEFAULT 0,
 	created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_issues_workspace_status_created ON issues(workspace_id, status, created_at);

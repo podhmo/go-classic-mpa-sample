@@ -563,3 +563,14 @@ podhmo からの改善要望（grid と story のリンク誤押・見た目・s
 - v6 のテーブル再構築（issues_new/discussions_new + `migrateWithFKOff`）は旧 DB のデータ移行のためのものだったので不要になり削除。DROP TABLE 時の ON DELETE CASCADE 問題自体は pitfalls.md の知見として残す。
 - **旧フォーマットの DB は fail fast**: 事前に issues テーブルが存在する DB では `CREATE TABLE IF NOT EXISTS` が触らないためカラム欠落のまま動いてしまう。migrateV1 後に `workspace_id` カラムを検査し、なければ「DB を消して init し直せ」というエラーにする。既存の dev DB は削除対象。
 - **検証**: `go test ./...` / `go vet` / `gofmt` 全パス。アップグレード経路を検証していた TestMigrationFromVersionZero / TestMigrationV5 は経路ごと消えたため削除し、新規スキーマ検査は workspace/discussion_threads 系カラムを含む形に更新。
+
+## ローカル CLI からの書き込みを SSE に届ける（2026-11-17、`devin/*-cli-local-sse-changes` ブランチ）
+
+`issues` CLI の local mode（`--db` 直結）はサーバーとは**別プロセス**で同じ SQLite を開くため、`SetListener → hub.Publish` の in-process 通知では拾えなかった — web/API 経由の書き込みだけが SSE に流れていた。`docs/sketch/ja/live-updates.md` が「複数プロセスが同一 DB を共有したら」として挙げていた逃げ道まさにそのケースなので、案 (a) の **changes テーブル + poll** に切り替えた。
+
+- **`changes` テーブルが唯一の通知経路**: 全 mutator が mutation と**同じトランザクション**内に hint 行を `INSERT`（`commitTx` が `tx.Commit()` の代わり — 記録忘れを構造的に防ぐ）。hint と本体は必ず同時にコミット/ロールバックされる。
+- **`SetListener`/`notify` は撤去**: in-proc 速報経路とテーブル経路を二重に持つと重複 publish のための origin 管理が要る。ポーリング一本化で +≤250ms の遅延になるが、クライアント側の 300ms debounce の中に収まる。
+- **サーバーは `WatchChanges` で tail**: main.go が `go st.WatchChanges(ctx, hub.Publish)` を起動（250ms 間隔）。別プロセスの書き込み（local CLI、もう1台のサーバー）も同じ経路で SSE に届く。起動時は `MAX(seq)` から開始してバックログを再生しない（hint は揮発、取りこぼしはクライアント resync で回復）。
+- **保持は5分**: `PurgeChanges` が `created_at` の古い行を捨てる（watcher ループ内で1分に1度）。長期停止後の再起動ではバックログは読まないため消費未済の古行は意味を持たない。
+- **tx を持たなかった3 mutator**（`SetIssueStatus`/`DeleteIssue`/`DeleteDiscussion`）は `BeginTx` で包んで `commitTx` に揃えた。
+- **検証**: `go test ./...` / `go vet` / `gofmt` 全パス。`changes_test.go` は同一ファイルを開く2本の `*Store` で CLI↔server 分割を再現して配達を確認。e2e（`make test-e2e`）は実バイナリで SSE 購読 → local-mode `comment create --db` → `event: comment` 受信を確認。ついでに `discussion comment`（thread 化で出力が変わっていた）と `api` パス（workspace スコープ化で `/w/{slug}/` 必須になっていた）の stale な e2e 期待値も修正した。

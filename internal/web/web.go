@@ -100,11 +100,11 @@ func WithAPIEnabled(on bool) Option {
 }
 
 // WithHub supplies the change hub the /{issues,discussions}/{id}/events
-// SSE endpoints broadcast from. It must be the same hub the store
-// publishes to — main wires both sides via
-// (*store.Store).SetListener(hub.Publish). Callers that skip the option
-// (tests, the storybook) get a private quiet hub: the endpoints exist
-// but never emit.
+// SSE endpoints broadcast from. It must be the same hub the store's
+// change watcher publishes to — main wires both sides via
+// (*store.Store).WatchChanges(ctx, hub.Publish). Callers that skip the
+// option (tests, the storybook) get a private quiet hub: the endpoints
+// exist but never emit.
 func WithHub(hub *events.Hub) Option {
 	return func(c *config) { c.hub = hub }
 }
