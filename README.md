@@ -30,7 +30,7 @@ everywhere. Two themes drive it:
 ## Run
 
 ```sh
-go run .
+go run ./cmd/zatudan
 ```
 
 Then open <http://localhost:8080> — `GET /` redirects to `/issues`.
@@ -45,7 +45,7 @@ discussion categories and comments (only when the tables are empty).
 ### `init` subcommand
 
 ```sh
-go run . -db zatudan.db init     # or: go run . -init
+go run ./cmd/zatudan -db zatudan.db init     # or: go run ./cmd/zatudan -init
 ```
 
 `init` creates the database file if needed, applies the complete schema
@@ -58,8 +58,8 @@ safe: the schema DDL is idempotent and `ANALYZE` refreshes the planner
 statistics on a populated database.
 
 Flags must come **before** the `init` argument — Go's `flag` package stops
-parsing at the first positional argument, so write `go run . -db x.db
-init`, not `go run . init -db x.db`. `-addr` has no effect in init mode.
+parsing at the first positional argument, so write `go run ./cmd/zatudan -db x.db
+init`, not `go run ./cmd/zatudan init -db x.db`. `-addr` has no effect in init mode.
 
 ## Accounts
 
@@ -120,10 +120,10 @@ See `docs/ja/for-ui-designer.md`.
 | `-init` | —             | `false`          | Initialize the database and exit (same as the `init` subcommand)       |
 | `-api-token` | `ZATUDAN_API_TOKEN` | *(unset)*   | Shared Bearer token for `/api/v1`; the API also mounts when per-user `api_tokens` exist |
 
-Example: `go run . -addr :8080 -db /tmp/my-zatudan.db` or
-`ZATUDAN_ADDR=:8080 go run .`.
+Example: `go run ./cmd/zatudan -addr :8080 -db /tmp/my-zatudan.db` or
+`ZATUDAN_ADDR=:8080 go run ./cmd/zatudan`.
 
-Use `-db :memory:` for a throwaway database. `go run . -db PATH init` (or
+Use `-db :memory:` for a throwaway database. `go run ./cmd/zatudan -db PATH init` (or
 `-init`) prepares the database without serving — see the `init` subcommand
 above; flags must precede the `init` argument.
 
@@ -262,12 +262,10 @@ full PRG round-trip without it.
 ## Architecture
 
 ```
-main.go            dev entry point (`go run .`): delegates to internal/app
-cmd/zatudan/       distributable server binary (same bootstrap as main.go)
+cmd/zatudan/       server binary: flags/env, store.Open, SeedDemoData,
+                   http.Server with timeouts, graceful shutdown
 cmd/zatu/          gh-style CLI binary (issue/comment/label/discussion/auth/api/completion)
 cmd/storybook/     UI preview server (separate module, runs on minigo)
-internal/app/       shared bootstrap: flags/env, store.Open, SeedDemoData,
-                   http.Server with timeouts, graceful shutdown
 internal/store/    persistence: sqlite schema, queries, ErrNotFound contract.
                    Exposes *store.Store; no HTTP knowledge.
 internal/web/      HTML layer: consumer-side Store interface, handlers,

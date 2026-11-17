@@ -24,14 +24,14 @@ import (
 )
 
 // buildBinaries compiles the server binary and the CLI binary (separate
-// commands: cmd/zatu is the client, the repo root is the server).
+// commands: cmd/zatu is the client, cmd/zatudan is the server).
 func buildBinaries(t *testing.T) (serverBin, cliBin string) {
 	t.Helper()
 	dir := t.TempDir()
 	serverBin = filepath.Join(dir, "zatudan")
 	cliBin = filepath.Join(dir, "zatu")
 	for target, out := range map[string]string{
-		"../..":          serverBin,
+		"../../cmd/zatudan": serverBin,
 		"../../cmd/zatu": cliBin,
 	} {
 		b, err := exec.Command("go", "build", "-o", out, target).CombinedOutput()

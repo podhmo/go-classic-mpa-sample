@@ -1,6 +1,6 @@
 ---
 name: verify-ui
-description: Use after a UI change on go-classic-mpa-sample when the homemade storybook is no longer enough and the change must be exercised in the real running app end-to-end — real routing/middleware, the real SQLite store, PRG redirects, view transitions across navigations, JavaScript event behavior, or console/CSP errors — by driving a real browser with playwright-cli against `go run .` on :8080.
+description: Use after a UI change on go-classic-mpa-sample when the homemade storybook is no longer enough and the change must be exercised in the real running app end-to-end — real routing/middleware, the real SQLite store, PRG redirects, view transitions across navigations, JavaScript event behavior, or console/CSP errors — by driving a real browser with playwright-cli against `go run ./cmd/zatudan` on :8080.
 ---
 
 # Verify UI changes against the real app
@@ -15,8 +15,8 @@ needs that level of proof, run the app and drive a real browser.
 ## Start the app
 
 ```sh
-go run .                    # http://127.0.0.1:8080, db: zatudan.db
-go run . -db /tmp/e2e.db    # scratch DB — demo issues auto-seed on first launch
+go run ./cmd/zatudan                    # http://127.0.0.1:8080, db: zatudan.db
+go run ./cmd/zatudan -db /tmp/e2e.db    # scratch DB — demo issues auto-seed on first launch
 ```
 
 `SeedDemoData` runs on every startup and is a no-op on a non-empty

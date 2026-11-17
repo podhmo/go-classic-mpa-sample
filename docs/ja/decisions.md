@@ -581,7 +581,7 @@ podhmo からの改善要望（grid と story のリンク誤押・見た目・s
 
 `docs/sketch/ja/naming.md`（PR #90）の調査をもとに命名を決定。サーバ/app は **`zatudan`**、CLI は **`zatu`**、env prefix は **`ZATUDAN_*`**。開発中のため breaking changes は移行措置なしでそのまま付け替え。
 
-- **サーバの実体は `internal/app.Run` に移設**: `main.go`（`go run .` 用の薄い入口）と `cmd/zatudan/main.go`（配布バイナリ）の2入口が同じ bootstrap を呼ぶ構造（naming.md の案 S2）。`go build` のバイナリ名が import path 末端由来のため、`-o` 運用ではなく cmd/ 移設で名前を確定させる。
+- **サーバの entrypoint は `cmd/zatudan` のみ**: naming.md の案 S2。`go build` のバイナリ名が import path 末端由来のため、`-o` 運用ではなく cmd/ 移設で名前を確定させる。当初は `go run .` 維持のため root main.go → internal/app への委譲構造にしたが、「動かなくて良い・委譲も不要」との判断で廃止し、bootstrap は `cmd/zatudan/main.go` に直接置く（dev 時は `go run ./cmd/zatudan`）。
 - **CLI は `cmd/issues` → `cmd/zatu`**: `git mv` で移動し usage 文字列・doc comment・completion スクリプト（`_zatu`, `zatu.fish`）・エラーメッセージを一式更新。
 - **env は app 名に揃える**: `ISSUES_*` → `ZATUDAN_*`（server: `ZATUDAN_ADDR`/`ZATUDAN_DB`/`ZATUDAN_API_TOKEN`、CLI: `ZATUDAN_DB`/`ZATUDAN_SERVER`/`ZATUDAN_TOKEN`/`ZATUDAN_WORKSPACE`）。CLI 短名 `zatu` ではなく app 名 prefix を選んだ — env は「アプリの設定」でありコマンドごとの修飾ではないため。
 - **既定 DB 名は `zatudan.db`**（旧 `issues.db`）。旧 DB は移行対象にしない。
