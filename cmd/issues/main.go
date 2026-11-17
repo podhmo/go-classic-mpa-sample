@@ -8,8 +8,8 @@
 //	issues comment create N --body B
 //	issues label list
 //	issues discussion list|view|create|edit|delete
-//	issues discussion comment create N --body B [--parent C]
-//	issues discussion answer N --comment C [--unmark]
+//	issues discussion comment create N --body B [--thread T]
+//	issues discussion answer N --thread T [--unmark]
 //	issues auth token --user NAME | token list | token revoke  (local mode only)
 //	issues api <path> [-X METHOD] [-f k=v]... [-F k=v]...       (remote mode only)
 //	issues completion bash|zsh|fish
