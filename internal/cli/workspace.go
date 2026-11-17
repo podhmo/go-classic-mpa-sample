@@ -35,7 +35,7 @@ func workspaceList(ctx context.Context, o Options, args []string) error {
 		return err
 	}
 	_ = pos
-	b, closer, err := o.backend(ctx, bf)
+	b, closer, err := o.backendIn(ctx, bf, "")
 	if err != nil {
 		return err
 	}
@@ -75,7 +75,7 @@ func workspaceCreate(ctx context.Context, o Options, args []string) error {
 		}
 		return usageError{msg: "invalid workspace input"}
 	}
-	b, closer, err := o.backend(ctx, bf)
+	b, closer, err := o.backendIn(ctx, bf, "")
 	if err != nil {
 		return err
 	}
@@ -100,7 +100,7 @@ func workspaceDelete(ctx context.Context, o Options, args []string) error {
 		return usageError{msg: "missing workspace slug"}
 	}
 	slug := pos[0]
-	b, closer, err := o.backend(ctx, bf)
+	b, closer, err := o.backendIn(ctx, bf, "")
 	if err != nil {
 		return err
 	}

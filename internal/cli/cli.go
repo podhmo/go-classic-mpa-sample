@@ -267,12 +267,19 @@ func (b *backendFlags) dbPath() string {
 // selects remote mode, anything else opens the local database. The
 // returned io.Closer is nil for remote backends.
 func (o Options) backend(ctx context.Context, b *backendFlags) (Backend, io.Closer, error) {
+	return o.backendIn(ctx, b, b.wsSlug())
+}
+
+// backendIn opens the Backend scoped to an explicit workspace slug; ws==""
+// means unscoped (workspace management verbs must work even when no
+// workspace exists — e.g. after deleting default).
+func (o Options) backendIn(ctx context.Context, b *backendFlags, ws string) (Backend, io.Closer, error) {
 	if b.server != "" {
 		warnPlaintext(o.Stderr, b.server, b.token)
-		be, err := o.OpenRemote(b.server, b.token, b.wsSlug())
+		be, err := o.OpenRemote(b.server, b.token, ws)
 		return be, nil, err
 	}
-	return o.OpenLocal(ctx, b.dbPath(), b.wsSlug())
+	return o.OpenLocal(ctx, b.dbPath(), ws)
 }
 
 // warnPlaintext warns when an API token is about to travel over

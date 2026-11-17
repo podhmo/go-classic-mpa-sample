@@ -15,8 +15,13 @@ type ScopedStore struct {
 }
 
 // In resolves the workspace slug eagerly — a miss is ErrNotFound — and
-// returns the scoped view.
+// returns the scoped view. An empty slug returns an unscoped view (wsID 0)
+// for workspace-management callers; resource operations then miss every
+// scope check and answer ErrNotFound.
 func (s *Store) In(ctx context.Context, slug string) (*ScopedStore, error) {
+	if slug == "" {
+		return &ScopedStore{s: s, wsID: 0}, nil
+	}
 	ws, err := s.WorkspaceBySlug(ctx, slug)
 	if err != nil {
 		return nil, err
