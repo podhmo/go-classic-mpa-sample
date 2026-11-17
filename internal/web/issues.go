@@ -470,7 +470,12 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request, ws *stor
 	if partial {
 		// The fragment also carries the header meta as a data-swap node —
 		// the comment bumped updated_at, so the stale "Last updated" line
-		// must be re-rendered. The issue was fetched pre-write above.
+		// must be re-rendered from the post-write issue.
+		issue, err = h.store.GetIssue(r.Context(), id)
+		if err != nil {
+			h.issueError(w, r, err)
+			return
+		}
 		h.r.renderFragment(w, "issue_detail", "issue_comment_append", http.StatusOK, dict(
 			"Workspace", ws,
 			"Issue", issue,
