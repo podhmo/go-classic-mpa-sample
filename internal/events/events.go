@@ -72,7 +72,7 @@ func NewHub() *Hub {
 
 // Publish assigns the change a sequence number and delivers it to every
 // current subscriber of its topic. Safe for concurrent use; intended to
-// be wired as (*store.Store).WatchChanges(ctx, hub.Publish).
+// be wired as (*store.Store).WatchChanges(ctx, watermark, hub.Publish).
 func (h *Hub) Publish(c Change) {
 	h.mu.Lock()
 	defer h.mu.Unlock()

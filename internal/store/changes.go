@@ -80,20 +80,19 @@ func (s *Store) PurgeChanges(ctx context.Context, before int64) error {
 	return err
 }
 
-// WatchChanges polls the changes table and calls fn for every new row
-// until ctx is done — how the server's SSE hub learns about writes made
-// by other processes (main.go wires it to hub.Publish). Poll errors are
-// logged and retried on the next tick; a dying database makes the loop
-// noisy but not dead.
-func (s *Store) WatchChanges(ctx context.Context, fn func(events.Change)) {
-	s.watchChanges(ctx, watchInterval, fn)
+// WatchChanges polls the changes table and calls fn for every row with
+// seq > after until ctx is done — how the server's SSE hub learns about
+// writes made by other processes (main.go wires it to hub.Publish). The
+// caller supplies the start watermark via a synchronous LatestChangeSeq
+// call: sampling inside the goroutine would let a commit slip between
+// goroutine start and its first read. Poll errors are logged and retried
+// on the next tick; a dying database makes the loop noisy but not dead.
+func (s *Store) WatchChanges(ctx context.Context, after int64, fn func(events.Change)) {
+	s.watchChanges(ctx, watchInterval, after, fn)
 }
 
-func (s *Store) watchChanges(ctx context.Context, interval time.Duration, fn func(events.Change)) {
-	last, err := s.LatestChangeSeq(ctx)
-	if err != nil {
-		log.Printf("store: watch changes: %v", err)
-	}
+func (s *Store) watchChanges(ctx context.Context, interval time.Duration, after int64, fn func(events.Change)) {
+	last := after
 	tick := time.NewTicker(interval)
 	defer tick.Stop()
 	lastPurge := time.Now()

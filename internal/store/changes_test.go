@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"testing"
 	"time"
@@ -128,6 +129,37 @@ func TestFailedMutationRecordsNoChange(t *testing.T) {
 	}
 }
 
+// A database stamped user_version=1 before the changes table existed
+// never re-runs migrateV1, so migrateV2 must add it — otherwise every
+// commitTx insert fails and all writes roll back.
+func TestMigrateV1DatabaseGainsChangesTable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "issues.db")
+	s := mustOpen(t, path)
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Rewind the file to its pre-changes state: no table, version 1.
+	db, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("DROP TABLE changes"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("PRAGMA user_version = 1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	s = mustOpen(t, path)
+	if _, err := s.CreateIssue(context.Background(), 1, IssueInput{Title: "n"}, 0); err != nil {
+		t.Fatalf("write on migrated v1 database: %v", err)
+	}
+}
+
 // Two Store handles on the same file are the CLI↔server split in
 // miniature: a write through one handle must surface through the other's
 // watcher. This is the path that makes `issues --db` live-update pages.
@@ -138,8 +170,12 @@ func TestWatchChangesAcrossStores(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	after, err := server.LatestChangeSeq(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 	got := make(chan events.Change, 8)
-	go server.watchChanges(ctx, 10*time.Millisecond, func(c events.Change) { got <- c })
+	go server.watchChanges(ctx, 10*time.Millisecond, after, func(c events.Change) { got <- c })
 
 	id, err := cli.CreateIssue(ctx, 1, IssueInput{Title: "from cli"}, 0)
 	if err != nil {
@@ -176,8 +212,12 @@ func TestWatchChangesSkipsBacklog(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	after, err := s.LatestChangeSeq(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 	got := make(chan events.Change, 8)
-	go s.watchChanges(ctx, 10*time.Millisecond, func(c events.Change) { got <- c })
+	go s.watchChanges(ctx, 10*time.Millisecond, after, func(c events.Change) { got <- c })
 
 	select {
 	case c := <-got:

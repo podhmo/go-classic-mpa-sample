@@ -95,9 +95,15 @@ func main() {
 	// Live updates: every mutator records its hints in the changes table
 	// inside the mutation's own tx, and WatchChanges re-publishes new rows
 	// to the hub — so writes from other processes (the local CLI) reach
-	// the SSE endpoints too (docs/sketch/ja/live-updates.md, 案(a)).
+	// the SSE endpoints too (docs/sketch/ja/live-updates.md, 案(a)). The
+	// watermark is sampled synchronously so a commit cannot slip between
+	// goroutine start and its first read.
 	hub := events.NewHub()
-	go st.WatchChanges(ctx, hub.Publish)
+	watermark, err := st.LatestChangeSeq(ctx)
+	if err != nil {
+		log.Fatalf("read changes watermark: %v", err)
+	}
+	go st.WatchChanges(ctx, watermark, hub.Publish)
 
 	srv := &http.Server{
 		Addr:              *addr,
