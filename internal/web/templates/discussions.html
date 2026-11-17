@@ -53,6 +53,7 @@
     </div>
     <div class="issue-row-meta">
       <a class="category-badge" href="/w/{{$.Workspace.Slug}}/discussions?category={{.Category.Slug}}">{{.Category.Name}}</a>
+      {{range .Labels}}<span class="label-badge" style="--label-color: {{.Color}}">{{.Name}}</span>{{end}}
       {{if .Answered}}<span class="badge badge-answered">Answered</span>{{end}}
       <time class="issue-time" datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .CreatedAt}}</time>
     </div>

@@ -29,23 +29,10 @@ func (c *Client) ListIssues(ctx context.Context, f store.ListFilter) ([]*store.I
 		q.Set("sort", f.Sort)
 	}
 	if f.LabelID > 0 {
-		labels, err := c.ListLabels(ctx)
-		if err != nil {
-			return nil, 0, err
-		}
-		found := false
-		for _, l := range labels {
-			if l.ID == f.LabelID {
-				q.Set("label", l.Name)
-				found = true
-				break
-			}
-		}
-		if !found {
-			// Local semantics: an unknown label matches nothing.
-			// Dropping the filter would return unrelated issues.
-			return []*store.Issue{}, 0, nil
-		}
+		// Filtering by id (not name) keeps an exact match when shared and
+		// workspace labels share a name; an unknown id matches nothing,
+		// same as local semantics.
+		q.Set("label_id", strconv.FormatInt(f.LabelID, 10))
 	}
 
 	return listWindow(ctx, f.Page, f.PerPage,
@@ -152,21 +139,6 @@ func (c *Client) CreateComment(ctx context.Context, issueID int64, body string, 
 	return res.Comment.ID, nil
 }
 
-func (c *Client) ListLabels(ctx context.Context) ([]*store.Label, error) {
-	var res struct {
-		Labels []api.Label `json:"labels"`
-	}
-	if err := c.do(ctx, "GET", "/labels", nil, &res); err != nil {
-		return nil, err
-	}
-	out := make([]*store.Label, 0, len(res.Labels))
-	for _, l := range res.Labels {
-		l := l
-		out = append(out, &store.Label{ID: l.ID, Name: l.Name, Color: l.Color})
-	}
-	return out, nil
-}
-
 func issueFromDTO(i api.Issue) *store.Issue {
 	out := &store.Issue{
 		ID: i.ID, Title: i.Title, Body: i.Body, Status: i.Status,
@@ -174,7 +146,7 @@ func issueFromDTO(i api.Issue) *store.Issue {
 		CreatedAt: parseTime(i.CreatedAt), UpdatedAt: parseTime(i.UpdatedAt),
 	}
 	for _, l := range i.Labels {
-		out.Labels = append(out.Labels, store.Label{ID: l.ID, Name: l.Name, Color: l.Color})
+		out.Labels = append(out.Labels, labelFromDTO(l))
 	}
 	return out
 }

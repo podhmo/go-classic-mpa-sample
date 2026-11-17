@@ -47,7 +47,9 @@ type Backend interface {
 	DeleteIssue(ctx context.Context, id int64) error
 	ListComments(ctx context.Context, issueID int64) ([]*store.Comment, error)
 	CreateComment(ctx context.Context, issueID int64, body string, authorID int64) (int64, error)
-	ListLabels(ctx context.Context) ([]*store.Label, error)
+	ListLabels(ctx context.Context, kind string) ([]*store.Label, error)
+	CreateLabel(ctx context.Context, kind string, in store.LabelInput, master bool) (int64, error)
+	ArchiveLabel(ctx context.Context, id int64, archived bool) error
 
 	ListDiscussions(ctx context.Context, f store.DiscussionListFilter) ([]*store.Discussion, int, error)
 	GetDiscussion(ctx context.Context, id int64) (*store.Discussion, error)
@@ -201,7 +203,9 @@ func (o Options) printUsage() {
 Commands:
   issue list|view|create|edit|close|reopen|delete
   comment create N --body B
-  label list
+  label list [--kind issue|discussion]
+  label create NAME --color HEX [--kind K] [--shared]
+  label delete NAME [--kind K]   archives the label (still shown on existing issues)
   discussion list|view|create|edit|delete
   discussion comment create N --body B [--thread T]
   discussion answer N --thread T [--unmark]
@@ -374,11 +378,11 @@ func (o Options) readBody(body, bodyFile string) (string, error) {
 
 // resolveLabelIDs maps label names to ids through the backend's label list
 // (the CLI takes names like gh's --label, the store takes ids).
-func resolveLabelIDs(ctx context.Context, b Backend, names []string) ([]int64, error) {
+func resolveLabelIDs(ctx context.Context, b Backend, kind string, names []string) ([]int64, error) {
 	if len(names) == 0 {
 		return nil, nil
 	}
-	all, err := b.ListLabels(ctx)
+	all, err := b.ListLabels(ctx, kind)
 	if err != nil {
 		return nil, err
 	}

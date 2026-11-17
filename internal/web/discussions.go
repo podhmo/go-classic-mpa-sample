@@ -59,6 +59,7 @@ type discussionFormPage struct {
 	SubmitLabel string
 	Input       store.DiscussionInput
 	Categories  []*store.DiscussionCategory
+	Labels      []*store.Label
 	Errors      discussionFormErrors
 	Section     string
 	Workspace   *store.Workspace
@@ -139,7 +140,7 @@ func (h *handler) listDiscussions(w http.ResponseWriter, r *http.Request, ws *st
 
 // newDiscussion renders the empty create form.
 func (h *handler) newDiscussion(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
-	categories, err := h.store.ListDiscussionCategories(r.Context())
+	categories, labels, err := h.discussionFormChoices(r, ws)
 	if err != nil {
 		h.internalError(w, r, err)
 		return
@@ -150,10 +151,25 @@ func (h *handler) newDiscussion(w http.ResponseWriter, r *http.Request, ws *stor
 		Action:      "/w/" + ws.Slug + "/discussions",
 		SubmitLabel: "Create discussion",
 		Categories:  categories,
+		Labels:      labels,
 		Section:     "discussions",
 		Workspace:   ws,
 		User:        userFromContext(r.Context()),
 	})
+}
+
+// discussionFormChoices loads the category list and the workspace's
+// discussion-kind labels the form's picker needs.
+func (h *handler) discussionFormChoices(r *http.Request, ws *store.Workspace) ([]*store.DiscussionCategory, []*store.Label, error) {
+	categories, err := h.store.ListDiscussionCategories(r.Context())
+	if err != nil {
+		return nil, nil, err
+	}
+	labels, err := h.store.ListLabels(r.Context(), ws.ID, store.KindLabelDiscussion)
+	if err != nil {
+		return nil, nil, err
+	}
+	return categories, labels, nil
 }
 
 // createDiscussion validates POST /discussions and redirects to the new
@@ -226,25 +242,31 @@ func (h *handler) editDiscussion(w http.ResponseWriter, r *http.Request, ws *sto
 	if !h.requireScope(w, r, ws, discussion.WorkspaceID) {
 		return
 	}
-	categories, err := h.store.ListDiscussionCategories(r.Context())
+	categories, labels, err := h.discussionFormChoices(r, ws)
 	if err != nil {
 		h.internalError(w, r, err)
 		return
+	}
+	in := store.DiscussionInput{
+		Title:      discussion.Title,
+		Body:       discussion.Body,
+		CategoryID: discussion.Category.ID,
+		LabelIDs:   make([]int64, 0, len(discussion.Labels)),
+	}
+	for _, l := range discussion.Labels {
+		in.LabelIDs = append(in.LabelIDs, l.ID)
 	}
 	h.r.renderDiscussionForm(w, http.StatusOK, discussionFormPage{
 		Title:       fmt.Sprintf("Edit discussion #%d", discussion.ID),
 		Heading:     fmt.Sprintf("Edit discussion #%d", discussion.ID),
 		Action:      discussionURL(ws, id) + "/edit",
 		SubmitLabel: "Save changes",
-		Input: store.DiscussionInput{
-			Title:      discussion.Title,
-			Body:       discussion.Body,
-			CategoryID: discussion.Category.ID,
-		},
-		Categories: categories,
-		Section:    "discussions",
-		Workspace:  ws,
-		User:       userFromContext(r.Context()),
+		Input:       in,
+		Categories:  categories,
+		Labels:      labels,
+		Section:     "discussions",
+		Workspace:   ws,
+		User:        userFromContext(r.Context()),
 	})
 }
 
@@ -616,7 +638,7 @@ func (h *handler) discussionError(w http.ResponseWriter, r *http.Request, err er
 // renderDiscussionFormError re-renders the discussion form with 422.
 func (h *handler) renderDiscussionFormError(w http.ResponseWriter, r *http.Request, ws *store.Workspace,
 	title, heading, action, submitLabel string, in store.DiscussionInput, errs discussionFormErrors) {
-	categories, err := h.store.ListDiscussionCategories(r.Context())
+	categories, labels, err := h.discussionFormChoices(r, ws)
 	if err != nil {
 		h.internalError(w, r, err)
 		return
@@ -628,6 +650,7 @@ func (h *handler) renderDiscussionFormError(w http.ResponseWriter, r *http.Reque
 		SubmitLabel: submitLabel,
 		Input:       in,
 		Categories:  categories,
+		Labels:      labels,
 		Errors:      errs,
 		Section:     "discussions",
 		Workspace:   ws,
@@ -650,6 +673,11 @@ func (h *handler) validateDiscussionInput(_ http.ResponseWriter, r *http.Request
 	if v := r.PostFormValue("category_id"); v != "" {
 		if id, err := strconv.ParseInt(v, 10, 64); err == nil && id > 0 {
 			in.CategoryID = id
+		}
+	}
+	for _, v := range r.PostForm["label_id"] {
+		if id, err := strconv.ParseInt(v, 10, 64); err == nil && id > 0 {
+			in.LabelIDs = append(in.LabelIDs, id)
 		}
 	}
 	// A discussion must belong to exactly one category — the select's

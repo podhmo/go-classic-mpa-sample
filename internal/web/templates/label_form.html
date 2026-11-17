@@ -1,0 +1,24 @@
+{{define "content"}}
+{{/* One module entry (page-form.js) pulls in Ctrl/Cmd+Enter submit,
+   aria-invalid sync, and the unsaved-input guard. */}}
+<script type="module" src="/static/page-form.js"></script>
+<h1>{{.Heading}}</h1>
+<p class="field-hint">{{.Label.Kind}} label · {{if .Label.WorkspaceID}}workspace{{else}}shared{{end}}{{if .Label.Archived}} · archived{{end}}</p>
+<form method="post" action="{{.Action}}" class="form" novalidate>
+  <div class="field">
+    <label for="name">Name</label>
+    <input type="text" id="name" name="name" value="{{.Input.Name}}" required maxlength="64" pattern=".*\S.*" autocomplete="off" data-error="f-label-name-error"{{if .Errors.Name}} aria-invalid="true" aria-describedby="f-label-name-error" autofocus{{else}} aria-invalid="false"{{end}}>
+    <p class="field-error{{if not .Errors.Name}} field-error-pending{{end}}" id="f-label-name-error">{{or .Errors.Name "Name is required."}}</p>
+  </div>
+  <div class="field">
+    <label for="color">Color</label>
+    <input type="color" id="color" name="color" value="{{if .Input.Color}}{{.Input.Color}}{{else}}#0075ca{{end}}" required data-error="f-label-color-error"{{if .Errors.Color}} aria-invalid="true" aria-describedby="f-label-color-error"{{if not .Errors.Name}} autofocus{{end}}{{else}} aria-invalid="false"{{end}}>
+    <p class="field-error{{if not .Errors.Color}} field-error-pending{{end}}" id="f-label-color-error">{{or .Errors.Color "Color is required."}}</p>
+  </div>
+  {{if .Errors.Other}}<p class="field-error">{{.Errors.Other}}</p>{{end}}
+  <div class="form-actions">
+    <a class="btn btn-quiet" href="/w/{{.Workspace.Slug}}/labels">Cancel</a>
+    <button type="submit" class="btn btn-primary">Save changes</button>
+  </div>
+</form>
+{{end}}

@@ -8,8 +8,10 @@ import (
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
-// GET /api/v1/issues?status=&q=&label=&sort=&page=&per_page=
+// GET /api/v1/issues?status=&q=&label=&label_id=&sort=&page=&per_page=
 // Response: {"issues": [...], "total": N, "page": P, "per_page": PP}
+// label_id filters by exact label id (preferred); label filters by name
+// and is ambiguous when shared and workspace labels share a name.
 func (h *handler) listIssues(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	q := r.URL.Query()
 	f := store.ListFilter{
@@ -19,8 +21,10 @@ func (h *handler) listIssues(w http.ResponseWriter, r *http.Request, ws *store.W
 		Page:    queryInt(r, "page", 1),
 		PerPage: min(queryInt(r, "per_page", defaultPerPage), maxPerPage),
 	}
-	if name := q.Get("label"); name != "" {
-		all, err := h.store.ListLabels(r.Context())
+	if lid := q.Get("label_id"); lid != "" {
+		f.LabelID = int64(queryInt(r, "label_id", 0))
+	} else if name := q.Get("label"); name != "" {
+		all, err := h.store.ListLabels(r.Context(), ws.ID, store.KindLabelIssue)
 		if err != nil {
 			h.storeError(w, err)
 			return
@@ -92,7 +96,7 @@ func (h *handler) createIssue(w http.ResponseWriter, r *http.Request, ws *store.
 	}
 	title := strings.TrimSpace(deref(in.Title))
 	body := strings.TrimSpace(deref(in.Body))
-	labelIDs, ferr, err := h.resolveLabelIDs(r, in.LabelIDs, in.Labels)
+	labelIDs, ferr, err := h.resolveLabelIDs(r, ws, store.KindLabelIssue, in.LabelIDs, in.Labels)
 	if err != nil {
 		h.storeError(w, err)
 		return
@@ -149,7 +153,7 @@ func (h *handler) updateIssue(w http.ResponseWriter, r *http.Request, ws *store.
 		input.Body = strings.TrimSpace(*in.Body)
 	}
 	if in.LabelIDs != nil || len(in.Labels) > 0 {
-		labelIDs, ferr, err := h.resolveLabelIDs(r, in.LabelIDs, in.Labels)
+		labelIDs, ferr, err := h.resolveLabelIDs(r, ws, store.KindLabelIssue, in.LabelIDs, in.Labels)
 		if err != nil {
 			h.storeError(w, err)
 			return
@@ -281,20 +285,6 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request, ws *stor
 	writeJSON(w, http.StatusCreated, map[string]any{"comment": map[string]any{"id": cid}})
 }
 
-// GET /api/v1/labels → {"labels": [...]}
-func (h *handler) listLabels(w http.ResponseWriter, r *http.Request) {
-	labels, err := h.store.ListLabels(r.Context())
-	if err != nil {
-		h.storeError(w, err)
-		return
-	}
-	out := []Label{}
-	for _, l := range labels {
-		out = append(out, labelDTO(*l))
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"labels": out})
-}
-
 func deref(s *string) string {
 	if s == nil {
 		return ""
@@ -303,9 +293,12 @@ func deref(s *string) string {
 }
 
 type Label struct {
-	ID    int64  `json:"id"`
-	Name  string `json:"name"`
-	Color string `json:"color"`
+	ID          int64  `json:"id"`
+	Name        string `json:"name"`
+	Color       string `json:"color"`
+	Kind        string `json:"kind"`
+	WorkspaceID *int64 `json:"workspace_id"` // null = shared master label
+	Archived    bool   `json:"archived"`
 }
 
 type Issue struct {
@@ -327,7 +320,12 @@ type Comment struct {
 }
 
 func labelDTO(l store.Label) Label {
-	return Label{ID: l.ID, Name: l.Name, Color: l.Color}
+	out := Label{ID: l.ID, Name: l.Name, Color: l.Color, Kind: l.Kind, Archived: l.Archived}
+	if l.WorkspaceID != 0 {
+		id := l.WorkspaceID
+		out.WorkspaceID = &id
+	}
+	return out
 }
 
 func issueDTO(i *store.Issue) Issue {
@@ -350,11 +348,11 @@ func commentDTO(c *store.Comment) Comment {
 // explicit "label_ids". Unknown names are a 422 field error; a store
 // failure is an error — silently dropping names would lose labels the
 // client asked for.
-func (h *handler) resolveLabelIDs(r *http.Request, ids []int64, names []string) ([]int64, map[string]string, error) {
+func (h *handler) resolveLabelIDs(r *http.Request, ws *store.Workspace, kind string, ids []int64, names []string) ([]int64, map[string]string, error) {
 	if len(names) == 0 {
 		return ids, nil, nil
 	}
-	all, err := h.store.ListLabels(r.Context())
+	all, err := h.store.ListLabels(r.Context(), ws.ID, kind)
 	if err != nil {
 		return nil, nil, err
 	}

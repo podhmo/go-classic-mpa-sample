@@ -43,7 +43,7 @@ func TestSeedDemoData(t *testing.T) {
 		t.Fatalf("want labeled issues incl. multi-label: %d/%d", withLabels, multiLabel)
 	}
 
-	labels, err := s.ListLabels(ctx)
+	labels, err := s.ListLabels(ctx, 1, KindLabelIssue)
 	if err != nil {
 		t.Fatalf("ListLabels: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestSeedDemoData(t *testing.T) {
 	if total2 != total {
 		t.Fatalf("issue count changed after re-seed: %d -> %d", total, total2)
 	}
-	labels2, err := s.ListLabels(ctx)
+	labels2, err := s.ListLabels(ctx, 1, KindLabelIssue)
 	if err != nil {
 		t.Fatalf("ListLabels: %v", err)
 	}

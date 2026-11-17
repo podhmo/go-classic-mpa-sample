@@ -65,10 +65,12 @@ func (h *handler) getDiscussion(w http.ResponseWriter, r *http.Request, ws *stor
 }
 
 type discussionBody struct {
-	Title      *string `json:"title"`
-	Body       *string `json:"body"`
-	CategoryID *int64  `json:"category_id"`
-	Category   string  `json:"category"` // category slug, resolved via ListDiscussionCategories
+	Title      *string  `json:"title"`
+	Body       *string  `json:"body"`
+	CategoryID *int64   `json:"category_id"`
+	Category   string   `json:"category"` // category slug, resolved via ListDiscussionCategories
+	LabelIDs   []int64  `json:"label_ids"`
+	Labels     []string `json:"labels"` // label names, resolved via ListLabels
 }
 
 // POST /api/v1/discussions {"title","body","category_id"|"category"} → 201
@@ -87,8 +89,18 @@ func (h *handler) createDiscussion(w http.ResponseWriter, r *http.Request, ws *s
 		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", ferr)
 		return
 	}
+	labelIDs, ferr2, err := h.resolveLabelIDs(r, ws, store.KindLabelDiscussion, in.LabelIDs, in.Labels)
+	if err != nil {
+		h.storeError(w, err)
+		return
+	}
+	if ferr2 != nil {
+		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", ferr2)
+		return
+	}
 	input := store.DiscussionInput{
 		Title: strings.TrimSpace(deref(in.Title)), Body: strings.TrimSpace(deref(in.Body)), CategoryID: resolved,
+		LabelIDs: labelIDs,
 	}
 	if fe := store.ValidateDiscussionInput(input); fe.Any() {
 		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", fields(fe))
@@ -127,6 +139,9 @@ func (h *handler) updateDiscussion(w http.ResponseWriter, r *http.Request, ws *s
 		return
 	}
 	input := store.DiscussionInput{Title: d.Title, Body: d.Body, CategoryID: d.Category.ID}
+	for _, l := range d.Labels {
+		input.LabelIDs = append(input.LabelIDs, l.ID)
+	}
 	if in.Title != nil {
 		input.Title = strings.TrimSpace(*in.Title)
 	}
@@ -144,6 +159,18 @@ func (h *handler) updateDiscussion(w http.ResponseWriter, r *http.Request, ws *s
 			return
 		}
 		input.CategoryID = resolved
+	}
+	if in.LabelIDs != nil || len(in.Labels) > 0 {
+		labelIDs, ferr2, err := h.resolveLabelIDs(r, ws, store.KindLabelDiscussion, in.LabelIDs, in.Labels)
+		if err != nil {
+			h.storeError(w, err)
+			return
+		}
+		if ferr2 != nil {
+			writeError(w, http.StatusUnprocessableEntity, "Validation failed.", ferr2)
+			return
+		}
+		input.LabelIDs = labelIDs
 	}
 	if fe := store.ValidateDiscussionInput(input); fe.Any() {
 		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", fields(fe))
@@ -360,6 +387,7 @@ type Discussion struct {
 	Title     string             `json:"title"`
 	Body      string             `json:"body"`
 	Category  DiscussionCategory `json:"category"`
+	Labels    []Label            `json:"labels"`
 	Author    *User              `json:"author"`
 	Answered  bool               `json:"answered"`
 	CreatedAt string             `json:"created_at"`
@@ -387,11 +415,16 @@ func categoryDTO(c store.DiscussionCategory) DiscussionCategory {
 }
 
 func discussionDTO(d *store.Discussion) Discussion {
-	return Discussion{
+	out := Discussion{
 		ID: d.ID, Title: d.Title, Body: d.Body, Category: categoryDTO(d.Category),
 		Author: userDTO(d.Author), Answered: d.Answered,
 		CreatedAt: fmtTime(d.CreatedAt), UpdatedAt: fmtTime(d.UpdatedAt),
+		Labels: []Label{},
 	}
+	for _, l := range d.Labels {
+		out.Labels = append(out.Labels, labelDTO(l))
+	}
+	return out
 }
 
 func discussionThreadDTO(t *store.DiscussionThread) DiscussionThread {

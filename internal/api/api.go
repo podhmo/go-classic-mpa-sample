@@ -32,7 +32,11 @@ type Store interface {
 	DeleteIssue(ctx context.Context, id int64) error
 	ListComments(ctx context.Context, issueID int64) ([]*store.Comment, error)
 	CreateComment(ctx context.Context, issueID int64, body string, authorID int64) (int64, error)
-	ListLabels(ctx context.Context) ([]*store.Label, error)
+	ListLabels(ctx context.Context, wsID int64, kind string) ([]*store.Label, error)
+	GetLabel(ctx context.Context, id int64) (*store.Label, error)
+	CreateLabel(ctx context.Context, wsID int64, kind string, in store.LabelInput) (int64, error)
+	UpdateLabel(ctx context.Context, id int64, in store.LabelInput) error
+	ArchiveLabel(ctx context.Context, id int64, archived bool) error
 	ListDiscussions(ctx context.Context, wsID int64, f store.DiscussionListFilter) ([]*store.Discussion, int, error)
 	GetDiscussion(ctx context.Context, id int64) (*store.Discussion, error)
 	CreateDiscussion(ctx context.Context, wsID int64, in store.DiscussionInput, authorID int64) (int64, error)
@@ -74,13 +78,16 @@ func New(st Store, envToken string) http.Handler {
 	// unknown path → JSON 404 via the "/api/v1/" subtree below.
 	// Workspace-scoped resources live under /w/{slug}; the workspace-less
 	// /issues and /discussions paths are gone (a 404, not a redirect — API
-	// callers should be updated, docs/sketch/ja/workspaces.md). Labels and
-	// categories stay global like the HTML app's.
+	// callers should be updated, docs/sketch/ja/workspaces.md). Labels are
+	// workspace-scoped too (shared master rows ride along); only
+	// discussion categories stay global.
 	routes := map[string]map[string]http.HandlerFunc{
 		"/api/v1/workspaces":            {"GET": h.listWorkspaces, "POST": h.createWorkspace},
 		"/api/v1/workspaces/{slug}":     {"GET": h.getWorkspace, "DELETE": h.deleteWorkspace},
-		"/api/v1/labels":                {"GET": h.listLabels},
 		"/api/v1/discussion-categories": {"GET": h.listDiscussionCategories},
+
+		"/api/v1/w/{ws}/labels":      {"GET": h.scoped(h.listLabels), "POST": h.scoped(h.createLabel)},
+		"/api/v1/w/{ws}/labels/{id}": {"PATCH": h.scoped(h.updateLabel), "DELETE": h.scoped(h.deleteLabel)},
 
 		"/api/v1/w/{ws}/issues":               {"GET": h.scoped(h.listIssues), "POST": h.scoped(h.createIssue)},
 		"/api/v1/w/{ws}/issues/{id}":          {"GET": h.scoped(h.getIssue), "PATCH": h.scoped(h.updateIssue), "DELETE": h.scoped(h.deleteIssue)},

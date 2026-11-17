@@ -44,7 +44,7 @@ func issueViewJSON(i *store.Issue) api.Issue {
 		Labels: []api.Label{},
 	}
 	for _, l := range i.Labels {
-		out.Labels = append(out.Labels, api.Label{ID: l.ID, Name: l.Name, Color: l.Color})
+		out.Labels = append(out.Labels, labelView(l))
 	}
 	return out
 }
@@ -68,10 +68,19 @@ func commentViews(cs []*store.Comment) []api.Comment {
 	return out
 }
 
+func labelView(l store.Label) api.Label {
+	out := api.Label{ID: l.ID, Name: l.Name, Color: l.Color, Kind: l.Kind, Archived: l.Archived}
+	if l.WorkspaceID != 0 {
+		wsID := l.WorkspaceID
+		out.WorkspaceID = &wsID
+	}
+	return out
+}
+
 func labelViews(labels []*store.Label) []api.Label {
 	out := make([]api.Label, 0, len(labels))
 	for _, l := range labels {
-		out = append(out, api.Label{ID: l.ID, Name: l.Name, Color: l.Color})
+		out = append(out, labelView(*l))
 	}
 	return out
 }
@@ -84,13 +93,18 @@ func categoryView(c store.DiscussionCategory) api.DiscussionCategory {
 }
 
 func discussionViewJSON(d *store.Discussion) api.Discussion {
-	return api.Discussion{
+	out := api.Discussion{
 		ID: d.ID, Title: d.Title, Body: d.Body,
 		Category:  categoryView(d.Category),
+		Labels:    []api.Label{},
 		Author:    userView(d.Author),
 		Answered:  d.Answered,
 		CreatedAt: d.CreatedAt.Format(time.RFC3339), UpdatedAt: d.UpdatedAt.Format(time.RFC3339),
 	}
+	for _, l := range d.Labels {
+		out.Labels = append(out.Labels, labelView(l))
+	}
+	return out
 }
 
 func discussionViews(ds []*store.Discussion) []api.Discussion {

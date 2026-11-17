@@ -55,6 +55,7 @@ type Discussion struct {
 	Category    DiscussionCategory
 	Author      *User // nil for an anonymous post
 	Answered    bool
+	Labels      []Label // populated by ListDiscussions and GetDiscussion
 }
 
 // DiscussionThread is one conversation thread inside a discussion. The
@@ -86,6 +87,7 @@ type DiscussionInput struct {
 	Title      string
 	Body       string
 	CategoryID int64
+	LabelIDs   []int64
 }
 
 // DiscussionListFilter controls ListDiscussions. Zero values apply the
@@ -188,7 +190,13 @@ func (s *Store) ListDiscussions(ctx context.Context, wsID int64, f DiscussionLis
 		}
 		out = append(out, d)
 	}
-	return out, total, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	if err := s.attachDiscussionLabels(ctx, out); err != nil {
+		return nil, 0, err
+	}
+	return out, total, nil
 }
 
 // discussionAnsweredCond is the EXISTS predicate behind Discussion.Answered
@@ -219,6 +227,9 @@ func (s *Store) GetDiscussion(ctx context.Context, id int64) (*Discussion, error
 	if err != nil {
 		return nil, err
 	}
+	if err := s.attachDiscussionLabels(ctx, []*Discussion{d}); err != nil {
+		return nil, err
+	}
 	return d, nil
 }
 
@@ -246,6 +257,9 @@ func (s *Store) CreateDiscussion(ctx context.Context, wsID int64, in DiscussionI
 	}
 	id, err := res.LastInsertId()
 	if err != nil {
+		return 0, err
+	}
+	if err := setDiscussionLabels(ctx, tx, id, wsID, in.LabelIDs); err != nil {
 		return 0, err
 	}
 	if err := s.commitTx(ctx, tx, events.Change{Topic: events.DiscussionsTopic, Kind: events.KindNew, Target: id}); err != nil {
@@ -279,6 +293,13 @@ func (s *Store) UpdateDiscussion(ctx context.Context, id int64, in DiscussionInp
 	if err := checkAffected(res); err != nil {
 		return err
 	}
+	var wsID int64
+	if err := tx.QueryRowContext(ctx, "SELECT workspace_id FROM discussions WHERE id = ?", id).Scan(&wsID); err != nil {
+		return err
+	}
+	if err := setDiscussionLabels(ctx, tx, id, wsID, in.LabelIDs); err != nil {
+		return err
+	}
 	changes := []events.Change{{Topic: events.DiscussionTopic(id), Kind: events.KindEdit, Target: id}}
 	var cleared int64
 	if format != CategoryFormatQA {
@@ -308,6 +329,63 @@ func requireCategory(ctx context.Context, tx *sql.Tx, categoryID int64) (string,
 		return "", ErrInvalidCategory
 	}
 	return format, err
+}
+
+// attachDiscussionLabels populates Labels on each discussion with a
+// single grouped query — the issue counterpart is attachLabels.
+func (s *Store) attachDiscussionLabels(ctx context.Context, discussions []*Discussion) error {
+	if len(discussions) == 0 {
+		return nil
+	}
+	byID := make(map[int64]*Discussion, len(discussions))
+	ph := make([]string, len(discussions))
+	args := make([]any, len(discussions))
+	for i, d := range discussions {
+		byID[d.ID] = d
+		ph[i] = "?"
+		args[i] = d.ID
+	}
+	q := `SELECT dl.discussion_id, l.id, l.name, l.color, l.kind, COALESCE(l.workspace_id, 0), l.archived
+		FROM discussion_labels dl JOIN labels l ON l.id = dl.label_id
+		WHERE dl.discussion_id IN (` + strings.Join(ph, ",") + `) ORDER BY l.name`
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var discussionID int64
+		var l Label
+		if err := rows.Scan(&discussionID, &l.ID, &l.Name, &l.Color, &l.Kind, &l.WorkspaceID, &l.Archived); err != nil {
+			return err
+		}
+		if d := byID[discussionID]; d != nil {
+			d.Labels = append(d.Labels, l)
+		}
+	}
+	return rows.Err()
+}
+
+// setDiscussionLabels replaces the label set of a discussion inside tx,
+// mirroring setIssueLabels: unknown ids, cross-kind ids, out-of-workspace
+// ids and archived labels yield no row and are silently skipped.
+// Attachments to archived labels survive the replace for the same reason.
+func setDiscussionLabels(ctx context.Context, tx *sql.Tx, discussionID, wsID int64, labelIDs []int64) error {
+	if _, err := tx.ExecContext(ctx,
+		"DELETE FROM discussion_labels WHERE discussion_id = ? AND label_id NOT IN (SELECT id FROM labels WHERE archived = 1)",
+		discussionID); err != nil {
+		return err
+	}
+	for _, lid := range labelIDs {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT OR IGNORE INTO discussion_labels(discussion_id, label_id)
+				SELECT ?, id FROM labels WHERE id = ? AND kind = '`+KindLabelDiscussion+`' AND archived = 0
+				AND (workspace_id IS NULL OR workspace_id = ?)`,
+			discussionID, lid, wsID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // DeleteDiscussion removes the discussion; its comments and replies go via

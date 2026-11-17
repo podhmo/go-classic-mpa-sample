@@ -100,7 +100,7 @@ func (h *handler) listIssues(w http.ResponseWriter, r *http.Request, ws *store.W
 		}
 	}
 
-	labels, err := h.store.ListLabels(r.Context())
+	labels, err := h.store.ListLabels(r.Context(), ws.ID, store.KindLabelIssue)
 	if err != nil {
 		h.internalError(w, r, err)
 		return
@@ -135,7 +135,7 @@ func (h *handler) listIssues(w http.ResponseWriter, r *http.Request, ws *store.W
 
 // newIssue renders the empty create form.
 func (h *handler) newIssue(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
-	labels, err := h.store.ListLabels(r.Context())
+	labels, err := h.store.ListLabels(r.Context(), ws.ID, store.KindLabelIssue)
 	if err != nil {
 		h.internalError(w, r, err)
 		return
@@ -159,7 +159,7 @@ func (h *handler) createIssue(w http.ResponseWriter, r *http.Request, ws *store.
 	}
 	in, errs := validateIssueInput(r)
 	if errs.any() {
-		labels, err := h.store.ListLabels(r.Context())
+		labels, err := h.store.ListLabels(r.Context(), ws.ID, store.KindLabelIssue)
 		if err != nil {
 			h.internalError(w, r, err)
 			return
@@ -231,7 +231,7 @@ func (h *handler) editIssue(w http.ResponseWriter, r *http.Request, ws *store.Wo
 	if !h.requireScope(w, r, ws, issue.WorkspaceID) {
 		return
 	}
-	labels, err := h.store.ListLabels(r.Context())
+	labels, err := h.store.ListLabels(r.Context(), ws.ID, store.KindLabelIssue)
 	if err != nil {
 		h.internalError(w, r, err)
 		return
@@ -279,7 +279,7 @@ func (h *handler) updateIssue(w http.ResponseWriter, r *http.Request, ws *store.
 	}
 	in, errs := validateIssueInput(r)
 	if errs.any() {
-		labels, err := h.store.ListLabels(r.Context())
+		labels, err := h.store.ListLabels(r.Context(), ws.ID, store.KindLabelIssue)
 		if err != nil {
 			h.internalError(w, r, err)
 			return

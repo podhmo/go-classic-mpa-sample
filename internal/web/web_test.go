@@ -69,9 +69,9 @@ func newFakeStore() *fakeStore {
 		nextDC:      1,
 	}
 	f.labels = []*store.Label{
-		{ID: 1, Name: "Bug", Color: "#d73a4a"},
-		{ID: 2, Name: "Documentation", Color: "#0075ca"},
-		{ID: 3, Name: "Feature", Color: "#a2eeef"},
+		{ID: 1, Name: "Bug", Color: "#d73a4a", Kind: store.KindLabelIssue},
+		{ID: 2, Name: "Documentation", Color: "#0075ca", Kind: store.KindLabelIssue},
+		{ID: 3, Name: "Feature", Color: "#a2eeef", Kind: store.KindLabelIssue},
 	}
 	f.dcategories = []*store.DiscussionCategory{
 		{ID: 1, Name: "General", Slug: "general", Format: store.CategoryFormatOpen},
@@ -313,16 +313,93 @@ func (f *fakeStore) CreateComment(_ context.Context, issueID int64, body string,
 	return c.ID, nil
 }
 
-func (f *fakeStore) ListLabels(_ context.Context) ([]*store.Label, error) {
+func (f *fakeStore) ListLabels(_ context.Context, wsID int64, kind string) ([]*store.Label, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	out := make([]*store.Label, len(f.labels))
-	for i, l := range f.labels {
+	var out []*store.Label
+	for _, l := range f.labels {
+		if l.Kind != kind || l.Archived {
+			continue
+		}
+		if l.WorkspaceID != 0 && l.WorkspaceID != wsID {
+			continue
+		}
 		c := *l
-		out[i] = &c
+		out = append(out, &c)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
+}
+
+func (f *fakeStore) ListArchivedLabels(_ context.Context, wsID int64, kind string) ([]*store.Label, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []*store.Label
+	for _, l := range f.labels {
+		if l.Kind != kind || !l.Archived {
+			continue
+		}
+		if l.WorkspaceID != 0 && l.WorkspaceID != wsID {
+			continue
+		}
+		c := *l
+		out = append(out, &c)
+	}
+	return out, nil
+}
+
+func (f *fakeStore) GetLabel(_ context.Context, id int64) (*store.Label, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, l := range f.labels {
+		if l.ID == id {
+			c := *l
+			return &c, nil
+		}
+	}
+	return nil, store.ErrNotFound
+}
+
+func (f *fakeStore) CreateLabel(_ context.Context, wsID int64, kind string, in store.LabelInput) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, l := range f.labels {
+		if l.Name == in.Name && l.Kind == kind && l.WorkspaceID == wsID {
+			if l.Archived {
+				l.Archived = false
+				l.Color = in.Color
+				return l.ID, nil
+			}
+			return 0, store.ErrDuplicateLabel
+		}
+	}
+	id := int64(len(f.labels) + 1)
+	f.labels = append(f.labels, &store.Label{ID: id, WorkspaceID: wsID, Kind: kind, Name: in.Name, Color: in.Color})
+	return id, nil
+}
+
+func (f *fakeStore) UpdateLabel(_ context.Context, id int64, in store.LabelInput) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, l := range f.labels {
+		if l.ID == id {
+			l.Name, l.Color = in.Name, in.Color
+			return nil
+		}
+	}
+	return store.ErrNotFound
+}
+
+func (f *fakeStore) ArchiveLabel(_ context.Context, id int64, archived bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, l := range f.labels {
+		if l.ID == id {
+			l.Archived = archived
+			return nil
+		}
+	}
+	return store.ErrNotFound
 }
 
 // addDiscussion is a test helper that inserts a discussion directly.

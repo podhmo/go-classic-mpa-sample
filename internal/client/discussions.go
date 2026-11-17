@@ -89,7 +89,7 @@ func (c *Client) CreateDiscussion(ctx context.Context, in store.DiscussionInput,
 		Discussion api.Discussion `json:"discussion"`
 	}
 	err := c.do(ctx, "POST", c.wsPath("discussions"), map[string]any{
-		"title": in.Title, "body": in.Body, "category_id": in.CategoryID,
+		"title": in.Title, "body": in.Body, "category_id": in.CategoryID, "label_ids": in.LabelIDs,
 	}, &res)
 	if err != nil {
 		return 0, err
@@ -98,8 +98,13 @@ func (c *Client) CreateDiscussion(ctx context.Context, in store.DiscussionInput,
 }
 
 func (c *Client) UpdateDiscussion(ctx context.Context, id int64, in store.DiscussionInput) error {
+	labelIDs := in.LabelIDs
+	if labelIDs == nil {
+		// Same nil-means-clear convention as UpdateIssue.
+		labelIDs = []int64{}
+	}
 	return c.do(ctx, "PATCH", c.wsPath("discussions/")+fmt.Sprint(id), map[string]any{
-		"title": in.Title, "body": in.Body, "category_id": in.CategoryID,
+		"title": in.Title, "body": in.Body, "category_id": in.CategoryID, "label_ids": labelIDs,
 	}, nil)
 }
 
@@ -157,13 +162,17 @@ func (c *Client) ListDiscussionCategories(ctx context.Context) ([]*store.Discuss
 }
 
 func discussionFromDTO(d api.Discussion) *store.Discussion {
-	return &store.Discussion{
+	out := &store.Discussion{
 		ID: d.ID, Title: d.Title, Body: d.Body,
 		Category:  categoryFromDTO(d.Category),
 		Author:    userFromDTO(d.Author),
 		Answered:  d.Answered,
 		CreatedAt: parseTime(d.CreatedAt), UpdatedAt: parseTime(d.UpdatedAt),
 	}
+	for _, l := range d.Labels {
+		out.Labels = append(out.Labels, labelFromDTO(l))
+	}
+	return out
 }
 
 func discussionThreadFromDTO(t api.DiscussionThread, discussionID int64) *store.DiscussionThread {

@@ -587,3 +587,17 @@ podhmo からの改善要望（grid と story のリンク誤押・見た目・s
 - **既定 DB 名は `zatudan.db`**（旧 `issues.db`）。旧 DB は移行対象にしない。
 - **変えないもの**: `issues` は引き続きドメイン語 — URL パス（`/w/{slug}/issues` 等）、`/api/v1`、JSON フィールド名、テーブル名、CLI サブコマンド語彙（`zatu issue list` 等）は据え置き。リポジトリ名・module path も意図どおり据え置き。
 - **検証**: `go test ./...` / `go vet` / `gofmt` 全パス。`make test-e2e`（実バイナリ init→serve→local/remote CLI）パス。`go build ./cmd/zatudan`・`./cmd/zatu` のバイナリ名確認。
+
+## ラベルを定数から DB 管理へ（2026-11-17、`devin/*-labels-db-managed` ブランチ）
+
+ラベル選択肢はこれまで `seedLabels` の定数データを `SeedDemoData` で投入するだけで、追加・削除の術がなかった。ユーザー要望により「issue/discussion で別種」「ワークスペース毎に設定可能（`workspace_id IS NULL` はマスターデータ）」「削除は可視性の変更」という3点を含めて DB 管理化した。
+
+- **スキーマ（migrateV3）**: `labels` に `workspace_id`（NULL=マスター、全ワークスペースで可視）・`kind`（`'issue'|'discussion'`、picker を分離するため同名を用途別に持てる）・`archived` を追加。一意制約は `UNIQUE(name)` から式インデックス `idx_labels_kind_name_ws ON (kind, name, COALESCE(workspace_id, 0))` へ — マスターとワークスペースで同名ラベルを共存させる union 方式のため。`discussion_labels` join テーブルを新設。
+- **既定ラベルはデータマイグレーション**: `defaultLabelsDDL` を `schemaDDL`（新規 DB）と `migrateV3`（既存 DB）の両方から `INSERT ... WHERE NOT EXISTS` で実行し、Bug/Documentation/Enhancement/Feature をマスターの issue ラベルとして投入。`seedLabels` 定数は廃止し、`SeedDemoData` はマスター issue ラベルを名前解決して付ける形に。
+- **削除は archived フラグ**: picker・フィルタ・管理一覧からは消えるが、付与済みの issue/discussion には残り続ける（attach 系クエリは archived を絞らない）。`setIssueLabels`/`setDiscussionLabels` は `kind`+`archived=0` でガードし、別 kind・削除済み id の混入を防ぐ。復帰は管理画面の Restore または同名再作成（`CreateLabel` が archived 行を色更新して復活させる）の2経路。
+- **API は `/api/v1/w/{ws}/labels` へ移動**: labels は issue と同じワークスペーススコープの資源になったのでグローバル `/api/v1/labels` は廃止（discussion-categories のみグローバル継続）。GET `?kind=`、POST `{name,color,kind,shared}`、PATCH/DELETE `{id}`（DELETE=アーカイブ）。
+- **CLI は `zatu label list|create|delete`**: `--kind` で issue/discussion を切替え、`--shared` でマスター作成。unarchive は同名 `label create`（store の restore セマンティクスそのまま）。issue 側の `--label` 解決は `kind='issue'`、discussion create/edit の `--label` は `kind='discussion'` を見る。
+- **FK-off rebuild の復活**: v2→v3 で `labels` を再構築する際、DROP TABLE が `issue_labels` の `ON DELETE CASCADE` で紐付けを全消しするため、以前削除した `migrateWithFKOff`（migrateV2 用）を migrations[2] 向けに復活させた（pitfalls の知見どおり）。
+- **検証**: `go test ./...` / `go vet` / `gofmt` 全パス。`internal/store/labels_test.go` が CRUD・union・discussion 付与・v2→v3 移行を検証。実サーバで管理画面の作成→重複 422→アーカイブ→復帰、discussion picker、local-mode `zatu label` を手動確認済み。
+
+追記（レビュー指摘対応）: 添付ガードに `(workspace_id IS NULL OR workspace_id = ?)` を加え他ワークスペースのラベル id を拒否。replace 時の DELETE は `archived=1` の添付を温存する（picker に出ないため編集で消えてしまうのを防ぐ）。API の label フィルタは `label_id` パラメータを優先（同名 union の曖昧さ回避）。ラベル管理フォームも `novalidate`/`page-form.js`/aria 関連付けを他フォームと揃えた。

@@ -56,6 +56,32 @@ func ValidateDiscussionInput(in DiscussionInput) FieldErrors {
 	return errs
 }
 
+// MaxLabelNameRunes is the label name length limit.
+const MaxLabelNameRunes = 64
+
+// labelColorRE is the color rule for labels — they render through the
+// --label-color CSS custom property, so only a 6-digit hex color is
+// accepted.
+var labelColorRE = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+
+// ValidateLabelInput validates a LabelInput value.
+func ValidateLabelInput(in LabelInput) FieldErrors {
+	var errs FieldErrors
+	switch {
+	case in.Name == "":
+		errs = FieldErrors{"name": "Name is required."}
+	case utf8.RuneCountInString(in.Name) > MaxLabelNameRunes:
+		errs = FieldErrors{"name": fmt.Sprintf("Name must be %d characters or fewer.", MaxLabelNameRunes)}
+	}
+	if !labelColorRE.MatchString(in.Color) {
+		if errs == nil {
+			errs = FieldErrors{}
+		}
+		errs["color"] = "Color must be a hex color like #d73a4a."
+	}
+	return errs
+}
+
 // workspaceSlugRE is the identity rule for workspaces — the slug is the
 // URL path segment and API key, so it stays lowercase ASCII.
 var workspaceSlugRE = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,62}$`)
