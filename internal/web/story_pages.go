@@ -203,6 +203,7 @@ func StoryIssueList() {
 		TotalPages: 1,
 		RangeStart: 1,
 		RangeEnd:   len(storyIssues),
+		Workspace:  storyWorkspace,
 		Section:    "issues",
 	})
 }
@@ -216,6 +217,7 @@ func StoryIssueListEmpty() {
 		Page:            1,
 		TotalPages:      0,
 		HasActiveFilter: true,
+		Workspace:       storyWorkspace,
 		Section:         "issues",
 	})
 }
@@ -233,6 +235,7 @@ func StoryIssueListPaged() {
 		RangeStart:      41,
 		RangeEnd:        60,
 		HasActiveFilter: true,
+		Workspace:       storyWorkspace,
 		Section:         "issues",
 	})
 }
@@ -251,6 +254,7 @@ func StoryIssueListSearch() {
 		RangeStart:      1,
 		RangeEnd:        len(storyIssues),
 		HasActiveFilter: true,
+		Workspace:       storyWorkspace,
 		Section:         "issues",
 	})
 }
@@ -258,10 +262,11 @@ func StoryIssueListSearch() {
 // StoryIssueDetail renders the issue detail page with comments.
 func StoryIssueDetail() {
 	renderIssueDetail(http.StatusOK, issueDetailPage{
-		Title:    "#2 Improve responsive layout",
-		Issue:    storyIssue,
-		Comments: storyComments,
-		Section:  "issues",
+		Title:     "#2 Improve responsive layout",
+		Issue:     storyIssue,
+		Comments:  storyComments,
+		Workspace: storyWorkspace,
+		Section:   "issues",
 	})
 }
 
@@ -277,10 +282,11 @@ func StoryIssueDetailLong() {
 		})
 	}
 	renderIssueDetail(http.StatusOK, issueDetailPage{
-		Title:    "#2 Improve responsive layout",
-		Issue:    storyIssue,
-		Comments: comments,
-		Section:  "issues",
+		Title:     "#2 Improve responsive layout",
+		Issue:     storyIssue,
+		Comments:  comments,
+		Workspace: storyWorkspace,
+		Section:   "issues",
 	})
 }
 
@@ -293,6 +299,7 @@ func StoryIssueDetailCommentError() {
 		Comments:     storyComments,
 		CommentDraft: "   ",
 		CommentError: "Body is required.",
+		Workspace:    storyWorkspace,
 		Section:      "issues",
 	})
 }
@@ -301,9 +308,10 @@ func StoryIssueDetailCommentError() {
 // empty list state plus the bottom comment form's initial state.
 func StoryIssueDetailEmpty() {
 	renderIssueDetail(http.StatusOK, issueDetailPage{
-		Title:   "#2 Improve responsive layout",
-		Issue:   storyIssue,
-		Section: "issues",
+		Title:     "#2 Improve responsive layout",
+		Issue:     storyIssue,
+		Workspace: storyWorkspace,
+		Section:   "issues",
 	})
 }
 
@@ -315,6 +323,7 @@ func StoryIssueFormNew() {
 		Action:      "/issues",
 		SubmitLabel: "Create issue",
 		Labels:      storyLabels,
+		Workspace:   storyWorkspace,
 		Section:     "issues",
 	})
 }
@@ -329,6 +338,7 @@ func StoryIssueFormErrors() {
 		Input:       store.IssueInput{Body: "title was empty"},
 		Labels:      storyLabels,
 		Errors:      issueFormErrors{Title: "Title is required."},
+		Workspace:   storyWorkspace,
 		Section:     "issues",
 	})
 }
@@ -342,6 +352,7 @@ func StoryIssueFormEdit() {
 		SubmitLabel: "Save changes",
 		Input:       store.IssueInput{Title: storyIssue.Title, Body: storyIssue.Body, LabelIDs: []int64{1, 2}},
 		Labels:      storyLabels,
+		Workspace:   storyWorkspace,
 		Section:     "issues",
 	})
 }
@@ -349,9 +360,10 @@ func StoryIssueFormEdit() {
 // StoryIssueDelete renders the delete confirmation page.
 func StoryIssueDelete() {
 	renderIssueDelete(http.StatusOK, issueDeletePage{
-		Title:   "Delete issue #2",
-		Issue:   storyIssue,
-		Section: "issues",
+		Title:     "Delete issue #2",
+		Issue:     storyIssue,
+		Workspace: storyWorkspace,
+		Section:   "issues",
 	})
 }
 
@@ -374,6 +386,7 @@ func StoryDiscussionList() {
 		TotalPages:  1,
 		RangeStart:  1,
 		RangeEnd:    len(storyDiscussions),
+		Workspace:   storyWorkspace,
 		Section:     "discussions",
 	})
 }
@@ -387,6 +400,7 @@ func StoryDiscussionListEmpty() {
 		Filter:          store.DiscussionListFilter{CategorySlug: "qa", Answered: "yes", Query: "zzz", Page: 1, PerPage: perPage},
 		Page:            1,
 		HasActiveFilter: true,
+		Workspace:       storyWorkspace,
 		Section:         "discussions",
 	})
 }
@@ -398,6 +412,7 @@ func StoryDiscussionDetail() {
 		Title:      "#2 How do custom labels get their color?",
 		Discussion: storyDiscussion,
 		Threads:    storyDThreads,
+		Workspace:  storyWorkspace,
 		Section:    "discussions",
 	})
 }
@@ -414,6 +429,7 @@ func StoryDiscussionDetailReplyOpen() {
 		ThreadDraftID: 1,
 		CommentDraft:  "   ",
 		CommentError:  "Body is required.",
+		Workspace:     storyWorkspace,
 		Section:       "discussions",
 	})
 }
@@ -434,6 +450,7 @@ func StoryDiscussionDetailLong() {
 		Title:      "#2 How do custom labels get their color?",
 		Discussion: storyDiscussion,
 		Threads:    threads,
+		Workspace:  storyWorkspace,
 		Section:    "discussions",
 	})
 }
@@ -446,6 +463,7 @@ func StoryDiscussionFormNew() {
 		Action:      "/discussions",
 		SubmitLabel: "Create discussion",
 		Categories:  storyCategories,
+		Workspace:   storyWorkspace,
 		Section:     "discussions",
 	})
 }
@@ -461,6 +479,7 @@ func StoryDiscussionFormErrors() {
 		Input:       store.DiscussionInput{Body: "title was empty"},
 		Categories:  storyCategories,
 		Errors:      discussionFormErrors{Title: "Title is required.", Category: "Please pick a category."},
+		Workspace:   storyWorkspace,
 		Section:     "discussions",
 	})
 }
@@ -470,6 +489,7 @@ func StoryDiscussionDelete() {
 	renderDiscussionDelete(http.StatusOK, discussionDeletePage{
 		Title:      "Delete discussion #2",
 		Discussion: storyDiscussion,
+		Workspace:  storyWorkspace,
 		Section:    "discussions",
 	})
 }
