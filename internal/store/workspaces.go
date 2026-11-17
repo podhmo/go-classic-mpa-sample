@@ -1,6 +1,5 @@
-// Workspaces: GitHub-repository-like containers (schema version 6, see
-// migrations in store.go). Every issue and discussion belongs to exactly
-// one workspace; deleting a workspace cascades to its contents like a
+// Workspaces: GitHub-repository-like containers (see schemaDDL in
+// store.go). Every issue and discussion belongs to exactly one workspace; deleting a workspace cascades to its contents like a
 // GitHub repository deletion. Design: docs/sketch/ja/workspaces.md.
 package store
 
@@ -22,8 +21,8 @@ var ErrDuplicateSlug = errors.New("store: workspace slug already taken")
 // workspace — a tracker with no container cannot accept content.
 var ErrLastWorkspace = errors.New("store: cannot delete the last workspace")
 
-// DefaultWorkspaceSlug is the slug of the workspace created by migration
-// v6 and re-created by EnsureDefaultWorkspace when no workspace exists.
+// DefaultWorkspaceSlug is the slug of the workspace the schema creates
+// and EnsureDefaultWorkspace re-creates when no workspace exists.
 const DefaultWorkspaceSlug = "default"
 
 // Workspace is a container of issues and discussions. IssueCount and

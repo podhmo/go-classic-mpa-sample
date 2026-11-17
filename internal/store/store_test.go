@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"database/sql"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -121,11 +120,14 @@ func TestMigrationFreshAndLegacyDB(t *testing.T) {
 		t.Errorf("fresh DB user_version = %d, want %d", version, schemaVersion)
 	}
 	for _, q := range []string{
-		"SELECT author_id FROM issues LIMIT 0",
+		"SELECT workspace_id, author_id FROM issues LIMIT 0",
 		"SELECT author_id FROM comments LIMIT 0",
 		"SELECT id FROM users LIMIT 0",
 		"SELECT id, expires_at FROM sessions LIMIT 0",
 		"SELECT id, user_id, created_at FROM api_tokens LIMIT 0",
+		"SELECT id, slug FROM workspaces LIMIT 0",
+		"SELECT workspace_id FROM discussions LIMIT 0",
+		"SELECT id, is_answer FROM discussion_threads LIMIT 0",
 	} {
 		if _, err := s.db.ExecContext(ctx, q); err != nil {
 			t.Errorf("schema check %q: %v", q, err)
@@ -142,136 +144,5 @@ func TestMigrationFreshAndLegacyDB(t *testing.T) {
 	}
 	if err := s.Close(); err != nil {
 		t.Fatalf("close: %v", err)
-	}
-}
-
-func TestMigrationFromVersionZero(t *testing.T) {
-	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "legacy.db")
-
-	// Simulate a database created before migrations existed: the v1 schema
-	// applied, user_version still 0. Raw driver access, not Open.
-	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(1)")
-	if err != nil {
-		t.Fatalf("sql.Open: %v", err)
-	}
-	if _, err := db.ExecContext(ctx, schemaDDL); err != nil {
-		t.Fatalf("apply legacy schema: %v", err)
-	}
-	if _, err := db.ExecContext(ctx,
-		"INSERT INTO issues(title, body, status, created_at, updated_at) VALUES('keep me', '', 'open', 1, 1)"); err != nil {
-		t.Fatalf("seed legacy row: %v", err)
-	}
-	if err := db.Close(); err != nil {
-		t.Fatalf("close: %v", err)
-	}
-
-	s, err := Open(path)
-	if err != nil {
-		t.Fatalf("Open legacy DB: %v", err)
-	}
-	defer s.Close()
-	var version int
-	if err := s.db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
-		t.Fatalf("read user_version: %v", err)
-	}
-	if version != schemaVersion {
-		t.Errorf("migrated DB user_version = %d, want %d", version, schemaVersion)
-	}
-	is, err := s.GetIssue(ctx, 1)
-	if err != nil {
-		t.Fatalf("GetIssue after migration: %v", err)
-	}
-	if is.Title != "keep me" {
-		t.Errorf("existing row lost: title = %q", is.Title)
-	}
-	var authorID any
-	if err := s.db.QueryRowContext(ctx, "SELECT author_id FROM issues WHERE id = 1").Scan(&authorID); err != nil {
-		t.Fatalf("author_id column: %v", err)
-	}
-	if authorID != nil {
-		t.Errorf("pre-migration row should keep author_id NULL, got %v", authorID)
-	}
-}
-
-// TestMigrationV5 carries pre-v5 discussion rows through the threads
-// split: top-level comments become threads keeping their ids, replies
-// keep theirs, and the answer mark survives on the thread.
-func TestMigrationV5(t *testing.T) {
-	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "v4.db")
-
-	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(1)")
-	if err != nil {
-		t.Fatalf("sql.Open: %v", err)
-	}
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	for i := 0; i < 4; i++ { // v1..v4
-		if err := migrations[i](ctx, tx); err != nil {
-			t.Fatalf("apply migration %d: %v", i+1, err)
-		}
-	}
-	if _, err := tx.ExecContext(ctx, "PRAGMA user_version = 4"); err != nil {
-		t.Fatalf("stamp version: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
-	exec := func(q string, args ...any) {
-		if _, err := db.ExecContext(ctx, q, args...); err != nil {
-			t.Fatalf("exec %q: %v", q, err)
-		}
-	}
-	exec("INSERT INTO discussion_categories(name, slug, format) VALUES('Q&A', 'qa', 'qa')")
-	exec("INSERT INTO discussions(category_id, title, body, created_at, updated_at) VALUES(1, 'q', '', 1, 1)")
-	exec("INSERT INTO discussion_comments(discussion_id, body, created_at) VALUES(1, 'top1', 1)")
-	exec("INSERT INTO discussion_comments(discussion_id, body, created_at, is_answer) VALUES(1, 'top2', 2, 1)")
-	exec("INSERT INTO discussion_comments(discussion_id, parent_id, body, created_at) VALUES(1, 2, 'reply to top2', 3)")
-	exec("INSERT INTO discussion_comments(discussion_id, parent_id, body, created_at) VALUES(1, 1, 'reply to top1', 4)")
-	if err := db.Close(); err != nil {
-		t.Fatalf("close: %v", err)
-	}
-
-	s, err := Open(path)
-	if err != nil {
-		t.Fatalf("Open v4 DB: %v", err)
-	}
-	defer s.Close()
-	var version int
-	if err := s.db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
-		t.Fatalf("read user_version: %v", err)
-	}
-	if version != schemaVersion {
-		t.Errorf("migrated DB user_version = %d, want %d", version, schemaVersion)
-	}
-
-	d, err := s.GetDiscussion(ctx, 1)
-	if err != nil {
-		t.Fatalf("GetDiscussion: %v", err)
-	}
-	if !d.Answered {
-		t.Error("answer mark lost in migration")
-	}
-	threads, err := s.ListDiscussionThreads(ctx, 1)
-	if err != nil {
-		t.Fatalf("ListDiscussionThreads: %v", err)
-	}
-	if len(threads) != 2 || threads[0].ID != 1 || threads[1].ID != 2 {
-		t.Fatalf("thread ids not preserved: %+v", threads)
-	}
-	if !threads[1].IsAnswer {
-		t.Error("is_answer not carried onto the thread")
-	}
-	if len(threads[0].Comments) != 1 || threads[0].Comments[0].ID != 4 {
-		t.Fatalf("reply on thread 1: %+v", threads[0].Comments)
-	}
-	if len(threads[1].Comments) != 1 || threads[1].Comments[0].ID != 3 {
-		t.Fatalf("reply on thread 2: %+v", threads[1].Comments)
-	}
-	if threads[0].Comments[0].ThreadID != 1 || threads[1].Comments[0].ThreadID != 2 {
-		t.Error("thread_id not remapped to the preserved parent id")
 	}
 }
