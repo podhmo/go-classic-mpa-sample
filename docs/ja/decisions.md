@@ -553,3 +553,13 @@ podhmo からの改善要望（grid と story のリンク誤押・見た目・s
 - **workspace 管理の web ルートは2階層**: `GET|POST /workspaces` + `GET /workspaces/new`（管理一覧・作成）は workspace 非依存、`GET|POST /w/{slug}/delete`（削除）は `scoped()` 経由で対象 ws を解決。`{ws}` は「削除される側」。
 - **そのまま採用した設計**: 採番はグローバル維持（issue #N は全 workspace で一意）、`workspaces(slug UNIQUE)` + `issues/discussions.workspace_id NOT NULL ON DELETE CASCADE`、`EnsureDefaultWorkspace` は「workspaces が空のときだけ default を INSERT」（init/起動時の冪等な保証）、最後の1件は `ErrLastWorkspace` → 422、label/category/user はグローバルのまま、ws 間移動・per-ws 採番・per-ws label は future work。
 - **検証**: `go test ./...` / `go vet` / `gofmt` 全パス + 実サーバ手動確認（`/`→`/w/default/issues` 302、`/issues` legacy 302、ws 作成→削除→最後の1件拒否 422、`/w/beta/issues/1` で他 ws の issue に GET→canonical 302、`issues workspace list|create|delete` と `--workspace` スコープの CLI、旧 `/api/v1/issues` は 404）。
+
+## migration の squash（2026-11-17、`devin/*-squash-migrations` ブランチ）
+
+リリース前で DB は捨ててよいので、v1〜v6 の累積 migration を1本に潰し、`schemaDDL` を現行スキーマ（workspaces 含む全テーブル）そのものにした。`init` は一発で現行状態を作る。
+
+- `migrations` / `PRAGMA user_version` の仕組み自体は残す（将来リリース後に versioned migration が必要になったらここに追加していく）。今は `migrateV1` 1本で `schemaVersion = 1`。
+- 'default' workspace の作成は DDL 内の `INSERT ... WHERE NOT EXISTS`（init 時の1件保証）+ `EnsureDefaultWorkspace`（空になった場合の再作成）の二段で担保。
+- v6 のテーブル再構築（issues_new/discussions_new + `migrateWithFKOff`）は旧 DB のデータ移行のためのものだったので不要になり削除。DROP TABLE 時の ON DELETE CASCADE 問題自体は pitfalls.md の知見として残す。
+- **旧フォーマットの DB は fail fast**: 事前に issues テーブルが存在する DB では `CREATE TABLE IF NOT EXISTS` が触らないためカラム欠落のまま動いてしまう。migrateV1 後に `workspace_id` カラムを検査し、なければ「DB を消して init し直せ」というエラーにする。既存の dev DB は削除対象。
+- **検証**: `go test ./...` / `go vet` / `gofmt` 全パス。アップグレード経路を検証していた TestMigrationFromVersionZero / TestMigrationV5 は経路ごと消えたため削除し、新規スキーマ検査は workspace/discussion_threads 系カラムを含む形に更新。
