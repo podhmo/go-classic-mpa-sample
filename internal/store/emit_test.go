@@ -13,7 +13,7 @@ func TestNotifyOnCreateComment(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	id, err := s.CreateIssue(ctx, IssueInput{Title: "n"}, 0)
+	id, err := s.CreateIssue(ctx, 1, IssueInput{Title: "n"}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +40,7 @@ func TestNotifyAnswerReportsPreviousMark(t *testing.T) {
 	ctx := context.Background()
 
 	qa := mustCategory(t, s, "Q&A", "qa", CategoryFormatQA)
-	did, err := s.CreateDiscussion(ctx, DiscussionInput{Title: "d", CategoryID: qa}, 0)
+	did, err := s.CreateDiscussion(ctx, 1, DiscussionInput{Title: "d", CategoryID: qa}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestNotifyAnswerReportsPreviousMark(t *testing.T) {
 // hub still run the same mutating methods.
 func TestNotifyWithoutListener(t *testing.T) {
 	s := newTestStore(t)
-	if _, err := s.CreateIssue(context.Background(), IssueInput{Title: "x"}, 0); err != nil {
+	if _, err := s.CreateIssue(context.Background(), 1, IssueInput{Title: "x"}, 0); err != nil {
 		t.Fatal(err)
 	}
 }

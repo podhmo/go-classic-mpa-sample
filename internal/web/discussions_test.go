@@ -24,7 +24,7 @@ func TestDiscussionListRenders(t *testing.T) {
 	srv, f := newTestServer(t)
 	seedDiscussions(t, f)
 
-	resp, err := srv.Client().Get(srv.URL + "/discussions")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/discussions")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,10 +37,10 @@ func TestDiscussionListRenders(t *testing.T) {
 			t.Errorf("list missing %q", want)
 		}
 	}
-	if !strings.Contains(body, `href="/discussions" aria-current="page"`) {
+	if !strings.Contains(body, `href="/w/default/discussions" aria-current="page"`) {
 		t.Error("discussions nav tab should be aria-current")
 	}
-	if strings.Contains(body, `href="/issues" aria-current="page"`) {
+	if strings.Contains(body, `href="/w/default/issues" aria-current="page"`) {
 		t.Error("issues nav tab must not be aria-current on /discussions")
 	}
 }
@@ -49,7 +49,7 @@ func TestDiscussionListCategoryFilter(t *testing.T) {
 	srv, f := newTestServer(t)
 	seedDiscussions(t, f)
 
-	resp, err := srv.Client().Get(srv.URL + "/discussions?category=qa")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/discussions?category=qa")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestDiscussionListAnsweredFilter(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resp, err := srv.Client().Get(srv.URL + "/discussions?answered=yes")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/discussions?answered=yes")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestDiscussionListAnsweredFilter(t *testing.T) {
 		t.Error("expected Answered badge")
 	}
 
-	resp, err = srv.Client().Get(srv.URL + "/discussions?answered=no")
+	resp, err = srv.Client().Get(srv.URL + "/w/default/discussions?answered=no")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestDiscussionDetailRendersThreadAndAnswer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resp, err := srv.Client().Get(srv.URL + "/discussions/" + itoa(d.ID))
+	resp, err := srv.Client().Get(srv.URL + "/w/default/discussions/" + itoa(d.ID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +147,7 @@ func TestPartialSetCommentAnswerContract(t *testing.T) {
 	partial := map[string]string{"X-Partial": "1"}
 
 	resp := postFormWithHeaders(t,
-		srv.URL+"/discussions/"+itoa(qa.ID)+"/comments/"+itoa(c2)+"/answer",
+		srv.URL+"/w/default/discussions/"+itoa(qa.ID)+"/comments/"+itoa(c2)+"/answer",
 		url.Values{"answer": {"1"}}, partial)
 	body := getBody(t, resp)
 	if resp.StatusCode != http.StatusOK {
@@ -171,7 +171,7 @@ func TestPartialSetCommentAnswerContract(t *testing.T) {
 
 	// Without X-Partial the same POST keeps the classic 303 PRG.
 	resp = postForm(t, noRedirectClient(),
-		srv.URL+"/discussions/"+itoa(qa.ID)+"/comments/"+itoa(c2)+"/answer",
+		srv.URL+"/w/default/discussions/"+itoa(qa.ID)+"/comments/"+itoa(c2)+"/answer",
 		url.Values{"answer": {"0"}})
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("plain answer POST status = %d, want 303", resp.StatusCode)
@@ -184,7 +184,7 @@ func TestDiscussionDetailOpenCategoryHasNoAnswerButton(t *testing.T) {
 	if _, err := f.CreateDiscussionThread(t.Context(), d.ID, "c", 0); err != nil {
 		t.Fatal(err)
 	}
-	resp, err := srv.Client().Get(srv.URL + "/discussions/" + itoa(d.ID))
+	resp, err := srv.Client().Get(srv.URL + "/w/default/discussions/" + itoa(d.ID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +199,7 @@ func TestDiscussionDetailOpenCategoryHasNoAnswerButton(t *testing.T) {
 
 func TestCreateDiscussionPRG(t *testing.T) {
 	srv, _ := newTestServer(t)
-	resp := postForm(t, noRedirectClient(), srv.URL+"/discussions", url.Values{
+	resp := postForm(t, noRedirectClient(), srv.URL+"/w/default/discussions", url.Values{
 		"title":       {"New thread"},
 		"body":        {"hello"},
 		"category_id": {"1"},
@@ -209,28 +209,28 @@ func TestCreateDiscussionPRG(t *testing.T) {
 		t.Fatalf("status = %d, want 303", resp.StatusCode)
 	}
 	loc := resp.Header.Get("Location")
-	if !strings.HasPrefix(loc, "/discussions/") {
+	if !strings.HasPrefix(loc, "/w/default/discussions/") {
 		t.Fatalf("Location = %q", loc)
 	}
 }
 
 func TestCreateDiscussionValidation(t *testing.T) {
 	srv, _ := newTestServer(t)
-	resp := postForm(t, srv.Client(), srv.URL+"/discussions", url.Values{
+	resp := postForm(t, srv.Client(), srv.URL+"/w/default/discussions", url.Values{
 		"title": {"t"}, "body": {"b"}, "category_id": {""},
 	})
 	if resp.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("missing category: status = %d, want 422", resp.StatusCode)
 	}
 	getBody(t, resp)
-	resp = postForm(t, srv.Client(), srv.URL+"/discussions", url.Values{
+	resp = postForm(t, srv.Client(), srv.URL+"/w/default/discussions", url.Values{
 		"title": {"t"}, "body": {"b"}, "category_id": {"999"},
 	})
 	if resp.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("unknown category: status = %d, want 422", resp.StatusCode)
 	}
 	getBody(t, resp)
-	resp = postForm(t, srv.Client(), srv.URL+"/discussions", url.Values{
+	resp = postForm(t, srv.Client(), srv.URL+"/w/default/discussions", url.Values{
 		"title": {"  "}, "body": {"b"}, "category_id": {"1"},
 	})
 	body := getBody(t, resp)
@@ -247,7 +247,7 @@ func TestDiscussionCommentReplyFlow(t *testing.T) {
 	d := f.addDiscussion("D", "b", 1, time.Now())
 	cid, _ := f.CreateDiscussionThread(t.Context(), d.ID, "top", 0)
 
-	resp := postForm(t, noRedirectClient(), srv.URL+"/discussions/"+itoa(d.ID)+"/comments", url.Values{
+	resp := postForm(t, noRedirectClient(), srv.URL+"/w/default/discussions/"+itoa(d.ID)+"/comments", url.Values{
 		"body": {"a reply"}, "thread_id": {itoa(cid)},
 	})
 	defer resp.Body.Close()
@@ -259,7 +259,7 @@ func TestDiscussionCommentReplyFlow(t *testing.T) {
 	}
 
 	rid, _ := f.CreateDiscussionComment(t.Context(), d.ID, cid, "nested", 0)
-	resp = postForm(t, srv.Client(), srv.URL+"/discussions/"+itoa(d.ID)+"/comments", url.Values{
+	resp = postForm(t, srv.Client(), srv.URL+"/w/default/discussions/"+itoa(d.ID)+"/comments", url.Values{
 		"body": {"too deep"}, "thread_id": {itoa(rid)},
 	})
 	body := getBody(t, resp)
@@ -275,7 +275,7 @@ func TestDiscussionCommentValidation(t *testing.T) {
 	srv, f := newTestServer(t)
 	d := f.addDiscussion("D", "b", 1, time.Now())
 
-	resp := postForm(t, srv.Client(), srv.URL+"/discussions/"+itoa(d.ID)+"/comments", url.Values{
+	resp := postForm(t, srv.Client(), srv.URL+"/w/default/discussions/"+itoa(d.ID)+"/comments", url.Values{
 		"body": {"   "},
 	})
 	body := getBody(t, resp)
@@ -289,14 +289,14 @@ func TestDiscussionCommentValidation(t *testing.T) {
 		t.Fatalf("empty comment was saved: %+v", ts)
 	}
 
-	resp = postForm(t, srv.Client(), srv.URL+"/discussions/"+itoa(d.ID)+"/comments", url.Values{
+	resp = postForm(t, srv.Client(), srv.URL+"/w/default/discussions/"+itoa(d.ID)+"/comments", url.Values{
 		"body": {"orphan"}, "thread_id": {"abc"},
 	})
 	getBody(t, resp)
 	if resp.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("bad thread_id: status = %d, want 422", resp.StatusCode)
 	}
-	resp = postForm(t, srv.Client(), srv.URL+"/discussions/"+itoa(d.ID)+"/comments", url.Values{
+	resp = postForm(t, srv.Client(), srv.URL+"/w/default/discussions/"+itoa(d.ID)+"/comments", url.Values{
 		"body": {"orphan"}, "thread_id": {"-5"},
 	})
 	getBody(t, resp)
@@ -325,7 +325,7 @@ func TestPartialCommentContract(t *testing.T) {
 	// A successful partial post returns the new comment's <li> plus the
 	// header meta as a data-swap node — posting bumped updated_at, so the
 	// client replaces the stale "Last updated" line instead of appending.
-	resp := postFormWithHeaders(t, srv.URL+"/issues/"+itoa(issue.ID)+"/comments",
+	resp := postFormWithHeaders(t, srv.URL+"/w/default/issues/"+itoa(issue.ID)+"/comments",
 		url.Values{"body": {"fragment body"}}, partial)
 	body := getBody(t, resp)
 	if resp.StatusCode != http.StatusOK {
@@ -347,7 +347,7 @@ func TestPartialCommentContract(t *testing.T) {
 	}
 
 	// A validation failure returns only the error-marked form at 422.
-	resp = postFormWithHeaders(t, srv.URL+"/issues/"+itoa(issue.ID)+"/comments",
+	resp = postFormWithHeaders(t, srv.URL+"/w/default/issues/"+itoa(issue.ID)+"/comments",
 		url.Values{"body": {""}}, partial)
 	body = getBody(t, resp)
 	if resp.StatusCode != http.StatusUnprocessableEntity {
@@ -364,7 +364,7 @@ func TestPartialCommentContract(t *testing.T) {
 
 	// A reply's fragment carries comment-reply markup plus the header meta
 	// swap node (posting bumped the discussion's updated_at).
-	resp = postFormWithHeaders(t, srv.URL+"/discussions/"+itoa(qa.ID)+"/comments",
+	resp = postFormWithHeaders(t, srv.URL+"/w/default/discussions/"+itoa(qa.ID)+"/comments",
 		url.Values{"body": {"a reply"}, "thread_id": {itoa(parent)}}, partial)
 	body = getBody(t, resp)
 	if resp.StatusCode != http.StatusOK {
@@ -376,7 +376,7 @@ func TestPartialCommentContract(t *testing.T) {
 		}
 	}
 	// A top-level discussion comment POST also rides the meta node.
-	resp = postFormWithHeaders(t, srv.URL+"/discussions/"+itoa(qa.ID)+"/comments",
+	resp = postFormWithHeaders(t, srv.URL+"/w/default/discussions/"+itoa(qa.ID)+"/comments",
 		url.Values{"body": {"top level"}}, partial)
 	body = getBody(t, resp)
 	if resp.StatusCode != http.StatusOK {
@@ -389,7 +389,7 @@ func TestPartialCommentContract(t *testing.T) {
 	}
 
 	// Without the header the same endpoints keep the 303 PRG redirect.
-	resp = postFormWithHeaders(t, srv.URL+"/discussions/"+itoa(qa.ID)+"/comments",
+	resp = postFormWithHeaders(t, srv.URL+"/w/default/discussions/"+itoa(qa.ID)+"/comments",
 		url.Values{"body": {"classic"}}, nil)
 	getBody(t, resp)
 	if resp.StatusCode != http.StatusSeeOther || !strings.Contains(resp.Header.Get("Location"), "#thread-") {
@@ -401,7 +401,7 @@ func TestSetCommentAnswerFlow(t *testing.T) {
 	srv, f := newTestServer(t)
 	d := f.addDiscussion("QA", "b", 2, time.Now())
 	cid, _ := f.CreateDiscussionThread(t.Context(), d.ID, "c", 0)
-	base := srv.URL + "/discussions/" + itoa(d.ID) + "/comments/" + itoa(cid) + "/answer"
+	base := srv.URL + "/w/default/discussions/" + itoa(d.ID) + "/comments/" + itoa(cid) + "/answer"
 
 	resp := postForm(t, noRedirectClient(), base, url.Values{"answer": {"1"}})
 	defer resp.Body.Close()
@@ -427,7 +427,7 @@ func TestSetCommentAnswerFlow(t *testing.T) {
 	dOpen := f.addDiscussion("O", "b", 1, time.Now())
 	oc, _ := f.CreateDiscussionThread(t.Context(), dOpen.ID, "c", 0)
 	resp = postForm(t, srv.Client(),
-		srv.URL+"/discussions/"+itoa(dOpen.ID)+"/comments/"+itoa(oc)+"/answer",
+		srv.URL+"/w/default/discussions/"+itoa(dOpen.ID)+"/comments/"+itoa(oc)+"/answer",
 		url.Values{"answer": {"1"}})
 	body := getBody(t, resp)
 	if resp.StatusCode != http.StatusUnprocessableEntity {
@@ -440,7 +440,7 @@ func TestSetCommentAnswerFlow(t *testing.T) {
 
 func TestDiscussionNotFound(t *testing.T) {
 	srv, _ := newTestServer(t)
-	for _, path := range []string{"/discussions/99", "/discussions/99/edit", "/discussions/abc"} {
+	for _, path := range []string{"/w/default/discussions/99", "/w/default/discussions/99/edit", "/w/default/discussions/abc"} {
 		resp, err := srv.Client().Get(srv.URL + path)
 		if err != nil {
 			t.Fatal(err)
@@ -456,7 +456,7 @@ func TestEditDiscussionFlow(t *testing.T) {
 	srv, f := newTestServer(t)
 	d := f.addDiscussion("Old title", "old body", 1, time.Now())
 
-	resp := postForm(t, noRedirectClient(), srv.URL+"/discussions/"+itoa(d.ID)+"/edit", url.Values{
+	resp := postForm(t, noRedirectClient(), srv.URL+"/w/default/discussions/"+itoa(d.ID)+"/edit", url.Values{
 		"title": {"New title"}, "body": {"new body"}, "category_id": {"2"},
 	})
 	defer resp.Body.Close()
@@ -476,7 +476,7 @@ func TestDeleteDiscussionFlow(t *testing.T) {
 	srv, f := newTestServer(t)
 	d := f.addDiscussion("Doomed", "b", 1, time.Now())
 
-	resp, err := srv.Client().Get(srv.URL + "/discussions/" + itoa(d.ID) + "/delete")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/discussions/" + itoa(d.ID) + "/delete")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -485,12 +485,12 @@ func TestDeleteDiscussionFlow(t *testing.T) {
 	}
 	getBody(t, resp)
 
-	resp = postForm(t, noRedirectClient(), srv.URL+"/discussions/"+itoa(d.ID)+"/delete", url.Values{})
+	resp = postForm(t, noRedirectClient(), srv.URL+"/w/default/discussions/"+itoa(d.ID)+"/delete", url.Values{})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("status = %d, want 303", resp.StatusCode)
 	}
-	if loc := resp.Header.Get("Location"); loc != "/discussions" {
+	if loc := resp.Header.Get("Location"); loc != "/w/default/discussions" {
 		t.Fatalf("Location = %q, want /discussions", loc)
 	}
 	if _, err := f.GetDiscussion(t.Context(), d.ID); err != store.ErrNotFound {

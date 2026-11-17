@@ -24,18 +24,18 @@ import (
 // Store is the consumer-side persistence contract the API needs.
 // *store.Store satisfies it automatically; tests may substitute a fake.
 type Store interface {
-	ListIssues(ctx context.Context, f store.ListFilter) ([]*store.Issue, int, error)
+	ListIssues(ctx context.Context, wsID int64, f store.ListFilter) ([]*store.Issue, int, error)
 	GetIssue(ctx context.Context, id int64) (*store.Issue, error)
-	CreateIssue(ctx context.Context, in store.IssueInput, authorID int64) (int64, error)
+	CreateIssue(ctx context.Context, wsID int64, in store.IssueInput, authorID int64) (int64, error)
 	UpdateIssue(ctx context.Context, id int64, in store.IssueInput) error
 	SetIssueStatus(ctx context.Context, id int64, status string) error
 	DeleteIssue(ctx context.Context, id int64) error
 	ListComments(ctx context.Context, issueID int64) ([]*store.Comment, error)
 	CreateComment(ctx context.Context, issueID int64, body string, authorID int64) (int64, error)
 	ListLabels(ctx context.Context) ([]*store.Label, error)
-	ListDiscussions(ctx context.Context, f store.DiscussionListFilter) ([]*store.Discussion, int, error)
+	ListDiscussions(ctx context.Context, wsID int64, f store.DiscussionListFilter) ([]*store.Discussion, int, error)
 	GetDiscussion(ctx context.Context, id int64) (*store.Discussion, error)
-	CreateDiscussion(ctx context.Context, in store.DiscussionInput, authorID int64) (int64, error)
+	CreateDiscussion(ctx context.Context, wsID int64, in store.DiscussionInput, authorID int64) (int64, error)
 	UpdateDiscussion(ctx context.Context, id int64, in store.DiscussionInput) error
 	DeleteDiscussion(ctx context.Context, id int64) error
 	ListDiscussionThreads(ctx context.Context, discussionID int64) ([]*store.DiscussionThread, error)
@@ -43,6 +43,10 @@ type Store interface {
 	CreateDiscussionComment(ctx context.Context, discussionID, threadID int64, body string, authorID int64) (int64, error)
 	SetThreadAnswer(ctx context.Context, discussionID, threadID int64, answer bool) error
 	ListDiscussionCategories(ctx context.Context) ([]*store.DiscussionCategory, error)
+	ListWorkspaces(ctx context.Context) ([]*store.Workspace, error)
+	WorkspaceBySlug(ctx context.Context, slug string) (*store.Workspace, error)
+	CreateWorkspace(ctx context.Context, in store.WorkspaceInput) (int64, error)
+	DeleteWorkspace(ctx context.Context, slug string) error
 	APITokenUser(ctx context.Context, token string) (*store.User, error)
 }
 
@@ -68,19 +72,26 @@ func New(st Store, envToken string) http.Handler {
 	// matches, while a methodless catch-all would eat them into a 404.
 	// Dispatching here gives both — known path + wrong method → 405,
 	// unknown path → JSON 404 via the "/api/v1/" subtree below.
+	// Workspace-scoped resources live under /w/{slug}; the workspace-less
+	// /issues and /discussions paths are gone (a 404, not a redirect — API
+	// callers should be updated, docs/sketch/ja/workspaces.md). Labels and
+	// categories stay global like the HTML app's.
 	routes := map[string]map[string]http.HandlerFunc{
-		"/api/v1/issues":               {"GET": h.listIssues, "POST": h.createIssue},
-		"/api/v1/issues/{id}":          {"GET": h.getIssue, "PATCH": h.updateIssue, "DELETE": h.deleteIssue},
-		"/api/v1/issues/{id}/status":   {"POST": h.setIssueStatus},
-		"/api/v1/issues/{id}/comments": {"POST": h.createComment},
-		"/api/v1/labels":               {"GET": h.listLabels},
+		"/api/v1/workspaces":            {"GET": h.listWorkspaces, "POST": h.createWorkspace},
+		"/api/v1/workspaces/{slug}":     {"GET": h.getWorkspace, "DELETE": h.deleteWorkspace},
+		"/api/v1/labels":                {"GET": h.listLabels},
+		"/api/v1/discussion-categories": {"GET": h.listDiscussionCategories},
 
-		"/api/v1/discussions":                             {"GET": h.listDiscussions, "POST": h.createDiscussion},
-		"/api/v1/discussions/{id}":                        {"GET": h.getDiscussion, "PATCH": h.updateDiscussion, "DELETE": h.deleteDiscussion},
-		"/api/v1/discussions/{id}/threads":                {"POST": h.createDiscussionThread},
-		"/api/v1/discussions/{id}/threads/{tid}/comments": {"POST": h.createDiscussionComment},
-		"/api/v1/discussions/{id}/threads/{tid}/answer":   {"POST": h.setThreadAnswer},
-		"/api/v1/discussion-categories":                   {"GET": h.listDiscussionCategories},
+		"/api/v1/w/{ws}/issues":               {"GET": h.scoped(h.listIssues), "POST": h.scoped(h.createIssue)},
+		"/api/v1/w/{ws}/issues/{id}":          {"GET": h.scoped(h.getIssue), "PATCH": h.scoped(h.updateIssue), "DELETE": h.scoped(h.deleteIssue)},
+		"/api/v1/w/{ws}/issues/{id}/status":   {"POST": h.scoped(h.setIssueStatus)},
+		"/api/v1/w/{ws}/issues/{id}/comments": {"POST": h.scoped(h.createComment)},
+
+		"/api/v1/w/{ws}/discussions":                             {"GET": h.scoped(h.listDiscussions), "POST": h.scoped(h.createDiscussion)},
+		"/api/v1/w/{ws}/discussions/{id}":                        {"GET": h.scoped(h.getDiscussion), "PATCH": h.scoped(h.updateDiscussion), "DELETE": h.scoped(h.deleteDiscussion)},
+		"/api/v1/w/{ws}/discussions/{id}/threads":                {"POST": h.scoped(h.createDiscussionThread)},
+		"/api/v1/w/{ws}/discussions/{id}/threads/{tid}/comments": {"POST": h.scoped(h.createDiscussionComment)},
+		"/api/v1/w/{ws}/discussions/{id}/threads/{tid}/answer":   {"POST": h.scoped(h.setThreadAnswer)},
 	}
 	for path, methods := range routes {
 		mux.HandleFunc(path, methodDispatch(methods))
@@ -239,11 +250,38 @@ func queryInt(r *http.Request, name string, def int) int {
 	return def
 }
 
+// scoped resolves the {ws} path segment into its workspace (a JSON 404 on
+// a miss) and calls fn with it.
+func (h *handler) scoped(fn func(http.ResponseWriter, *http.Request, *store.Workspace)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ws, err := h.store.WorkspaceBySlug(r.Context(), r.PathValue("ws"))
+		if err != nil {
+			h.storeError(w, err)
+			return
+		}
+		fn(w, r, ws)
+	}
+}
+
+// requireScope replies 404 when the resource belongs to another
+// workspace — the API's slug-mismatch contract (no redirect like HTML).
+func (h *handler) requireScope(w http.ResponseWriter, ws *store.Workspace, realWSID int64) bool {
+	if realWSID != ws.ID {
+		writeError(w, http.StatusNotFound, "Not found.", nil)
+		return false
+	}
+	return true
+}
+
 // storeError maps store sentinel errors to HTTP statuses.
 func (h *handler) storeError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		writeError(w, http.StatusNotFound, "Not found.", nil)
+	case errors.Is(err, store.ErrDuplicateSlug):
+		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", map[string]string{"slug": "This slug is already taken."})
+	case errors.Is(err, store.ErrLastWorkspace):
+		writeError(w, http.StatusUnprocessableEntity, "The last remaining workspace cannot be deleted.", nil)
 	case errors.Is(err, store.ErrInvalidCategory):
 		writeError(w, http.StatusUnprocessableEntity, "Unknown discussion category.", map[string]string{"category": "Unknown category."})
 	case errors.Is(err, store.ErrInvalidThread):

@@ -19,7 +19,7 @@ func TestSessionLookupFailureIs500NotAnonymous(t *testing.T) {
 	// A transient lookup failure must fail the request — proceeding
 	// anonymously would save an authored post without its author.
 	f.sessionUserErr = errors.New("db gone")
-	req, err := http.NewRequest(http.MethodPost, srv.URL+"/issues",
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/w/default/issues",
 		strings.NewReader(url.Values{"title": {"x"}}.Encode()))
 	if err != nil {
 		t.Fatal(err)
@@ -39,7 +39,7 @@ func TestSessionLookupFailureIs500NotAnonymous(t *testing.T) {
 	}
 
 	f.sessionUserErr = nil
-	code, body := getWithCookie(t, srv, "/issues", &http.Cookie{Name: sessionCookieName, Value: "nope"})
+	code, body := getWithCookie(t, srv, "/w/default/issues", &http.Cookie{Name: sessionCookieName, Value: "nope"})
 	if code != http.StatusOK || strings.Contains(body, "@alice") {
 		t.Error("unknown session did not resolve anonymously")
 	}
@@ -78,13 +78,13 @@ func TestRegisterFlowSetsSessionCookie(t *testing.T) {
 	srv, _ := newTestServer(t)
 
 	resp := postForm(t, noRedirectClient(), srv.URL+"/register", url.Values{
-		"name": {"alice"}, "password": {"password123"}, "next": {"/issues"},
+		"name": {"alice"}, "password": {"password123"}, "next": {"/w/default/issues"},
 	})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("status = %d, want 303", resp.StatusCode)
 	}
-	if loc := resp.Header.Get("Location"); loc != "/issues" {
+	if loc := resp.Header.Get("Location"); loc != "/w/default/issues" {
 		t.Fatalf("Location = %q, want /issues", loc)
 	}
 	c := sessionCookie(t, resp)
@@ -101,7 +101,7 @@ func TestRegisterFlowSetsSessionCookie(t *testing.T) {
 		t.Errorf("MaxAge = %d, want browser-session cookie (no MaxAge)", c.MaxAge)
 	}
 
-	code, body := getWithCookie(t, srv, "/issues", c)
+	code, body := getWithCookie(t, srv, "/w/default/issues", c)
 	if code != http.StatusOK {
 		t.Fatalf("GET /issues = %d", code)
 	}
@@ -162,7 +162,7 @@ func TestLoginLogoutFlow(t *testing.T) {
 	}
 
 	resp = postForm(t, noRedirectClient(), srv.URL+"/login", url.Values{
-		"name": {"alice"}, "password": {"password123"}, "next": {"/issues"},
+		"name": {"alice"}, "password": {"password123"}, "next": {"/w/default/issues"},
 	})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusSeeOther {
@@ -201,7 +201,7 @@ func TestLoginLogoutFlow(t *testing.T) {
 		t.Error("logout did not clear the session cookie")
 	}
 
-	code, body := getWithCookie(t, srv, "/issues", c)
+	code, body := getWithCookie(t, srv, "/w/default/issues", c)
 	if code != http.StatusOK {
 		t.Fatalf("GET /issues = %d", code)
 	}
@@ -215,7 +215,7 @@ func TestLoginLogoutFlow(t *testing.T) {
 
 func TestSafeNext(t *testing.T) {
 	for _, tc := range []struct{ in, want string }{
-		{"", "/issues"}, {"/issues/3", "/issues/3"},
+		{"", "/issues"}, {"/w/default/issues/3", "/w/default/issues/3"},
 		{"//evil.example", "/issues"}, {"https://evil.example", "/issues"},
 		{"javascript:alert(1)", "/issues"}, {"/\\evil.example", "/issues"},
 	} {

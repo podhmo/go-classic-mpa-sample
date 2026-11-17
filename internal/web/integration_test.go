@@ -40,13 +40,13 @@ func newRealServer(t *testing.T) (*httptest.Server, *store.Store) {
 // (303 → /issues/{id}) and returns the new issue's detail path.
 func e2eCreateIssue(t *testing.T, srv *httptest.Server, form url.Values) string {
 	t.Helper()
-	resp := postForm(t, noRedirectClient(), srv.URL+"/issues", form)
+	resp := postForm(t, noRedirectClient(), srv.URL+"/w/default/issues", form)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("POST /issues status = %d, want 303", resp.StatusCode)
 	}
 	loc := resp.Header.Get("Location")
-	if !strings.HasPrefix(loc, "/issues/") || loc == "/issues/new" {
+	if !strings.HasPrefix(loc, "/w/default/issues/") || loc == "/w/default/issues/new" {
 		t.Fatalf("POST /issues Location = %q, want /issues/{id}", loc)
 	}
 	return loc
@@ -92,10 +92,10 @@ func TestE2EIssueLifecycle(t *testing.T) {
 		"body":     {"first body"},
 		"label_id": {strconv.FormatInt(label.ID, 10)},
 	})
-	num := "#" + strings.TrimPrefix(loc, "/issues/")
+	num := "#" + strings.TrimPrefix(loc, "/w/default/issues/")
 
 	// The default (open) list shows the new issue by title and number.
-	status, _, body := e2eGet(t, srv, "/issues")
+	status, _, body := e2eGet(t, srv, "/w/default/issues")
 	if status != http.StatusOK {
 		t.Fatalf("GET /issues status = %d, want 200", status)
 	}
@@ -150,11 +150,11 @@ func TestE2EIssueLifecycle(t *testing.T) {
 		t.Error("detail should show the Closed badge")
 	}
 
-	_, _, body = e2eGet(t, srv, "/issues")
+	_, _, body = e2eGet(t, srv, "/w/default/issues")
 	if strings.Contains(body, `href="`+loc+`"`) {
 		t.Error("closed issue should not appear in the default (open) list")
 	}
-	_, _, body = e2eGet(t, srv, "/issues?status=closed")
+	_, _, body = e2eGet(t, srv, "/w/default/issues?status=closed")
 	if !strings.Contains(body, `href="`+loc+`"`) || !strings.Contains(body, "Renamed") {
 		t.Error("closed issue should appear on the closed tab")
 	}
@@ -175,7 +175,7 @@ func TestE2EIssueLifecycle(t *testing.T) {
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("POST %s/delete status = %d, want 303", loc, resp.StatusCode)
 	}
-	if loc2 := resp.Header.Get("Location"); loc2 != "/issues" {
+	if loc2 := resp.Header.Get("Location"); loc2 != "/w/default/issues" {
 		t.Fatalf("delete redirect = %q, want /issues", loc2)
 	}
 	status, hdr, body := e2eGet(t, srv, loc)
@@ -257,7 +257,7 @@ func TestE2ECommentsAndValidation(t *testing.T) {
 		t.Error("invalid comments must not be persisted")
 	}
 
-	resp = postForm(t, srv.Client(), srv.URL+"/issues/999/comments", url.Values{
+	resp = postForm(t, srv.Client(), srv.URL+"/w/default/issues/999/comments", url.Values{
 		"body": {"valid comment"},
 	})
 	getBody(t, resp)
@@ -337,7 +337,7 @@ func TestE2EListInteractions(t *testing.T) {
 	// false-match the issue-row-main / issue-row-meta children.
 	countRows := func(body string) int { return strings.Count(body, `class="issue-row"`) }
 
-	status, _, body := e2eGet(t, srv, "/issues")
+	status, _, body := e2eGet(t, srv, "/w/default/issues")
 	if status != http.StatusOK {
 		t.Fatalf("GET /issues status = %d, want 200", status)
 	}
@@ -355,7 +355,7 @@ func TestE2EListInteractions(t *testing.T) {
 		}
 	}
 
-	_, _, body = e2eGet(t, srv, "/issues?status=closed")
+	_, _, body = e2eGet(t, srv, "/w/default/issues?status=closed")
 	if n := countRows(body); n != len(closedSeedTitles) {
 		t.Errorf("closed list rendered %d rows, want %d", n, len(closedSeedTitles))
 	}
@@ -372,7 +372,7 @@ func TestE2EListInteractions(t *testing.T) {
 
 	// q searches bodies, not just titles: "trigram" appears only in the
 	// body of "Search slows down with 10,000+ records" (seed.go).
-	_, _, body = e2eGet(t, srv, "/issues?q=trigram")
+	_, _, body = e2eGet(t, srv, "/w/default/issues?q=trigram")
 	if n := countRows(body); n != 1 {
 		t.Errorf("q=trigram rendered %d rows, want 1", n)
 	}
@@ -386,8 +386,8 @@ func TestE2EListInteractions(t *testing.T) {
 	// Sort flips the row order. Seed ages are fixed relative to now:
 	// "Update screenshots…" (8h) is the newest seed and "Crash…" (6.5d) the
 	// oldest — assert their relative positions, not absolute offsets.
-	_, _, newestFirst := e2eGet(t, srv, "/issues?status=all")
-	_, _, oldestFirst := e2eGet(t, srv, "/issues?status=all&sort=oldest")
+	_, _, newestFirst := e2eGet(t, srv, "/w/default/issues?status=all")
+	_, _, oldestFirst := e2eGet(t, srv, "/w/default/issues?status=all&sort=oldest")
 	shotsIdx := strings.Index(newestFirst, "Update screenshots in the user manual")
 	crashIdx := strings.Index(newestFirst, "Crash when opening an empty project")
 	if shotsIdx < 0 || crashIdx < 0 {
@@ -418,7 +418,7 @@ func TestE2EListInteractions(t *testing.T) {
 	if bugID == 0 {
 		t.Fatal("seeded Bug label not found")
 	}
-	_, _, body = e2eGet(t, srv, "/issues?label="+strconv.FormatInt(bugID, 10))
+	_, _, body = e2eGet(t, srv, "/w/default/issues?label="+strconv.FormatInt(bugID, 10))
 	if n := countRows(body); n != 2 {
 		t.Errorf("label=Bug rendered %d rows, want 2", n)
 	}
@@ -446,7 +446,7 @@ func TestE2EListInteractions(t *testing.T) {
 		e2eCreateIssue(t, srv, url.Values{"title": {"Filler issue " + strconv.Itoa(i)}})
 	}
 
-	status, _, body = e2eGet(t, srv, "/issues?status=all&page=999")
+	status, _, body = e2eGet(t, srv, "/w/default/issues?status=all&page=999")
 	if status != http.StatusOK {
 		t.Fatalf("GET page=999 status = %d, want 200", status)
 	}
@@ -460,7 +460,7 @@ func TestE2EListInteractions(t *testing.T) {
 		t.Error("clamped last page should hold only the oldest rows")
 	}
 
-	status, _, body = e2eGet(t, srv, "/issues?status=all&page=abc")
+	status, _, body = e2eGet(t, srv, "/w/default/issues?status=all&page=abc")
 	if status != http.StatusOK {
 		t.Fatalf("GET page=abc status = %d, want 200", status)
 	}
@@ -478,7 +478,7 @@ func TestE2EListInteractions(t *testing.T) {
 func TestE2ECSRF(t *testing.T) {
 	srv, _ := newRealServer(t) // empty store: any forged create would be visible
 
-	resp := postFormWithHeaders(t, srv.URL+"/issues", url.Values{
+	resp := postFormWithHeaders(t, srv.URL+"/w/default/issues", url.Values{
 		"title": {"Cross-site forged issue"},
 		"body":  {"forged"},
 	}, map[string]string{"Sec-Fetch-Site": "cross-site"})
@@ -489,7 +489,7 @@ func TestE2ECSRF(t *testing.T) {
 
 	// Without Sec-Fetch-Site the middleware falls back to comparing the
 	// Origin host with the request host; a foreign Origin is rejected too.
-	resp = postFormWithHeaders(t, srv.URL+"/issues", url.Values{
+	resp = postFormWithHeaders(t, srv.URL+"/w/default/issues", url.Values{
 		"title": {"Origin forged issue"},
 	}, map[string]string{"Origin": "http://evil.example"})
 	resp.Body.Close()
@@ -497,7 +497,7 @@ func TestE2ECSRF(t *testing.T) {
 		t.Fatalf("foreign-Origin POST status = %d, want 403", resp.StatusCode)
 	}
 
-	_, _, body := e2eGet(t, srv, "/issues")
+	_, _, body := e2eGet(t, srv, "/w/default/issues")
 	for _, forged := range []string{"Cross-site forged issue", "Origin forged issue"} {
 		if strings.Contains(body, forged) {
 			t.Errorf("rejected POST must not create %q", forged)
@@ -507,14 +507,14 @@ func TestE2ECSRF(t *testing.T) {
 		t.Error("list should still render the empty state after rejected POSTs")
 	}
 
-	resp = postFormWithHeaders(t, srv.URL+"/issues", url.Values{
+	resp = postFormWithHeaders(t, srv.URL+"/w/default/issues", url.Values{
 		"title": {"Same-origin issue"},
 	}, map[string]string{"Sec-Fetch-Site": "same-origin"})
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("same-origin POST status = %d, want 303", resp.StatusCode)
 	}
-	if _, _, body := e2eGet(t, srv, "/issues"); !strings.Contains(body, "Same-origin issue") {
+	if _, _, body := e2eGet(t, srv, "/w/default/issues"); !strings.Contains(body, "Same-origin issue") {
 		t.Error("same-origin POST should have created the issue")
 	}
 }
@@ -526,9 +526,9 @@ func TestE2ESeededDataRenders(t *testing.T) {
 	srv, st := newSeededServer(t)
 	ctx := context.Background()
 
-	status, _, body := e2eGet(t, srv, "/issues?status=all")
+	status, _, body := e2eGet(t, srv, "/w/default/issues?status=all")
 	if status != http.StatusOK {
-		t.Fatalf("GET /issues?status=all status = %d, want 200", status)
+		t.Fatalf("GET /w/default/issues?status=all status = %d, want 200", status)
 	}
 	if n := strings.Count(body, `class="issue-row"`); n < 6 {
 		t.Errorf("seeded list rendered %d rows, want at least 6", n)
@@ -559,7 +559,7 @@ func TestE2ESeededDataRenders(t *testing.T) {
 
 	// Pick a seeded issue through the store instead of assuming id=1: the
 	// oldest row is "Crash when opening an empty project" (age 6.5d).
-	issues, _, err := st.ListIssues(ctx, store.ListFilter{Status: "all", Sort: "oldest", PerPage: 1})
+	issues, _, err := st.ListIssues(ctx, 1, store.ListFilter{Status: "all", Sort: "oldest", PerPage: 1})
 	if err != nil {
 		t.Fatalf("ListIssues: %v", err)
 	}
@@ -570,7 +570,7 @@ func TestE2ESeededDataRenders(t *testing.T) {
 	if seeded.Title != "Crash when opening an empty project" {
 		t.Fatalf("oldest seed = %q, want the Crash issue", seeded.Title)
 	}
-	status, _, body = e2eGet(t, srv, "/issues/"+strconv.FormatInt(seeded.ID, 10))
+	status, _, body = e2eGet(t, srv, "/w/default/issues/"+strconv.FormatInt(seeded.ID, 10))
 	if status != http.StatusOK {
 		t.Fatalf("GET detail status = %d, want 200", status)
 	}
@@ -593,7 +593,7 @@ func TestE2ESeededDataRenders(t *testing.T) {
 
 func TestAPINotMountedWithoutToken(t *testing.T) {
 	srv, _ := newRealServer(t) // New(st) — no WithAPIToken
-	status, _, body := e2eGet(t, srv, "/api/v1/issues")
+	status, _, body := e2eGet(t, srv, "/api/v1/w/default/issues")
 	if status != http.StatusNotFound {
 		t.Fatalf("GET /api/v1/issues without token = %d, want 404", status)
 	}
@@ -612,7 +612,7 @@ func TestAPIMountedWithToken(t *testing.T) {
 	srv := httptest.NewServer(New(st, WithAPIToken("secret-token")))
 	t.Cleanup(srv.Close)
 
-	resp, err := srv.Client().Get(srv.URL + "/api/v1/issues")
+	resp, err := srv.Client().Get(srv.URL + "/api/v1/w/default/issues")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -624,7 +624,7 @@ func TestAPIMountedWithToken(t *testing.T) {
 		t.Fatalf("401 Content-Type = %q, want application/json", ct)
 	}
 
-	req, _ := http.NewRequest("GET", srv.URL+"/api/v1/issues", nil)
+	req, _ := http.NewRequest("GET", srv.URL+"/api/v1/w/default/issues", nil)
 	req.Header.Set("Authorization", "Bearer secret-token")
 	resp, err = srv.Client().Do(req)
 	if err != nil {

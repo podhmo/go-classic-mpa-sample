@@ -61,8 +61,9 @@ func listWindow[E any](ctx context.Context, page, perPage int,
 // Client calls the JSON API on a remote issues server. The zero-ish use is
 // New(server, token); every method takes a context.
 type Client struct {
-	base  string // server root, e.g. http://127.0.0.1:8080 (no trailing slash)
+	base  string // server root + /api/v1, e.g. http://127.0.0.1:8080/api/v1
 	token string
+	ws    string // workspace slug; "" means the unscoped client
 	hc    *http.Client
 }
 
@@ -92,6 +93,27 @@ func New(server, token string) *Client {
 		token: token,
 		hc:    HTTPClient,
 	}
+}
+
+// In returns a copy of the client scoped to workspace slug — its
+// issue/discussion calls go under /api/v1/w/{slug}/... . Workspace
+// management calls (ListWorkspaces etc.) and global resources (labels,
+// categories) are unaffected. An empty slug leaves the client unchanged.
+func (c *Client) In(slug string) *Client {
+	out := *c
+	out.ws = slug
+	return &out
+}
+
+// wsPath prefixes a workspace resource path ("issues/1") with the
+// /w/{slug} segment. The empty ws keeps the bare path — the unscoped
+// client is only useful for /labels, /workspaces and `issues api`-style
+// raw calls anyway.
+func (c *Client) wsPath(p string) string {
+	if c.ws == "" {
+		return "/" + p
+	}
+	return "/w/" + c.ws + "/" + p
 }
 
 // Error is a non-2xx API response with the server's error message. It is

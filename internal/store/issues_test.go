@@ -64,7 +64,7 @@ func TestCreateAndGetIssue(t *testing.T) {
 	bug := mustLabel(t, s, "Bug", "#d73a4a")
 	feat := mustLabel(t, s, "Feature", "#0075ca")
 
-	id, err := s.CreateIssue(ctx, IssueInput{
+	id, err := s.CreateIssue(ctx, 1, IssueInput{
 		Title: "first issue", Body: "hello body", LabelIDs: []int64{feat, bug},
 	}, 0)
 	if err != nil {
@@ -103,14 +103,14 @@ func TestIssueIDsNotReused(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	id1, err := s.CreateIssue(ctx, IssueInput{Title: "one"}, 0)
+	id1, err := s.CreateIssue(ctx, 1, IssueInput{Title: "one"}, 0)
 	if err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
 	if err := s.DeleteIssue(ctx, id1); err != nil {
 		t.Fatalf("DeleteIssue: %v", err)
 	}
-	id2, err := s.CreateIssue(ctx, IssueInput{Title: "two"}, 0)
+	id2, err := s.CreateIssue(ctx, 1, IssueInput{Title: "two"}, 0)
 	if err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestUpdateIssue(t *testing.T) {
 	feat := mustLabel(t, s, "Feature", "#0075ca")
 	doc := mustLabel(t, s, "Docs", "#1f6feb")
 
-	id, err := s.CreateIssue(ctx, IssueInput{Title: "old", Body: "old body", LabelIDs: []int64{bug, feat}}, 0)
+	id, err := s.CreateIssue(ctx, 1, IssueInput{Title: "old", Body: "old body", LabelIDs: []int64{bug, feat}}, 0)
 	if err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestIssueLabelsSkipUnknownAndDuplicates(t *testing.T) {
 
 	bug := mustLabel(t, s, "Bug", "#d73a4a")
 
-	id, err := s.CreateIssue(ctx, IssueInput{
+	id, err := s.CreateIssue(ctx, 1, IssueInput{
 		Title: "x", LabelIDs: []int64{bug, bug, 99999},
 	}, 0)
 	if err != nil {
@@ -192,7 +192,7 @@ func TestSetIssueStatus(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	id, err := s.CreateIssue(ctx, IssueInput{Title: "x"}, 0)
+	id, err := s.CreateIssue(ctx, 1, IssueInput{Title: "x"}, 0)
 	if err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
@@ -228,7 +228,7 @@ func TestSetIssueStatusUpdatedAt(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	id, err := s.CreateIssue(ctx, IssueInput{Title: "x"}, 0)
+	id, err := s.CreateIssue(ctx, 1, IssueInput{Title: "x"}, 0)
 	if err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
@@ -270,7 +270,7 @@ func TestDeleteIssue(t *testing.T) {
 	ctx := context.Background()
 
 	bug := mustLabel(t, s, "Bug", "#d73a4a")
-	id, err := s.CreateIssue(ctx, IssueInput{Title: "gone", LabelIDs: []int64{bug}}, 0)
+	id, err := s.CreateIssue(ctx, 1, IssueInput{Title: "gone", LabelIDs: []int64{bug}}, 0)
 	if err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
@@ -307,7 +307,7 @@ func TestComments(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	id, err := s.CreateIssue(ctx, IssueInput{Title: "threaded"}, 0)
+	id, err := s.CreateIssue(ctx, 1, IssueInput{Title: "threaded"}, 0)
 	if err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
@@ -345,7 +345,7 @@ func TestCreateCommentBumpsIssueUpdatedAt(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	id, err := s.CreateIssue(ctx, IssueInput{Title: "x"}, 0)
+	id, err := s.CreateIssue(ctx, 1, IssueInput{Title: "x"}, 0)
 	if err != nil {
 		t.Fatalf("CreateIssue: %v", err)
 	}
@@ -411,7 +411,7 @@ func TestListIssues(t *testing.T) {
 	feat := mustLabel(t, s, "Feature", "#0075ca")
 
 	mk := func(title, body string, age time.Duration, labels ...int64) int64 {
-		id, err := s.CreateIssue(ctx, IssueInput{Title: title, Body: body, LabelIDs: labels}, 0)
+		id, err := s.CreateIssue(ctx, 1, IssueInput{Title: title, Body: body, LabelIDs: labels}, 0)
 		if err != nil {
 			t.Fatalf("CreateIssue(%q): %v", title, err)
 		}
@@ -429,7 +429,7 @@ func TestListIssues(t *testing.T) {
 
 	check := func(name string, f ListFilter, wantTotal int, wantIDs ...int64) {
 		t.Helper()
-		issues, total, err := s.ListIssues(ctx, f)
+		issues, total, err := s.ListIssues(ctx, 1, f)
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
@@ -453,28 +453,28 @@ func TestListIssues(t *testing.T) {
 	check("oldest first", ListFilter{Status: "all", Sort: "oldest"}, 4, i4, i1, i2, i3)
 	check("newest explicit", ListFilter{Status: "all", Sort: "newest"}, 4, i3, i2, i1, i4)
 
-	issues, total, err := s.ListIssues(ctx, ListFilter{Status: "all", PerPage: 2, Page: 1})
+	issues, total, err := s.ListIssues(ctx, 1, ListFilter{Status: "all", PerPage: 2, Page: 1})
 	if err != nil {
 		t.Fatalf("page1: %v", err)
 	}
 	if total != 4 || !equalIDs(issueIDs(issues), i3, i2) {
 		t.Fatalf("page1: ids=%v total=%d", issueIDs(issues), total)
 	}
-	issues, _, err = s.ListIssues(ctx, ListFilter{Status: "all", PerPage: 2, Page: 2})
+	issues, _, err = s.ListIssues(ctx, 1, ListFilter{Status: "all", PerPage: 2, Page: 2})
 	if err != nil {
 		t.Fatalf("page2: %v", err)
 	}
 	if !equalIDs(issueIDs(issues), i1, i4) {
 		t.Fatalf("page2: ids=%v", issueIDs(issues))
 	}
-	issues, total, err = s.ListIssues(ctx, ListFilter{Status: "all", PerPage: 2, Page: 3})
+	issues, total, err = s.ListIssues(ctx, 1, ListFilter{Status: "all", PerPage: 2, Page: 3})
 	if err != nil {
 		t.Fatalf("page3: %v", err)
 	}
 	if total != 4 || len(issues) != 0 {
 		t.Fatalf("page3: len=%d total=%d", len(issues), total)
 	}
-	issues, _, err = s.ListIssues(ctx, ListFilter{Status: "all", PerPage: 2, Page: 0})
+	issues, _, err = s.ListIssues(ctx, 1, ListFilter{Status: "all", PerPage: 2, Page: 0})
 	if err != nil {
 		t.Fatalf("page0: %v", err)
 	}
@@ -482,7 +482,7 @@ func TestListIssues(t *testing.T) {
 		t.Fatalf("page0: ids=%v", issueIDs(issues))
 	}
 
-	issues, _, err = s.ListIssues(ctx, ListFilter{LabelID: bug})
+	issues, _, err = s.ListIssues(ctx, 1, ListFilter{LabelID: bug})
 	if err != nil {
 		t.Fatalf("label populated: %v", err)
 	}

@@ -31,17 +31,22 @@ func run(t *testing.T, o Options, args ...string) (code int, stdout, stderr stri
 func localOptions(t *testing.T, dbPath string) Options {
 	t.Helper()
 	return Options{
-		OpenLocal: func(string) (Backend, io.Closer, error) {
+		OpenLocal: func(ctx context.Context, _ string, ws string) (Backend, io.Closer, error) {
 			st, err := store.Open(dbPath)
 			if err != nil {
 				return nil, nil, err
 			}
-			return st, st, nil
+			be, err := st.In(ctx, ws)
+			if err != nil {
+				st.Close()
+				return nil, nil, err
+			}
+			return be, st, nil
 		},
 		OpenTokenStore: func(string) (TokenStore, error) {
 			return store.Open(dbPath)
 		},
-		OpenRemote: func(string, string) (Backend, error) {
+		OpenRemote: func(string, string, string) (Backend, error) {
 			t.Fatal("remote backend used in local-mode test")
 			return nil, nil
 		},
@@ -59,7 +64,7 @@ func seedIssue(t *testing.T, dbPath string, title string) int64 {
 		t.Fatal(err)
 	}
 	defer st.Close()
-	id, err := st.CreateIssue(context.Background(),
+	id, err := st.CreateIssue(context.Background(), 1,
 		store.IssueInput{Title: title, Body: "body of " + title}, 0)
 	if err != nil {
 		t.Fatal(err)

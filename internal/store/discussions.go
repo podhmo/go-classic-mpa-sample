@@ -46,14 +46,15 @@ type DiscussionCategory struct {
 // Discussion is one conversation. Answered reports whether any of
 // its threads is marked as the answer (only meaningful for qa categories).
 type Discussion struct {
-	ID        int64
-	Title     string
-	Body      string
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	Category  DiscussionCategory
-	Author    *User // nil for an anonymous post
-	Answered  bool
+	ID          int64
+	WorkspaceID int64
+	Title       string
+	Body        string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	Category    DiscussionCategory
+	Author      *User // nil for an anonymous post
+	Answered    bool
 }
 
 // DiscussionThread is one conversation thread inside a discussion. The
@@ -118,11 +119,15 @@ func (s *Store) ListDiscussionCategories(ctx context.Context) ([]*DiscussionCate
 	return out, rows.Err()
 }
 
-// ListDiscussions returns the page of discussions matching f (each with
-// Category and Answered populated) and the total before pagination.
-func (s *Store) ListDiscussions(ctx context.Context, f DiscussionListFilter) ([]*Discussion, int, error) {
+// ListDiscussions returns the page of discussions in workspace wsID
+// matching f (each with Category and Answered populated) and the total
+// before pagination.
+func (s *Store) ListDiscussions(ctx context.Context, wsID int64, f DiscussionListFilter) ([]*Discussion, int, error) {
 	var conds []string
 	var args []any
+
+	conds = append(conds, "d.workspace_id = ?")
+	args = append(args, wsID)
 
 	if f.CategorySlug != "" {
 		conds = append(conds, "c.slug = ?")
@@ -161,7 +166,7 @@ func (s *Store) ListDiscussions(ctx context.Context, f DiscussionListFilter) ([]
 		perPage = 20
 	}
 
-	q := `SELECT d.id, d.title, d.body, d.created_at, d.updated_at,
+	q := `SELECT d.id, d.workspace_id, d.title, d.body, d.created_at, d.updated_at,
 		c.id, c.name, c.slug, c.description, c.format,
 		u.id, u.name, u.created_at,
 		` + discussionAnsweredCond + `
@@ -196,10 +201,11 @@ const discussionAnsweredCond = `EXISTS (
 )`
 
 // GetDiscussion returns one discussion with Category and Answered, or
-// ErrNotFound.
+// ErrNotFound. The lookup is global — callers that need workspace scoping
+// compare Discussion.WorkspaceID against their context.
 func (s *Store) GetDiscussion(ctx context.Context, id int64) (*Discussion, error) {
 	d, err := scanDiscussion(s.db.QueryRowContext(ctx,
-		`SELECT d.id, d.title, d.body, d.created_at, d.updated_at,
+		`SELECT d.id, d.workspace_id, d.title, d.body, d.created_at, d.updated_at,
 			c.id, c.name, c.slug, c.description, c.format,
 			u.id, u.name, u.created_at,
 			`+discussionAnsweredCond+`
@@ -216,11 +222,12 @@ func (s *Store) GetDiscussion(ctx context.Context, id int64) (*Discussion, error
 	return d, nil
 }
 
-// CreateDiscussion inserts a discussion and returns its new ID (also the
-// discussion number; IDs are never reused, and are independent of issue
-// numbers). authorID is the posting user's ID, or 0 for an anonymous post.
-// Returns ErrInvalidCategory when the category does not exist.
-func (s *Store) CreateDiscussion(ctx context.Context, in DiscussionInput, authorID int64) (int64, error) {
+// CreateDiscussion inserts a discussion in workspace wsID and returns
+// its new ID (also the discussion number; IDs are never reused, and are
+// independent of issue numbers). authorID is the posting user's ID, or 0
+// for an anonymous post. Returns ErrInvalidCategory when the category
+// does not exist.
+func (s *Store) CreateDiscussion(ctx context.Context, wsID int64, in DiscussionInput, authorID int64) (int64, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
@@ -232,8 +239,8 @@ func (s *Store) CreateDiscussion(ctx context.Context, in DiscussionInput, author
 	}
 	now := time.Now().UTC().Unix()
 	res, err := tx.ExecContext(ctx,
-		"INSERT INTO discussions(category_id, title, body, created_at, updated_at, author_id) VALUES(?, ?, ?, ?, ?, ?)",
-		in.CategoryID, in.Title, in.Body, now, now, nullID(authorID))
+		"INSERT INTO discussions(workspace_id, category_id, title, body, created_at, updated_at, author_id) VALUES(?, ?, ?, ?, ?, ?, ?)",
+		wsID, in.CategoryID, in.Title, in.Body, now, now, nullID(authorID))
 	if err != nil {
 		return 0, err
 	}
@@ -562,7 +569,7 @@ func scanDiscussion(s scanner) (*Discussion, error) {
 	var aname sql.NullString
 	var acreated sql.NullInt64
 	var answered int64
-	if err := s.Scan(&d.ID, &d.Title, &d.Body, &c, &u,
+	if err := s.Scan(&d.ID, &d.WorkspaceID, &d.Title, &d.Body, &c, &u,
 		&d.Category.ID, &d.Category.Name, &d.Category.Slug, &d.Category.Description, &d.Category.Format,
 		&aid, &aname, &acreated, &answered); err != nil {
 		return nil, err

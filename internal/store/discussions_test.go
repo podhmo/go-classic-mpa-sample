@@ -27,7 +27,7 @@ func mustCategory(t *testing.T, s *Store, name, slug, format string) int64 {
 // mustDiscussion creates a discussion and returns its ID.
 func mustDiscussion(t *testing.T, s *Store, categoryID int64, title string) int64 {
 	t.Helper()
-	id, err := s.CreateDiscussion(context.Background(),
+	id, err := s.CreateDiscussion(context.Background(), 1,
 		DiscussionInput{Title: title, Body: "body", CategoryID: categoryID}, 0)
 	if err != nil {
 		t.Fatalf("CreateDiscussion: %v", err)
@@ -79,7 +79,7 @@ func TestDiscussionCategoryValidation(t *testing.T) {
 	ctx := context.Background()
 	cat := mustCategory(t, s, "General", "general", CategoryFormatOpen)
 
-	if _, err := s.CreateDiscussion(ctx, DiscussionInput{Title: "t", CategoryID: 999}, 0); !errors.Is(err, ErrInvalidCategory) {
+	if _, err := s.CreateDiscussion(ctx, 1, DiscussionInput{Title: "t", CategoryID: 999}, 0); !errors.Is(err, ErrInvalidCategory) {
 		t.Fatalf("create with unknown category: %v", err)
 	}
 	id := mustDiscussion(t, s, cat, "ok")
@@ -98,13 +98,13 @@ func TestListDiscussions(t *testing.T) {
 	d2 := mustDiscussion(t, s, qa, "why empty export")
 	mustDiscussion(t, s, qa, "keyboard shortcuts")
 
-	list, total, err := s.ListDiscussions(ctx, DiscussionListFilter{CategorySlug: "qa"})
+	list, total, err := s.ListDiscussions(ctx, 1, DiscussionListFilter{CategorySlug: "qa"})
 	if err != nil || total != 2 {
 		t.Fatalf("category=qa: total=%d err=%v", total, err)
 	}
 	_ = list
 
-	_, total, err = s.ListDiscussions(ctx, DiscussionListFilter{Query: "keyboard"})
+	_, total, err = s.ListDiscussions(ctx, 1, DiscussionListFilter{Query: "keyboard"})
 	if err != nil || total != 1 {
 		t.Fatalf("q=keyboard: total=%d err=%v", total, err)
 	}
@@ -119,16 +119,16 @@ func TestListDiscussions(t *testing.T) {
 	if err := s.SetThreadAnswer(ctx, d2, tid, true); err != nil {
 		t.Fatalf("SetThreadAnswer: %v", err)
 	}
-	_, total, err = s.ListDiscussions(ctx, DiscussionListFilter{Answered: "yes"})
+	_, total, err = s.ListDiscussions(ctx, 1, DiscussionListFilter{Answered: "yes"})
 	if err != nil || total != 1 {
 		t.Fatalf("answered=yes: total=%d err=%v", total, err)
 	}
-	_, total, err = s.ListDiscussions(ctx, DiscussionListFilter{Answered: "no"})
+	_, total, err = s.ListDiscussions(ctx, 1, DiscussionListFilter{Answered: "no"})
 	if err != nil || total != 2 {
 		t.Fatalf("answered=no: total=%d err=%v", total, err)
 	}
 
-	list, _, err = s.ListDiscussions(ctx, DiscussionListFilter{Sort: "oldest"})
+	list, _, err = s.ListDiscussions(ctx, 1, DiscussionListFilter{Sort: "oldest"})
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}

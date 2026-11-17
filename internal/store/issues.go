@@ -16,17 +16,19 @@ const (
 	StatusClosed = "closed"
 )
 
-// Issue is a single tracker entry. Labels is populated by read methods.
-// Author is the posting account, or nil for an anonymous post.
+// Issue is a single tracker entry belonging to one workspace. Labels is
+// populated by read methods. Author is the posting account, or nil for an
+// anonymous post.
 type Issue struct {
-	ID        int64
-	Title     string
-	Body      string
-	Status    string // StatusOpen or StatusClosed
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	Labels    []Label
-	Author    *User
+	ID          int64
+	WorkspaceID int64
+	Title       string
+	Body        string
+	Status      string // StatusOpen or StatusClosed
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	Labels      []Label
+	Author      *User
 }
 
 // Comment is a plaintext comment on an issue, shown in chronological order.
@@ -63,11 +65,15 @@ type ListFilter struct {
 	PerPage int    // <= 0 defaults to 20
 }
 
-// ListIssues returns the page of issues matching f (each with Labels
-// populated) and the total number of matching issues before pagination.
-func (s *Store) ListIssues(ctx context.Context, f ListFilter) ([]*Issue, int, error) {
+// ListIssues returns the page of issues in workspace wsID matching f
+// (each with Labels populated) and the total number of matching issues
+// before pagination.
+func (s *Store) ListIssues(ctx context.Context, wsID int64, f ListFilter) ([]*Issue, int, error) {
 	var conds []string
 	var args []any
+
+	conds = append(conds, "i.workspace_id = ?")
+	args = append(args, wsID)
 
 	status := f.Status
 	if status == "" {
@@ -106,7 +112,7 @@ func (s *Store) ListIssues(ctx context.Context, f ListFilter) ([]*Issue, int, er
 		perPage = 20
 	}
 
-	q := `SELECT i.id, i.title, i.body, i.status, i.created_at, i.updated_at,
+	q := `SELECT i.id, i.workspace_id, i.title, i.body, i.status, i.created_at, i.updated_at,
 		u.id, u.name, u.created_at
 		FROM issues i LEFT JOIN users u ON u.id = i.author_id` + where +
 		" ORDER BY i.created_at " + dir + ", i.id " + dir + " LIMIT ? OFFSET ?"
@@ -135,10 +141,12 @@ func (s *Store) ListIssues(ctx context.Context, f ListFilter) ([]*Issue, int, er
 	return issues, total, nil
 }
 
-// GetIssue returns one issue with Labels, or ErrNotFound.
+// GetIssue returns one issue with Labels, or ErrNotFound. The lookup is
+// global — callers that need workspace scoping compare Issue.WorkspaceID
+// against their context.
 func (s *Store) GetIssue(ctx context.Context, id int64) (*Issue, error) {
 	i, err := scanIssue(s.db.QueryRowContext(ctx,
-		`SELECT i.id, i.title, i.body, i.status, i.created_at, i.updated_at,
+		`SELECT i.id, i.workspace_id, i.title, i.body, i.status, i.created_at, i.updated_at,
 			u.id, u.name, u.created_at
 			FROM issues i LEFT JOIN users u ON u.id = i.author_id WHERE i.id = ?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -153,10 +161,11 @@ func (s *Store) GetIssue(ctx context.Context, id int64) (*Issue, error) {
 	return i, nil
 }
 
-// CreateIssue inserts an open issue and returns its new ID (also the issue
-// number; IDs are never reused). authorID is the posting user's ID, or 0
-// for an anonymous post.
-func (s *Store) CreateIssue(ctx context.Context, in IssueInput, authorID int64) (int64, error) {
+// CreateIssue inserts an open issue in workspace wsID and returns its
+// new ID (also the issue number; IDs are never reused and stay global
+// across workspaces). authorID is the posting user's ID, or 0 for an
+// anonymous post.
+func (s *Store) CreateIssue(ctx context.Context, wsID int64, in IssueInput, authorID int64) (int64, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
@@ -165,8 +174,8 @@ func (s *Store) CreateIssue(ctx context.Context, in IssueInput, authorID int64) 
 
 	now := time.Now().UTC().Unix()
 	res, err := tx.ExecContext(ctx,
-		"INSERT INTO issues(title, body, status, created_at, updated_at, author_id) VALUES(?, ?, ?, ?, ?, ?)",
-		in.Title, in.Body, StatusOpen, now, now, nullID(authorID))
+		"INSERT INTO issues(workspace_id, title, body, status, created_at, updated_at, author_id) VALUES(?, ?, ?, ?, ?, ?, ?)",
+		wsID, in.Title, in.Body, StatusOpen, now, now, nullID(authorID))
 	if err != nil {
 		return 0, err
 	}
@@ -393,7 +402,7 @@ func scanIssue(s scanner) (*Issue, error) {
 	var aid sql.NullInt64
 	var aname sql.NullString
 	var acreated sql.NullInt64
-	if err := s.Scan(&i.ID, &i.Title, &i.Body, &i.Status, &c, &u, &aid, &aname, &acreated); err != nil {
+	if err := s.Scan(&i.ID, &i.WorkspaceID, &i.Title, &i.Body, &i.Status, &c, &u, &aid, &aname, &acreated); err != nil {
 		return nil, err
 	}
 	i.CreatedAt = time.Unix(c, 0).UTC()

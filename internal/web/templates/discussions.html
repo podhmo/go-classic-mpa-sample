@@ -7,7 +7,7 @@
   <h1>Discussions</h1>
 </div>
 
-<form method="get" action="/discussions" class="filter-bar" role="search" aria-label="Filter discussions">
+<form method="get" action="/w/{{.Workspace.Slug}}/discussions" class="filter-bar" role="search" aria-label="Filter discussions">
   <div class="filter-field">
     <label for="filter-q">Search</label>
     <input type="search" id="filter-q" name="q" value="{{.Filter.Query}}" placeholder="Title or body">
@@ -38,7 +38,7 @@
   </div>
   <div class="filter-actions">
     <button type="submit" class="btn">Apply</button>
-    {{if .HasActiveFilter}}<a class="btn btn-quiet" href="/discussions">Clear</a>{{end}}
+    {{if .HasActiveFilter}}<a class="btn btn-quiet" href="/w/{{.Workspace.Slug}}/discussions">Clear</a>{{end}}
   </div>
 </form>
 
@@ -48,11 +48,11 @@
   {{range .Discussions}}
   <li class="issue-row">
     <div class="issue-row-main">
-      <a class="issue-title" href="/discussions/{{.ID}}">{{.Title}}</a>
+      <a class="issue-title" href="/w/{{$.Workspace.Slug}}/discussions/{{.ID}}">{{.Title}}</a>
       <span class="issue-num">#{{.ID}}</span>
     </div>
     <div class="issue-row-meta">
-      <a class="category-badge" href="/discussions?category={{.Category.Slug}}">{{.Category.Name}}</a>
+      <a class="category-badge" href="/w/{{$.Workspace.Slug}}/discussions?category={{.Category.Slug}}">{{.Category.Name}}</a>
       {{if .Answered}}<span class="badge badge-answered">Answered</span>{{end}}
       <time class="issue-time" datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .CreatedAt}}</time>
     </div>
@@ -63,13 +63,13 @@
 {{if gt .TotalPages 1}}
 <nav class="pagination" aria-label="Pagination">
   {{if gt .Page 1}}
-  <a class="btn" href="{{dListURL .Filter (sub .Page 1)}}">Previous</a>
+  <a class="btn" href="{{dListURL .Workspace .Filter (sub .Page 1)}}">Previous</a>
   {{else}}
   <span class="btn btn-disabled" aria-disabled="true">Previous</span>
   {{end}}
   <span class="page-info">Page {{.Page}} of {{.TotalPages}}</span>
   {{if lt .Page .TotalPages}}
-  <a class="btn" href="{{dListURL .Filter (add .Page 1)}}">Next</a>
+  <a class="btn" href="{{dListURL .Workspace .Filter (add .Page 1)}}">Next</a>
   {{else}}
   <span class="btn btn-disabled" aria-disabled="true">Next</span>
   {{end}}
@@ -80,10 +80,10 @@
 <div class="empty-state">
   {{if .HasActiveFilter}}
   <p class="empty-lead">No discussions match the current filters.</p>
-  <p>Try a different keyword or <a href="/discussions">clear the filters</a>.</p>
+  <p>Try a different keyword or <a href="/w/{{.Workspace.Slug}}/discussions">clear the filters</a>.</p>
   {{else}}
   <p class="empty-lead">No discussions here yet.</p>
-  <p><a class="btn btn-primary" href="/discussions/new">Start the first discussion</a></p>
+  <p><a class="btn btn-primary" href="/w/{{.Workspace.Slug}}/discussions/new">Start the first discussion</a></p>
   {{end}}
 </div>
 {{end}}

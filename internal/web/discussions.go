@@ -30,6 +30,7 @@ type discussionListPage struct {
 	RangeEnd        int
 	HasActiveFilter bool
 	Section         string
+	Workspace       *store.Workspace
 	User            *store.User
 }
 
@@ -45,6 +46,7 @@ type discussionDetailPage struct {
 	CommentError  string
 	ThreadDraftID int64 // thread ID whose reply failed validation
 	Section       string
+	Workspace     *store.Workspace
 	User          *store.User
 }
 
@@ -59,6 +61,7 @@ type discussionFormPage struct {
 	Categories  []*store.DiscussionCategory
 	Errors      discussionFormErrors
 	Section     string
+	Workspace   *store.Workspace
 	User        *store.User
 }
 
@@ -77,15 +80,16 @@ type discussionDeletePage struct {
 	Title      string
 	Discussion *store.Discussion
 	Section    string
+	Workspace  *store.Workspace
 	User       *store.User
 }
 
 // listDiscussions handles GET /discussions: category filter, keyword
 // search, answered filter, sorting and pagination.
-func (h *handler) listDiscussions(w http.ResponseWriter, r *http.Request) {
+func (h *handler) listDiscussions(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	f := parseDiscussionFilter(r)
 
-	discussions, total, err := h.store.ListDiscussions(r.Context(), f)
+	discussions, total, err := h.store.ListDiscussions(r.Context(), ws.ID, f)
 	if err != nil {
 		h.internalError(w, r, err)
 		return
@@ -96,7 +100,7 @@ func (h *handler) listDiscussions(w http.ResponseWriter, r *http.Request) {
 	totalPages := (total + perPage - 1) / perPage
 	if total > 0 && f.Page > totalPages {
 		f.Page = totalPages
-		discussions, total, err = h.store.ListDiscussions(r.Context(), f)
+		discussions, total, err = h.store.ListDiscussions(r.Context(), ws.ID, f)
 		if err != nil {
 			h.internalError(w, r, err)
 			return
@@ -119,8 +123,9 @@ func (h *handler) listDiscussions(w http.ResponseWriter, r *http.Request) {
 		TotalPages:  totalPages,
 		HasActiveFilter: f.Query != "" || f.CategorySlug != "" ||
 			f.Answered != "" || f.Sort != "",
-		Section: "discussions",
-		User:    userFromContext(r.Context()),
+		Section:   "discussions",
+		Workspace: ws,
+		User:      userFromContext(r.Context()),
 	}
 	if total > 0 {
 		data.RangeStart = (f.Page-1)*perPage + 1
@@ -133,7 +138,7 @@ func (h *handler) listDiscussions(w http.ResponseWriter, r *http.Request) {
 }
 
 // newDiscussion renders the empty create form.
-func (h *handler) newDiscussion(w http.ResponseWriter, r *http.Request) {
+func (h *handler) newDiscussion(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	categories, err := h.store.ListDiscussionCategories(r.Context())
 	if err != nil {
 		h.internalError(w, r, err)
@@ -142,23 +147,24 @@ func (h *handler) newDiscussion(w http.ResponseWriter, r *http.Request) {
 	h.r.renderDiscussionForm(w, http.StatusOK, discussionFormPage{
 		Title:       "New discussion",
 		Heading:     "New discussion",
-		Action:      "/discussions",
+		Action:      "/w/" + ws.Slug + "/discussions",
 		SubmitLabel: "Create discussion",
 		Categories:  categories,
 		Section:     "discussions",
+		Workspace:   ws,
 		User:        userFromContext(r.Context()),
 	})
 }
 
 // createDiscussion validates POST /discussions and redirects to the new
 // discussion.
-func (h *handler) createDiscussion(w http.ResponseWriter, r *http.Request) {
+func (h *handler) createDiscussion(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	if !h.parseForm(w, r) {
 		return
 	}
 	in, errs := h.validateDiscussionInput(w, r)
 	if errs == nil {
-		id, err := h.store.CreateDiscussion(r.Context(), *in, authorIDFromContext(r.Context()))
+		id, err := h.store.CreateDiscussion(r.Context(), ws.ID, *in, authorIDFromContext(r.Context()))
 		switch {
 		case errors.Is(err, store.ErrInvalidCategory):
 			errs = &discussionFormErrors{Category: "Category is required."}
@@ -166,17 +172,17 @@ func (h *handler) createDiscussion(w http.ResponseWriter, r *http.Request) {
 			h.internalError(w, r, err)
 			return
 		case err == nil:
-			http.Redirect(w, r, discussionURL(id), http.StatusSeeOther)
+			http.Redirect(w, r, discussionURL(ws, id), http.StatusSeeOther)
 			return
 		}
 	}
-	h.renderDiscussionFormError(w, r, "New discussion", "New discussion",
-		"/discussions", "Create discussion", *in, *errs)
+	h.renderDiscussionFormError(w, r, ws, "New discussion", "New discussion",
+		"/w/"+ws.Slug+"/discussions", "Create discussion", *in, *errs)
 }
 
 // showDiscussion renders the detail page including threaded comments and
 // the comment form.
-func (h *handler) showDiscussion(w http.ResponseWriter, r *http.Request) {
+func (h *handler) showDiscussion(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := parseID(r)
 	if !ok {
 		h.notFound(w, r)
@@ -185,6 +191,9 @@ func (h *handler) showDiscussion(w http.ResponseWriter, r *http.Request) {
 	discussion, err := h.store.GetDiscussion(r.Context(), id)
 	if err != nil {
 		h.discussionError(w, r, err)
+		return
+	}
+	if !h.requireScope(w, r, ws, discussion.WorkspaceID) {
 		return
 	}
 	threads, err := h.store.ListDiscussionThreads(r.Context(), id)
@@ -197,12 +206,13 @@ func (h *handler) showDiscussion(w http.ResponseWriter, r *http.Request) {
 		Discussion: discussion,
 		Threads:    threads,
 		Section:    "discussions",
+		Workspace:  ws,
 		User:       userFromContext(r.Context()),
 	})
 }
 
 // editDiscussion renders the edit form populated with the current values.
-func (h *handler) editDiscussion(w http.ResponseWriter, r *http.Request) {
+func (h *handler) editDiscussion(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := parseID(r)
 	if !ok {
 		h.notFound(w, r)
@@ -213,6 +223,9 @@ func (h *handler) editDiscussion(w http.ResponseWriter, r *http.Request) {
 		h.discussionError(w, r, err)
 		return
 	}
+	if !h.requireScope(w, r, ws, discussion.WorkspaceID) {
+		return
+	}
 	categories, err := h.store.ListDiscussionCategories(r.Context())
 	if err != nil {
 		h.internalError(w, r, err)
@@ -221,7 +234,7 @@ func (h *handler) editDiscussion(w http.ResponseWriter, r *http.Request) {
 	h.r.renderDiscussionForm(w, http.StatusOK, discussionFormPage{
 		Title:       fmt.Sprintf("Edit discussion #%d", discussion.ID),
 		Heading:     fmt.Sprintf("Edit discussion #%d", discussion.ID),
-		Action:      discussionURL(id) + "/edit",
+		Action:      discussionURL(ws, id) + "/edit",
 		SubmitLabel: "Save changes",
 		Input: store.DiscussionInput{
 			Title:      discussion.Title,
@@ -230,13 +243,14 @@ func (h *handler) editDiscussion(w http.ResponseWriter, r *http.Request) {
 		},
 		Categories: categories,
 		Section:    "discussions",
+		Workspace:  ws,
 		User:       userFromContext(r.Context()),
 	})
 }
 
 // updateDiscussion validates POST /discussions/{id}/edit and redirects to
 // the detail page.
-func (h *handler) updateDiscussion(w http.ResponseWriter, r *http.Request) {
+func (h *handler) updateDiscussion(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := parseID(r)
 	if !ok {
 		h.notFound(w, r)
@@ -244,8 +258,12 @@ func (h *handler) updateDiscussion(w http.ResponseWriter, r *http.Request) {
 	}
 	// Same rule as updateIssue: ANY POST to a missing discussion is a 404,
 	// even one that would fail validation.
-	if _, err := h.store.GetDiscussion(r.Context(), id); err != nil {
+	discussion, err := h.store.GetDiscussion(r.Context(), id)
+	if err != nil {
 		h.discussionError(w, r, err)
+		return
+	}
+	if !h.requireScope(w, r, ws, discussion.WorkspaceID) {
 		return
 	}
 	if !h.parseForm(w, r) {
@@ -261,18 +279,18 @@ func (h *handler) updateDiscussion(w http.ResponseWriter, r *http.Request) {
 			h.discussionError(w, r, err)
 			return
 		case err == nil:
-			http.Redirect(w, r, discussionURL(id), http.StatusSeeOther)
+			http.Redirect(w, r, discussionURL(ws, id), http.StatusSeeOther)
 			return
 		}
 	}
-	h.renderDiscussionFormError(w, r,
+	h.renderDiscussionFormError(w, r, ws,
 		fmt.Sprintf("Edit discussion #%d", id), fmt.Sprintf("Edit discussion #%d", id),
-		discussionURL(id)+"/edit", "Save changes", *in, *errs)
+		discussionURL(ws, id)+"/edit", "Save changes", *in, *errs)
 }
 
 // confirmDeleteDiscussion renders the delete confirmation page. Being a
 // GET, it must never delete anything itself.
-func (h *handler) confirmDeleteDiscussion(w http.ResponseWriter, r *http.Request) {
+func (h *handler) confirmDeleteDiscussion(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := parseID(r)
 	if !ok {
 		h.notFound(w, r)
@@ -283,19 +301,31 @@ func (h *handler) confirmDeleteDiscussion(w http.ResponseWriter, r *http.Request
 		h.discussionError(w, r, err)
 		return
 	}
+	if !h.requireScope(w, r, ws, discussion.WorkspaceID) {
+		return
+	}
 	h.r.renderDiscussionDelete(w, http.StatusOK, discussionDeletePage{
 		Title:      fmt.Sprintf("Delete discussion #%d", discussion.ID),
 		Discussion: discussion,
 		Section:    "discussions",
+		Workspace:  ws,
 		User:       userFromContext(r.Context()),
 	})
 }
 
 // deleteDiscussion performs the deletion and returns to the list.
-func (h *handler) deleteDiscussion(w http.ResponseWriter, r *http.Request) {
+func (h *handler) deleteDiscussion(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := parseID(r)
 	if !ok {
 		h.notFound(w, r)
+		return
+	}
+	discussion, err := h.store.GetDiscussion(r.Context(), id)
+	if err != nil {
+		h.discussionError(w, r, err)
+		return
+	}
+	if !h.requireScope(w, r, ws, discussion.WorkspaceID) {
 		return
 	}
 	if !h.parseForm(w, r) {
@@ -305,7 +335,7 @@ func (h *handler) deleteDiscussion(w http.ResponseWriter, r *http.Request) {
 		h.discussionError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, "/discussions", http.StatusSeeOther)
+	http.Redirect(w, r, "/w/"+ws.Slug+"/discussions", http.StatusSeeOther)
 }
 
 // createDiscussionComment validates POST /discussions/{id}/comments — a
@@ -314,10 +344,18 @@ func (h *handler) deleteDiscussion(w http.ResponseWriter, r *http.Request) {
 // X-Partial it answers a fragment instead: the new <li> on success, or the
 // error-marked form (the thread's reply form, or the bottom form)
 // on a validation failure (422).
-func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request) {
+func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := parseID(r)
 	if !ok {
 		h.notFound(w, r)
+		return
+	}
+	discussion0, err := h.store.GetDiscussion(r.Context(), id)
+	if err != nil {
+		h.discussionError(w, r, err)
+		return
+	}
+	if !h.requireScope(w, r, ws, discussion0.WorkspaceID) {
 		return
 	}
 	if !h.parseForm(w, r) {
@@ -351,14 +389,14 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 		switch {
 		case err == nil:
 			if partial {
-				h.renderNewDiscussionComment(w, r, id, threadID, commentID, body)
+				h.renderNewDiscussionComment(w, r, ws, id, threadID, commentID, body)
 				return
 			}
 			anchor := "comment"
 			if threadID == 0 {
 				anchor = "thread"
 			}
-			http.Redirect(w, r, fmt.Sprintf("%s#%s-%d", discussionURL(id), anchor, commentID), http.StatusSeeOther)
+			http.Redirect(w, r, fmt.Sprintf("%s#%s-%d", discussionURL(ws, id), anchor, commentID), http.StatusSeeOther)
 			return
 		case errors.Is(err, store.ErrInvalidThread):
 			errMsg = "Comments can only be added to a thread."
@@ -402,7 +440,7 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 	if partial {
 		if thread != nil {
 			h.r.renderFragment(w, "discussion_detail", "discussion_reply_form", http.StatusUnprocessableEntity,
-				dict("Discussion", discussion, "C", thread,
+				dict("Discussion", discussion, "C", thread, "Workspace", ws,
 					"ThreadDraftID", threadID, "CommentDraft", body, "CommentError", errMsg))
 			return
 		}
@@ -411,6 +449,7 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 				Discussion:   discussion,
 				CommentDraft: body,
 				CommentError: errMsg,
+				Workspace:    ws,
 				User:         userFromContext(r.Context()),
 			})
 		return
@@ -423,6 +462,7 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 		CommentError:  errMsg,
 		ThreadDraftID: threadID,
 		Section:       "discussions",
+		Workspace:     ws,
 		User:          userFromContext(r.Context()),
 	})
 }
@@ -433,7 +473,7 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 // answer button, so it needs the parent discussion's category). Either
 // way the fragment starts with the header meta as a data-swap node — the
 // post bumped discussion.updated_at.
-func (h *handler) renderNewDiscussionComment(w http.ResponseWriter, r *http.Request, id, threadID, commentID int64, body string) {
+func (h *handler) renderNewDiscussionComment(w http.ResponseWriter, r *http.Request, ws *store.Workspace, id, threadID, commentID int64, body string) {
 	discussion, err := h.store.GetDiscussion(r.Context(), id)
 	if err != nil {
 		h.discussionError(w, r, err)
@@ -448,7 +488,7 @@ func (h *handler) renderNewDiscussionComment(w http.ResponseWriter, r *http.Requ
 			CreatedAt: time.Now(),
 		}
 		h.r.renderFragment(w, "discussion_detail", "discussion_reply_append", http.StatusOK,
-			dict("Discussion", discussion, "C", comment))
+			dict("Discussion", discussion, "C", comment, "Workspace", ws))
 		return
 	}
 	thread := &store.DiscussionThread{
@@ -459,7 +499,7 @@ func (h *handler) renderNewDiscussionComment(w http.ResponseWriter, r *http.Requ
 		CreatedAt:    time.Now(),
 	}
 	h.r.renderFragment(w, "discussion_detail", "discussion_comment_append", http.StatusOK,
-		dict("Discussion", discussion, "C", thread))
+		dict("Discussion", discussion, "C", thread, "Workspace", ws))
 }
 
 // setCommentAnswer handles POST /discussions/{id}/comments/{cid}/answer.
@@ -467,7 +507,7 @@ func (h *handler) renderNewDiscussionComment(w http.ResponseWriter, r *http.Requ
 // post, so the route predating the rename still reads naturally. The
 // target state arrives as a hidden field ("1" to mark, "0" to unmark) —
 // the same hidden-field toggle pattern as setStatus.
-func (h *handler) setCommentAnswer(w http.ResponseWriter, r *http.Request) {
+func (h *handler) setCommentAnswer(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := parseID(r)
 	if !ok {
 		h.notFound(w, r)
@@ -476,6 +516,14 @@ func (h *handler) setCommentAnswer(w http.ResponseWriter, r *http.Request) {
 	cid, err := strconv.ParseInt(r.PathValue("cid"), 10, 64)
 	if err != nil || cid < 1 {
 		h.notFound(w, r)
+		return
+	}
+	discussion0, err := h.store.GetDiscussion(r.Context(), id)
+	if err != nil {
+		h.discussionError(w, r, err)
+		return
+	}
+	if !h.requireScope(w, r, ws, discussion0.WorkspaceID) {
 		return
 	}
 	if !h.parseForm(w, r) {
@@ -512,10 +560,10 @@ func (h *handler) setCommentAnswer(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case err == nil:
 		if wantsPartial(r) {
-			h.renderAnswerSwap(w, r, id, cid, prevID)
+			h.renderAnswerSwap(w, r, ws, id, cid, prevID)
 			return
 		}
-		http.Redirect(w, r, fmt.Sprintf("%s#thread-%d", discussionURL(id), cid), http.StatusSeeOther)
+		http.Redirect(w, r, fmt.Sprintf("%s#thread-%d", discussionURL(ws, id), cid), http.StatusSeeOther)
 	case errors.Is(err, store.ErrNotFound):
 		h.notFound(w, r)
 	case errors.Is(err, store.ErrNotAnswerable):
@@ -530,7 +578,7 @@ func (h *handler) setCommentAnswer(w http.ResponseWriter, r *http.Request) {
 // that changed: the toggled thread plus, when the mark moved, the
 // thread that carried it before (prevID, 0 when nothing was marked).
 // Each <li> self-targets by id in the client's replace swap.
-func (h *handler) renderAnswerSwap(w http.ResponseWriter, r *http.Request, id, cid, prevID int64) {
+func (h *handler) renderAnswerSwap(w http.ResponseWriter, r *http.Request, ws *store.Workspace, id, cid, prevID int64) {
 	discussion, err := h.store.GetDiscussion(r.Context(), id)
 	if err != nil {
 		h.discussionError(w, r, err)
@@ -552,7 +600,7 @@ func (h *handler) renderAnswerSwap(w http.ResponseWriter, r *http.Request, id, c
 		return
 	}
 	h.r.renderFragment(w, "discussion_detail", "discussion_comment_swap", http.StatusOK,
-		dict("Discussion", discussion, "Comments", nodes))
+		dict("Discussion", discussion, "Comments", nodes, "Workspace", ws))
 }
 
 // discussionError maps store.ErrNotFound to a 404 page and delegates
@@ -566,7 +614,7 @@ func (h *handler) discussionError(w http.ResponseWriter, r *http.Request, err er
 }
 
 // renderDiscussionFormError re-renders the discussion form with 422.
-func (h *handler) renderDiscussionFormError(w http.ResponseWriter, r *http.Request,
+func (h *handler) renderDiscussionFormError(w http.ResponseWriter, r *http.Request, ws *store.Workspace,
 	title, heading, action, submitLabel string, in store.DiscussionInput, errs discussionFormErrors) {
 	categories, err := h.store.ListDiscussionCategories(r.Context())
 	if err != nil {
@@ -582,12 +630,13 @@ func (h *handler) renderDiscussionFormError(w http.ResponseWriter, r *http.Reque
 		Categories:  categories,
 		Errors:      errs,
 		Section:     "discussions",
+		Workspace:   ws,
 		User:        userFromContext(r.Context()),
 	})
 }
 
-func discussionURL(id int64) string {
-	return fmt.Sprintf("/discussions/%d", id)
+func discussionURL(ws *store.Workspace, id int64) string {
+	return fmt.Sprintf("/w/%s/discussions/%d", ws.Slug, id)
 }
 
 // validateDiscussionInput extracts and validates the discussion form
@@ -637,9 +686,10 @@ func parseDiscussionFilter(r *http.Request) store.DiscussionListFilter {
 	return f
 }
 
-// discussionsURL builds /discussions URLs carrying the current filter
-// state, so pagination and category links preserve active filters.
-func discussionsURL(f store.DiscussionListFilter) string {
+// discussionsURL builds the workspace's /discussions URLs carrying the
+// current filter state, so pagination and category links preserve active
+// filters.
+func discussionsURL(ws *store.Workspace, f store.DiscussionListFilter) string {
 	v := url.Values{}
 	if f.CategorySlug != "" {
 		v.Set("category", f.CategorySlug)
@@ -657,13 +707,13 @@ func discussionsURL(f store.DiscussionListFilter) string {
 		v.Set("page", strconv.Itoa(f.Page))
 	}
 	if enc := v.Encode(); enc != "" {
-		return "/discussions?" + enc
+		return "/w/" + ws.Slug + "/discussions?" + enc
 	}
-	return "/discussions"
+	return "/w/" + ws.Slug + "/discussions"
 }
 
 // dListURL keeps the filter but moves to another page.
-func dListURL(f store.DiscussionListFilter, page int) string {
+func dListURL(ws *store.Workspace, f store.DiscussionListFilter, page int) string {
 	f.Page = page
-	return discussionsURL(f)
+	return discussionsURL(ws, f)
 }

@@ -64,14 +64,14 @@ func TestSchemaObjects(t *testing.T) {
 
 	// All application tables plus sqlite_sequence (AUTOINCREMENT
 	// bookkeeping), sorted by name.
-	wantTables := []string{"api_tokens", "comments", "discussion_categories", "discussion_comments", "discussion_threads", "discussions", "issue_labels", "issues", "labels", "sessions", "sqlite_sequence", "users"}
+	wantTables := []string{"api_tokens", "comments", "discussion_categories", "discussion_comments", "discussion_threads", "discussions", "issue_labels", "issues", "labels", "sessions", "sqlite_sequence", "users", "workspaces"}
 	if !slices.Equal(tables, wantTables) {
 		t.Errorf("tables = %v, want %v", tables, wantTables)
 	}
 
 	// Only the named indexes from the schema; the UNIQUE/PK backing
 	// indexes (sqlite_autoindex%) must be filtered out.
-	wantIndexes := []string{"idx_api_tokens_user", "idx_comments_issue_created", "idx_dcomments_thread_created", "idx_discussions_category_created", "idx_dthreads_answer", "idx_dthreads_discussion_created", "idx_issue_labels_label", "idx_issues_status_created", "idx_sessions_user"}
+	wantIndexes := []string{"idx_api_tokens_user", "idx_comments_issue_created", "idx_dcomments_thread_created", "idx_discussions_workspace_category_created", "idx_discussions_workspace_created", "idx_dthreads_answer", "idx_dthreads_discussion_created", "idx_issue_labels_label", "idx_issues_workspace_status_created", "idx_sessions_user"}
 	if !slices.Equal(indexes, wantIndexes) {
 		t.Errorf("indexes = %v, want %v", indexes, wantIndexes)
 	}
@@ -99,7 +99,7 @@ func TestAnalyze(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SchemaObjects after ANALYZE: %v", err)
 	}
-	wantTables := []string{"api_tokens", "comments", "discussion_categories", "discussion_comments", "discussion_threads", "discussions", "issue_labels", "issues", "labels", "sessions", "sqlite_sequence", "users"}
+	wantTables := []string{"api_tokens", "comments", "discussion_categories", "discussion_comments", "discussion_threads", "discussions", "issue_labels", "issues", "labels", "sessions", "sqlite_sequence", "users", "workspaces"}
 	if !slices.Equal(tables, wantTables) {
 		t.Errorf("tables after ANALYZE = %v, want %v", tables, wantTables)
 	}

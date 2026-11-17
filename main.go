@@ -68,6 +68,12 @@ func main() {
 		}
 	}()
 
+	// A database created before workspaces existed needs its default one
+	// before seeds or scoped stores touch it.
+	if err := st.EnsureDefaultWorkspace(context.Background()); err != nil {
+		log.Fatalf("ensure default workspace: %v", err)
+	}
+
 	// SeedDemoData is a no-op when the issues table is not empty, so it is
 	// safe to call on every startup.
 	if err := st.SeedDemoData(context.Background()); err != nil {
@@ -153,6 +159,11 @@ func initDB(path string) {
 	// categories are reference data with no other source — without them a
 	// schema-only database can never accept a discussion via the local CLI.
 	ctx := context.Background()
+	// init always guarantees the one mandatory workspace.
+	if err := st.EnsureDefaultWorkspace(ctx); err != nil {
+		st.Close()
+		log.Fatalf("ensure default workspace in %q: %v", path, err)
+	}
 	if err := st.SeedCategories(ctx); err != nil {
 		st.Close()
 		log.Fatalf("seed categories in %q: %v", path, err)

@@ -65,7 +65,7 @@ func TestAuthRequired(t *testing.T) {
 	srv, _ := newServer(t)
 
 	for _, auth := range []string{"", "Bearer wrong", "bearer " + testToken, "Basic " + testToken} {
-		req, _ := http.NewRequest("GET", srv.URL+"/api/v1/issues", nil)
+		req, _ := http.NewRequest("GET", srv.URL+"/api/v1/w/default/issues", nil)
 		if auth != "" {
 			req.Header.Set("Authorization", auth)
 		}
@@ -79,11 +79,11 @@ func TestAuthRequired(t *testing.T) {
 		}
 	}
 
-	code, _ := do(t, srv, "GET", "/api/v1/issues", "")
+	code, _ := do(t, srv, "GET", "/api/v1/w/default/issues", "")
 	if code != http.StatusOK {
 		t.Fatalf("authorized GET → %d, want 200", code)
 	}
-	req, _ := http.NewRequest("GET", srv.URL+"/api/v1/issues", nil)
+	req, _ := http.NewRequest("GET", srv.URL+"/api/v1/w/default/issues", nil)
 	resp, err := srv.Client().Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -97,7 +97,7 @@ func TestAuthRequired(t *testing.T) {
 func TestWrongMethodAndTrailingJSON(t *testing.T) {
 	srv, _ := newServer(t)
 
-	req, _ := http.NewRequest("PATCH", srv.URL+"/api/v1/issues/1/status", nil)
+	req, _ := http.NewRequest("PATCH", srv.URL+"/api/v1/w/default/issues/1/status", nil)
 	req.Header.Set("Authorization", "Bearer "+testToken)
 	resp, err := srv.Client().Do(req)
 	if err != nil {
@@ -115,7 +115,7 @@ func TestWrongMethodAndTrailingJSON(t *testing.T) {
 	}
 
 	// HEAD rides on GET like the std mux's method-scoped patterns.
-	req, _ = http.NewRequest("HEAD", srv.URL+"/api/v1/issues", nil)
+	req, _ = http.NewRequest("HEAD", srv.URL+"/api/v1/w/default/issues", nil)
 	req.Header.Set("Authorization", "Bearer "+testToken)
 	resp, err = srv.Client().Do(req)
 	if err != nil {
@@ -126,11 +126,11 @@ func TestWrongMethodAndTrailingJSON(t *testing.T) {
 		t.Fatalf("HEAD = %d, want 200", resp.StatusCode)
 	}
 
-	code, _ := do(t, srv, "POST", "/api/v1/issues", `{"title":"x"} {"title":"y"}`)
+	code, _ := do(t, srv, "POST", "/api/v1/w/default/issues", `{"title":"x"} {"title":"y"}`)
 	if code != http.StatusBadRequest {
 		t.Fatalf("trailing payload = %d, want 400", code)
 	}
-	code, _ = do(t, srv, "POST", "/api/v1/issues", `{"title":"x"}garbage`)
+	code, _ = do(t, srv, "POST", "/api/v1/w/default/issues", `{"title":"x"}garbage`)
 	if code != http.StatusBadRequest {
 		t.Fatalf("trailing garbage = %d, want 400", code)
 	}
@@ -140,10 +140,10 @@ func TestNotFoundAndUnknownRoutes(t *testing.T) {
 	srv, _ := newServer(t)
 
 	for path, code := range map[string]int{
-		"/api/v1/issues/999":    http.StatusNotFound,
-		"/api/v1/issues/abc":    http.StatusNotFound,
-		"/api/v1/nope":          http.StatusNotFound,
-		"/api/v1/discussions/7": http.StatusNotFound,
+		"/api/v1/w/default/issues/999":    http.StatusNotFound,
+		"/api/v1/w/default/issues/abc":    http.StatusNotFound,
+		"/api/v1/nope":                    http.StatusNotFound,
+		"/api/v1/w/default/discussions/7": http.StatusNotFound,
 	} {
 		got, out := do(t, srv, "GET", path, "")
 		if got != code {
@@ -172,7 +172,7 @@ func TestPerUserTokenActor(t *testing.T) {
 
 	post := func(token string) map[string]any {
 		t.Helper()
-		req, err := http.NewRequest("POST", srv.URL+"/api/v1/issues",
+		req, err := http.NewRequest("POST", srv.URL+"/api/v1/w/default/issues",
 			bytes.NewReader([]byte(`{"title":"actor test"}`)))
 		if err != nil {
 			t.Fatal(err)
@@ -207,7 +207,7 @@ func TestPerUserTokenActor(t *testing.T) {
 	// Unknown and revoked tokens are 401, and revoking takes effect at
 	// request time (no restart needed once the API is mounted).
 	for _, token := range []string{"no-such-token", "wrong"} {
-		req, _ := http.NewRequest("GET", srv.URL+"/api/v1/issues", nil)
+		req, _ := http.NewRequest("GET", srv.URL+"/api/v1/w/default/issues", nil)
 		req.Header.Set("Authorization", "Bearer "+token)
 		resp, err := srv.Client().Do(req)
 		if err != nil {
@@ -221,7 +221,7 @@ func TestPerUserTokenActor(t *testing.T) {
 	if err := st.DeleteAPIToken(ctx, userToken); err != nil {
 		t.Fatalf("DeleteAPIToken: %v", err)
 	}
-	req, _ := http.NewRequest("GET", srv.URL+"/api/v1/issues", nil)
+	req, _ := http.NewRequest("GET", srv.URL+"/api/v1/w/default/issues", nil)
 	req.Header.Set("Authorization", "Bearer "+userToken)
 	resp, err := srv.Client().Do(req)
 	if err != nil {

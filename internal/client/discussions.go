@@ -44,7 +44,7 @@ func (c *Client) listDiscussionsPage(ctx context.Context, q url.Values) ([]*stor
 		Discussions []api.Discussion `json:"discussions"`
 		Total       int              `json:"total"`
 	}
-	if err := c.do(ctx, "GET", "/discussions?"+q.Encode(), nil, &res); err != nil {
+	if err := c.do(ctx, "GET", c.wsPath("discussions?")+q.Encode(), nil, &res); err != nil {
 		return nil, 0, err
 	}
 	out := make([]*store.Discussion, 0, len(res.Discussions))
@@ -58,7 +58,7 @@ func (c *Client) GetDiscussion(ctx context.Context, id int64) (*store.Discussion
 	var res struct {
 		Discussion api.Discussion `json:"discussion"`
 	}
-	if err := c.do(ctx, "GET", "/discussions/"+fmt.Sprint(id), nil, &res); err != nil {
+	if err := c.do(ctx, "GET", c.wsPath("discussions/")+fmt.Sprint(id), nil, &res); err != nil {
 		return nil, err
 	}
 	return discussionFromDTO(res.Discussion), nil
@@ -72,7 +72,7 @@ func (c *Client) ListDiscussionThreads(ctx context.Context, discussionID int64) 
 	var res struct {
 		Threads []api.DiscussionThread `json:"threads"`
 	}
-	if err := c.do(ctx, "GET", "/discussions/"+fmt.Sprint(discussionID), nil, &res); err != nil {
+	if err := c.do(ctx, "GET", c.wsPath("discussions/")+fmt.Sprint(discussionID), nil, &res); err != nil {
 		return nil, err
 	}
 	out := make([]*store.DiscussionThread, 0, len(res.Threads))
@@ -88,7 +88,7 @@ func (c *Client) CreateDiscussion(ctx context.Context, in store.DiscussionInput,
 	var res struct {
 		Discussion api.Discussion `json:"discussion"`
 	}
-	err := c.do(ctx, "POST", "/discussions", map[string]any{
+	err := c.do(ctx, "POST", c.wsPath("discussions"), map[string]any{
 		"title": in.Title, "body": in.Body, "category_id": in.CategoryID,
 	}, &res)
 	if err != nil {
@@ -98,20 +98,20 @@ func (c *Client) CreateDiscussion(ctx context.Context, in store.DiscussionInput,
 }
 
 func (c *Client) UpdateDiscussion(ctx context.Context, id int64, in store.DiscussionInput) error {
-	return c.do(ctx, "PATCH", "/discussions/"+fmt.Sprint(id), map[string]any{
+	return c.do(ctx, "PATCH", c.wsPath("discussions/")+fmt.Sprint(id), map[string]any{
 		"title": in.Title, "body": in.Body, "category_id": in.CategoryID,
 	}, nil)
 }
 
 func (c *Client) DeleteDiscussion(ctx context.Context, id int64) error {
-	return c.do(ctx, "DELETE", "/discussions/"+fmt.Sprint(id), nil, nil)
+	return c.do(ctx, "DELETE", c.wsPath("discussions/")+fmt.Sprint(id), nil, nil)
 }
 
 func (c *Client) CreateDiscussionThread(ctx context.Context, discussionID int64, body string, _ int64) (int64, error) {
 	var res struct {
 		Thread api.DiscussionThread `json:"thread"`
 	}
-	err := c.do(ctx, "POST", "/discussions/"+fmt.Sprint(discussionID)+"/threads",
+	err := c.do(ctx, "POST", c.wsPath("discussions/")+fmt.Sprint(discussionID)+"/threads",
 		map[string]any{"body": body}, &res)
 	if err != nil {
 		return 0, err
@@ -124,7 +124,7 @@ func (c *Client) CreateDiscussionComment(ctx context.Context, discussionID, thre
 		Comment api.DiscussionComment `json:"comment"`
 	}
 	err := c.do(ctx, "POST",
-		"/discussions/"+fmt.Sprint(discussionID)+"/threads/"+fmt.Sprint(threadID)+"/comments",
+		c.wsPath("discussions/")+fmt.Sprint(discussionID)+"/threads/"+fmt.Sprint(threadID)+"/comments",
 		map[string]any{"body": body}, &res)
 	if err != nil {
 		return 0, err
@@ -134,7 +134,7 @@ func (c *Client) CreateDiscussionComment(ctx context.Context, discussionID, thre
 
 func (c *Client) SetThreadAnswer(ctx context.Context, discussionID, threadID int64, answer bool) error {
 	return c.do(ctx, "POST",
-		"/discussions/"+fmt.Sprint(discussionID)+"/threads/"+fmt.Sprint(threadID)+"/answer",
+		c.wsPath("discussions/")+fmt.Sprint(discussionID)+"/threads/"+fmt.Sprint(threadID)+"/answer",
 		map[string]any{"answer": answer}, nil)
 }
 

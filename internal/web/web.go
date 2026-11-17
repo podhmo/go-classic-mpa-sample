@@ -30,18 +30,18 @@ var staticFS embed.FS
 // methods of *store.Store, which satisfies this interface automatically.
 // Tests provide an in-memory implementation instead.
 type Store interface {
-	ListIssues(ctx context.Context, f store.ListFilter) ([]*store.Issue, int, error)
+	ListIssues(ctx context.Context, wsID int64, f store.ListFilter) ([]*store.Issue, int, error)
 	GetIssue(ctx context.Context, id int64) (*store.Issue, error)
-	CreateIssue(ctx context.Context, in store.IssueInput, authorID int64) (int64, error)
+	CreateIssue(ctx context.Context, wsID int64, in store.IssueInput, authorID int64) (int64, error)
 	UpdateIssue(ctx context.Context, id int64, in store.IssueInput) error
 	SetIssueStatus(ctx context.Context, id int64, status string) error
 	DeleteIssue(ctx context.Context, id int64) error
 	ListComments(ctx context.Context, issueID int64) ([]*store.Comment, error)
 	CreateComment(ctx context.Context, issueID int64, body string, authorID int64) (int64, error)
 	ListLabels(ctx context.Context) ([]*store.Label, error)
-	ListDiscussions(ctx context.Context, f store.DiscussionListFilter) ([]*store.Discussion, int, error)
+	ListDiscussions(ctx context.Context, wsID int64, f store.DiscussionListFilter) ([]*store.Discussion, int, error)
 	GetDiscussion(ctx context.Context, id int64) (*store.Discussion, error)
-	CreateDiscussion(ctx context.Context, in store.DiscussionInput, authorID int64) (int64, error)
+	CreateDiscussion(ctx context.Context, wsID int64, in store.DiscussionInput, authorID int64) (int64, error)
 	UpdateDiscussion(ctx context.Context, id int64, in store.DiscussionInput) error
 	DeleteDiscussion(ctx context.Context, id int64) error
 	ListDiscussionThreads(ctx context.Context, discussionID int64) ([]*store.DiscussionThread, error)
@@ -49,6 +49,11 @@ type Store interface {
 	CreateDiscussionComment(ctx context.Context, discussionID, threadID int64, body string, authorID int64) (int64, error)
 	SetThreadAnswer(ctx context.Context, discussionID, threadID int64, answer bool) error
 	ListDiscussionCategories(ctx context.Context) ([]*store.DiscussionCategory, error)
+	ListWorkspaces(ctx context.Context) ([]*store.Workspace, error)
+	WorkspaceBySlug(ctx context.Context, slug string) (*store.Workspace, error)
+	WorkspaceByID(ctx context.Context, id int64) (*store.Workspace, error)
+	CreateWorkspace(ctx context.Context, in store.WorkspaceInput) (int64, error)
+	DeleteWorkspace(ctx context.Context, slug string) error
 	CreateUser(ctx context.Context, name, passwordHash string) (int64, error)
 	AuthenticateUser(ctx context.Context, name, password string) (*store.User, error)
 	CreateSession(ctx context.Context, userID int64, ttl time.Duration) (string, error)
@@ -122,35 +127,55 @@ func New(st Store, opts ...Option) http.Handler {
 	mux.HandleFunc("GET /login", h.loginForm)
 	mux.HandleFunc("POST /login", h.login)
 	mux.HandleFunc("POST /logout", h.logout)
-	mux.HandleFunc("GET /issues", h.listIssues)
-	mux.HandleFunc("GET /issues/new", h.newIssue)
-	mux.HandleFunc("POST /issues", h.createIssue)
-	mux.HandleFunc("GET /issues/{id}", h.showIssue)
-	mux.HandleFunc("GET /issues/{id}/edit", h.editIssue)
-	mux.HandleFunc("POST /issues/{id}/edit", h.updateIssue)
-	mux.HandleFunc("POST /issues/{id}/status", h.setStatus)
-	mux.HandleFunc("GET /issues/{id}/delete", h.confirmDelete)
-	mux.HandleFunc("POST /issues/{id}/delete", h.deleteIssue)
-	mux.HandleFunc("POST /issues/{id}/comments", h.createComment)
-	mux.HandleFunc("GET /discussions", h.listDiscussions)
-	mux.HandleFunc("GET /discussions/new", h.newDiscussion)
-	mux.HandleFunc("POST /discussions", h.createDiscussion)
-	mux.HandleFunc("GET /discussions/{id}", h.showDiscussion)
-	mux.HandleFunc("GET /discussions/{id}/edit", h.editDiscussion)
-	mux.HandleFunc("POST /discussions/{id}/edit", h.updateDiscussion)
-	mux.HandleFunc("GET /discussions/{id}/delete", h.confirmDeleteDiscussion)
-	mux.HandleFunc("POST /discussions/{id}/delete", h.deleteDiscussion)
-	mux.HandleFunc("POST /discussions/{id}/comments", h.createDiscussionComment)
-	mux.HandleFunc("POST /discussions/{id}/comments/{cid}/answer", h.setCommentAnswer)
+	// Workspace management (docs/sketch/ja/workspaces.md).
+	mux.HandleFunc("GET /workspaces", h.listWorkspaces)
+	mux.HandleFunc("GET /workspaces/new", h.newWorkspace)
+	mux.HandleFunc("POST /workspaces", h.createWorkspace)
+	mux.HandleFunc("GET /w/{ws}/delete", h.scoped(h.confirmDeleteWorkspace))
+	mux.HandleFunc("POST /w/{ws}/delete", h.scoped(h.deleteWorkspace))
+	// Canonical resource URLs live under /w/{slug}; the workspace-less
+	// /issues and /discussions paths stay as redirects at the bottom.
+	mux.HandleFunc("GET /w/{ws}/issues", h.scoped(h.listIssues))
+	mux.HandleFunc("GET /w/{ws}/issues/new", h.scoped(h.newIssue))
+	mux.HandleFunc("POST /w/{ws}/issues", h.scoped(h.createIssue))
+	mux.HandleFunc("GET /w/{ws}/issues/{id}", h.scoped(h.showIssue))
+	mux.HandleFunc("GET /w/{ws}/issues/{id}/edit", h.scoped(h.editIssue))
+	mux.HandleFunc("POST /w/{ws}/issues/{id}/edit", h.scoped(h.updateIssue))
+	mux.HandleFunc("POST /w/{ws}/issues/{id}/status", h.scoped(h.setStatus))
+	mux.HandleFunc("GET /w/{ws}/issues/{id}/delete", h.scoped(h.confirmDelete))
+	mux.HandleFunc("POST /w/{ws}/issues/{id}/delete", h.scoped(h.deleteIssue))
+	mux.HandleFunc("POST /w/{ws}/issues/{id}/comments", h.scoped(h.createComment))
+	mux.HandleFunc("GET /w/{ws}/discussions", h.scoped(h.listDiscussions))
+	mux.HandleFunc("GET /w/{ws}/discussions/new", h.scoped(h.newDiscussion))
+	mux.HandleFunc("POST /w/{ws}/discussions", h.scoped(h.createDiscussion))
+	mux.HandleFunc("GET /w/{ws}/discussions/{id}", h.scoped(h.showDiscussion))
+	mux.HandleFunc("GET /w/{ws}/discussions/{id}/edit", h.scoped(h.editDiscussion))
+	mux.HandleFunc("POST /w/{ws}/discussions/{id}/edit", h.scoped(h.updateDiscussion))
+	mux.HandleFunc("GET /w/{ws}/discussions/{id}/delete", h.scoped(h.confirmDeleteDiscussion))
+	mux.HandleFunc("POST /w/{ws}/discussions/{id}/delete", h.scoped(h.deleteDiscussion))
+	mux.HandleFunc("POST /w/{ws}/discussions/{id}/comments", h.scoped(h.createDiscussionComment))
+	mux.HandleFunc("POST /w/{ws}/discussions/{id}/comments/{cid}/answer", h.scoped(h.setCommentAnswer))
 	// Live updates (docs/sketch/ja/live-updates.md): SSE change channels
 	// plus the fragment endpoints live-updates.js refetches after a hint.
-	mux.HandleFunc("GET /issues/{id}/events", h.issueEvents)
-	mux.HandleFunc("GET /issues/{id}/fragments/comments", h.issueCommentsFragment)
-	mux.HandleFunc("GET /issues/{id}/fragments/article", h.issueArticleFragment)
-	mux.HandleFunc("GET /discussions/{id}/events", h.discussionEvents)
-	mux.HandleFunc("GET /discussions/{id}/fragments/threads", h.discussionThreadsFragment)
-	mux.HandleFunc("GET /discussions/{id}/fragments/replies", h.discussionRepliesFragment)
-	mux.HandleFunc("GET /discussions/{id}/fragments/article", h.discussionArticleFragment)
+	mux.HandleFunc("GET /w/{ws}/issues/{id}/events", h.scoped(h.issueEvents))
+	mux.HandleFunc("GET /w/{ws}/issues/{id}/fragments/comments", h.scoped(h.issueCommentsFragment))
+	mux.HandleFunc("GET /w/{ws}/issues/{id}/fragments/article", h.scoped(h.issueArticleFragment))
+	mux.HandleFunc("GET /w/{ws}/discussions/{id}/events", h.scoped(h.discussionEvents))
+	mux.HandleFunc("GET /w/{ws}/discussions/{id}/fragments/threads", h.scoped(h.discussionThreadsFragment))
+	mux.HandleFunc("GET /w/{ws}/discussions/{id}/fragments/replies", h.scoped(h.discussionRepliesFragment))
+	mux.HandleFunc("GET /w/{ws}/discussions/{id}/fragments/article", h.scoped(h.discussionArticleFragment))
+	// Legacy workspace-less URLs redirect into a workspace: collections
+	// land in the default workspace, {id} paths in the resource's real
+	// one (GET/HEAD → 302, other methods → 307 keeps method and body). They must be
+	// method-scoped like the 404 catch-alls below: a method-less
+	// "/issues/{rest...}" would conflict with "GET /" (more general path,
+	// fewer methods). GET covers HEAD; other verbs get the mux's 405.
+	for _, m := range []string{"GET", "POST", "PUT", "PATCH", "DELETE"} {
+		mux.HandleFunc(m+" /issues", h.legacyCollection("issues"))
+		mux.HandleFunc(m+" /issues/{rest...}", h.legacySub("issues"))
+		mux.HandleFunc(m+" /discussions", h.legacyCollection("discussions"))
+		mux.HandleFunc(m+" /discussions/{rest...}", h.legacySub("discussions"))
+	}
 	if cfg.apiEnabled {
 		// Method-scoped subtree patterns: a method-less "/api/v1/" would
 		// conflict with the catch-all "GET /" (more general path, fewer
@@ -447,7 +472,5 @@ func parseID(r *http.Request) (int64, bool) {
 	return id, true
 }
 
-// home redirects the bare root to the issue list.
-func (h *handler) home(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, "/issues", http.StatusSeeOther)
-}
+// home redirects the bare root to the default workspace's issue list.
+// Defined in workspaces.go with the other workspace helpers.

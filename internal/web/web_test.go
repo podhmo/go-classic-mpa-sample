@@ -46,6 +46,8 @@ type fakeStore struct {
 	nextDC      int64
 	users       map[int64]*fakeUser
 	sessions    map[string]int64 // hashed token → user ID
+	workspaces  map[string]*store.Workspace
+	nextWS      int64
 	// sessionUserErr, when set, makes SessionUser fail — simulates a
 	// transient session-store error.
 	sessionUserErr error
@@ -61,6 +63,8 @@ func newFakeStore() *fakeStore {
 		dthreads:    map[int64][]*store.DiscussionThread{},
 		users:       map[int64]*fakeUser{},
 		sessions:    map[string]int64{},
+		workspaces:  map[string]*store.Workspace{"default": {ID: 1, Slug: "default", Name: "default"}},
+		nextWS:      2,
 		nextD:       1,
 		nextDC:      1,
 	}
@@ -81,12 +85,13 @@ func (f *fakeStore) addIssue(title, body, status string, created time.Time, labe
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	is := &store.Issue{
-		ID:        f.nextIssue,
-		Title:     title,
-		Body:      body,
-		Status:    status,
-		CreatedAt: created,
-		UpdatedAt: created,
+		ID:          f.nextIssue,
+		WorkspaceID: 1,
+		Title:       title,
+		Body:        body,
+		Status:      status,
+		CreatedAt:   created,
+		UpdatedAt:   created,
 	}
 	f.nextIssue++
 	is.Labels = f.resolveLabels(labelIDs)
@@ -125,7 +130,7 @@ func cloneIssue(is *store.Issue) *store.Issue {
 	return &c
 }
 
-func (f *fakeStore) ListIssues(_ context.Context, fl store.ListFilter) ([]*store.Issue, int, error) {
+func (f *fakeStore) ListIssues(_ context.Context, wsID int64, fl store.ListFilter) ([]*store.Issue, int, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -201,17 +206,18 @@ func (f *fakeStore) GetIssue(_ context.Context, id int64) (*store.Issue, error) 
 	return cloneIssue(is), nil
 }
 
-func (f *fakeStore) CreateIssue(_ context.Context, in store.IssueInput, authorID int64) (int64, error) {
+func (f *fakeStore) CreateIssue(_ context.Context, wsID int64, in store.IssueInput, authorID int64) (int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	now := time.Now()
 	is := &store.Issue{
-		ID:        f.nextIssue,
-		Title:     in.Title,
-		Body:      in.Body,
-		Status:    store.StatusOpen,
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:          f.nextIssue,
+		WorkspaceID: wsID,
+		Title:       in.Title,
+		Body:        in.Body,
+		Status:      store.StatusOpen,
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 	f.nextIssue++
 	if fu := f.users[authorID]; fu != nil {
@@ -324,11 +330,12 @@ func (f *fakeStore) addDiscussion(title, body string, categoryID int64, created 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	d := &store.Discussion{
-		ID:        f.nextD,
-		Title:     title,
-		Body:      body,
-		CreatedAt: created,
-		UpdatedAt: created,
+		ID:          f.nextD,
+		WorkspaceID: 1,
+		Title:       title,
+		Body:        body,
+		CreatedAt:   created,
+		UpdatedAt:   created,
 	}
 	if c := f.dcategoryByID(categoryID); c != nil {
 		d.Category = *c
@@ -363,7 +370,7 @@ func (f *fakeStore) answered(discussionID int64) bool {
 	return false
 }
 
-func (f *fakeStore) ListDiscussions(_ context.Context, fl store.DiscussionListFilter) ([]*store.Discussion, int, error) {
+func (f *fakeStore) ListDiscussions(_ context.Context, wsID int64, fl store.DiscussionListFilter) ([]*store.Discussion, int, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -437,7 +444,7 @@ func (f *fakeStore) GetDiscussion(_ context.Context, id int64) (*store.Discussio
 	return c, nil
 }
 
-func (f *fakeStore) CreateDiscussion(_ context.Context, in store.DiscussionInput, authorID int64) (int64, error) {
+func (f *fakeStore) CreateDiscussion(_ context.Context, wsID int64, in store.DiscussionInput, authorID int64) (int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	cat := f.dcategoryByID(in.CategoryID)
@@ -446,12 +453,13 @@ func (f *fakeStore) CreateDiscussion(_ context.Context, in store.DiscussionInput
 	}
 	now := time.Now()
 	d := &store.Discussion{
-		ID:        f.nextD,
-		Title:     in.Title,
-		Body:      in.Body,
-		Category:  *cat,
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:          f.nextD,
+		WorkspaceID: wsID,
+		Title:       in.Title,
+		Body:        in.Body,
+		Category:    *cat,
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 	f.nextD++
 	if fu := f.users[authorID]; fu != nil {
@@ -643,6 +651,67 @@ func (f *fakeStore) addUser(t *testing.T, name, password string) *store.User {
 	return &fu.user
 }
 
+func (f *fakeStore) ListWorkspaces(_ context.Context) ([]*store.Workspace, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := []*store.Workspace{}
+	for _, ws := range f.workspaces {
+		out = append(out, ws)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Slug < out[j].Slug })
+	return out, nil
+}
+
+func (f *fakeStore) WorkspaceBySlug(_ context.Context, slug string) (*store.Workspace, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	ws, ok := f.workspaces[slug]
+	if !ok {
+		return nil, store.ErrNotFound
+	}
+	return ws, nil
+}
+
+func (f *fakeStore) WorkspaceByID(_ context.Context, id int64) (*store.Workspace, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, ws := range f.workspaces {
+		if ws.ID == id {
+			return ws, nil
+		}
+	}
+	return nil, store.ErrNotFound
+}
+
+func (f *fakeStore) CreateWorkspace(_ context.Context, in store.WorkspaceInput) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, ok := f.workspaces[in.Slug]; ok {
+		return 0, store.ErrDuplicateSlug
+	}
+	id := f.nextWS
+	f.nextWS++
+	name := in.Name
+	if name == "" {
+		name = in.Slug
+	}
+	f.workspaces[in.Slug] = &store.Workspace{ID: id, Slug: in.Slug, Name: name, Description: in.Description}
+	return id, nil
+}
+
+func (f *fakeStore) DeleteWorkspace(_ context.Context, slug string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, ok := f.workspaces[slug]; !ok {
+		return store.ErrNotFound
+	}
+	if len(f.workspaces) == 1 {
+		return store.ErrLastWorkspace
+	}
+	delete(f.workspaces, slug)
+	return nil
+}
+
 func (f *fakeStore) CreateUser(_ context.Context, name, passwordHash string) (int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -759,7 +828,7 @@ func TestCSRFRejectsCrossSitePost(t *testing.T) {
 	srv, f := newTestServer(t)
 	f.addIssue("CSRF target", "", store.StatusOpen, time.Now())
 
-	req, err := http.NewRequest(http.MethodPost, srv.URL+"/issues",
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/w/default/issues",
 		strings.NewReader("title=hi"))
 	if err != nil {
 		t.Fatal(err)
@@ -776,7 +845,7 @@ func TestCSRFRejectsCrossSitePost(t *testing.T) {
 	}
 
 	// Same-site requests keep working.
-	req2, err := http.NewRequest(http.MethodPost, srv.URL+"/issues",
+	req2, err := http.NewRequest(http.MethodPost, srv.URL+"/w/default/issues",
 		strings.NewReader("title=ok"))
 	if err != nil {
 		t.Fatal(err)
@@ -797,7 +866,7 @@ func TestUnsupportedMethodRenders405(t *testing.T) {
 	srv, _ := newTestServer(t)
 	// The catch-alls are method-scoped (GET/POST only), so a disallowed
 	// method on a known path falls through to the mux's automatic 405.
-	req, err := http.NewRequest(http.MethodDelete, srv.URL+"/issues", nil)
+	req, err := http.NewRequest(http.MethodDelete, srv.URL+"/w/default/issues", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -884,7 +953,7 @@ func TestStaticToastJS(t *testing.T) {
 
 func TestLayoutOptsIntoOSTextScale(t *testing.T) {
 	srv, _ := newTestServer(t)
-	resp, err := srv.Client().Get(srv.URL + "/issues")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -916,7 +985,7 @@ func TestUnknownPathRendersStyled404(t *testing.T) {
 
 func TestIssuesTrailingSlashRendersStyled404(t *testing.T) {
 	srv, _ := newTestServer(t)
-	resp, err := srv.Client().Get(srv.URL + "/issues/")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues/")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -949,7 +1018,7 @@ func TestStaticDirectoryListing404(t *testing.T) {
 
 func TestSecurityHeaders(t *testing.T) {
 	srv, _ := newTestServer(t)
-	resp, err := srv.Client().Get(srv.URL + "/issues")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1007,11 +1076,11 @@ func TestSkipLinkAndLandmarks(t *testing.T) {
 		name string
 		path string
 	}{
-		{"list", "/issues"},
-		{"detail", "/issues/1"},
-		{"new form", "/issues/new"},
-		{"edit form", "/issues/1/edit"},
-		{"delete confirm", "/issues/1/delete"},
+		{"list", "/w/default/issues"},
+		{"detail", "/w/default/issues/1"},
+		{"new form", "/w/default/issues/new"},
+		{"edit form", "/w/default/issues/1/edit"},
+		{"delete confirm", "/w/default/issues/1/delete"},
 		{"styled 404", "/nonexistent"},
 	}
 	for _, p := range pages {
@@ -1050,7 +1119,7 @@ func TestSpeculationRules(t *testing.T) {
 	srv, f := newTestServer(t)
 	f.addIssue("Speculated target", "body", store.StatusOpen, time.Now())
 
-	resp, err := srv.Client().Get(srv.URL + "/issues")
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1069,7 +1138,7 @@ func TestSpeculationRules(t *testing.T) {
 		t.Error("list page must only load same-origin /static scripts, never inline")
 	}
 
-	resp2, err := srv.Client().Get(srv.URL + "/issues/1")
+	resp2, err := srv.Client().Get(srv.URL + "/w/default/issues/1")
 	if err != nil {
 		t.Fatal(err)
 	}

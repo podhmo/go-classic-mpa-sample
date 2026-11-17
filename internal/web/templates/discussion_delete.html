@@ -6,8 +6,8 @@
 <div class="card">
   <p>Are you sure you want to delete <strong>{{.Discussion.Title}}</strong>?</p>
   <p class="muted">This permanently removes the discussion and all of its comments. This action cannot be undone.</p>
-  <form method="post" action="/discussions/{{.Discussion.ID}}/delete" class="form-actions">
-    <a class="btn btn-quiet" href="/discussions/{{.Discussion.ID}}">Cancel</a>
+  <form method="post" action="/w/{{.Workspace.Slug}}/discussions/{{.Discussion.ID}}/delete" class="form-actions">
+    <a class="btn btn-quiet" href="/w/{{.Workspace.Slug}}/discussions/{{.Discussion.ID}}">Cancel</a>
     <button type="submit" class="btn btn-danger">Delete discussion</button>
   </form>
 </div>
