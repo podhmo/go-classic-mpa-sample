@@ -472,7 +472,7 @@ func TestAppMount(t *testing.T) {
 	}}
 	post := func(form string, headers map[string]string) (*http.Response, string) {
 		t.Helper()
-		req, err := http.NewRequest(http.MethodPost, srv.URL+"/issues/2/comments", strings.NewReader(form))
+		req, err := http.NewRequest(http.MethodPost, srv.URL+"/w/default/issues/2/comments", strings.NewReader(form))
 		if err != nil {
 			t.Fatal(err)
 		}
