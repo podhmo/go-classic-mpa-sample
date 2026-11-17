@@ -10,6 +10,7 @@ import (
 )
 
 type Workspace struct {
+	ID              int64  `json:"id"`
 	Slug            string `json:"slug"`
 	Name            string `json:"name"`
 	Description     string `json:"description"`
@@ -20,7 +21,7 @@ type Workspace struct {
 
 func workspaceDTO(ws *store.Workspace) Workspace {
 	return Workspace{
-		Slug: ws.Slug, Name: ws.Name, Description: ws.Description,
+		ID: ws.ID, Slug: ws.Slug, Name: ws.Name, Description: ws.Description,
 		IssueCount: ws.IssueCount, DiscussionCount: ws.DiscussionCount,
 		CreatedAt: fmtTime(ws.CreatedAt),
 	}

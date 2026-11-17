@@ -45,10 +45,7 @@ func (c *Client) CreateWorkspace(ctx context.Context, in store.WorkspaceInput) (
 	if err != nil {
 		return 0, err
 	}
-	// The API returns the workspace DTO; the store's CreateWorkspace
-	// returns an id the CLI does not print, so echo the slug back as a
-	// synthetic id is wrong — return 0; callers only check err.
-	return 0, nil
+	return res.Workspace.ID, nil
 }
 
 func (c *Client) DeleteWorkspace(ctx context.Context, slug string) error {
@@ -57,6 +54,7 @@ func (c *Client) DeleteWorkspace(ctx context.Context, slug string) error {
 
 func workspaceFromDTO(w api.Workspace) *store.Workspace {
 	return &store.Workspace{
+		ID:              w.ID,
 		Slug:            w.Slug,
 		Name:            w.Name,
 		Description:     w.Description,
