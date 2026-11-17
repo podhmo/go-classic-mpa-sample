@@ -248,10 +248,9 @@ func (s *Store) CreateDiscussion(ctx context.Context, wsID int64, in DiscussionI
 	if err != nil {
 		return 0, err
 	}
-	if err := tx.Commit(); err != nil {
+	if err := s.commitTx(ctx, tx, events.Change{Topic: events.DiscussionsTopic, Kind: events.KindNew, Target: id}); err != nil {
 		return 0, err
 	}
-	s.notify(events.Change{Topic: events.DiscussionsTopic, Kind: events.KindNew, Target: id})
 	return id, nil
 }
 
@@ -280,6 +279,7 @@ func (s *Store) UpdateDiscussion(ctx context.Context, id int64, in DiscussionInp
 	if err := checkAffected(res); err != nil {
 		return err
 	}
+	changes := []events.Change{{Topic: events.DiscussionTopic(id), Kind: events.KindEdit, Target: id}}
 	var cleared int64
 	if format != CategoryFormatQA {
 		res, err := tx.ExecContext(ctx,
@@ -289,17 +289,13 @@ func (s *Store) UpdateDiscussion(ctx context.Context, id int64, in DiscussionInp
 			return err
 		}
 		cleared, _ = res.RowsAffected()
+		if cleared > 0 {
+			// Marks vanished from threads the article swap does not touch —
+			// tell watchers to rebuild the thread list, not just the card.
+			changes = append(changes, events.Change{Topic: events.DiscussionTopic(id), Kind: events.KindResync, Target: id})
+		}
 	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	s.notify(events.Change{Topic: events.DiscussionTopic(id), Kind: events.KindEdit, Target: id})
-	if cleared > 0 {
-		// Marks vanished from threads the article swap does not touch —
-		// tell watchers to rebuild the thread list, not just the card.
-		s.notify(events.Change{Topic: events.DiscussionTopic(id), Kind: events.KindResync, Target: id})
-	}
-	return nil
+	return s.commitTx(ctx, tx, changes...)
 }
 
 // requireCategory verifies the category exists inside tx and returns its
@@ -317,16 +313,22 @@ func requireCategory(ctx context.Context, tx *sql.Tx, categoryID int64) (string,
 // DeleteDiscussion removes the discussion; its comments and replies go via
 // ON DELETE CASCADE. Returns ErrNotFound if the discussion does not exist.
 func (s *Store) DeleteDiscussion(ctx context.Context, id int64) error {
-	res, err := s.db.ExecContext(ctx, "DELETE FROM discussions WHERE id = ?", id)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	res, err := tx.ExecContext(ctx, "DELETE FROM discussions WHERE id = ?", id)
 	if err != nil {
 		return err
 	}
 	if err := checkAffected(res); err != nil {
 		return err
 	}
-	s.notify(events.Change{Topic: events.DiscussionTopic(id), Kind: events.KindDelete, Target: id})
-	s.notify(events.Change{Topic: events.DiscussionsTopic, Kind: events.KindDelete, Target: id})
-	return nil
+	return s.commitTx(ctx, tx,
+		events.Change{Topic: events.DiscussionTopic(id), Kind: events.KindDelete, Target: id},
+		events.Change{Topic: events.DiscussionsTopic, Kind: events.KindDelete, Target: id})
 }
 
 // ListDiscussionThreads returns the threads of a discussion in
@@ -418,10 +420,9 @@ func (s *Store) CreateDiscussionThread(ctx context.Context, discussionID int64, 
 	if err != nil {
 		return 0, err
 	}
-	if err := tx.Commit(); err != nil {
+	if err := s.commitTx(ctx, tx, events.Change{Topic: events.DiscussionTopic(discussionID), Kind: events.KindThread, Target: id}); err != nil {
 		return 0, err
 	}
-	s.notify(events.Change{Topic: events.DiscussionTopic(discussionID), Kind: events.KindThread, Target: id})
 	return id, nil
 }
 
@@ -471,10 +472,9 @@ func (s *Store) CreateDiscussionComment(ctx context.Context, discussionID, threa
 	if err != nil {
 		return 0, err
 	}
-	if err := tx.Commit(); err != nil {
+	if err := s.commitTx(ctx, tx, events.Change{Topic: events.DiscussionTopic(discussionID), Kind: events.KindReply, Target: id, Parent: threadID}); err != nil {
 		return 0, err
 	}
-	s.notify(events.Change{Topic: events.DiscussionTopic(discussionID), Kind: events.KindReply, Target: id, Parent: threadID})
 	return id, nil
 }
 
@@ -555,11 +555,7 @@ func (s *Store) SetThreadAnswer(ctx context.Context, discussionID, threadID int6
 		time.Now().UTC().Unix(), discussionID); err != nil {
 		return err
 	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	s.notify(events.Change{Topic: events.DiscussionTopic(discussionID), Kind: events.KindAnswer, Target: threadID, Parent: prev})
-	return nil
+	return s.commitTx(ctx, tx, events.Change{Topic: events.DiscussionTopic(discussionID), Kind: events.KindAnswer, Target: threadID, Parent: prev})
 }
 
 func scanDiscussion(s scanner) (*Discussion, error) {

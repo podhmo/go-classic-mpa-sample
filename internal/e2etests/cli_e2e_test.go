@@ -6,7 +6,9 @@
 package e2etests
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -181,6 +183,48 @@ func TestCLIE2E(t *testing.T) {
 	}
 
 	mustRun(t, cliBin, nil, remote("comment", "create", strconv.FormatInt(id, 10), "--body", "remote comment")...)
+
+	// Local-mode writes must reach the SSE stream: the CLI commits the
+	// change row through its own process and the server's table watcher
+	// re-publishes it (docs/sketch/ja/live-updates.md 案(a)).
+	sseCtx, sseCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer sseCancel()
+	sreq, err := http.NewRequestWithContext(sseCtx, "GET",
+		server+"/w/default/issues/"+strconv.FormatInt(id, 10)+"/events", nil)
+	if err != nil {
+		t.Fatalf("events request: %v", err)
+	}
+	sresp, err := http.DefaultClient.Do(sreq)
+	if err != nil {
+		t.Fatalf("events stream: %v", err)
+	}
+	defer sresp.Body.Close()
+	sseLines := make(chan string, 32)
+	go func() {
+		sc := bufio.NewScanner(sresp.Body)
+		for sc.Scan() {
+			sseLines <- sc.Text()
+		}
+	}()
+	// The first frame is the retry directive — reading it proves the
+	// subscription is live before the CLI writes.
+	if l := <-sseLines; !strings.HasPrefix(l, "retry:") {
+		t.Fatalf("first SSE frame: %q", l)
+	}
+	mustRun(t, cliBin, nil, "comment", "create",
+		strconv.FormatInt(id, 10), "--body", "local-mode comment", "--db", db)
+	for {
+		select {
+		case l := <-sseLines:
+			if strings.HasPrefix(l, "event: comment") {
+				goto sawComment
+			}
+		case <-sseCtx.Done():
+			t.Fatal("timed out waiting for SSE comment event from local CLI write")
+		}
+	}
+sawComment:
+
 	out = mustRun(t, cliBin, nil, remote("issue", "close", strconv.FormatInt(id, 10))...)
 	if !strings.Contains(out, "closed issue #") {
 		t.Fatalf("issue close: %q", out)
@@ -198,23 +242,23 @@ func TestCLIE2E(t *testing.T) {
 	}
 	out = mustRun(t, cliBin, nil, remote("discussion", "comment", "create",
 		strconv.FormatInt(did, 10), "--body", "the answer")...)
-	var cid int64
-	if _, err := fmt.Sscanf(out, "created comment #%d", &cid); err != nil || cid == 0 {
+	var tid int64
+	if _, err := fmt.Sscanf(out, "created thread #%d", &tid); err != nil || tid == 0 {
 		t.Fatalf("discussion comment: %q", out)
 	}
 	mustRun(t, cliBin, nil, remote("discussion", "answer",
-		strconv.FormatInt(did, 10), "--comment", strconv.FormatInt(cid, 10))...)
+		strconv.FormatInt(did, 10), "--thread", strconv.FormatInt(tid, 10))...)
 	dview := mustRun(t, cliBin, nil, remote("discussion", "view",
 		strconv.FormatInt(did, 10), "--json", "title,answered")...)
 	if !strings.Contains(dview, `"answered": true`) {
 		t.Fatalf("discussion view after answer:\n%s", dview)
 	}
 
-	raw := mustRun(t, cliBin, nil, remote("api", "/issues")...)
+	raw := mustRun(t, cliBin, nil, remote("api", "/w/default/issues")...)
 	if !strings.Contains(raw, `"issues"`) {
-		t.Fatalf("issues api /issues:\n%s", raw)
+		t.Fatalf("issues api /w/default/issues:\n%s", raw)
 	}
-	code, _, errOut := run(t, cliBin, nil, "api", "/issues", "--server", server, "--token", "bogus")
+	code, _, errOut := run(t, cliBin, nil, "api", "/w/default/issues", "--server", server, "--token", "bogus")
 	if code != 1 || !strings.Contains(errOut, "401") {
 		t.Fatalf("api with bad token: exit %d\n%s", code, errOut)
 	}
@@ -232,12 +276,12 @@ func TestCLIE2E(t *testing.T) {
 		t.Fatalf("env-token list:\n%s", envTok)
 	}
 
-	out = mustRun(t, cliBin, nil, remote("api", "issues",
+	out = mustRun(t, cliBin, nil, remote("api", "w/default/issues",
 		"-X", "POST", "-f", "title=api posted", "-f", "body=from issues api")...)
 	if !strings.Contains(out, `"api posted"`) {
-		t.Fatalf("api POST /issues:\n%s", out)
+		t.Fatalf("api POST /w/default/issues:\n%s", out)
 	}
-	out = mustRun(t, cliBin, nil, remote("api", "issues",
+	out = mustRun(t, cliBin, nil, remote("api", "w/default/issues",
 		"-f", "status=closed", "--template", "{{range .issues}}{{.title}} {{end}}")...)
 	if !strings.Contains(out, "from cli") {
 		t.Fatalf("api GET -f/--template:\n%s", out)

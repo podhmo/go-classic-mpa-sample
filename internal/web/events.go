@@ -3,8 +3,9 @@
 //
 // Events are invalidation-only — {kind, target, parent} — so a subscriber
 // always re-fetches server-rendered fragments; markdown truth stays
-// server-side. The hub is fed by (*store.Store).SetListener, which covers
-// every write path (HTML forms, /api/v1, the CLI) in one place.
+// server-side. The hub is fed by (*store.Store).WatchChanges, which tails
+// the changes table and so covers every write path (HTML forms, /api/v1,
+// and the local CLI running in its own process) in one place.
 package web
 
 import (

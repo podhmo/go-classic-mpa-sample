@@ -89,11 +89,21 @@ func main() {
 		log.Fatalf("check api tokens: %v", err)
 	}
 
-	// Live updates: one hub shared by both ends of the channel — the store
-	// publishes every committed mutation, the web layer's SSE endpoints
-	// broadcast it to open detail pages (docs/sketch/ja/live-updates.md).
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	// Live updates: every mutator records its hints in the changes table
+	// inside the mutation's own tx, and WatchChanges re-publishes new rows
+	// to the hub — so writes from other processes (the local CLI) reach
+	// the SSE endpoints too (docs/sketch/ja/live-updates.md, 案(a)). The
+	// watermark is sampled synchronously so a commit cannot slip between
+	// goroutine start and its first read.
 	hub := events.NewHub()
-	st.SetListener(hub.Publish)
+	watermark, err := st.LatestChangeSeq(ctx)
+	if err != nil {
+		log.Fatalf("read changes watermark: %v", err)
+	}
+	go st.WatchChanges(ctx, watermark, hub.Publish)
 
 	srv := &http.Server{
 		Addr:              *addr,
@@ -106,9 +116,6 @@ func main() {
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	go func() {
 		<-ctx.Done()

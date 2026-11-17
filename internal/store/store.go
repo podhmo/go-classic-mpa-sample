@@ -10,10 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
-
-	"github.com/podhmo/go-classic-mpa-sample/internal/events"
 
 	_ "modernc.org/sqlite"
 )
@@ -23,32 +20,7 @@ var ErrNotFound = errors.New("store: not found")
 
 // Store wraps the SQLite database handle.
 type Store struct {
-	db    *sql.DB
-	emit  func(events.Change)
-	emitM sync.Mutex
-}
-
-// SetListener registers fn as the single change listener: every mutating
-// method calls it once after its commit succeeds, so a caller wiring the
-// web layer's SSE hub sees writes from every path (HTML forms, /api/v1,
-// the CLI) in one place. Nil disables emission. Replace-not-append by
-// design: one broadcaster owns the fan-out.
-func (s *Store) SetListener(fn func(events.Change)) {
-	s.emitM.Lock()
-	s.emit = fn
-	s.emitM.Unlock()
-}
-
-// notify fires the registered listener, if any. It runs after the
-// mutator's tx committed — never inside it — so a slow listener cannot
-// hold the write open.
-func (s *Store) notify(c events.Change) {
-	s.emitM.Lock()
-	fn := s.emit
-	s.emitM.Unlock()
-	if fn != nil {
-		fn(c)
-	}
+	db *sql.DB
 }
 
 // Timestamps are stored as UTC unix seconds.
@@ -147,6 +119,7 @@ CREATE TABLE IF NOT EXISTS discussion_comments (
 	body TEXT NOT NULL,
 	created_at INTEGER NOT NULL
 );
+` + changesDDL + `
 CREATE INDEX IF NOT EXISTS idx_issues_workspace_status_created ON issues(workspace_id, status, created_at);
 CREATE INDEX IF NOT EXISTS idx_comments_issue_created ON comments(issue_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_issue_labels_label ON issue_labels(label_id);
@@ -157,12 +130,27 @@ CREATE INDEX IF NOT EXISTS idx_discussions_workspace_created ON discussions(work
 CREATE INDEX IF NOT EXISTS idx_discussions_workspace_category_created ON discussions(workspace_id, category_id, created_at);
 `
 
+// changesDDL is kept out of line so migrateV2 can apply it alone to
+// databases stamped user_version=1 before the table existed — schemaDDL
+// concatenates it so fresh v1 databases get the identical definition.
+const changesDDL = `
+-- Cross-process change hints (commitTx writes, WatchChanges tails → SSE
+-- hub). Volatile by design; PurgeChanges bounds the table.
+CREATE TABLE IF NOT EXISTS changes (
+	seq INTEGER PRIMARY KEY AUTOINCREMENT,
+	topic TEXT NOT NULL,
+	kind TEXT NOT NULL,
+	target INTEGER NOT NULL,
+	parent INTEGER NOT NULL DEFAULT 0,
+	created_at INTEGER NOT NULL
+);
+`
+
 // migrations is the ordered list of schema upgrades: migrations[i] moves a
-// database from PRAGMA user_version i to i+1. Today the whole list is the
-// single current-schema builder — versioned upgrades resume here once a
-// released schema exists to migrate from.
+// database from PRAGMA user_version i to i+1.
 var migrations = []func(ctx context.Context, tx *sql.Tx) error{
 	migrateV1, // current schema in one shot
+	migrateV2, // changes table — reaches databases already stamped v1
 }
 
 // schemaVersion is the user_version a fully migrated database reports.
@@ -185,6 +173,14 @@ func migrateV1(ctx context.Context, tx *sql.Tx) error {
 		return fmt.Errorf("store: database schema predates workspaces — delete the file and re-run init")
 	}
 	return nil
+}
+
+// migrateV2 adds the changes table to a database that passed the squashed
+// v1 before the table was introduced (migrateV1 is skipped for those, so
+// the table would never appear and every commitTx insert would fail).
+func migrateV2(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, changesDDL)
+	return err
 }
 
 // migrate applies every schema version the database is missing, stamping
