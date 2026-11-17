@@ -1,4 +1,4 @@
-{{define "layout"}}{{$ws := "default"}}{{if .Workspace}}{{$ws = .Workspace.Slug}}{{end}}<!DOCTYPE html>
+{{define "layout"}}<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -23,15 +23,19 @@
   <header class="site-header">
     <div class="header-bar">
       <div class="container header-inner">
-        <a class="site-title" href="/w/{{$ws}}/issues">Issue Tracker</a>
+        <a class="site-title" href="{{if .Workspace}}/w/{{.Workspace.Slug}}/issues{{else}}/{{end}}">Issue Tracker</a>
         <nav class="site-nav" aria-label="Main">
-          <a href="/w/{{$ws}}/issues"{{if eq .Section "issues"}} aria-current="page"{{end}}>Issues</a>
-          <a href="/w/{{$ws}}/discussions"{{if eq .Section "discussions"}} aria-current="page"{{end}}>Discussions</a>
+          {{if .Workspace}}
+          <a href="/w/{{.Workspace.Slug}}/issues"{{if eq .Section "issues"}} aria-current="page"{{end}}>Issues</a>
+          <a href="/w/{{.Workspace.Slug}}/discussions"{{if eq .Section "discussions"}} aria-current="page"{{end}}>Discussions</a>
+          {{end}}
           <a href="/workspaces"{{if eq .Section "workspaces"}} aria-current="page"{{end}}>Workspaces</a>
+          {{if .Workspace}}
           {{if eq .Section "discussions"}}
-          <a class="btn" href="/w/{{$ws}}/discussions/new">New discussion</a>
+          <a class="btn" href="/w/{{.Workspace.Slug}}/discussions/new">New discussion</a>
           {{else}}
-          <a class="btn" href="/w/{{$ws}}/issues/new">New issue</a>
+          <a class="btn" href="/w/{{.Workspace.Slug}}/issues/new">New issue</a>
+          {{end}}
           {{end}}
           {{if .User}}
           <span class="user-handle">@{{.User.Name}}</span>
