@@ -2,8 +2,8 @@
 <h1>Delete workspace {{.Workspace.Slug}}?</h1>
 <p>This deletes the workspace <strong>w/{{.Workspace.Slug}}</strong> and everything in it — {{.Workspace.IssueCount}} issues and {{.Workspace.DiscussionCount}} discussions. This cannot be undone.</p>
 <p>The last remaining workspace cannot be deleted.</p>
-<form method="post" action="/w/{{.Workspace.Slug}}/delete" class="form">
+<form method="post" action="/w/{{.Workspace.Slug}}/delete" class="form-actions">
+  <a class="btn btn-quiet" href="/workspaces">Cancel</a>
   <button type="submit" class="btn btn-danger">Delete workspace</button>
-  <a class="btn" href="/workspaces">Cancel</a>
 </form>
 {{end}}

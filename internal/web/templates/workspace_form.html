@@ -9,7 +9,7 @@
   </div>
   <div class="field">
     <label for="name">Name</label>
-    <input type="text" id="name" name="name" value="{{.Input.Name}}" maxlength="100" autocomplete="off">
+    <input type="text" id="name" name="name" value="{{.Input.Name}}" maxlength="200" autocomplete="off">
     {{if .Errors.Name}}<p class="field-error">{{.Errors.Name}}</p>{{end}}
     <p class="field-hint">Optional display name; defaults to the slug.</p>
   </div>
@@ -18,6 +18,9 @@
     <textarea id="description" name="description" rows="3">{{.Input.Description}}</textarea>
     {{if .Errors.Description}}<p class="field-error">{{.Errors.Description}}</p>{{end}}
   </div>
-  <button type="submit" class="btn">{{.SubmitLabel}}</button>
+  <div class="form-actions">
+    <a class="btn btn-quiet" href="/workspaces">Cancel</a>
+    <button type="submit" class="btn btn-primary">{{.SubmitLabel}}</button>
+  </div>
 </form>
 {{end}}
