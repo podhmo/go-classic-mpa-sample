@@ -1,4 +1,4 @@
-// `issues auth token` — per-user API token management (local mode only).
+// `zatu auth token` — per-user API token management (local mode only).
 // Issuance, listing and revocation all write the api_tokens table directly
 // instead of going through HTTP: the point is managing a credential
 // without exposing password verification over HTTP (cli-and-web-api.md
@@ -15,10 +15,10 @@ import (
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
-// issues auth token --user NAME | token list [--user NAME] | token revoke (ID|--token T)
+// zatu auth token --user NAME | token list [--user NAME] | token revoke (ID|--token T)
 func authCmd(ctx context.Context, o Options, args []string) error {
 	if len(args) == 0 || args[0] != "token" {
-		return usageError{msg: "usage: issues auth token --user NAME | token list [--user NAME] | token revoke (ID|--token T)"}
+		return usageError{msg: "usage: zatu auth token --user NAME | token list [--user NAME] | token revoke (ID|--token T)"}
 	}
 	args = args[1:]
 	if len(args) > 0 {
@@ -40,9 +40,9 @@ func (o Options) openTokenStore(bf *backendFlags) (TokenStore, error) {
 	return o.OpenTokenStore(bf.dbPath())
 }
 
-// issues auth token --user NAME — issue a new token. The plaintext is
+// zatu auth token --user NAME — issue a new token. The plaintext is
 // shown once and never stored, so stdout stays the bare token
-// (`export ISSUES_TOKEN=$(...)`).
+// (`export ZATUDAN_TOKEN=$(...)`).
 func authTokenCreate(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("auth token", flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
@@ -76,7 +76,7 @@ func authTokenCreate(ctx context.Context, o Options, args []string) error {
 	return nil
 }
 
-// issues auth token list [--user NAME] — the stored (hashed) token ids
+// zatu auth token list [--user NAME] — the stored (hashed) token ids
 // with their owners. Only a prefix of the hash is printed: enough to name
 // a token for `auth token revoke`, never enough to use it.
 func authTokenList(ctx context.Context, o Options, args []string) error {
@@ -124,10 +124,10 @@ func authTokenList(ctx context.Context, o Options, args []string) error {
 	return nil
 }
 
-// issues auth token revoke (ID|--token T) — delete one token row. ID is
+// zatu auth token revoke (ID|--token T) — delete one token row. ID is
 // the hash prefix printed by `auth token list`; an explicit --token takes
-// the plaintext value itself (e.g. revoking the token in $ISSUES_TOKEN).
-// --token must be given on the command line — an ISSUES_TOKEN env default
+// the plaintext value itself (e.g. revoking the token in $ZATUDAN_TOKEN).
+// --token must be given on the command line — an ZATUDAN_TOKEN env default
 // does not count, so remote-mode users cannot revoke by accident.
 func authTokenRevoke(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("auth token revoke", flag.ContinueOnError)
@@ -143,7 +143,7 @@ func authTokenRevoke(ctx context.Context, o Options, args []string) error {
 		}
 	})
 	if !explicitToken && len(rest) == 0 {
-		return usageError{msg: "usage: issues auth token revoke (ID|--token T)"}
+		return usageError{msg: "usage: zatu auth token revoke (ID|--token T)"}
 	}
 	if explicitToken && len(rest) > 0 {
 		return usageError{msg: "pass either an id or --token, not both"}

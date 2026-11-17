@@ -48,7 +48,7 @@
 - **`UPDATE ... SET col=CASE WHEN...` の句順**: `SetIssueStatus` で `status=?` を先に書くと、SQLite は代入前の値で CASE を評価するが、DB/文法依存の心配を避けるため `updated_at=CASE WHEN status != ?` を `status` 代入より先に置く書き方にした（防御的記述）。
 - **`git add -A` は無関係な大きなファイルを拾う**: 作業ディレクトリに残っていた 129MB の `playwright-cli` バイナリを誤ってコミットしかけた（amend で除去）。`.gitignore` されていない実行バイナリ・スクラッチはコミット前に `git status` で目視確認する。
 - **HTML5 `required` はサーバー側バリデーションを無効化する**: 「バリデーションはサーバー側で」という要件のフォームに素の `required` を付けると、ブラウザが送信自体をブロックしてネイティブバブルを出し、設計した 422+インラインエラーの UI に到達しない。curl/httptest では絶対に見えないバグ — **実ブラウザでの手動・自動検証が必須**。対策は `<form novalidate>`（`required` 属性は aria 的な意味として残してよい）。
-- **`go run` を pkill しても子プロセスが残る**: `go run .` は親が go toolchain、実際にポートを握るのは `go-build/.../exe/` 配下の子バイナリ。`pkill -f 'go run'` は親しか殺さず、旧バージョンのサーバーが応答し続ける。`lsof -ti:<port>` で実際の PID を殺すのが確実（二度目の遭遇）。
+- **`go run` を pkill しても子プロセスが残る**: `go run ./cmd/zatudan` は親が go toolchain、実際にポートを握るのは `go-build/.../exe/` 配下の子バイナリ。`pkill -f 'go run'` は親しか殺さず、旧バージョンのサーバーが応答し続ける。`lsof -ti:<port>` で実際の PID を殺すのが確実（二度目の遭遇）。
 - **embed.FS の変更はプロセス再起動が必要**: テンプレート/CSS を embed しているため、`go run` 中に HTML を直しても反映されない。ブラウザ検証では「今動いているバイナリが最新か」をまず確認する（今回は旧サーバーが `required` 付きテンプレートを返し続けていた）。
 - **`html/template` は `+` を `&#43;` にエスケープする**: UTF-7 XSS 対策のため。`"10,000+ records"` のような文字列はレンダリング後に verbatim で現れない — テストでタイトル文字列をそのまま assert すると落ちる。テストではエスケープされない部分文字列で assert する。
 - **`var()` を含む CSS 宣言は「後勝ちフォールバック」にならない**: `color: #000; color: contrast-color(var(--bg));` と書いても、`var()` を含む宣言は parse 時には常に有効扱いされ、未対応関数だと計算値時点で無効（IACVT）→ `unset`（`color` なら親から継承）になり、前の `#000` には戻らない。新しい色関数を custom property と組み合わせるときは `@supports (color: contrast-color(red))` のように宣言ごと囲う。

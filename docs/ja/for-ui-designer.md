@@ -14,7 +14,7 @@
 パッケージベース）を指す。
 
 ポイントは「デザインの試行錯誤にバックエンドの環境構築が要らない」
-こと。DB ファイルも `init` もシードデータも `go run .` も不要で、
+こと。DB ファイルも `init` もシードデータも `go run ./cmd/zatudan` も不要で、
 見た目の確認だけを独立に回せる。バックエンドとフロントエンド（デザイン）
 で作業が分かれているとき、デザイン側はこれだけあればよい。
 
@@ -104,7 +104,7 @@ JS を配信しない）。エラーで 500 になったページも watch 中�
 ## 静的スナップショット（export）
 
 ```sh
-cd cmd/storybook && go run . -o /tmp/book ../../internal/web
+cd cmd/storybook && go run ./cmd/zatudan -o /tmp/book ../../internal/web
 python3 -m http.server -d /tmp/book
 ```
 

@@ -11,10 +11,10 @@ import (
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
-// issueCmd dispatches `issues issue <action>`.
+// issueCmd dispatches `zatu issue <action>`.
 func issueCmd(ctx context.Context, o Options, args []string) error {
 	if len(args) == 0 {
-		return usageError{msg: "usage: issues issue list|view|create|edit|close|reopen|delete"}
+		return usageError{msg: "usage: zatu issue list|view|create|edit|close|reopen|delete"}
 	}
 	switch args[0] {
 	case "list":
@@ -32,7 +32,7 @@ func issueCmd(ctx context.Context, o Options, args []string) error {
 	}
 }
 
-// issues issue list [--state open|closed|all] [--label NAME]
+// zatu issue list [--state open|closed|all] [--label NAME]
 // [--search Q] [--sort newest|oldest] [--limit N] [--page N] [--json F,...]
 func issueList(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("issue list", flag.ContinueOnError)
@@ -94,7 +94,7 @@ func issueList(ctx context.Context, o Options, args []string) error {
 	return nil
 }
 
-// issues issue view N [--comments] [--json F,...] [-w]
+// zatu issue view N [--comments] [--json F,...] [-w]
 func issueView(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("issue view", flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
@@ -173,7 +173,7 @@ func issueView(ctx context.Context, o Options, args []string) error {
 	return nil
 }
 
-// issues issue create --title T [--body B|--body-file -] [--label NAME]... [-w]
+// zatu issue create --title T [--body B|--body-file -] [--label NAME]... [-w]
 func issueCreate(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("issue create", flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
@@ -193,7 +193,7 @@ func issueCreate(ctx context.Context, o Options, args []string) error {
 	if *web && bf.server == "" {
 		// Check before touching the backend: creating the issue first
 		// and only then failing means a retry creates a duplicate.
-		return usageError{msg: "-w/--web requires --server (or ISSUES_SERVER)"}
+		return usageError{msg: "-w/--web requires --server (or ZATUDAN_SERVER)"}
 	}
 	bodyText, err := o.readBody(*body, *bodyFile)
 	if err != nil {
@@ -231,7 +231,7 @@ func issueCreate(ctx context.Context, o Options, args []string) error {
 	return nil
 }
 
-// issues issue edit N [--title T] [--body B] [--label NAME]...
+// zatu issue edit N [--title T] [--body B] [--label NAME]...
 func issueEdit(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("issue edit", flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
@@ -292,7 +292,7 @@ func issueEdit(ctx context.Context, o Options, args []string) error {
 	return nil
 }
 
-// issues issue close|reopen|delete N
+// zatu issue close|reopen|delete N
 func issueStateChange(ctx context.Context, o Options, action string, args []string) error {
 	fs := flag.NewFlagSet("issue "+action, flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
@@ -329,10 +329,10 @@ func issueStateChange(ctx context.Context, o Options, action string, args []stri
 	return nil
 }
 
-// issues comment create N --body B | --body-file -
+// zatu comment create N --body B | --body-file -
 func commentCmd(ctx context.Context, o Options, args []string) error {
 	if len(args) == 0 || args[0] != "create" {
-		return usageError{msg: "usage: issues comment create N --body B"}
+		return usageError{msg: "usage: zatu comment create N --body B"}
 	}
 	fs := flag.NewFlagSet("comment create", flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
@@ -371,10 +371,10 @@ func commentCmd(ctx context.Context, o Options, args []string) error {
 	return nil
 }
 
-// issues label list
+// zatu label list
 func labelCmd(ctx context.Context, o Options, args []string) error {
 	if len(args) == 0 || args[0] != "list" {
-		return usageError{msg: "usage: issues label list"}
+		return usageError{msg: "usage: zatu label list"}
 	}
 	fs := flag.NewFlagSet("label list", flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
@@ -412,7 +412,7 @@ func labelCmd(ctx context.Context, o Options, args []string) error {
 // browser. It needs the server base URL, so remote mode is required.
 func (o Options) openPage(bf *backendFlags, prefix string, id int64) error {
 	if bf.server == "" {
-		return usageError{msg: "-w/--web requires --server (or ISSUES_SERVER)"}
+		return usageError{msg: "-w/--web requires --server (or ZATUDAN_SERVER)"}
 	}
 	return o.OpenBrowser(strings.TrimSuffix(bf.server, "/") + prefix + fmt.Sprint(id))
 }

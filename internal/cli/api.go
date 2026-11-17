@@ -1,4 +1,4 @@
-// `issues api <path>` — the raw-API escape hatch (gh api equivalent),
+// `zatu api` <path>` — the raw-API escape hatch (gh api equivalent),
 // remote mode only.
 package cli
 
@@ -18,7 +18,7 @@ import (
 	"github.com/podhmo/go-classic-mpa-sample/internal/client"
 )
 
-// issues api <path> [-X METHOD] [-f name=value]... [-F name=value]...
+// zatu api <path> [-X METHOD] [-f name=value]... [-F name=value]...
 // [--template TMPL] — call the path against the configured server and
 // print the body (verbatim, or through a Go template when --template is
 // given). -f/-F fields become query parameters on GET and a JSON request
@@ -41,10 +41,10 @@ func apiCmd(ctx context.Context, o Options, args []string) error {
 		return err
 	}
 	if len(rest) == 0 {
-		return usageError{msg: "usage: issues api <path> [-X METHOD] [-f name=value]..."}
+		return usageError{msg: "usage: zatu api <path> [-X METHOD] [-f name=value]..."}
 	}
 	if bf.server == "" {
-		return usageError{msg: "issues api requires --server (or ISSUES_SERVER)"}
+		return usageError{msg: "zatu api requires --server (or ZATUDAN_SERVER)"}
 	}
 	warnPlaintext(o.Stderr, bf.server, bf.token)
 

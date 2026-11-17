@@ -1,14 +1,17 @@
-// Command go-classic-mpa-sample runs the issue tracker web app.
+// Command zatudan is the server binary of the issue tracker web app — a
+// classic multi-page application: server-rendered HTML, plain HTML forms
+// for every state change, and progressive-enhancement JavaScript. It
+// binds to localhost by default because there is no authorization — do
+// not expose it publicly.
 //
-// It is a classic multi-page application: server-rendered HTML, plain HTML
-// forms for every state change, and no JavaScript. It binds to localhost by
-// default because there is no authentication — do not expose it publicly.
+// The "init" subcommand (or the -init flag) prepares the database file
+// and schema, refreshes planner statistics, prints a report, and exits
+// without starting the server.
 //
-// The "init" subcommand (or the -init flag) prepares the database file and
-// schema, refreshes planner statistics, prints a report, and exits without
-// starting the server.
+//	zatudan -addr 127.0.0.1:8080 -db zatudan.db
+//	zatudan -db zatudan.db init
 //
-// The gh-like CLI is a separate binary, cmd/issues — clients of the web
+// The gh-like CLI is a separate binary, cmd/zatu — clients of the web
 // API should not have the server embedded in their tool.
 package main
 
@@ -31,22 +34,22 @@ import (
 )
 
 func main() {
-	addr := flag.String("addr", envOr("ISSUES_ADDR", "127.0.0.1:8080"),
-		"listen address (env ISSUES_ADDR)")
-	dbPath := flag.String("db", envOr("ISSUES_DB", "issues.db"),
-		"SQLite database file path (env ISSUES_DB)")
+	addr := flag.String("addr", envOr("ZATUDAN_ADDR", "127.0.0.1:8080"),
+		"listen address (env ZATUDAN_ADDR)")
+	dbPath := flag.String("db", envOr("ZATUDAN_DB", "zatudan.db"),
+		"SQLite database file path (env ZATUDAN_DB)")
 	initFlag := flag.Bool("init", false,
 		"initialize the database (create file, apply schema, ANALYZE) and exit; "+
 			"equivalent to the 'init' subcommand")
-	apiToken := flag.String("api-token", envOr("ISSUES_API_TOKEN", ""),
-		"Bearer token for the JSON API under /api/v1 (env ISSUES_API_TOKEN); "+
+	apiToken := flag.String("api-token", envOr("ZATUDAN_API_TOKEN", ""),
+		"Bearer token for the JSON API under /api/v1 (env ZATUDAN_API_TOKEN); "+
 			"empty disables the API entirely")
 	flag.Parse()
 
 	// An explicitly empty -db would open an unnamed ephemeral SQLite
 	// database whose data silently vanishes; fail fast instead.
 	if *dbPath == "" {
-		log.Fatal("empty database path: pass -db PATH or set ISSUES_DB")
+		log.Fatal("empty database path: pass -db PATH or set ZATUDAN_DB")
 	}
 
 	// The "init" subcommand or -init flag selects init mode: prepare the

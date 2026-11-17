@@ -30,7 +30,7 @@ everywhere. Two themes drive it:
 ## Run
 
 ```sh
-go run .
+go run ./cmd/zatudan
 ```
 
 Then open <http://localhost:8080> — `GET /` redirects to `/issues`.
@@ -45,7 +45,7 @@ discussion categories and comments (only when the tables are empty).
 ### `init` subcommand
 
 ```sh
-go run . -db issues.db init     # or: go run . -init
+go run ./cmd/zatudan -db zatudan.db init     # or: go run ./cmd/zatudan -init
 ```
 
 `init` creates the database file if needed, applies the complete schema
@@ -58,8 +58,8 @@ safe: the schema DDL is idempotent and `ANALYZE` refreshes the planner
 statistics on a populated database.
 
 Flags must come **before** the `init` argument — Go's `flag` package stops
-parsing at the first positional argument, so write `go run . -db x.db
-init`, not `go run . init -db x.db`. `-addr` has no effect in init mode.
+parsing at the first positional argument, so write `go run ./cmd/zatudan -db x.db
+init`, not `go run ./cmd/zatudan init -db x.db`. `-addr` has no effect in init mode.
 
 ## Accounts
 
@@ -72,25 +72,25 @@ SHA-256 is stored, so reading the table can't steal a live session.
 
 ## CLI
 
-`cmd/issues` is a separate gh-style binary — distributing the client must
+`cmd/zatu` is a separate gh-style binary — distributing the client must
 not require shipping the server, so it is its own command:
 
 ```sh
-go run ./cmd/issues issue list
-go run ./cmd/issues issue view 3
-go run ./cmd/issues comment create 3 --body "nice catch"
-go run ./cmd/issues discussion list
-go run ./cmd/issues auth token --user alice          # mint a per-user API token
-go run ./cmd/issues completion zsh                   # bash|zsh|fish
+go run ./cmd/zatu issue list
+go run ./cmd/zatu issue view 3
+go run ./cmd/zatu comment create 3 --body "nice catch"
+go run ./cmd/zatu discussion list
+go run ./cmd/zatu auth token --user alice          # mint a per-user API token
+go run ./cmd/zatu completion zsh                   # bash|zsh|fish
 ```
 
 Two backends, selected automatically:
 
-- **local** (default): opens the SQLite file directly via `-db`/`ISSUES_DB`
+- **local** (default): opens the SQLite file directly via `-db`/`ZATUDAN_DB`
   — no server needed. `auth token …` is local-only.
-- **remote**: `--server`/`--token` or `ISSUES_SERVER`/`ISSUES_TOKEN` talks
+- **remote**: `--server`/`--token` or `ZATUDAN_SERVER`/`ZATUDAN_TOKEN` talks
   to `/api/v1`. The raw escape hatch is remote-only —
-  `issues api /api/v1/issues -f q=bug` (gh-style `-f`/`-F`/`-X`; `-f`
+  `zatu api /api/v1/issues -f q=bug` (gh-style `-f`/`-F`/`-X`; `-f`
   fields become query params on GET, a JSON body otherwise).
 
 ## Test
@@ -115,20 +115,20 @@ See `docs/ja/for-ui-designer.md`.
 
 | Flag    | Env var       | Default          | Description                                                            |
 | ------- | ------------- | ---------------- | ---------------------------------------------------------------------- |
-| `-addr` | `ISSUES_ADDR` | `127.0.0.1:8080` | Listen address                                                         |
-| `-db`   | `ISSUES_DB`   | `issues.db`      | SQLite database file path                                              |
+| `-addr` | `ZATUDAN_ADDR` | `127.0.0.1:8080` | Listen address                                                         |
+| `-db`   | `ZATUDAN_DB`   | `zatudan.db`      | SQLite database file path                                              |
 | `-init` | —             | `false`          | Initialize the database and exit (same as the `init` subcommand)       |
-| `-api-token` | `ISSUES_API_TOKEN` | *(unset)*   | Shared Bearer token for `/api/v1`; the API also mounts when per-user `api_tokens` exist |
+| `-api-token` | `ZATUDAN_API_TOKEN` | *(unset)*   | Shared Bearer token for `/api/v1`; the API also mounts when per-user `api_tokens` exist |
 
-Example: `go run . -addr :8080 -db /tmp/my-issues.db` or
-`ISSUES_ADDR=:8080 go run .`.
+Example: `go run ./cmd/zatudan -addr :8080 -db /tmp/my-zatudan.db` or
+`ZATUDAN_ADDR=:8080 go run ./cmd/zatudan`.
 
-Use `-db :memory:` for a throwaway database. `go run . -db PATH init` (or
+Use `-db :memory:` for a throwaway database. `go run ./cmd/zatudan -db PATH init` (or
 `-init`) prepares the database without serving — see the `init` subcommand
 above; flags must precede the `init` argument.
 
-The CLI reads its own variables: `ISSUES_DB` for local mode,
-`ISSUES_SERVER` + `ISSUES_TOKEN` for remote mode.
+The CLI reads its own variables: `ZATUDAN_DB` for local mode,
+`ZATUDAN_SERVER` + `ZATUDAN_TOKEN` for remote mode.
 
 ## Routes
 
@@ -179,8 +179,8 @@ Notes:
 ## JSON API (`/api/v1`)
 
 A machine-facing JSON API (design: `docs/sketch/ja/cli-and-web-api.md`),
-mounted only when a credential exists — `-api-token`/`ISSUES_API_TOKEN`
-set **or** at least one per-user token minted via `issues auth token`.
+mounted only when a credential exists — `-api-token`/`ZATUDAN_API_TOKEN`
+set **or** at least one per-user token minted via `zatu auth token`.
 With neither, `/api/v1` is not mounted at all (fail-closed). Every
 request then needs `Authorization: Bearer <token>`. Credential presence
 is decided once at startup — if you mint the first token while the
@@ -222,8 +222,8 @@ Notes:
 ## Data storage
 
 All data — issues, comments, labels, discussions, users, sessions,
-`api_tokens` — lives in a single SQLite file, `issues.db` by default
-(path from `-db`/`ISSUES_DB`), created in the working directory. `*.db`
+`api_tokens` — lives in a single SQLite file, `zatudan.db` by default
+(path from `-db`/`ZATUDAN_DB`), created in the working directory. `*.db`
 files are git-ignored. Deleting the file resets the app; the next start
 re-seeds demo data.
 
@@ -262,9 +262,9 @@ full PRG round-trip without it.
 ## Architecture
 
 ```
-main.go            entry point: flags/env, store.Open, SeedDemoData,
+cmd/zatudan/       server binary: flags/env, store.Open, SeedDemoData,
                    http.Server with timeouts, graceful shutdown
-cmd/issues/        gh-style CLI binary (issue/comment/label/discussion/auth/api/completion)
+cmd/zatu/          gh-style CLI binary (issue/comment/label/discussion/auth/api/completion)
 cmd/storybook/     UI preview server (separate module, runs on minigo)
 internal/store/    persistence: sqlite schema, queries, ErrNotFound contract.
                    Exposes *store.Store; no HTTP knowledge.

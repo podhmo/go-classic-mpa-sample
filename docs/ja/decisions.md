@@ -576,3 +576,14 @@ podhmo からの改善要望（grid と story のリンク誤押・見た目・s
 - **保持は5分**: `PurgeChanges` が `created_at` の古い行を捨てる（watcher ループ内で1分に1度）。長期停止後の再起動ではバックログは読まないため消費未済の古行は意味を持たない。
 - **tx を持たなかった3 mutator**（`SetIssueStatus`/`DeleteIssue`/`DeleteDiscussion`）は `BeginTx` で包んで `commitTx` に揃えた。
 - **検証**: `go test ./...` / `go vet` / `gofmt` 全パス。`changes_test.go` は同一ファイルを開く2本の `*Store` で CLI↔server 分割を再現して配達を確認し、`TestMigrateV1DatabaseGainsChangesTable` が v1 DB への migrateV2 を再現。e2e（`make test-e2e`）は実バイナリで SSE 購読 → local-mode `comment create --db` → `event: comment` 受信を確認。ついでに `discussion comment`（thread 化で出力が変わっていた）と `api` パス（workspace スコープ化で `/w/{slug}/` 必須になっていた）の stale な e2e 期待値も修正した。
+
+## バイナリ・コマンド名の改称（2026-11-17、`devin/*-rename-zatudan-zatu` ブランチ）
+
+`docs/sketch/ja/naming.md`（PR #90）の調査をもとに命名を決定。サーバ/app は **`zatudan`**、CLI は **`zatu`**、env prefix は **`ZATUDAN_*`**。開発中のため breaking changes は移行措置なしでそのまま付け替え。
+
+- **サーバの entrypoint は `cmd/zatudan` のみ**: naming.md の案 S2。`go build` のバイナリ名が import path 末端由来のため、`-o` 運用ではなく cmd/ 移設で名前を確定させる。当初は `go run .` 維持のため root main.go → internal/app への委譲構造にしたが、「動かなくて良い・委譲も不要」との判断で廃止し、bootstrap は `cmd/zatudan/main.go` に直接置く（dev 時は `go run ./cmd/zatudan`）。
+- **CLI は `cmd/issues` → `cmd/zatu`**: `git mv` で移動し usage 文字列・doc comment・completion スクリプト（`_zatu`, `zatu.fish`）・エラーメッセージを一式更新。
+- **env は app 名に揃える**: `ISSUES_*` → `ZATUDAN_*`（server: `ZATUDAN_ADDR`/`ZATUDAN_DB`/`ZATUDAN_API_TOKEN`、CLI: `ZATUDAN_DB`/`ZATUDAN_SERVER`/`ZATUDAN_TOKEN`/`ZATUDAN_WORKSPACE`）。CLI 短名 `zatu` ではなく app 名 prefix を選んだ — env は「アプリの設定」でありコマンドごとの修飾ではないため。
+- **既定 DB 名は `zatudan.db`**（旧 `issues.db`）。旧 DB は移行対象にしない。
+- **変えないもの**: `issues` は引き続きドメイン語 — URL パス（`/w/{slug}/issues` 等）、`/api/v1`、JSON フィールド名、テーブル名、CLI サブコマンド語彙（`zatu issue list` 等）は据え置き。リポジトリ名・module path も意図どおり据え置き。
+- **検証**: `go test ./...` / `go vet` / `gofmt` 全パス。`make test-e2e`（実バイナリ init→serve→local/remote CLI）パス。`go build ./cmd/zatudan`・`./cmd/zatu` のバイナリ名確認。

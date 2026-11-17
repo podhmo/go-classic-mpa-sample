@@ -4,7 +4,7 @@
 test:
 	go test ./...
 
-# CLI の E2E: init → register → auth token → serve → issues/リモート動作確認
+# CLI の E2E: init → register → auth token → serve → zatu/リモート動作確認
 test-e2e:
 	go test -tags=e2e -v -run 'TestCLIE2E' ./internal/e2etests/
 

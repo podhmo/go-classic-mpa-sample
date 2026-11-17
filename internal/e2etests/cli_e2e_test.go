@@ -1,7 +1,7 @@
 //go:build e2e
 
 // Package e2etests runs the built binary end to end: init → serve →
-// register → auth token → remote-mode CLI and `issues api` against the
+// register → auth token → remote-mode CLI and `zatu api` against the
 // live server. Runs only under -tags=e2e (`make test-e2e`).
 package e2etests
 
@@ -24,15 +24,15 @@ import (
 )
 
 // buildBinaries compiles the server binary and the CLI binary (separate
-// commands: cmd/issues is the client, the repo root is the server).
+// commands: cmd/zatu is the client, cmd/zatudan is the server).
 func buildBinaries(t *testing.T) (serverBin, cliBin string) {
 	t.Helper()
 	dir := t.TempDir()
-	serverBin = filepath.Join(dir, "issues-server")
-	cliBin = filepath.Join(dir, "issues")
+	serverBin = filepath.Join(dir, "zatudan")
+	cliBin = filepath.Join(dir, "zatu")
 	for target, out := range map[string]string{
-		"../..":            serverBin,
-		"../../cmd/issues": cliBin,
+		"../../cmd/zatudan": serverBin,
+		"../../cmd/zatu": cliBin,
 	} {
 		b, err := exec.Command("go", "build", "-o", out, target).CombinedOutput()
 		if err != nil {
@@ -264,7 +264,7 @@ sawComment:
 	}
 
 	envOut := mustRun(t, cliBin,
-		[]string{"ISSUES_SERVER=" + server, "ISSUES_TOKEN=" + token},
+		[]string{"ZATUDAN_SERVER=" + server, "ZATUDAN_TOKEN=" + token},
 		"issue", "list", "--state", "all")
 	if !strings.Contains(envOut, "from cli") {
 		t.Fatalf("env-based remote list:\n%s", envOut)
