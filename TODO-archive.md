@@ -130,3 +130,18 @@
 - [x] JSON Web API (`/api/v1`) > **バリデーションの共有**: `validateIssueInput`/`validateDiscussionInput` を「`*Input` 値を検証する関数」に分解して web/api 両方から使う（`internal/store` の `ValidateIssueInput`/`ValidateDiscussionInput`/`ValidateCommentBody` + `MaxTitleRunes`/`MaxBodyRunes` に集約）。
 - [x] JSON Web API (`/api/v1`) > **discussions endpoints**: `GET|POST /api/v1/discussions`、`GET|PATCH|DELETE /api/v1/discussions/{id}`、`POST /api/v1/discussions/{id}/comments`（`parent_id` で返信）、`POST /api/v1/discussions/{id}/comments/{cid}/answer`、`GET /api/v1/discussion-categories`。
 - [x] JSON Web API (`/api/v1`) > **api_tokens（ユーザー別トークン）**: token→user_id の `api_tokens` テーブル（migrateV4、平文は保存せず SHA-256 のみ、revoke は行削除、期限なし）。Bearer は env token → anonymous / api_tokens 行 → その user_id が actor（API 書き込みに author_id が立つ）。mount 判定は起動時: env token 非空 OR `api_tokens` 非空で `/api/v1` を mount（`web.WithAPIEnabled`）。発行導線 `issues auth token` は「gh ライクな CLI」タスク側。
+
+- [x] **fake/stub の契約乖離を全コードから探索し整理する**: 全 5 interface × 全実装の意味論突き合わせを実施（記録は PR #71）。実バグ寄りは全て修正、意図的スタブは doc コメントで宣言済み
+- [x] **UI ルール監査で検出した不統一の修正**: `docs/ja/ui-rules.md` の「変更予定」項目（外部デザインシステムチェックリスト監査 2026-11-16 の結果）
+- [x] UI ルール監査で検出した不統一の修正 > **ボタン配置の統一**: 作成/編集フォーム（issue_form/discussion_form）と GET 削除確認ページ（issue_delete/discussion_delete）を「左:キャンセル / 右:確定・右寄せ」に揃える。dialog・返信フォームは準拠済み
+- [x] UI ルール監査で検出した不統一の修正 > **ヘッダ New ボタンの枠線化**: layout.html の "New issue"/"New discussion" から `btn-primary` を外しページ内 Primary を1つにする
+- [x] UI ルール監査で検出した不統一の修正 > **コメント欄が空のとき送信ボタンを Disabled に**: **JS**（textarea の input 監視。トップレベル・返信両方）
+- [x] UI ルール監査で検出した不統一の修正 > **返信の部分投稿後に `<details>` を畳む**: **JS**（partial-submit.js append パスで `.reply-form` 成功時に `details.open=false`）
+- [x] UI ルール監査で検出した不統一の修正 > **入力中の離脱ガード**: **JS**（dirty 時に beforeunload 確認を出す static/ スクリプト。送信成功で解除）
+- [x] UI ルール監査で検出した不統一の修正 > **モバイル対応の残件**: 固定要素（toast/back-to-top）に `env(safe-area-inset-*)` を加味、装飾的 `:hover` を `@media (hover:hover)` でガード統一、狭画面で固定要素が送信ボタン等を覆わない配置の見直し
+- [x] UI ルール監査で検出した不統一の修正 > **storybook ストーリーの拡充**: 変更予定項目（ボタン配置・狭画面レイアウト等）を目視確認できるよう、不足している状態ストーリーを `internal/web/story_pages.go` に追加する。JS 挙動は verify-ui 側で確認
+- [x] UI ルール監査で検出した不統一の修正 > **コメント permalink を判別可能にする**: `.comment-permalink` が `color: inherit; text-decoration: none` で本文と同色無下線（hover でしか判別できない）→ リンクと分かる表現に直す（ui-rules.md §9、2026-11-16 決定）
+- [x] **クライアント JS のライフサイクル統合**: 共有 registry `dom-hooks.js`（1本の MutationObserver + `bind(selector, {init, teardown})`）に attach/detach 追従を集約し、detail/form ページの script タグをページ種別エントリ1本に畳む（decisions.md 2026-11-16 参照）
+- [x] **他者コメントのリアルタイム反映（SSE push）**: `GET /{issues,discussions}/{id}/events` + store 層 emitter + `live-updates.js` + fragment GET エンドポイント。設計は `docs/sketch/ja/live-updates.md`。comment/thread/reply の live append に加え status/answer/edit/delete/resync も対応。一覧ページ側の未読表示・presence は未実装
+- [x] **storybook の UI 改善**: index に検索フィルタ（`?q=`、name/doc/group、ライブ絞り込み+GET フォールバック）とプレビューツールバー（story 名・group・ソース位置・raw/grid・幅切替）を追加。grid への導線は story リンクと混同しない `⊞ grid` ピルに分離し、grid を index 内プレビュー（`?g=`）で開けるようにした。story 選択は iframe 差替えのみでページリロードせず、export した index.html でも JS が `?s/?g/?w/?q` を読んで動く
+- [x] **workspace（GitHub リポジトリ相当のコンテナ）の導入**: issues/discussions を workspace 所属にする。設計は `docs/sketch/ja/workspaces.md`（採番はグローバル維持、正準 URL `/w/{slug}/...`、migration v6 で default 作成、最後の1件は削除不可）。workspace 間移動・per-workspace 採番・ws 別 label/category は future work
