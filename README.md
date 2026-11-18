@@ -78,6 +78,7 @@ not require shipping the server, so it is its own command:
 ```sh
 go run ./cmd/zatu issue list
 go run ./cmd/zatu issue view 3
+go run ./cmd/zatu issue view 3 --markdown               # the issue + comments as one markdown doc
 go run ./cmd/zatu comment create 3 --body "nice catch"
 go run ./cmd/zatu discussion list
 go run ./cmd/zatu auth token --user alice          # mint a per-user API token
@@ -135,6 +136,7 @@ The CLI reads its own variables: `ZATUDAN_DB` for local mode,
 | Method | Path                                  | Purpose                                          |
 | ------ | ------------------------------------- | ------------------------------------------------ |
 | GET    | `/`                                   | 303 redirect to `/issues`                        |
+| GET/POST | `/workspaces` + `/workspaces/new`   | Workspace list / create (routes below live under `/w/{ws}`) |
 | GET/POST | `/register`                         | Create an account (session cookie on success)    |
 | GET/POST | `/login`                            | Sign in                                          |
 | POST   | `/logout`                             | Sign out → 303                                   |
@@ -146,17 +148,25 @@ The CLI reads its own variables: `ZATUDAN_DB` for local mode,
 | POST   | `/issues/{id}/status`                 | Toggle open/closed (hidden `status` field) → 303 |
 | GET/POST | `/issues/{id}/delete`               | GET confirm page (safe) / POST delete → 303 to `/issues` |
 | POST   | `/issues/{id}/comments`               | Add comment → 303 to `/issues/{id}#comment-N`    |
+| GET    | `/issues/{id}/markdown`               | The issue + comments as one `text/markdown` document |
 | GET    | `/discussions`                        | Discussion list: `?category=<slug>`, `?answered=`, `?q=`, `?sort=`, `?page=` |
 | GET/POST | `/discussions/new` + `/discussions` | Create form → create → 303 to detail             |
 | GET    | `/discussions/{id}`                   | Detail: category, threads with their replies |
 | GET/POST | `/discussions/{id}/edit`            | Edit form → 303 to detail                        |
 | GET/POST | `/discussions/{id}/delete`          | GET confirm page / POST delete → 303 to list     |
 | POST   | `/discussions/{id}/comments`          | New thread, or reply (`thread_id`) → 303 to `#thread-N`/`#comment-N` |
+| GET    | `/discussions/{id}/markdown`          | The discussion + threads + replies as `text/markdown` |
 | POST   | `/discussions/{id}/comments/{cid}/answer` | Mark/unmark a thread as the Q&A answer (qa only) → 303 |
 | GET    | `/static/*`                           | Embedded CSS/JS assets (explicitly registered)   |
 
 Notes:
 
+- Routes are workspace-scoped: the canonical form of every path in the
+  table carries a `/w/{ws}` prefix (e.g. `/w/main/issues/3`), and the
+  workspace-less forms above redirect into the right workspace
+  (302 for GET/HEAD, 307 otherwise). The `/markdown` rows are the
+  cookie-session counterpart of the API endpoints below — the detail
+  pages' "Copy as markdown" buttons fetch them.
 - Successful mutations always answer `303 See Other` (PRG). Comment,
   answer and status forms additionally carry `data-partial`, so with JS
   enabled `partial-submit.js` posts them via `fetch` and swaps the
@@ -193,31 +203,40 @@ Two credential kinds:
 
 | Method | Path                                          | Purpose                                             |
 | ------ | --------------------------------------------- | --------------------------------------------------- |
-| GET    | `/api/v1/issues`                              | List: `?status=&q=&label=<name>&sort=&page=&per_page=` (cap 100) |
-| POST   | `/api/v1/issues`                              | Create `{title, body, label_ids\|labels}` → 201     |
-| GET    | `/api/v1/issues/{id}`                         | Issue + labels + comments in one call               |
-| PATCH  | `/api/v1/issues/{id}`                         | Partial update (only provided fields change)        |
-| POST   | `/api/v1/issues/{id}/status`                  | `{status: "open"\|"closed"}`                      |
-| DELETE | `/api/v1/issues/{id}`                         | Delete → 204                                        |
-| POST   | `/api/v1/issues/{id}/comments`                | `{body}` → 201                                      |
-| GET    | `/api/v1/labels`                              | All labels                                          |
-| GET    | `/api/v1/discussions`                         | List: `?category=&answered=&q=&sort=&page=`         |
-| POST   | `/api/v1/discussions`                         | `{title, body, category_id\|category}` → 201        |
-| GET    | `/api/v1/discussions/{id}`                    | Discussion + threads (replies nested)               |
-| PATCH  | `/api/v1/discussions/{id}`                    | Partial update                                      |
-| DELETE | `/api/v1/discussions/{id}`                    | Delete → 204                                        |
-| POST   | `/api/v1/discussions/{id}/threads`            | `{body}` → 201 (new thread)                         |
-| POST   | `/api/v1/discussions/{id}/threads/{tid}/comments` | `{body}` → 201 (reply to thread)                |
-| POST   | `/api/v1/discussions/{id}/threads/{tid}/answer` | `{answer: bool}` mark/unmark the answer (qa)      |
+| GET/POST | `/api/v1/workspaces`                        | List / create workspaces                            |
+| GET/DELETE | `/api/v1/workspaces/{slug}`               | Read / delete a workspace                           |
+| GET    | `/api/v1/w/{ws}/issues`                       | List: `?status=&q=&label=<name>&sort=&page=&per_page=` (cap 100) |
+| POST   | `/api/v1/w/{ws}/issues`                       | Create `{title, body, label_ids\|labels}` → 201     |
+| GET    | `/api/v1/w/{ws}/issues/{id}`                  | Issue + labels + comments in one call               |
+| PATCH  | `/api/v1/w/{ws}/issues/{id}`                  | Partial update (only provided fields change)        |
+| POST   | `/api/v1/w/{ws}/issues/{id}/status`           | `{status: "open"\|"closed"}`                      |
+| DELETE | `/api/v1/w/{ws}/issues/{id}`                  | Delete → 204                                        |
+| POST   | `/api/v1/w/{ws}/issues/{id}/comments`         | `{body}` → 201                                      |
+| GET    | `/api/v1/w/{ws}/issues/{id}/markdown`         | Issue + comments as one `text/markdown` document    |
+| GET/POST | `/api/v1/w/{ws}/labels`                     | All labels / create (`PATCH`/`DELETE` on `…/labels/{id}`) |
+| GET    | `/api/v1/w/{ws}/discussions`                  | List: `?category=&answered=&q=&sort=&page=`         |
+| POST   | `/api/v1/w/{ws}/discussions`                  | `{title, body, category_id\|category}` → 201        |
+| GET    | `/api/v1/w/{ws}/discussions/{id}`             | Discussion + threads (replies nested)               |
+| PATCH  | `/api/v1/w/{ws}/discussions/{id}`             | Partial update                                      |
+| DELETE | `/api/v1/w/{ws}/discussions/{id}`             | Delete → 204                                        |
+| GET    | `/api/v1/w/{ws}/discussions/{id}/markdown`    | Discussion + threads + replies as `text/markdown`   |
+| POST   | `/api/v1/w/{ws}/discussions/{id}/threads`     | `{body}` → 201 (new thread)                         |
+| POST   | `/api/v1/w/{ws}/discussions/{id}/threads/{tid}/comments` | `{body}` → 201 (reply to thread)          |
+| POST   | `/api/v1/w/{ws}/discussions/{id}/threads/{tid}/answer` | `{answer: bool}` mark/unmark the answer (qa) |
 | GET    | `/api/v1/discussion-categories`               | All categories                                      |
 
 Notes:
 
+- `{ws}` is the workspace slug — resources outside `/api/v1/w/{ws}` are
+  the two global top-level rows (workspaces, discussion categories).
 - Responses are `application/json`; errors use
   `{"error":{"message": ..., "fields": {...}}}` (`fields` only for
   per-field 422s).
 - Timestamps are RFC 3339 strings. Status changes stay a `POST` action
   endpoint, mirroring the HTML app's action routes.
+- The `/markdown` endpoints answer `text/markdown; charset=utf-8` with
+  `Content-Disposition: inline` — the same document the web twins serve,
+  rendered by `internal/export`.
 
 ## Data storage
 
@@ -243,7 +262,8 @@ full PRG round-trip without it.
 - **Invoker Commands** — `command`/`commandfor` opens and closes the
   `<dialog>` delete confirmation (browsers without support still get the
   GET confirmation page); a custom `--copy-permalink` command backs each
-  comment's copy-link button
+  comment's copy-link button and a `--copy-markdown` command backs the
+  detail pages' copy-as-markdown button
 - **Speculation Rules** — `Speculation-Rules` header + external
   `application/speculationrules+json` ruleset prefetches likely next pages
 - **Custom Highlight API** — `?q=` hits marked in list titles
@@ -273,6 +293,8 @@ internal/web/      HTML layer: consumer-side Store interface, handlers,
 internal/api/      /api/v1 JSON surface: wire DTOs, Bearer auth, method dispatch
 internal/cli/      command grammar over a Backend interface (store or HTTP)
 internal/client/   HTTP Backend implementation for remote-mode CLI
+internal/export/   one markdown document per issue/discussion — shared by
+                   the API, the web /markdown routes and `zatu view --markdown`
 internal/auth/     argon2id password hashes + opaque session tokens
 internal/e2etests/ CLI end-to-end tests (build tag `e2e`)
 internal/web/templates/  layout.html + one file per page ({{define "content"}}) + fragments.html

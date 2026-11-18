@@ -3,6 +3,7 @@
 // progressive enhancement layered on the same forms: without JS they
 // still post and validate normally (the classic POST → 303 → GET path).
 import "./copy-permalink.js";
+import "./copy-markdown.js";
 import "./enter-submit.js";
 import "./form-errors.js";
 import "./partial-submit.js";

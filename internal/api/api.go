@@ -12,6 +12,8 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"slices"
 	"strconv"
@@ -93,9 +95,11 @@ func New(st Store, envToken string) http.Handler {
 		"/api/v1/w/{ws}/issues/{id}":          {"GET": h.scoped(h.getIssue), "PATCH": h.scoped(h.updateIssue), "DELETE": h.scoped(h.deleteIssue)},
 		"/api/v1/w/{ws}/issues/{id}/status":   {"POST": h.scoped(h.setIssueStatus)},
 		"/api/v1/w/{ws}/issues/{id}/comments": {"POST": h.scoped(h.createComment)},
+		"/api/v1/w/{ws}/issues/{id}/markdown": {"GET": h.scoped(h.issueMarkdown)},
 
 		"/api/v1/w/{ws}/discussions":                             {"GET": h.scoped(h.listDiscussions), "POST": h.scoped(h.createDiscussion)},
 		"/api/v1/w/{ws}/discussions/{id}":                        {"GET": h.scoped(h.getDiscussion), "PATCH": h.scoped(h.updateDiscussion), "DELETE": h.scoped(h.deleteDiscussion)},
+		"/api/v1/w/{ws}/discussions/{id}/markdown":               {"GET": h.scoped(h.discussionMarkdown)},
 		"/api/v1/w/{ws}/discussions/{id}/threads":                {"POST": h.scoped(h.createDiscussionThread)},
 		"/api/v1/w/{ws}/discussions/{id}/threads/{tid}/comments": {"POST": h.scoped(h.createDiscussionComment)},
 		"/api/v1/w/{ws}/discussions/{id}/threads/{tid}/answer":   {"POST": h.scoped(h.setThreadAnswer)},
@@ -209,6 +213,15 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(v)
+}
+
+// writeMarkdown answers a text/markdown document — the thread export from
+// internal/export, the API's one non-JSON representation. Errors keep the
+// JSON envelope; only 200s carry markdown.
+func writeMarkdown(w http.ResponseWriter, filename, doc string) {
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=%q", filename))
+	io.WriteString(w, doc)
 }
 
 // writeError emits {"error":{"message":..., "fields":{...}}} where fields

@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/podhmo/go-classic-mpa-sample/internal/export"
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
@@ -94,11 +95,12 @@ func issueList(ctx context.Context, o Options, args []string) error {
 	return nil
 }
 
-// zatu issue view N [--comments] [--json F,...] [-w]
+// zatu issue view N [--comments|--markdown] [--json F,...] [-w]
 func issueView(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("issue view", flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
 	comments := fs.Bool("comments", false, "include comments")
+	markdown := fs.Bool("markdown", false, "print the issue with comments as a markdown document")
 	jsonFields := fs.String("json", "", "output JSON with the named fields (comma-separated)")
 	tmpl := fs.String("template", "", "render output through a Go text/template")
 	web := fs.Bool("web", false, "open the issue page in a browser (requires --server)")
@@ -109,6 +111,12 @@ func issueView(ctx context.Context, o Options, args []string) error {
 	}
 	if *jsonFields != "" && *tmpl != "" {
 		return usageError{msg: "--json and --template are mutually exclusive"}
+	}
+	if *markdown && (*jsonFields != "" || *tmpl != "" || *web) {
+		return usageError{msg: "--markdown is mutually exclusive with --json, --template and --web"}
+	}
+	if *markdown && *comments {
+		return usageError{msg: "--markdown is mutually exclusive with --comments (markdown always includes comments)"}
 	}
 	id, err := issueNumber(rest, 0)
 	if err != nil {
@@ -129,11 +137,15 @@ func issueView(ctx context.Context, o Options, args []string) error {
 		return err
 	}
 	var cs []*store.Comment
-	if *comments {
+	if *comments || *markdown {
 		cs, err = b.ListComments(ctx, id)
 		if err != nil {
 			return err
 		}
+	}
+	if *markdown {
+		fmt.Fprint(o.Stdout, export.IssueMarkdown(issue, cs, bf.wsSlug()))
+		return nil
 	}
 	out := func(v any) error {
 		if *tmpl != "" {

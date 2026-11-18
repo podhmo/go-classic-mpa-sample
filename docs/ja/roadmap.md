@@ -23,6 +23,7 @@
 - アカウント（ログイン + 投稿者識別） — `/register` `/login` `/logout`。**Phase 1 実装済み**（ログイン + 投稿者識別、authorization は未導入）。未ログインでも全機能は使え、投稿に投稿者名が付く — `docs/sketch/ja/accounts.md`
 - Discussions タブ — `/discussions` 系。カテゴリ（seed 固定 taxonomy）・1段スレッド返信・Q&A の answer マーク — `docs/sketch/ja/discussions.md`。reactions・poll・issue→discussion 変換・pin・カテゴリ管理 UI は未実装（v3 候補）
 - コメント/返信の部分更新 — 手書き fetch + HTML fragment（`X-Partial` 判定ヘッダ）で全体再描画を回避。`partial-submit.js` は最初の ES module とし共有コード（announcer 等）を module 化。answer マーク・status toggle も同機構の replace モードで実装済み — `docs/sketch/ja/partial-updates.md` `docs/sketch/ja/js-modules.md`
+- Markdown エクスポート — 詳細ページの "Copy as markdown" ボタン、`GET /w/{ws}/issues|discussions/{id}/markdown`、`GET /api/v1/w/{ws}/.../{id}/markdown`、CLI `zatu issue|discussion view --markdown`。serializer は `internal/export` で全 surface 共有 — `docs/ja/decisions.md`「Markdown エクスポート」
 
 ## v3 候補（検討メモあり・未着手）
 

@@ -8,7 +8,9 @@ import (
 	"context"
 	"embed"
 	"errors"
+	"fmt"
 	"html/template"
+	"io"
 	"log"
 	"mime"
 	"net/http"
@@ -144,6 +146,7 @@ func New(st Store, opts ...Option) http.Handler {
 	mux.HandleFunc("GET /w/{ws}/issues/new", h.scoped(h.newIssue))
 	mux.HandleFunc("POST /w/{ws}/issues", h.scoped(h.createIssue))
 	mux.HandleFunc("GET /w/{ws}/issues/{id}", h.scoped(h.showIssue))
+	mux.HandleFunc("GET /w/{ws}/issues/{id}/markdown", h.scoped(h.issueMarkdown))
 	mux.HandleFunc("GET /w/{ws}/issues/{id}/edit", h.scoped(h.editIssue))
 	mux.HandleFunc("POST /w/{ws}/issues/{id}/edit", h.scoped(h.updateIssue))
 	mux.HandleFunc("POST /w/{ws}/issues/{id}/status", h.scoped(h.setStatus))
@@ -162,6 +165,7 @@ func New(st Store, opts ...Option) http.Handler {
 	mux.HandleFunc("GET /w/{ws}/discussions/new", h.scoped(h.newDiscussion))
 	mux.HandleFunc("POST /w/{ws}/discussions", h.scoped(h.createDiscussion))
 	mux.HandleFunc("GET /w/{ws}/discussions/{id}", h.scoped(h.showDiscussion))
+	mux.HandleFunc("GET /w/{ws}/discussions/{id}/markdown", h.scoped(h.discussionMarkdown))
 	mux.HandleFunc("GET /w/{ws}/discussions/{id}/edit", h.scoped(h.editDiscussion))
 	mux.HandleFunc("POST /w/{ws}/discussions/{id}/edit", h.scoped(h.updateDiscussion))
 	mux.HandleFunc("GET /w/{ws}/discussions/{id}/delete", h.scoped(h.confirmDeleteDiscussion))
@@ -217,6 +221,16 @@ func New(st Store, opts ...Option) http.Handler {
 	// Comment permalink copy buttons on the detail page.
 	mux.HandleFunc("GET /static/copy-permalink.js", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFileFS(w, r, staticFS, "static/copy-permalink.js")
+	})
+	// "Copy as markdown" action on the article rows (imported by
+	// page-detail.js).
+	mux.HandleFunc("GET /static/copy-markdown.js", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, staticFS, "static/copy-markdown.js")
+	})
+	// Shared clipboard write + tip feedback used by the copy-* modules
+	// (imported, not loaded as a script tag).
+	mux.HandleFunc("GET /static/clipboard.js", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, staticFS, "static/clipboard.js")
 	})
 	// Ctrl/Cmd+Enter form submission from textareas.
 	mux.HandleFunc("GET /static/enter-submit.js", func(w http.ResponseWriter, r *http.Request) {
@@ -473,6 +487,15 @@ func (h *handler) parseForm(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	return true
+}
+
+// writeMarkdown serves an exported markdown document. The copy-as-markdown
+// button fetches these endpoints, so Content-Disposition stays inline — the
+// body is clipboard input, not a download.
+func writeMarkdown(w http.ResponseWriter, filename, doc string) {
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=%q", filename))
+	io.WriteString(w, doc)
 }
 
 // parseID extracts the {id} path value. Non-numeric or non-positive IDs are

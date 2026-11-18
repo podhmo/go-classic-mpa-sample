@@ -1398,6 +1398,28 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   opacity: 1;
 }
 
+/* "Copy as markdown" on the article action row: a normal .btn sharing
+   the same copy-tip bubble — the wrap's inline-start margin exists for
+   the comment header, flex gap already spaces the action row. */
+.issue-actions .copy-wrap {
+  margin-inline-start: 0;
+}
+
+.issue-actions .btn[data-copied] {
+  color: var(--open);
+  border-color: var(--open);
+}
+
+.issue-actions .btn[data-failed] {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.issue-actions .btn[data-copied] + .copy-tip,
+.issue-actions .btn[data-failed] + .copy-tip {
+  opacity: 1;
+}
+
 @media (hover: hover) {
   .copy-btn {
     opacity: 0;

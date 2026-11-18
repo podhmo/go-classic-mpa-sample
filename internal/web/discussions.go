@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/podhmo/go-classic-mpa-sample/internal/export"
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
@@ -225,6 +226,31 @@ func (h *handler) showDiscussion(w http.ResponseWriter, r *http.Request, ws *sto
 		Workspace:  ws,
 		User:       userFromContext(r.Context()),
 	})
+}
+
+// discussionMarkdown serves GET /discussions/{id}/markdown — the cookie-
+// session twin of the API endpoint, fetched by the "Copy as markdown"
+// action.
+func (h *handler) discussionMarkdown(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
+	id, ok := parseID(r)
+	if !ok {
+		h.notFound(w, r)
+		return
+	}
+	discussion, err := h.store.GetDiscussion(r.Context(), id)
+	if err != nil {
+		h.discussionError(w, r, err)
+		return
+	}
+	if !h.requireScope(w, r, ws, discussion.WorkspaceID) {
+		return
+	}
+	threads, err := h.store.ListDiscussionThreads(r.Context(), id)
+	if err != nil {
+		h.internalError(w, r, err)
+		return
+	}
+	writeMarkdown(w, fmt.Sprintf("discussion-%d.md", id), export.DiscussionMarkdown(discussion, threads, ws.Slug))
 }
 
 // editDiscussion renders the edit form populated with the current values.

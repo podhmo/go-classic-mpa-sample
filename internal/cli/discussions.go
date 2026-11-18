@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/podhmo/go-classic-mpa-sample/internal/export"
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
@@ -93,11 +94,12 @@ func discussionList(ctx context.Context, o Options, args []string) error {
 	return nil
 }
 
-// zatu discussion view N [--comments] [--json F,...] [-w]
+// zatu discussion view N [--comments|--markdown] [--json F,...] [-w]
 func discussionView(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("discussion view", flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
 	comments := fs.Bool("comments", false, "include threads and their replies")
+	markdown := fs.Bool("markdown", false, "print the discussion with threads as a markdown document")
 	jsonFields := fs.String("json", "", "output JSON with the named fields (comma-separated)")
 	tmpl := fs.String("template", "", "render output through a Go text/template")
 	web := fs.Bool("web", false, "open the discussion page in a browser (requires --server)")
@@ -108,6 +110,12 @@ func discussionView(ctx context.Context, o Options, args []string) error {
 	}
 	if *jsonFields != "" && *tmpl != "" {
 		return usageError{msg: "--json and --template are mutually exclusive"}
+	}
+	if *markdown && (*jsonFields != "" || *tmpl != "" || *web) {
+		return usageError{msg: "--markdown is mutually exclusive with --json, --template and --web"}
+	}
+	if *markdown && *comments {
+		return usageError{msg: "--markdown is mutually exclusive with --comments (markdown always includes threads)"}
 	}
 	id, err := argNumber(rest, 0, "discussion")
 	if err != nil {
@@ -128,11 +136,15 @@ func discussionView(ctx context.Context, o Options, args []string) error {
 		return err
 	}
 	var ts []*store.DiscussionThread
-	if *comments {
+	if *comments || *markdown {
 		ts, err = b.ListDiscussionThreads(ctx, id)
 		if err != nil {
 			return err
 		}
+	}
+	if *markdown {
+		fmt.Fprint(o.Stdout, export.DiscussionMarkdown(d, ts, bf.wsSlug()))
+		return nil
 	}
 	out := func(v any) error {
 		if *tmpl != "" {
