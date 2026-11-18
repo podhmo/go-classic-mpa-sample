@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -88,6 +89,7 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 			}
 		}
 		slog.InfoContext(ctx, "serving stories", "addr", *addr, "dir", b.Dir, "stories", len(stories), "watch", *watch)
+		fmt.Fprintf(stdout, "storybook: http://%s\n", browsableAddr(*addr))
 		return http.ListenAndServe(*addr, b.Handler())
 	case fs.NArg() >= 2:
 		res, err := b.Render(ctx, fs.Arg(1))
@@ -99,4 +101,15 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 	default:
 		return errors.New("one of -list, -o, -http or a story name is required")
 	}
+}
+
+func browsableAddr(addr string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" || host == "[::]" {
+		host = "localhost"
+	}
+	return net.JoinHostPort(host, port)
 }
