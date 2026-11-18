@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -94,5 +95,62 @@ func TestDiscussionLifecycle(t *testing.T) {
 	code, _ = do(t, srv, "DELETE", fmt.Sprintf("/api/v1/w/default/discussions/%d", did), "")
 	if code != http.StatusNoContent {
 		t.Fatalf("delete = %d", code)
+	}
+}
+
+// The markdown endpoint answers text/markdown: the discussion with every
+// thread and reply as one document; the answer mark rides the heading.
+func TestDiscussionMarkdown(t *testing.T) {
+	srv, st := newServer(t)
+	if err := st.SeedDemoData(t.Context()); err != nil {
+		t.Fatalf("SeedDemoData: %v", err)
+	}
+	cats, err := st.ListDiscussionCategories(t.Context())
+	if err != nil || len(cats) == 0 {
+		t.Fatalf("no categories seeded: %v", err)
+	}
+	var qaSlug string
+	for _, c := range cats {
+		if c.Format == "qa" {
+			qaSlug = c.Slug
+		}
+	}
+
+	code, out := do(t, srv, "POST", "/api/v1/w/default/discussions",
+		fmt.Sprintf(`{"title":"how?","body":"details","category":"%s"}`, qaSlug))
+	if code != http.StatusCreated {
+		t.Fatalf("create = %d %v", code, out)
+	}
+	did := int64(out["discussion"].(map[string]any)["id"].(float64))
+	code, out = do(t, srv, "POST", fmt.Sprintf("/api/v1/w/default/discussions/%d/threads", did), `{"body":"try this"}`)
+	if code != http.StatusCreated {
+		t.Fatalf("thread = %d", code)
+	}
+	tid := int64(out["thread"].(map[string]any)["id"].(float64))
+	do(t, srv, "POST", fmt.Sprintf("/api/v1/w/default/discussions/%d/threads/%d/comments", did, tid), `{"body":"it worked"}`)
+	do(t, srv, "POST", fmt.Sprintf("/api/v1/w/default/discussions/%d/threads/%d/answer", did, tid), `{"answer":true}`)
+
+	code, hdr, body := doText(t, srv, "GET", fmt.Sprintf("/api/v1/w/default/discussions/%d/markdown", did), "")
+	if code != http.StatusOK {
+		t.Fatalf("markdown status = %d", code)
+	}
+	if ct := hdr.Get("Content-Type"); ct != "text/markdown; charset=utf-8" {
+		t.Fatalf("Content-Type = %q, want text/markdown", ct)
+	}
+	if cd := hdr.Get("Content-Disposition"); cd != fmt.Sprintf(`inline; filename="discussion-%d.md"`, did) {
+		t.Fatalf("Content-Disposition = %q", cd)
+	}
+	for _, want := range []string{
+		"# how?\n", "- **Answered**: yes\n", "details",
+		"## Threads", "· answer\n", "try this", "#### Reply by", "it worked",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("markdown missing %q:\n%s", want, body)
+		}
+	}
+
+	code, out = do(t, srv, "GET", "/api/v1/w/default/discussions/999/markdown", "")
+	if code != http.StatusNotFound || out["error"] == nil {
+		t.Fatalf("missing discussion = %d %v, want 404 JSON", code, out)
 	}
 }

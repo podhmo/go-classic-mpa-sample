@@ -2,10 +2,34 @@ package api
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
+
+// doText sends an authorized request and returns status + response
+// headers + raw body — the non-JSON counterpart of do() for the markdown
+// endpoints.
+func doText(t *testing.T, srv *httptest.Server, method, path, body string) (int, http.Header, string) {
+	t.Helper()
+	req, err := http.NewRequest(method, srv.URL+path, strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+testToken)
+	resp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, path, err)
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp.StatusCode, resp.Header, string(raw)
+}
 
 // createIssue POSTs an issue and returns its id.
 func createIssue(t *testing.T, srv *httptest.Server, body string) int64 {
@@ -76,6 +100,56 @@ func TestIssueLifecycle(t *testing.T) {
 	code, _ = do(t, srv, "GET", fmt.Sprintf("/api/v1/w/default/issues/%d", id), "")
 	if code != http.StatusNotFound {
 		t.Fatalf("deleted issue = %d, want 404", code)
+	}
+}
+
+// The markdown endpoint answers text/markdown: the issue plus every
+// comment as one document. Errors stay JSON.
+func TestIssueMarkdown(t *testing.T) {
+	srv, _ := newServer(t)
+	id := createIssue(t, srv, `{"title":"first","body":"hello"}`)
+	do(t, srv, "POST", fmt.Sprintf("/api/v1/w/default/issues/%d/comments", id), `{"body":"me too"}`)
+
+	code, hdr, body := doText(t, srv, "GET", fmt.Sprintf("/api/v1/w/default/issues/%d/markdown", id), "")
+	if code != http.StatusOK {
+		t.Fatalf("markdown status = %d", code)
+	}
+	if ct := hdr.Get("Content-Type"); ct != "text/markdown; charset=utf-8" {
+		t.Fatalf("Content-Type = %q, want text/markdown", ct)
+	}
+	// inline, not attachment: the body is clipboard input, not a download.
+	if cd := hdr.Get("Content-Disposition"); cd != fmt.Sprintf(`inline; filename="issue-%d.md"`, id) {
+		t.Fatalf("Content-Disposition = %q", cd)
+	}
+	for _, want := range []string{"# first\n", "- **Status**: open\n", "hello", "## Comments", "### Comment by anonymous", "me too"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("markdown missing %q:\n%s", want, body)
+		}
+	}
+
+	// Missing issue → JSON 404 envelope, not a markdown body.
+	code, out := do(t, srv, "GET", "/api/v1/w/default/issues/999/markdown", "")
+	if code != http.StatusNotFound || out["error"] == nil {
+		t.Fatalf("missing issue = %d %v, want 404 JSON", code, out)
+	}
+
+	// An issue in "default" is invisible from another workspace slug.
+	do(t, srv, "POST", "/api/v1/workspaces", `{"slug":"other"}`)
+	code, out = do(t, srv, "GET", fmt.Sprintf("/api/v1/w/other/issues/%d/markdown", id), "")
+	if code != http.StatusNotFound || out["error"] == nil {
+		t.Fatalf("cross-workspace markdown = %d %v, want 404 JSON", code, out)
+	}
+
+	// POST is a JSON 405 with Allow: GET.
+	req, _ := http.NewRequest("POST", srv.URL+fmt.Sprintf("/api/v1/w/default/issues/%d/markdown", id), nil)
+	req.Header.Set("Authorization", "Bearer "+testToken)
+	resp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusMethodNotAllowed || resp.Header.Get("Allow") != "GET, HEAD" {
+		t.Fatalf("POST markdown = %d Allow=%q, want 405 GET, HEAD", resp.StatusCode, resp.Header.Get("Allow"))
 	}
 }
 

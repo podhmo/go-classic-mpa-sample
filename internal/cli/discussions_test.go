@@ -106,6 +106,41 @@ func TestDiscussionLifecycleLocal(t *testing.T) {
 	}
 }
 
+// --markdown prints the same document the /markdown endpoints serve,
+// threads and replies included.
+func TestDiscussionViewMarkdown(t *testing.T) {
+	db := t.TempDir() + "/test.db"
+	seedCategories(t, db)
+	o := localOptions(t, db)
+
+	id := createDiscussion(t, o, "cli question", "qa")
+	cid := createDThread(t, o, id, "the answer")
+	run(t, o, "discussion", "comment", "create", itoa(id), "--thread", itoa(cid), "--body", "a reply")
+	run(t, o, "discussion", "answer", itoa(id), "--thread", itoa(cid))
+
+	code, out, _ := run(t, o, "discussion", "view", itoa(id), "--markdown")
+	if code != ExitOK {
+		t.Fatalf("view --markdown: exit %d", code)
+	}
+	for _, want := range []string{
+		"# cli question\n", "- **Category**: Q&A\n", "- **Answered**: yes\n",
+		"## Threads", "· answer\n", "the answer", "#### Reply by", "a reply",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("--markdown missing %q:\n%s", want, out)
+		}
+	}
+
+	code, _, _ = run(t, o, "discussion", "view", itoa(id), "--markdown", "--template", "{{.title}}")
+	if code != ExitUsage {
+		t.Fatalf("--markdown --template: exit %d, want %d", code, ExitUsage)
+	}
+	code, _, _ = run(t, o, "discussion", "view", itoa(id), "--markdown", "--comments")
+	if code != ExitUsage {
+		t.Fatalf("--markdown --comments: exit %d, want %d", code, ExitUsage)
+	}
+}
+
 func TestDiscussionEditDeleteAndJSON(t *testing.T) {
 	db := t.TempDir() + "/test.db"
 	seedCategories(t, db)

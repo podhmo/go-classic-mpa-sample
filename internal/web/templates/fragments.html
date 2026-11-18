@@ -9,7 +9,7 @@
    itself (partial-submit.js replace mode — a single node without an id
    falls back to data-partial-target=".issue-detail"). The status forms
    ride the same fetch machinery the comment forms use. */}}
-<article class="card issue-detail">
+<article class="card issue-detail" id="issue-article">
   <header class="issue-detail-head">
     <div class="issue-title-row">
       <span class="badge badge-{{.Issue.Status}}">{{if eq .Issue.Status "open"}}Open{{else}}Closed{{end}}</span>
@@ -44,6 +44,10 @@
       <button type="submit" class="btn">Reopen issue</button>
     </form>
     {{end}}
+    <span class="copy-wrap">
+      <button type="button" class="btn" command="--copy-markdown" commandfor="issue-article" data-url="/w/{{.Workspace.Slug}}/issues/{{.Issue.ID}}/markdown">Copy as markdown</button>
+      <span class="copy-tip" role="status"></span>
+    </span>
     <button type="button" class="btn btn-danger delete-open" commandfor="delete-dialog" command="show-modal">Delete</button>
     <a class="btn btn-danger delete-fallback" href="/w/{{.Workspace.Slug}}/issues/{{.Issue.ID}}/delete">Delete</a>
   </div>
@@ -119,7 +123,7 @@
 {{/* The whole discussion card, extracted so both the detail page and the
    live-update article fragment render the same markup — the discussion
    counterpart of issue_article (title/body/category change on edit). */}}
-<article class="card issue-detail">
+<article class="card issue-detail" id="discussion-article">
   <header class="issue-detail-head">
     <div class="issue-title-row">
       <a class="category-badge" href="/w/{{.Workspace.Slug}}/discussions?category={{.Discussion.Category.Slug}}">{{.Discussion.Category.Name}}</a>
@@ -143,6 +147,10 @@
 
   <div class="issue-actions">
     <a class="btn" href="/w/{{.Workspace.Slug}}/discussions/{{.Discussion.ID}}/edit">Edit</a>
+    <span class="copy-wrap">
+      <button type="button" class="btn" command="--copy-markdown" commandfor="discussion-article" data-url="/w/{{.Workspace.Slug}}/discussions/{{.Discussion.ID}}/markdown">Copy as markdown</button>
+      <span class="copy-tip" role="status"></span>
+    </span>
     <button type="button" class="btn btn-danger delete-open" commandfor="delete-dialog" command="show-modal">Delete</button>
     <a class="btn btn-danger delete-fallback" href="/w/{{.Workspace.Slug}}/discussions/{{.Discussion.ID}}/delete">Delete</a>
   </div>

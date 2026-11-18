@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/podhmo/go-classic-mpa-sample/internal/export"
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
@@ -79,6 +80,31 @@ func (h *handler) getIssue(w http.ResponseWriter, r *http.Request, ws *store.Wor
 		out = append(out, commentDTO(c))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"issue": issueDTO(issue), "comments": out})
+}
+
+// GET /api/v1/w/{ws}/issues/{id}/markdown → text/markdown — the issue
+// with all comments rendered by internal/export. The HTML app's "Copy as
+// markdown" cannot use this endpoint (Bearer only), so /w/{ws}/issues/
+// {id}/markdown serves the same document on the cookie session.
+func (h *handler) issueMarkdown(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
+	id, ok := h.pathID(w, r, "id")
+	if !ok {
+		return
+	}
+	issue, err := h.store.GetIssue(r.Context(), id)
+	if err != nil {
+		h.storeError(w, err)
+		return
+	}
+	if !h.requireScope(w, ws, issue.WorkspaceID) {
+		return
+	}
+	comments, err := h.store.ListComments(r.Context(), id)
+	if err != nil {
+		h.storeError(w, err)
+		return
+	}
+	writeMarkdown(w, fmt.Sprintf("issue-%d.md", id), export.IssueMarkdown(issue, comments, ws.Slug))
 }
 
 type issueBody struct {

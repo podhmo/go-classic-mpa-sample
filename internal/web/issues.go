@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/podhmo/go-classic-mpa-sample/internal/export"
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
@@ -214,6 +215,32 @@ func (h *handler) showIssue(w http.ResponseWriter, r *http.Request, ws *store.Wo
 		Workspace: ws,
 		User:      userFromContext(r.Context()),
 	})
+}
+
+// issueMarkdown serves GET /issues/{id}/markdown — the same document the
+// API's markdown endpoint returns, fetched by the "Copy as markdown"
+// action. The API route can't serve the HTML page (Bearer auth), so this
+// is the cookie-session twin of it.
+func (h *handler) issueMarkdown(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
+	id, ok := parseID(r)
+	if !ok {
+		h.notFound(w, r)
+		return
+	}
+	issue, err := h.store.GetIssue(r.Context(), id)
+	if err != nil {
+		h.issueError(w, r, err)
+		return
+	}
+	if !h.requireScope(w, r, ws, issue.WorkspaceID) {
+		return
+	}
+	comments, err := h.store.ListComments(r.Context(), id)
+	if err != nil {
+		h.internalError(w, r, err)
+		return
+	}
+	writeMarkdown(w, fmt.Sprintf("issue-%d.md", id), export.IssueMarkdown(issue, comments, ws.Slug))
 }
 
 // editIssue renders the edit form populated with the current values.

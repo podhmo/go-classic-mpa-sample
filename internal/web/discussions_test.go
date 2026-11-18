@@ -132,6 +132,56 @@ func TestDiscussionDetailRendersThreadAndAnswer(t *testing.T) {
 	}
 }
 
+// The /markdown route answers text/markdown — the fetch target of the
+// "Copy as markdown" action — with threads and replies flattened into
+// headings; errors keep the styled HTML pages.
+func TestDiscussionMarkdownEndpoint(t *testing.T) {
+	srv, f := newTestServer(t)
+	d := f.addDiscussion("How does triage work?", "qa body", 2, time.Now())
+	tid, err := f.CreateDiscussionThread(t.Context(), d.ID, "the fix", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.CreateDiscussionComment(t.Context(), d.ID, tid, "it worked", 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.SetThreadAnswer(t.Context(), d.ID, tid, true); err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := srv.Client().Get(srv.URL + "/w/default/discussions/" + itoa(d.ID) + "/markdown")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := getBody(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "text/markdown; charset=utf-8" {
+		t.Fatalf("Content-Type = %q, want text/markdown", ct)
+	}
+	if cd := resp.Header.Get("Content-Disposition"); cd != `inline; filename="discussion-`+itoa(d.ID)+`.md"` {
+		t.Fatalf("Content-Disposition = %q", cd)
+	}
+	for _, want := range []string{
+		"# How does triage work?\n", "- **Category**: Q&A\n", "- **Answered**: yes\n",
+		"qa body", "## Threads", "· answer\n", "the fix", "#### Reply by", "it worked",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("markdown missing %q:\n%s", want, body)
+		}
+	}
+
+	resp2, err := srv.Client().Get(srv.URL + "/w/default/discussions/999/markdown")
+	if err != nil {
+		t.Fatal(err)
+	}
+	getBody(t, resp2)
+	if resp2.StatusCode != http.StatusNotFound {
+		t.Fatalf("missing discussion status = %d, want 404", resp2.StatusCode)
+	}
+}
+
 // Phase 2 of the partial-update contract: a partial answer POST swaps
 // <li>s in place instead of appending. Since marking moves the badge, the
 // fragment carries the toggled comment AND the previous mark holder, each

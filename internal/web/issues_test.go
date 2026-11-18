@@ -213,6 +213,62 @@ func TestShowIssueRendersMarkdown(t *testing.T) {
 	}
 }
 
+// The /markdown route answers text/markdown — the fetch target of the
+// "Copy as markdown" action — while errors keep the styled HTML pages.
+func TestIssueMarkdownEndpoint(t *testing.T) {
+	srv, f := newTestServer(t)
+	is := f.addIssue("Detail title", "line one\nline two", store.StatusOpen, time.Now())
+	f.comments[is.ID] = append(f.comments[is.ID], &store.Comment{ID: 1, IssueID: is.ID, Body: "first!", CreatedAt: time.Now()})
+
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues/1/markdown")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := getBody(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "text/markdown; charset=utf-8" {
+		t.Fatalf("Content-Type = %q, want text/markdown", ct)
+	}
+	if cd := resp.Header.Get("Content-Disposition"); cd != `inline; filename="issue-1.md"` {
+		t.Fatalf("Content-Disposition = %q", cd)
+	}
+	for _, want := range []string{"# Detail title\n", "- **Status**: open\n", "line one\nline two", "## Comments", "first!"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("markdown missing %q:\n%s", want, body)
+		}
+	}
+
+	for _, path := range []string{"/w/default/issues/999/markdown", "/w/default/issues/abc/markdown"} {
+		resp, err := srv.Client().Get(srv.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		getBody(t, resp)
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("%s status = %d, want 404", path, resp.StatusCode)
+		}
+	}
+
+	// A GET under the wrong workspace redirects to the canonical URL —
+	// the same rule the detail page follows.
+	if _, err := f.CreateWorkspace(t.Context(), store.WorkspaceInput{Slug: "other"}); err != nil {
+		t.Fatal(err)
+	}
+	resp3, err := noRedirectClient().Get(srv.URL + "/w/other/issues/1/markdown")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp3.Body.Close()
+	if resp3.StatusCode != http.StatusFound {
+		t.Fatalf("cross-workspace status = %d, want 302", resp3.StatusCode)
+	}
+	if loc := resp3.Header.Get("Location"); loc != "/w/default/issues/1/markdown" {
+		t.Fatalf("Location = %q, want /w/default/issues/1/markdown", loc)
+	}
+}
+
 func TestCreateIssueValidationError(t *testing.T) {
 	srv, _ := newTestServer(t)
 	resp := postForm(t, srv.Client(), srv.URL+"/w/default/issues", url.Values{
@@ -399,7 +455,7 @@ func TestPartialSetStatusContract(t *testing.T) {
 		t.Fatalf("partial status POST status = %d, want 200", resp.StatusCode)
 	}
 	for _, want := range []string{
-		`<article class="card issue-detail">`,
+		`<article class="card issue-detail" id="issue-article">`,
 		`badge-closed`,
 		`name="status" value="open"`,
 		"Reopen issue",

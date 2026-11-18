@@ -91,6 +91,38 @@ func TestIssueListAndViewLocal(t *testing.T) {
 	}
 }
 
+// --markdown prints the same document the /markdown endpoints serve —
+// the export package shared by all three surfaces.
+func TestIssueViewMarkdown(t *testing.T) {
+	db := t.TempDir() + "/test.db"
+	id := seedIssue(t, db, "first issue")
+	o := localOptions(t, db)
+
+	code, out, _ := run(t, o, "comment", "create", itoa(id), "--body", "me too")
+	if code != ExitOK {
+		t.Fatalf("comment create: exit %d\n%s", code, out)
+	}
+
+	code, out, _ = run(t, o, "issue", "view", itoa(id), "--markdown")
+	if code != ExitOK {
+		t.Fatalf("view --markdown: exit %d", code)
+	}
+	for _, want := range []string{"# first issue\n", "- **Status**: open\n", "body of first issue", "## Comments", "me too"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("--markdown missing %q:\n%s", want, out)
+		}
+	}
+
+	code, _, _ = run(t, o, "issue", "view", itoa(id), "--markdown", "--json", "title")
+	if code != ExitUsage {
+		t.Fatalf("--markdown --json: exit %d, want %d", code, ExitUsage)
+	}
+	code, _, _ = run(t, o, "issue", "view", itoa(id), "--markdown", "--comments")
+	if code != ExitUsage {
+		t.Fatalf("--markdown --comments: exit %d, want %d", code, ExitUsage)
+	}
+}
+
 func TestIssueCreateJSONAndLifecycle(t *testing.T) {
 	db := t.TempDir() + "/test.db"
 	o := localOptions(t, db)

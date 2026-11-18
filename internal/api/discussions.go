@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/podhmo/go-classic-mpa-sample/internal/export"
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
@@ -62,6 +63,29 @@ func (h *handler) getDiscussion(w http.ResponseWriter, r *http.Request, ws *stor
 		out = append(out, discussionThreadDTO(t))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"discussion": discussionDTO(d), "threads": out})
+}
+
+// GET /api/v1/w/{ws}/discussions/{id}/markdown → text/markdown — the
+// discussion with threads and replies rendered by internal/export.
+func (h *handler) discussionMarkdown(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
+	id, ok := h.pathID(w, r, "id")
+	if !ok {
+		return
+	}
+	d, err := h.store.GetDiscussion(r.Context(), id)
+	if err != nil {
+		h.storeError(w, err)
+		return
+	}
+	if !h.requireScope(w, ws, d.WorkspaceID) {
+		return
+	}
+	threads, err := h.store.ListDiscussionThreads(r.Context(), id)
+	if err != nil {
+		h.storeError(w, err)
+		return
+	}
+	writeMarkdown(w, fmt.Sprintf("discussion-%d.md", id), export.DiscussionMarkdown(d, threads, ws.Slug))
 }
 
 type discussionBody struct {

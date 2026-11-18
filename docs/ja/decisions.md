@@ -601,3 +601,13 @@ podhmo からの改善要望（grid と story のリンク誤押・見た目・s
 - **検証**: `go test ./...` / `go vet` / `gofmt` 全パス。`internal/store/labels_test.go` が CRUD・union・discussion 付与・v2→v3 移行を検証。実サーバで管理画面の作成→重複 422→アーカイブ→復帰、discussion picker、local-mode `zatu label` を手動確認済み。
 
 追記（レビュー指摘対応）: 添付ガードに `(workspace_id IS NULL OR workspace_id = ?)` を加え他ワークスペースのラベル id を拒否。replace 時の DELETE は `archived=1` の添付を温存する（picker に出ないため編集で消えてしまうのを防ぐ）。API の label フィルタは `label_id` パラメータを優先（同名 union の曖昧さ回避）。ラベル管理フォームも `novalidate`/`page-form.js`/aria 関連付けを他フォームと揃えた。
+
+## issue/discussion の Markdown エクスポート（2026-11-18、main ブランチ）
+
+「特定の issue / discussion(thread) を Markdown としてコピーしたい、API としても露出したい」という要望。serializer を `internal/export` に切り出し、HTML アプリ・`/api/v1`・CLI の 3 面が同一実装を共有する形にした。
+
+- **`internal/export` に serializer を集約**: `IssueMarkdown(issue, comments, wsSlug)` / `DiscussionMarkdown(discussion, threads, wsSlug)`。本文は既に Markdown なのでエスケープせず verbatim で埋め込み、メタデータは `- **Key**: value` の箇条書き。コメント/スレッドは `###`、返信は `####` の見出しで畳み込み、answer マークはスレッド見出しに `· answer` 接尾辞。`Answered` メタ行は qa カテゴリのみ（open カテゴリではマーク自体を持たないため）。
+- **エンドポイントは web と API の双子**: `GET /w/{ws}/issues|discussions/{id}/markdown` と `GET /api/v1/w/{ws}/.../{id}/markdown` が同じ文書を返す。`/api/v1` は Bearer 認証なのでブラウザの fetch からは叩けず、HTML 側にも同一路由を置いた（cookie セッション版）。成功は `text/markdown; charset=utf-8` + `Content-Disposition: inline` — 本文はクリップボード入力なので `attachment` の強制ダウンロードはしない。エラーは各層の既存挙動（API は JSON 404、web は styled 404 / GET なら canonical workspace へ 302）。
+- **UI はアクション行の "Copy as markdown" ボタン**: `command="--copy-markdown"` + `commandfor`（article id）の Invoker Command で、copy link と同型の進行形強化。クリックで `/markdown` を fetch して clipboard へ書き込む。`static/clipboard.js` に report bubble（`role="status"` の copy-tip）と write path を集約し、`copy-permalink.js` も import する形にリファクタ。`ClipboardItem` に promise を渡す方式で fetch 中もユーザーアクティベーションを保持（Safari は await 越しの `writeText` を拒否するため）。ClipboardItem 非対応は fetch→`writeText`→`execCommand` の順にフォールバック。
+- **CLI は `zatu issue|discussion view N --markdown`**: 同じ export 関数を使うため local/remote backend で差異なし（remote も既存の Get+List で文書を構成）。`--json`/`--template`/`--web` とは排他、`--markdown` 指定時は常に comments/threads 込み。
+- **検証**: `go test ./...` / `go vet` / `gofmt` 全パス。export 単体・API・web・CLI に各テスト追加。storybook でアクション行の描画（広幅・狭幅）を確認。実ブラウザでのコピー動作は verify-ui フローで別途確認。
