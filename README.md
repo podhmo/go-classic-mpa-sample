@@ -34,8 +34,10 @@ go run ./cmd/zatudan
 ```
 
 Then open <http://localhost:8080> — `GET /` redirects to `/issues`.
-On first start the app creates the schema and seeds demo issues, labels,
-discussion categories and comments (only when the tables are empty).
+On first start the app creates the schema and its master data (the default
+workspace, labels, discussion categories). Demo issues, discussions,
+comments and the `demo`/`demo` account are mock data and only land when
+`-seed` (env `ZATUDAN_SEED`) is set — without it the app starts empty.
 
 > The server binds to `127.0.0.1` by default. Accounts exist for author
 > attribution, but there is **no authorization** — signed in or not,
@@ -53,9 +55,9 @@ go run ./cmd/zatudan -db zatudan.db init     # or: go run ./cmd/zatudan -init
 statistics, prints a report, and exits without starting the server. The
 same schema init already happens automatically at every startup, so this
 step is purely optional — an explicit provisioning step for deployment
-scripts and the like. It does **not** seed demo data, and re-running it is
-safe: the schema DDL is idempotent and `ANALYZE` refreshes the planner
-statistics on a populated database.
+scripts and the like. It does **not** seed demo data unless `-seed` is
+passed, and re-running it is safe: the schema DDL is idempotent and
+`ANALYZE` refreshes the planner statistics on a populated database.
 
 Flags must come **before** the `init` argument — Go's `flag` package stops
 parsing at the first positional argument, so write `go run ./cmd/zatudan -db x.db
@@ -119,6 +121,7 @@ See `docs/ja/for-ui-designer.md`.
 | `-addr` | `ZATUDAN_ADDR` | `127.0.0.1:8080` | Listen address                                                         |
 | `-db`   | `ZATUDAN_DB`   | `zatudan.db`      | SQLite database file path                                              |
 | `-init` | —             | `false`          | Initialize the database and exit (same as the `init` subcommand)       |
+| `-seed` | `ZATUDAN_SEED` | `false`         | Insert demo issues, discussions and the demo user; master data is ensured either way |
 | `-api-token` | `ZATUDAN_API_TOKEN` | *(unset)*   | Shared Bearer token for `/api/v1`; the API also mounts when per-user `api_tokens` exist |
 
 Example: `go run ./cmd/zatudan -addr :8080 -db /tmp/my-zatudan.db` or
@@ -282,8 +285,9 @@ full PRG round-trip without it.
 ## Architecture
 
 ```
-cmd/zatudan/       server binary: flags/env, store.Open, SeedDemoData,
-                   http.Server with timeouts, graceful shutdown
+cmd/zatudan/       server binary: flags/env, store.Open, SeedMasterData
+                   (+ SeedDemoData under -seed), http.Server with
+                   timeouts, graceful shutdown
 cmd/zatu/          gh-style CLI binary (issue/comment/label/discussion/auth/api/completion)
 cmd/storybook/     UI preview server (separate module, runs on minigo)
 internal/store/    persistence: sqlite schema, queries, ErrNotFound contract.

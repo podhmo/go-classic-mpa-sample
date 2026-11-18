@@ -127,8 +127,8 @@ func TestCLIE2E(t *testing.T) {
 		t.Fatalf("local discussion create on init db: %q", lout)
 	}
 
-	// Serve with the env token so /api/v1 is mounted from the start;
-	// startup also seeds the demo data.
+	// Serve with the env token so /api/v1 is mounted from the start. No
+	// -seed: the fixture is only what this test creates itself.
 	serve(t, serverBin, db, addr, "envtok")
 
 	resp, err := http.PostForm(server+"/register", url.Values{

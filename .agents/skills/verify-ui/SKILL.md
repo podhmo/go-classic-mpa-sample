@@ -15,14 +15,16 @@ needs that level of proof, run the app and drive a real browser.
 ## Start the app
 
 ```sh
-go run ./cmd/zatudan                    # http://127.0.0.1:8080, db: zatudan.db
-go run ./cmd/zatudan -db /tmp/e2e.db    # scratch DB — demo issues auto-seed on first launch
+go run ./cmd/zatudan -seed                    # http://127.0.0.1:8080, db: zatudan.db
+go run ./cmd/zatudan -seed -db /tmp/e2e.db    # scratch DB — demo issues seed on first launch
 ```
 
-`SeedDemoData` runs on every startup and is a no-op on a non-empty
-table, so a fresh `-db` file gives you demo issues, comments and labels
-with zero setup. The `init` subcommand exists for schema maintenance
-but is **not** needed to run the app.
+Always pass `-seed` (or `ZATUDAN_SEED=1`) for UI verification: without it
+the server starts with master data only (workspace, labels, categories)
+and empty issue/discussion tables. `SeedDemoData` is a no-op on a
+non-empty table, so a fresh `-db` file gives you demo issues, comments
+and labels with zero setup. The `init` subcommand exists for schema
+maintenance but is **not** needed to run the app.
 
 ## Drive the browser with playwright-cli
 

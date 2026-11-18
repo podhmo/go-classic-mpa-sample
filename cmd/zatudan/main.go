@@ -5,10 +5,14 @@
 // not expose it publicly.
 //
 // The "init" subcommand (or the -init flag) prepares the database file
-// and schema, refreshes planner statistics, prints a report, and exits
-// without starting the server.
+// and schema plus its master data (default workspace, labels, discussion
+// categories), refreshes planner statistics, prints a report, and exits
+// without starting the server. Demo issues/discussions are mock data,
+// kept separate: they land only when -seed (env ZATUDAN_SEED) is set, in
+// init mode as well as on server start.
 //
 //	zatudan -addr 127.0.0.1:8080 -db zatudan.db
+//	zatudan -db zatudan.db -seed
 //	zatudan -db zatudan.db init
 //
 // The gh-like CLI is a separate binary, cmd/zatu — clients of the web
@@ -24,6 +28,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -44,6 +49,9 @@ func main() {
 	apiToken := flag.String("api-token", envOr("ZATUDAN_API_TOKEN", ""),
 		"Bearer token for the JSON API under /api/v1 (env ZATUDAN_API_TOKEN); "+
 			"empty disables the API entirely")
+	seed := flag.Bool("seed", envBool("ZATUDAN_SEED"),
+		"insert demo issues, discussions and the demo user (env ZATUDAN_SEED); "+
+			"master data (workspace, labels, categories) is ensured either way")
 	flag.Parse()
 
 	// An explicitly empty -db would open an unnamed ephemeral SQLite
@@ -57,7 +65,7 @@ func main() {
 	// first positional argument, so flags must precede "init" and
 	// flag.Arg(0) holds it. -addr is irrelevant in this mode and ignored.
 	if *initFlag || flag.Arg(0) == "init" {
-		initDB(*dbPath)
+		initDB(*dbPath, *seed)
 		return
 	}
 
@@ -71,16 +79,17 @@ func main() {
 		}
 	}()
 
-	// A database created before workspaces existed needs its default one
-	// before seeds or scoped stores touch it.
-	if err := st.EnsureDefaultWorkspace(context.Background()); err != nil {
-		log.Fatalf("ensure default workspace: %v", err)
+	// Master data (default workspace, discussion categories; labels come
+	// with the schema) is ensured on every start so the app functions on a
+	// fresh database. Demo data stays opt-in via -seed: without it the
+	// server starts with master data only.
+	if err := st.SeedMasterData(context.Background()); err != nil {
+		log.Fatalf("ensure master data: %v", err)
 	}
-
-	// SeedDemoData is a no-op when the issues table is not empty, so it is
-	// safe to call on every startup.
-	if err := st.SeedDemoData(context.Background()); err != nil {
-		log.Fatalf("seed demo data: %v", err)
+	if *seed {
+		if err := st.SeedDemoData(context.Background()); err != nil {
+			log.Fatalf("seed demo data: %v", err)
+		}
 	}
 
 	// /api/v1 mounts when either credential exists: the shared env token,
@@ -144,11 +153,19 @@ func envOr(key, def string) string {
 	return def
 }
 
+// envBool reports whether the environment variable holds a truthy value
+// ("1", "true", ...); unset or unparseable means false.
+func envBool(key string) bool {
+	v, err := strconv.ParseBool(os.Getenv(key))
+	return err == nil && v
+}
+
 // initDB implements the "init" subcommand / -init flag: create the database
-// file if missing, ensure the full schema (all tables and their indexes),
-// refresh query-planner statistics, print a report, and return. Everything
-// is idempotent, so init is deterministic and safe to re-run.
-func initDB(path string) {
+// file if missing, ensure the full schema (all tables and their indexes)
+// and the master data, refresh query-planner statistics, print a report,
+// and return. With seed=true it also inserts the demo data. Everything is
+// idempotent, so init is deterministic and safe to re-run.
+func initDB(path string, seed bool) {
 	// Stat before Open (which creates the file) to report whether the
 	// database is new. A stat failure other than "not exist" is reported
 	// as "created" — Open will surface the real error if the path is
@@ -165,18 +182,20 @@ func initDB(path string) {
 		log.Fatalf("open database %q: %v", path, err)
 	}
 
-	// Demo data stays a startup concern, but the fixed discussion
-	// categories are reference data with no other source — without them a
-	// schema-only database can never accept a discussion via the local CLI.
+	// Master data has no other source: without the workspace and the
+	// categories a schema-only database can never accept an issue or a
+	// discussion via the local CLI. Demo data is mock data and stays
+	// opt-in, matching the server's -seed flag.
 	ctx := context.Background()
-	// init always guarantees the one mandatory workspace.
-	if err := st.EnsureDefaultWorkspace(ctx); err != nil {
+	if err := st.SeedMasterData(ctx); err != nil {
 		st.Close()
-		log.Fatalf("ensure default workspace in %q: %v", path, err)
+		log.Fatalf("ensure master data in %q: %v", path, err)
 	}
-	if err := st.SeedCategories(ctx); err != nil {
-		st.Close()
-		log.Fatalf("seed categories in %q: %v", path, err)
+	if seed {
+		if err := st.SeedDemoData(ctx); err != nil {
+			st.Close()
+			log.Fatalf("seed demo data in %q: %v", path, err)
+		}
 	}
 	if err := st.Analyze(ctx); err != nil {
 		st.Close()

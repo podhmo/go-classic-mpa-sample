@@ -47,9 +47,10 @@
   `live-updates.js` 等の JS は `data-live-*` 属性経由で URL を受け取るため
   JS 側にパス埋め込みなし。`speculation-rules.json` は selector 基準で
   URL 非依存 → 変更不要。
-- **init**: `main.go` の `init` サブコマンド = schema 適用 + `SeedCategories` +
-  `ANALYZE` + レポート。起動時は `store.Open` + `SeedDemoData`（issues/
-  discussions が空のときだけ seed）。
+- **init**: `main.go` の `init` サブコマンド = schema 適用 + `SeedMasterData`
+  （default workspace + categories）+ `ANALYZE` + レポート。起動時は
+  `store.Open` + `SeedMasterData`。demo データは `-seed` 指定時のみ
+  `SeedDemoData`（issues/discussions が空のときだけ seed）。
 
 ## 論点と決定
 
@@ -93,8 +94,8 @@ index は `idx_issues_status_created` → `(workspace_id, status, created_at)`�
 - **migration v6** が `workspaces` 作成時に `slug='default'` の1行を必ず挿入
   （新規 DB も既存 DB アップグレードも同じ経路で default ができる）。
 - **削除後の再作成**: workspaces が **0件** のときだけ `EnsureDefaultWorkspace`
-  が `default` を作る。`initDB` と通常起動（`main` の SeedDemoData 付近）の
-  両方から呼ぶ。
+  が `default` を作る。`initDB` と通常起動（`main` の `SeedMasterData`
+  経由）の両方から呼ぶ。
 - **「default が消えたが他の workspace は残る」状態は再作成しない**:
   default を消して他だけ残す運用を許す（消しても復活するのは不親切）。
 - **削除ガード**: workspaces の最後の1件は削除不可（`ErrLastWorkspace` →
