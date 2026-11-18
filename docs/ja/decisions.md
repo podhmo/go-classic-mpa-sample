@@ -611,3 +611,14 @@ podhmo からの改善要望（grid と story のリンク誤押・見た目・s
 - **UI はアクション行の "Copy as markdown" ボタン**: `command="--copy-markdown"` + `commandfor`（article id）の Invoker Command で、copy link と同型の進行形強化。クリックで `/markdown` を fetch して clipboard へ書き込む。`static/clipboard.js` に report bubble（`role="status"` の copy-tip）と write path を集約し、`copy-permalink.js` も import する形にリファクタ。`ClipboardItem` に promise を渡す方式で fetch 中もユーザーアクティベーションを保持（Safari は await 越しの `writeText` を拒否するため）。ClipboardItem 非対応は fetch→`writeText`→`execCommand` の順にフォールバック。
 - **CLI は `zatu issue|discussion view N --markdown`**: 同じ export 関数を使うため local/remote backend で差異なし（remote も既存の Get+List で文書を構成）。`--json`/`--template`/`--web` とは排他、`--markdown` 指定時は常に comments/threads 込み。
 - **検証**: `go test ./...` / `go vet` / `gofmt` 全パス。export 単体・API・web・CLI に各テスト追加。storybook でアクション行の描画（広幅・狭幅）を確認。実ブラウザでのコピー動作は verify-ui フローで別途確認。
+
+## seed の分離 — schema / master data / mock data（2026-11-19、`devin/*-split-seed-migrations` ブランチ）
+
+起動時の自動シードを3層に分けた。ユーザーの要求は「空っぽな状態で起動できるようにしたい。ラベル等のマスターデータだけは DB に残したい」。
+
+- **3層の分類**: schema migration（`migrate`/`schemaDDL`、テーブル+index。master ラベルと default workspace は DDL 内 `INSERT ... WHERE NOT EXISTS` でここに含まれる）/ master data（`SeedMasterData` = `EnsureDefaultWorkspace` + `SeedCategories`、app が機能するための参照データ）/ mock data（`SeedDemoData` = demo issues/discussions/comments + `demo` ユーザー）。
+- **`-seed` フラグ（env `ZATUDAN_SEED`）で opt-in**: ユーザー選択「b の逆」。run は `-seed` なしでは demo を一切投入しない（従来は `issues` が空なら毎回自動投入していた）。`-seed` 付きの `init` でも demo が入る —「init で全部投入してあとで空にしたい」ワークフローも `-seed` なし init（master のみ）で代替できる。
+- **master data は常に保証**: `-seed` の有無に関わらず起動時に `SeedMasterData` を呼ぶ。categories を失うと local CLI で discussion を作れず、workspace を失うと scoped store が死ぬため「空っぽ」は「ユーザー生成データが空」であって参照データ込みではない。
+- **`SeedDemoData` 内の `ensureCategories` は残す**: demo discussions が category_id を参照するため、テスト等で `SeedDemoData` を直接呼んでも自足するように（冪等）。
+- **e2e は demo 非依存**: `internal/e2etests` の fixture は全て自作なので `-seed` なしのまま通る。
+- **検証**: `go test ./...` / `go vet` / `gofmt` 全パス。`TestSeedMasterData` 追加（workspace・labels・categories 有・issues/discussions/users 無）。実バイナリで `init`（master のみ）→ 起動（issues 空・200）→ 同 DB に `-seed` 起動（demo 投入）を確認。

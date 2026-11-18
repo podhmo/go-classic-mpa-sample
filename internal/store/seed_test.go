@@ -144,6 +144,56 @@ func TestSeedDemoData(t *testing.T) {
 	}
 }
 
+// TestSeedMasterData covers the startup/init guarantee: a schema-only
+// store gets the default workspace, the master labels and the fixed
+// categories — but no demo rows (issues, discussions, users stay empty).
+func TestSeedMasterData(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	if err := s.SeedMasterData(ctx); err != nil {
+		t.Fatalf("SeedMasterData: %v", err)
+	}
+	if err := s.SeedMasterData(ctx); err != nil {
+		t.Fatalf("SeedMasterData (idempotent): %v", err)
+	}
+
+	ws, err := s.ListWorkspaces(ctx)
+	if err != nil {
+		t.Fatalf("ListWorkspaces: %v", err)
+	}
+	if len(ws) != 1 || ws[0].Slug != "default" {
+		t.Fatalf("workspaces: %+v, want only default", ws)
+	}
+	labels, err := s.ListLabels(ctx, 1, KindLabelIssue)
+	if err != nil {
+		t.Fatalf("ListLabels: %v", err)
+	}
+	if len(labels) != 4 {
+		t.Fatalf("master labels: %d, want 4", len(labels))
+	}
+	cats, err := s.ListDiscussionCategories(ctx)
+	if err != nil {
+		t.Fatalf("ListDiscussionCategories: %v", err)
+	}
+	if len(cats) != 4 {
+		t.Fatalf("categories: %d, want 4", len(cats))
+	}
+	if _, total, err := s.ListIssues(ctx, 1, ListFilter{Status: "all"}); err != nil {
+		t.Fatalf("ListIssues: %v", err)
+	} else if total != 0 {
+		t.Fatalf("master seed created %d issues, want 0", total)
+	}
+	if _, total, err := s.ListDiscussions(ctx, 1, DiscussionListFilter{}); err != nil {
+		t.Fatalf("ListDiscussions: %v", err)
+	} else if total != 0 {
+		t.Fatalf("master seed created %d discussions, want 0", total)
+	}
+	if _, err := s.AuthenticateUser(ctx, "demo", "demo"); err == nil {
+		t.Fatal("demo user exists after master-only seed")
+	}
+}
+
 // TestSeedCategories covers `init`'s reference-data seed: a schema-only
 // store gets the fixed categories (and nothing else), idempotently.
 func TestSeedCategories(t *testing.T) {

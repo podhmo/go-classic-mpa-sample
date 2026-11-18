@@ -101,6 +101,18 @@ Possible directions: an FTS5 virtual table, a trigram index, or simply capping t
 	},
 }
 
+// SeedMasterData ensures the reference data a usable database needs on top
+// of the schema: the default workspace and the fixed discussion
+// categories. (The shared master labels are schema data — defaultLabelsDDL
+// inserts them during migration.) Idempotent; the server runs this on
+// every startup regardless of -seed.
+func (s *Store) SeedMasterData(ctx context.Context) error {
+	if err := s.EnsureDefaultWorkspace(ctx); err != nil {
+		return err
+	}
+	return s.SeedCategories(ctx)
+}
+
 // SeedDemoData inserts demo issues/comments, but only when the issues
 // table is empty; the issue part is a no-op otherwise. The demo account is
 // seeded independently so a database that already has issues still gets a
@@ -108,6 +120,10 @@ Possible directions: an FTS5 virtual table, a trigram index, or simply capping t
 // seeded when their table is empty, demo discussions when theirs is.
 // (Labels are not seeded here — the four default master labels are schema
 // data, inserted by defaultLabelsDDL on every database.)
+//
+// This is mock data, not master data: the server only calls it when the
+// -seed flag (ZATUDAN_SEED) is set, so a plain start leaves the tables
+// empty.
 func (s *Store) SeedDemoData(ctx context.Context) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
