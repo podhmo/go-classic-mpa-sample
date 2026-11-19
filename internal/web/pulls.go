@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -555,9 +556,13 @@ func (h *handler) pullFiles(w http.ResponseWriter, r *http.Request) {
 			Anchor:       fileAnchor(path),
 			Comments:     byPath[path],
 		}
-		// Left-side comments on a renamed file carry its old path.
+		// Left-side comments on a renamed file carry its old path;
+		// merging the two lists must keep the timeline chronological.
 		if ch.OldPath != "" && ch.OldPath != path {
 			fv.Comments = append(fv.Comments, byPath[ch.OldPath]...)
+			slices.SortFunc(fv.Comments, func(a, b *store.PRComment) int {
+				return a.CreatedAt.Compare(b.CreatedAt)
+			})
 		}
 		paths := []string{path}
 		if ch.OldPath != "" && ch.OldPath != path {
@@ -652,7 +657,7 @@ func (h *handler) createPRComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if in.Path != "" || r.PostFormValue("back") == "files" {
-		http.Redirect(w, r, fmt.Sprintf("/pulls/%d/files#%s", pr.ID, fileAnchor(in.Path)), http.StatusSeeOther)
+		http.Redirect(w, r, fmt.Sprintf("/pulls/%d/files#comment-%d", pr.ID, id), http.StatusSeeOther)
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/pulls/%d#comment-%d", pr.ID, id), http.StatusSeeOther)
