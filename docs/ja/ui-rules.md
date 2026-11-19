@@ -228,6 +228,28 @@
   畳み・beforeunload・toast の動作は `verify-ui` スキル（実サーバ +
   playwright-cli）で確認する。手順は `docs/ja/for-ui-designer.md` 参照。
 
+## 16. Pull requests（/pulls 系）
+
+- [正] **一覧・詳細・files・merge は issues/discussions と同じ MPA 構造**。
+  PRG・`.form-actions` の「左:キャンセル / 右:確定」・確認ページ経由の
+  状態変更・`...` ではなくアクション行の動詞ボタン、は共通ルールのまま。
+- [正] **files タブのファイル集合は merge-base→head（three-dot）相当**。
+  open PR は都度 `git merge-base` で解決し、closed/merged 後は記録済みの
+  merge_base/head（pin ref `refs/zatudan/pr/<id>/head`）で固定する。
+- [正] **行アンカーコメントは `<details>` 折りたたみフォーム**（summary
+  にアンカー位置）。anchor path は files 表示の Old/New パス集合に属する
+  もののみ受け付け、範囲外は 422 でフォームへ差し戻す。
+- [正] **hidden コメントは `<details class="comment-hidden-body">
+  <summary>Show comment</summary>`** で展開可能なまま最小化表示（セクション
+  5-6 のコメント規約と同型）。
+- [正] **merge 確認ページは conflict（`.Check.Status == 2`）時にフォームを
+  出さない**。衝突案内と files への戻りリンクのみ表示し、解消は git 側で
+  行う前提（UI での conflict 解消は対象外）。
+- [正] **詳細ページの JS は `/static/page-detail.js`（`type="module"`）**。
+  `form.comment-form` に empty-submit guard + leave-guard を付与する。
+  static ファイルは `web.go` の mux に個別ルートが必要（CSP
+  `script-src 'self'`）。
+
 ## N/A（対象外）一覧
 
 該当 UI・機能が存在しないため監査対象外とした項目。将来機能を追加する際の
