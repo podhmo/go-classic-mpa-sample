@@ -6,10 +6,10 @@
 // Command grammar (gh-style):
 //
 //	zatu issue list|view|create|edit|close|reopen|delete
-//	zatu comment create N --body B
+//	zatu comment create|edit|delete|hide|unhide
 //	zatu label list
 //	zatu discussion list|view|create|edit|delete
-//	zatu discussion comment create N --body B [--thread T]
+//	zatu discussion comment create|edit|delete|hide|unhide
 //	zatu discussion answer N --thread T [--unmark]
 //	zatu discussion categories
 //	zatu workspace list|create SLUG [--name N] [--description D]|delete SLUG
@@ -51,6 +51,9 @@ type Backend interface {
 	DeleteIssue(ctx context.Context, id int64) error
 	ListComments(ctx context.Context, issueID int64) ([]*store.Comment, error)
 	CreateComment(ctx context.Context, issueID int64, body string, authorID int64) (int64, error)
+	UpdateComment(ctx context.Context, issueID, commentID int64, body string) error
+	DeleteComment(ctx context.Context, issueID, commentID int64) error
+	SetCommentHidden(ctx context.Context, issueID, commentID int64, reason string) error
 	ListLabels(ctx context.Context, kind string) ([]*store.Label, error)
 	CreateLabel(ctx context.Context, kind string, in store.LabelInput, master bool) (int64, error)
 	ArchiveLabel(ctx context.Context, id int64, archived bool) error
@@ -64,6 +67,12 @@ type Backend interface {
 	CreateDiscussionThread(ctx context.Context, discussionID int64, body string, authorID int64) (int64, error)
 	CreateDiscussionComment(ctx context.Context, discussionID, threadID int64, body string, authorID int64) (int64, error)
 	SetThreadAnswer(ctx context.Context, discussionID, threadID int64, answer bool) error
+	UpdateDiscussionThread(ctx context.Context, discussionID, threadID int64, body string) error
+	DeleteDiscussionThread(ctx context.Context, discussionID, threadID int64) error
+	SetDiscussionThreadHidden(ctx context.Context, discussionID, threadID int64, reason string) error
+	UpdateDiscussionComment(ctx context.Context, discussionID, threadID, commentID int64, body string) error
+	DeleteDiscussionComment(ctx context.Context, discussionID, threadID, commentID int64) error
+	SetDiscussionCommentHidden(ctx context.Context, discussionID, threadID, commentID int64, reason string) error
 	ListDiscussionCategories(ctx context.Context) ([]*store.DiscussionCategory, error)
 
 	// Workspace management is unscoped — the same backend serves them
@@ -218,12 +227,12 @@ func (o Options) printUsage(w io.Writer) {
 
 Commands:
   issue list|view|create|edit|close|reopen|delete
-  comment create N --body B
+  comment create|edit|delete|hide|unhide
   label list [--kind issue|discussion]
   label create NAME --color HEX [--kind K] [--shared]
   label delete NAME [--kind K]   archives the label (still shown on existing issues)
   discussion list|view|create|edit|delete
-  discussion comment create N --body B [--thread T]
+  discussion comment create|edit|delete|hide|unhide
   discussion answer N --thread T [--unmark]
   discussion categories          list categories (--category slugs)
   auth token --user NAME     issue a per-user API token (local mode only)

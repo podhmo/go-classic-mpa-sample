@@ -20,7 +20,7 @@
      needed, so partial-submit.js can insert into an empty list by just
      unhiding it (same trick as .comment-replies on the discussion page). */}}
   <ol class="comment-list" role="list"{{if not .Comments}} hidden{{end}}>
-    {{range .Comments}}{{template "issue_comment" .}}{{end}}
+    {{range .Comments}}{{template "issue_comment" (dict "C" . "Workspace" $.Workspace)}}{{end}}
   </ol>
   <p class="muted" data-empty-note{{if .Comments}} hidden{{end}}>No comments yet.</p>
 

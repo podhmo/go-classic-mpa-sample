@@ -34,6 +34,9 @@ type Store interface {
 	DeleteIssue(ctx context.Context, id int64) error
 	ListComments(ctx context.Context, issueID int64) ([]*store.Comment, error)
 	CreateComment(ctx context.Context, issueID int64, body string, authorID int64) (int64, error)
+	UpdateComment(ctx context.Context, issueID, commentID int64, body string) error
+	DeleteComment(ctx context.Context, issueID, commentID int64) error
+	SetCommentHidden(ctx context.Context, issueID, commentID int64, reason string) error
 	ListLabels(ctx context.Context, wsID int64, kind string) ([]*store.Label, error)
 	GetLabel(ctx context.Context, id int64) (*store.Label, error)
 	CreateLabel(ctx context.Context, wsID int64, kind string, in store.LabelInput) (int64, error)
@@ -48,6 +51,12 @@ type Store interface {
 	CreateDiscussionThread(ctx context.Context, discussionID int64, body string, authorID int64) (int64, error)
 	CreateDiscussionComment(ctx context.Context, discussionID, threadID int64, body string, authorID int64) (int64, error)
 	SetThreadAnswer(ctx context.Context, discussionID, threadID int64, answer bool) error
+	UpdateDiscussionThread(ctx context.Context, discussionID, threadID int64, body string) error
+	DeleteDiscussionThread(ctx context.Context, discussionID, threadID int64) error
+	SetDiscussionThreadHidden(ctx context.Context, discussionID, threadID int64, reason string) error
+	UpdateDiscussionComment(ctx context.Context, discussionID, threadID, commentID int64, body string) error
+	DeleteDiscussionComment(ctx context.Context, discussionID, threadID, commentID int64) error
+	SetDiscussionCommentHidden(ctx context.Context, discussionID, threadID, commentID int64, reason string) error
 	ListDiscussionCategories(ctx context.Context) ([]*store.DiscussionCategory, error)
 	ListWorkspaces(ctx context.Context) ([]*store.Workspace, error)
 	WorkspaceBySlug(ctx context.Context, slug string) (*store.Workspace, error)
@@ -95,7 +104,12 @@ func New(st Store, envToken string) http.Handler {
 		"/api/v1/w/{ws}/issues/{id}":          {"GET": h.scoped(h.getIssue), "PATCH": h.scoped(h.updateIssue), "DELETE": h.scoped(h.deleteIssue)},
 		"/api/v1/w/{ws}/issues/{id}/status":   {"POST": h.scoped(h.setIssueStatus)},
 		"/api/v1/w/{ws}/issues/{id}/comments": {"POST": h.scoped(h.createComment)},
-		"/api/v1/w/{ws}/issues/{id}/markdown": {"GET": h.scoped(h.issueMarkdown)},
+		// Comment moderation (internal/api/comments.go): PATCH/DELETE on
+		// the comment itself, hide/unhide as explicit action POSTs.
+		"/api/v1/w/{ws}/issues/{id}/comments/{cid}":        {"PATCH": h.scoped(h.updateComment), "DELETE": h.scoped(h.deleteComment)},
+		"/api/v1/w/{ws}/issues/{id}/comments/{cid}/hide":   {"POST": h.scoped(h.hideComment)},
+		"/api/v1/w/{ws}/issues/{id}/comments/{cid}/unhide": {"POST": h.scoped(h.unhideComment)},
+		"/api/v1/w/{ws}/issues/{id}/markdown":              {"GET": h.scoped(h.issueMarkdown)},
 
 		"/api/v1/w/{ws}/discussions":                             {"GET": h.scoped(h.listDiscussions), "POST": h.scoped(h.createDiscussion)},
 		"/api/v1/w/{ws}/discussions/{id}":                        {"GET": h.scoped(h.getDiscussion), "PATCH": h.scoped(h.updateDiscussion), "DELETE": h.scoped(h.deleteDiscussion)},
@@ -103,6 +117,13 @@ func New(st Store, envToken string) http.Handler {
 		"/api/v1/w/{ws}/discussions/{id}/threads":                {"POST": h.scoped(h.createDiscussionThread)},
 		"/api/v1/w/{ws}/discussions/{id}/threads/{tid}/comments": {"POST": h.scoped(h.createDiscussionComment)},
 		"/api/v1/w/{ws}/discussions/{id}/threads/{tid}/answer":   {"POST": h.scoped(h.setThreadAnswer)},
+		// Thread and reply moderation — same shapes as issue comments.
+		"/api/v1/w/{ws}/discussions/{id}/threads/{tid}":                       {"PATCH": h.scoped(h.updateThread), "DELETE": h.scoped(h.deleteThread)},
+		"/api/v1/w/{ws}/discussions/{id}/threads/{tid}/hide":                  {"POST": h.scoped(h.hideThread)},
+		"/api/v1/w/{ws}/discussions/{id}/threads/{tid}/unhide":                {"POST": h.scoped(h.unhideThread)},
+		"/api/v1/w/{ws}/discussions/{id}/threads/{tid}/comments/{cid}":        {"PATCH": h.scoped(h.updateReply), "DELETE": h.scoped(h.deleteReply)},
+		"/api/v1/w/{ws}/discussions/{id}/threads/{tid}/comments/{cid}/hide":   {"POST": h.scoped(h.hideReply)},
+		"/api/v1/w/{ws}/discussions/{id}/threads/{tid}/comments/{cid}/unhide": {"POST": h.scoped(h.unhideReply)},
 	}
 	for path, methods := range routes {
 		mux.HandleFunc(path, methodDispatch(methods))
@@ -308,6 +329,8 @@ func (h *handler) storeError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusUnprocessableEntity, "Replies can only be added to a thread of this discussion.", map[string]string{"thread_id": "Invalid reply target."})
 	case errors.Is(err, store.ErrNotAnswerable):
 		writeError(w, http.StatusUnprocessableEntity, "This thread cannot be marked as the answer.", nil)
+	case errors.Is(err, store.ErrInvalidHideReason):
+		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", map[string]string{"reason": "Unknown hide reason. Valid values: " + strings.Join(store.HideReasons, ", ")})
 	default:
 		writeError(w, http.StatusInternalServerError, "Internal server error.", nil)
 	}

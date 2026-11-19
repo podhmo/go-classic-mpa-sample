@@ -143,6 +143,61 @@ func (c *Client) SetThreadAnswer(ctx context.Context, discussionID, threadID int
 		map[string]any{"answer": answer}, nil)
 }
 
+// UpdateDiscussionThread PATCHes the thread's body (the opening post).
+func (c *Client) UpdateDiscussionThread(ctx context.Context, discussionID, threadID int64, body string) error {
+	return c.do(ctx, "PATCH",
+		c.wsPath("discussions/")+fmt.Sprint(discussionID)+"/threads/"+fmt.Sprint(threadID),
+		map[string]any{"body": body}, nil)
+}
+
+// DeleteDiscussionThread removes the thread and its replies.
+func (c *Client) DeleteDiscussionThread(ctx context.Context, discussionID, threadID int64) error {
+	return c.do(ctx, "DELETE",
+		c.wsPath("discussions/")+fmt.Sprint(discussionID)+"/threads/"+fmt.Sprint(threadID), nil, nil)
+}
+
+// SetDiscussionThreadHidden minimizes the thread (reason "" restores).
+func (c *Client) SetDiscussionThreadHidden(ctx context.Context, discussionID, threadID int64, reason string) error {
+	action := "hide"
+	var body map[string]any
+	if reason != "" {
+		body = map[string]any{"reason": reason}
+	} else {
+		action = "unhide"
+	}
+	return c.do(ctx, "POST",
+		c.wsPath("discussions/")+fmt.Sprint(discussionID)+"/threads/"+fmt.Sprint(threadID)+"/"+action,
+		body, nil)
+}
+
+// UpdateDiscussionComment PATCHes a reply's body.
+func (c *Client) UpdateDiscussionComment(ctx context.Context, discussionID, threadID, commentID int64, body string) error {
+	return c.do(ctx, "PATCH",
+		c.wsPath("discussions/")+fmt.Sprint(discussionID)+"/threads/"+fmt.Sprint(threadID)+"/comments/"+fmt.Sprint(commentID),
+		map[string]any{"body": body}, nil)
+}
+
+// DeleteDiscussionComment removes a reply.
+func (c *Client) DeleteDiscussionComment(ctx context.Context, discussionID, threadID, commentID int64) error {
+	return c.do(ctx, "DELETE",
+		c.wsPath("discussions/")+fmt.Sprint(discussionID)+"/threads/"+fmt.Sprint(threadID)+"/comments/"+fmt.Sprint(commentID),
+		nil, nil)
+}
+
+// SetDiscussionCommentHidden minimizes a reply (reason "" restores).
+func (c *Client) SetDiscussionCommentHidden(ctx context.Context, discussionID, threadID, commentID int64, reason string) error {
+	action := "hide"
+	var body map[string]any
+	if reason != "" {
+		body = map[string]any{"reason": reason}
+	} else {
+		action = "unhide"
+	}
+	return c.do(ctx, "POST",
+		c.wsPath("discussions/")+fmt.Sprint(discussionID)+"/threads/"+fmt.Sprint(threadID)+"/comments/"+fmt.Sprint(commentID)+"/"+action,
+		body, nil)
+}
+
 func (c *Client) ListDiscussionCategories(ctx context.Context) ([]*store.DiscussionCategory, error) {
 	var res struct {
 		Categories []api.DiscussionCategory `json:"categories"`
@@ -179,8 +234,9 @@ func discussionThreadFromDTO(t api.DiscussionThread, discussionID int64) *store.
 	out := &store.DiscussionThread{
 		ID: t.ID, DiscussionID: discussionID,
 		IsAnswer: t.IsAnswer, Body: t.Body,
-		Author:    userFromDTO(t.Author),
-		CreatedAt: parseTime(t.CreatedAt),
+		Author:     userFromDTO(t.Author),
+		CreatedAt:  parseTime(t.CreatedAt),
+		Moderation: moderationFromDTO(t.Hidden, t.HiddenReason, t.EditedAt),
 	}
 	for _, c := range t.Comments {
 		out.Comments = append(out.Comments, discussionCommentFromDTO(c, t.ID))
@@ -191,8 +247,9 @@ func discussionThreadFromDTO(t api.DiscussionThread, discussionID int64) *store.
 func discussionCommentFromDTO(c api.DiscussionComment, threadID int64) *store.DiscussionComment {
 	return &store.DiscussionComment{
 		ID: c.ID, ThreadID: threadID, Body: c.Body,
-		Author:    userFromDTO(c.Author),
-		CreatedAt: parseTime(c.CreatedAt),
+		Author:     userFromDTO(c.Author),
+		CreatedAt:  parseTime(c.CreatedAt),
+		Moderation: moderationFromDTO(c.Hidden, c.HiddenReason, c.EditedAt),
 	}
 }
 

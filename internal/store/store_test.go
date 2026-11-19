@@ -128,6 +128,9 @@ func TestMigrationFreshAndLegacyDB(t *testing.T) {
 		"SELECT id, slug FROM workspaces LIMIT 0",
 		"SELECT workspace_id FROM discussions LIMIT 0",
 		"SELECT id, is_answer FROM discussion_threads LIMIT 0",
+		"SELECT edited_at, hidden_at, hidden_reason FROM comments LIMIT 0",
+		"SELECT edited_at, hidden_at, hidden_reason FROM discussion_threads LIMIT 0",
+		"SELECT edited_at, hidden_at, hidden_reason FROM discussion_comments LIMIT 0",
 	} {
 		if _, err := s.db.ExecContext(ctx, q); err != nil {
 			t.Errorf("schema check %q: %v", q, err)

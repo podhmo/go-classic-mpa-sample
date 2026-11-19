@@ -30,6 +30,7 @@ function start(section) {
     ids: new Set(),        // issue comments / discussion threads to upsert
     replies: new Map(),    // thread id -> Set(reply ids)
     answerIds: new Set(),  // threads re-rendered by an answer move
+    removes: [],           // deleted comment-level rows {target, parent}
     article: false,
     deleted: false,
     resync: false,
@@ -57,6 +58,13 @@ function start(section) {
   es.addEventListener("edit", () => mark("article"));
   es.addEventListener("new", () => {});
   es.addEventListener("delete", () => mark("deleted"));
+  // A comment-level row (issue comment / thread / reply) was deleted:
+  // drop the node directly — issue comments live under #comment-N,
+  // threads under #thread-N, replies share the #comment-N namespace.
+  es.addEventListener("remove", (e) => {
+    pending.removes.push(JSON.parse(e.data));
+    poke();
+  });
   es.addEventListener("resync", () => mark("resync"));
   // EventSource fires onerror while retrying (its own backoff honors our
   // `retry:` directive); onopen covers the successful reconnect.
@@ -310,12 +318,38 @@ function start(section) {
             announce("New reply.");
           }
         }
+        for (const { target, parent } of pending.removes) {
+          const node = document.getElementById(
+            parent ? `comment-${target}` : kind === "issue" ? `comment-${target}` : `thread-${target}`,
+          );
+          if (!node) continue;
+          const ol = node.parentElement;
+          node.remove();
+          // An emptied replies <ol> returns to its initial hidden state.
+          if (ol?.classList.contains("comment-replies") && !ol.children.length) {
+            ol.hidden = true;
+          }
+        }
+        if (pending.removes.length) {
+          // Recount top-level items like resync does (reply removals
+          // leave it untouched — replies are nested, not :scope > li).
+          const n = list.querySelectorAll(":scope > li").length;
+          const count = section.querySelector("[data-comment-count]");
+          if (count) {
+            count.textContent = String(n);
+            count.parentElement.hidden = n === 0;
+          }
+          list.hidden = n === 0;
+          const note = section.querySelector("[data-empty-note]");
+          if (note) note.hidden = n !== 0;
+        }
       }
     } finally {
       flushing = false;
       pending.ids.clear();
       pending.replies.clear();
       pending.answerIds.clear();
+      pending.removes.length = 0;
       pending.article = pending.deleted = pending.resync = false;
       if (queued) {
         queued = false;

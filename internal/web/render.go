@@ -30,7 +30,8 @@ func NewRenderer() *Renderer {
 func parsePages() map[string]*template.Template {
 	names := []string{"issues", "issue_detail", "issue_form", "issue_delete", "error", "auth_form",
 		"discussions", "discussion_detail", "discussion_form", "discussion_delete",
-		"workspaces", "workspace_form", "workspace_delete", "labels", "label_form"}
+		"workspaces", "workspace_form", "workspace_delete", "labels", "label_form",
+		"comment_edit", "comment_delete"}
 	// The detail pages also parse fragments.html: its defines power both
 	// their inline markup and the standalone partial-update responses.
 	fragments := map[string]bool{"issue_detail": true, "discussion_detail": true}
@@ -144,6 +145,17 @@ func (r *Renderer) renderLabelForm(w http.ResponseWriter, status int, data label
 // renderWorkspaceDelete renders the workspace delete confirmation page.
 func (r *Renderer) renderWorkspaceDelete(w http.ResponseWriter, status int, data workspaceDeletePage) {
 	r.execute(w, "workspace_delete", status, data)
+}
+
+// renderCommentEdit renders the shared comment edit page (issue
+// comments, threads and replies all use it).
+func (r *Renderer) renderCommentEdit(w http.ResponseWriter, status int, data commentEditPage) {
+	r.execute(w, "comment_edit", status, data)
+}
+
+// renderCommentDelete renders the shared comment delete confirmation.
+func (r *Renderer) renderCommentDelete(w http.ResponseWriter, status int, data commentDeletePage) {
+	r.execute(w, "comment_delete", status, data)
 }
 
 type errorPageData struct {

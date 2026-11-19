@@ -145,6 +145,37 @@ var (
 			},
 		},
 	}
+
+	// Moderated variants exercise the edited marker and the hidden
+	// state (reason note + collapsed body) — the plain fixtures stay
+	// for the default detail stories.
+	storyCommentsModerated = []*store.Comment{
+		{ID: 1, IssueID: 2, Body: "Reproduced on Firefox at 360px.", CreatedAt: storyTime,
+			Moderation: store.Moderation{EditedAt: storyTime2}},
+		{ID: 2, IssueID: 2, Body: "The select keeps its intrinsic width; see `min-width` on `.filter-field`.", CreatedAt: storyTime2},
+		{ID: 3, IssueID: 2, Body: "BUY MY COINS NOW!!!", CreatedAt: storyTime3,
+			Moderation: store.Moderation{Hidden: true, HiddenReason: store.HideReasonSpam}},
+	}
+
+	storyDThreadsModerated = []*store.DiscussionThread{
+		{
+			ID: 1, DiscussionID: 2, Body: "Look at `label_color` in the seed data.", CreatedAt: storyTime,
+			IsAnswer:   true,
+			Moderation: store.Moderation{EditedAt: storyTime2},
+			Comments: []*store.DiscussionComment{
+				{ID: 3, ThreadID: 1, Body: "That was it — thank you!", CreatedAt: storyTime2},
+			},
+		},
+		{
+			ID: 2, DiscussionID: 2, Body: "Same question on Firefox.", CreatedAt: storyTime2,
+			Moderation: store.Moderation{Hidden: true, HiddenReason: store.HideReasonDuplicate},
+			Comments: []*store.DiscussionComment{
+				{ID: 4, ThreadID: 2, Body: "On Firefox the dialog never opens.", CreatedAt: storyTime2},
+				{ID: 5, ThreadID: 2, Body: "That's a known `showModal()` quirk — see #12.", CreatedAt: storyTime3,
+					Moderation: store.Moderation{Hidden: true, HiddenReason: store.HideReasonOffTopic}},
+			},
+		},
+	}
 )
 
 func printRec(rec *httptest.ResponseRecorder) {
@@ -223,6 +254,18 @@ func renderLabels(status int, data labelsPage) {
 func renderLabelForm(status int, data labelFormPage) {
 	rec := httptest.NewRecorder()
 	NewRenderer().renderLabelForm(rec, status, data)
+	printRec(rec)
+}
+
+func renderCommentEdit(status int, data commentEditPage) {
+	rec := httptest.NewRecorder()
+	NewRenderer().renderCommentEdit(rec, status, data)
+	printRec(rec)
+}
+
+func renderCommentDelete(status int, data commentDeletePage) {
+	rec := httptest.NewRecorder()
+	NewRenderer().renderCommentDelete(rec, status, data)
 	printRec(rec)
 }
 
@@ -399,6 +442,49 @@ func StoryIssueDelete() {
 		Issue:     storyIssue,
 		Workspace: storyWorkspace,
 		Section:   "issues",
+	})
+}
+
+// StoryIssueDetailModerated renders the detail page with an edited
+// comment and a hidden one — the "edited" marker, the reason note and
+// the collapsed body, plus the Unhide row in place of the hide picker.
+func StoryIssueDetailModerated() {
+	renderIssueDetail(http.StatusOK, issueDetailPage{
+		Title:     "#2 Improve responsive layout",
+		Issue:     storyIssue,
+		Comments:  storyCommentsModerated,
+		Workspace: storyWorkspace,
+		Section:   "issues",
+	})
+}
+
+// StoryCommentEdit renders the shared comment edit page (the issue
+// comment flavor — threads and replies use the same template).
+func StoryCommentEdit() {
+	renderCommentEdit(http.StatusOK, commentEditPage{
+		Title:     "Edit comment #2",
+		Heading:   "Edit comment #2",
+		Action:    "/w/default/issues/2/comments/2/edit",
+		CancelURL: "/w/default/issues/2#comment-2",
+		Body:      storyComments[1].Body,
+		Workspace: storyWorkspace,
+		Section:   "issues",
+	})
+}
+
+// StoryCommentDelete renders the shared delete-confirm page — a thread
+// fixture so the "and its N replies" warning is exercised too.
+func StoryCommentDelete() {
+	renderCommentDelete(http.StatusOK, commentDeletePage{
+		Title:     "Delete thread #2",
+		Heading:   "Delete thread #2",
+		Noun:      "thread",
+		Preview:   excerpt(storyDThreads[1].Body),
+		Replies:   len(storyDThreads[1].Comments),
+		Action:    "/w/default/discussions/2/threads/2/delete",
+		CancelURL: "/w/default/discussions/2#thread-2",
+		Workspace: storyWorkspace,
+		Section:   "discussions",
 	})
 }
 
@@ -589,6 +675,7 @@ func StoryLabelFormEdit() {
 // tokens are never valid.
 type storyStore struct {
 	issues      map[int64]*store.Issue
+	comments    map[int64][]*store.Comment
 	discussions map[int64]*store.Discussion
 	dthreads    map[int64][]*store.DiscussionThread
 }
@@ -604,8 +691,14 @@ func newStoryStore() storyStore {
 		dd := *d
 		discussions[d.ID] = &dd
 	}
+	comments := make(map[int64][]*store.Comment, len(storyComments))
+	for _, c := range storyComments {
+		cc := *c
+		comments[c.IssueID] = append(comments[c.IssueID], &cc)
+	}
 	return storyStore{
 		issues:      issues,
+		comments:    comments,
 		discussions: discussions,
 		dthreads: map[int64][]*store.DiscussionThread{
 			storyDiscussion.ID: cloneDThreads(storyDThreads),
@@ -667,7 +760,12 @@ func (s storyStore) SetIssueStatus(ctx context.Context, id int64, status string)
 func (storyStore) DeleteIssue(ctx context.Context, id int64) error {
 	return nil
 }
-func (storyStore) ListComments(ctx context.Context, issueID int64) ([]*store.Comment, error) {
+func (s storyStore) ListComments(ctx context.Context, issueID int64) ([]*store.Comment, error) {
+	// The request-scoped copy — moderation mutations stay visible to the
+	// same replayed request (the hide-partial story relies on it).
+	if cs, ok := s.comments[issueID]; ok {
+		return cs, nil
+	}
 	return storyComments, nil
 }
 func (s storyStore) CreateComment(ctx context.Context, issueID int64, body string, authorID int64) (int64, error) {
@@ -679,6 +777,105 @@ func (s storyStore) CreateComment(ctx context.Context, issueID int64, body strin
 		is.UpdatedAt = time.Now()
 	}
 	return 99, nil
+}
+
+// Comment moderation on the request-scoped fixture copy, same
+// ErrNotFound contract as the real store.
+func (s storyStore) UpdateComment(ctx context.Context, issueID, commentID int64, body string) error {
+	c := findComment(s.comments[issueID], commentID)
+	if c == nil {
+		return store.ErrNotFound
+	}
+	if c.Body != body {
+		c.Body = body
+		c.EditedAt = time.Now()
+	}
+	return nil
+}
+func (s storyStore) DeleteComment(ctx context.Context, issueID, commentID int64) error {
+	if findComment(s.comments[issueID], commentID) == nil {
+		return store.ErrNotFound
+	}
+	return nil
+}
+func (s storyStore) SetCommentHidden(ctx context.Context, issueID, commentID int64, reason string) error {
+	c := findComment(s.comments[issueID], commentID)
+	if c == nil {
+		return store.ErrNotFound
+	}
+	if reason != "" && !store.ValidHideReason(reason) {
+		return store.ErrInvalidHideReason
+	}
+	c.Hidden = reason != ""
+	c.HiddenReason = reason
+	return nil
+}
+func (s storyStore) UpdateDiscussionThread(ctx context.Context, discussionID, threadID int64, body string) error {
+	t := findThread(s.dthreads[discussionID], threadID)
+	if t == nil {
+		return store.ErrNotFound
+	}
+	if t.Body != body {
+		t.Body = body
+		t.EditedAt = time.Now()
+	}
+	return nil
+}
+func (s storyStore) DeleteDiscussionThread(ctx context.Context, discussionID, threadID int64) error {
+	if findThread(s.dthreads[discussionID], threadID) == nil {
+		return store.ErrNotFound
+	}
+	return nil
+}
+func (s storyStore) SetDiscussionThreadHidden(ctx context.Context, discussionID, threadID int64, reason string) error {
+	t := findThread(s.dthreads[discussionID], threadID)
+	if t == nil {
+		return store.ErrNotFound
+	}
+	if reason != "" && !store.ValidHideReason(reason) {
+		return store.ErrInvalidHideReason
+	}
+	t.Hidden = reason != ""
+	t.HiddenReason = reason
+	return nil
+}
+func (s storyStore) UpdateDiscussionComment(ctx context.Context, discussionID, threadID, commentID int64, body string) error {
+	t := findThread(s.dthreads[discussionID], threadID)
+	if t == nil {
+		return store.ErrNotFound
+	}
+	c := findReply(t, commentID)
+	if c == nil {
+		return store.ErrNotFound
+	}
+	if c.Body != body {
+		c.Body = body
+		c.EditedAt = time.Now()
+	}
+	return nil
+}
+func (s storyStore) DeleteDiscussionComment(ctx context.Context, discussionID, threadID, commentID int64) error {
+	t := findThread(s.dthreads[discussionID], threadID)
+	if t == nil || findReply(t, commentID) == nil {
+		return store.ErrNotFound
+	}
+	return nil
+}
+func (s storyStore) SetDiscussionCommentHidden(ctx context.Context, discussionID, threadID, commentID int64, reason string) error {
+	t := findThread(s.dthreads[discussionID], threadID)
+	if t == nil {
+		return store.ErrNotFound
+	}
+	c := findReply(t, commentID)
+	if c == nil {
+		return store.ErrNotFound
+	}
+	if reason != "" && !store.ValidHideReason(reason) {
+		return store.ErrInvalidHideReason
+	}
+	c.Hidden = reason != ""
+	c.HiddenReason = reason
+	return nil
 }
 func (storyStore) ListLabels(ctx context.Context, wsID int64, kind string) ([]*store.Label, error) {
 	var out []*store.Label
@@ -853,7 +1050,28 @@ func renderFragment(page, name string, status int, data any) {
 // StoryIssueCommentFragment is the <li> a successful partial comment
 // POST returns for an issue — appended to .comment-list by the swap.
 func StoryIssueCommentFragment() {
-	renderFragment("issue_detail", "issue_comment", http.StatusOK, storyComments[1])
+	renderFragment("issue_detail", "issue_comment", http.StatusOK,
+		dict("C", storyComments[1], "Workspace", storyWorkspace))
+}
+
+// StoryIssueCommentHiddenFragment is the hidden-state <li> a partial
+// hide POST swaps over the visible comment.
+func StoryIssueCommentHiddenFragment() {
+	renderFragment("issue_detail", "issue_comment", http.StatusOK,
+		dict("C", storyCommentsModerated[2], "Workspace", storyWorkspace))
+}
+
+// StoryDiscussionDetailModerated renders the discussion detail with a
+// hidden thread and a hidden reply (the thread's replies stay visible —
+// they are other posts).
+func StoryDiscussionDetailModerated() {
+	renderDiscussionDetail(http.StatusOK, discussionDetailPage{
+		Title:      "#2 How do custom labels get their color?",
+		Discussion: storyDiscussion,
+		Threads:    storyDThreadsModerated,
+		Workspace:  storyWorkspace,
+		Section:    "discussions",
+	})
 }
 
 // StoryIssueCommentFormFragment is the error-marked form a 422 partial
@@ -928,6 +1146,28 @@ func StoryHttpSetStatusPartial(w http.ResponseWriter, r *http.Request) {
 // the unchanged 303 PRG path.
 func StoryHttpSetStatusRedirect(w http.ResponseWriter, r *http.Request) {
 	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/issues/2/status", url.Values{"status": {"closed"}}, false))
+}
+
+// StoryHttpHideCommentPartial replays a partial hide POST: the mux
+// answers the hidden-state <li> (reason note + collapsed body) that
+// replace mode swaps over the visible comment.
+func StoryHttpHideCommentPartial(w http.ResponseWriter, r *http.Request) {
+	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/issues/2/comments/2/hide", url.Values{"reason": {"spam"}}, true))
+}
+
+// StoryHttpHideCommentRedirect replays the same POST without X-Partial
+// — the unchanged 303 #comment-N path.
+func StoryHttpHideCommentRedirect(w http.ResponseWriter, r *http.Request) {
+	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/issues/2/comments/2/hide", url.Values{"reason": {"spam"}}, false))
+}
+
+// StoryHttpUnhideCommentPartial replays a partial unhide POST — the
+// store reports comment 2 visible again, so the fragment is the normal
+// comment markup.
+func StoryHttpUnhideCommentPartial(w http.ResponseWriter, r *http.Request) {
+	st := newStoryStore()
+	_ = st.SetCommentHidden(r.Context(), 2, 2, "spam")
+	New(st).ServeHTTP(w, storyPost("/w/default/issues/2/comments/2/unhide", nil, true))
 }
 
 // StoryHttpSetCommentAnswerPartial replays a partial answer mark on the

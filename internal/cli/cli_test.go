@@ -247,7 +247,7 @@ func TestHelp(t *testing.T) {
 		{[]string{"label", "--help"}, "usage: zatu label <action>"},
 		{[]string{"auth", "--help"}, "usage: zatu auth token"},
 		{[]string{"workspace", "--help"}, "usage: zatu workspace <action>"},
-		{[]string{"discussion", "comment", "--help"}, "usage: zatu discussion comment create"},
+		{[]string{"discussion", "comment", "--help"}, "usage: zatu discussion comment <action>"},
 	} {
 		code, out, _ := run(t, o, tc.args...)
 		if code != ExitOK || !strings.Contains(out, tc.want) {

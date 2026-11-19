@@ -343,6 +343,7 @@ type Comment struct {
 	Body      string `json:"body"`
 	Author    *User  `json:"author"`
 	CreatedAt string `json:"created_at"`
+	Moderation
 }
 
 func labelDTO(l store.Label) Label {
@@ -367,7 +368,10 @@ func issueDTO(i *store.Issue) Issue {
 }
 
 func commentDTO(c *store.Comment) Comment {
-	return Comment{ID: c.ID, Body: c.Body, Author: userDTO(c.Author), CreatedAt: fmtTime(c.CreatedAt)}
+	return Comment{
+		ID: c.ID, Body: c.Body, Author: userDTO(c.Author), CreatedAt: fmtTime(c.CreatedAt),
+		Moderation: moderationDTO(c.Moderation),
+	}
 }
 
 // resolveLabelIDs resolves label names ("labels") into ids, merged with

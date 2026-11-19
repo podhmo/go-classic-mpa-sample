@@ -425,6 +425,7 @@ type DiscussionThread struct {
 	Author    *User               `json:"author"`
 	CreatedAt string              `json:"created_at"`
 	Comments  []DiscussionComment `json:"comments,omitempty"`
+	Moderation
 }
 
 type DiscussionComment struct {
@@ -432,6 +433,7 @@ type DiscussionComment struct {
 	Body      string `json:"body"`
 	Author    *User  `json:"author"`
 	CreatedAt string `json:"created_at"`
+	Moderation
 }
 
 func categoryDTO(c store.DiscussionCategory) DiscussionCategory {
@@ -455,6 +457,7 @@ func discussionThreadDTO(t *store.DiscussionThread) DiscussionThread {
 	out := DiscussionThread{
 		ID: t.ID, IsAnswer: t.IsAnswer, Body: t.Body,
 		Author: userDTO(t.Author), CreatedAt: fmtTime(t.CreatedAt),
+		Moderation: moderationDTO(t.Moderation),
 	}
 	for _, c := range t.Comments {
 		out.Comments = append(out.Comments, discussionCommentDTO(c))
@@ -466,6 +469,7 @@ func discussionCommentDTO(c *store.DiscussionComment) DiscussionComment {
 	return DiscussionComment{
 		ID: c.ID, Body: c.Body,
 		Author: userDTO(c.Author), CreatedAt: fmtTime(c.CreatedAt),
+		Moderation: moderationDTO(c.Moderation),
 	}
 }
 

@@ -195,8 +195,8 @@ func issueView(ctx context.Context, o Options, args []string) error {
 	if *comments {
 		fmt.Fprintln(o.Stdout, "\ncomments:")
 		for _, c := range cs {
-			fmt.Fprintf(o.Stdout, "  #%d %s (%s)\n    %s\n",
-				c.ID, authorName(c.Author), fmtTimeShort(c.CreatedAt),
+			fmt.Fprintf(o.Stdout, "  #%d %s (%s)%s\n    %s\n",
+				c.ID, authorName(c.Author), fmtTimeShort(c.CreatedAt), moderationMarks(c.Moderation),
 				strings.ReplaceAll(c.Body, "\n", "\n    "))
 		}
 	}
@@ -363,24 +363,77 @@ const commentUsage = `usage: zatu comment <action> [flags]
 
 actions:
   create   comment on an issue: create N --body B | --body-file -
+  edit     edit a comment: edit N C --body B | --body-file -
+  delete   delete a comment: delete N C
+  hide     hide a comment: hide N C --reason R
+  unhide   restore a hidden comment: unhide N C
 
 "zatu comment <action> --help" shows an action's flags.
 `
 
-// zatu comment create N --body B | --body-file -
+// zatu comment create|edit|delete|hide|unhide
 func commentCmd(ctx context.Context, o Options, args []string) error {
 	if len(args) > 0 && isHelpArg(args[0]) {
 		fmt.Fprint(o.Stdout, commentUsage)
 		return nil
 	}
-	if len(args) == 0 || args[0] != "create" {
-		return usageError{msg: "usage: zatu comment create N --body B"}
+	if len(args) == 0 {
+		return usageError{msg: "usage: zatu comment create|edit|delete|hide|unhide"}
 	}
+	switch args[0] {
+	case "create":
+		return commentCreate(ctx, o, args[1:])
+	case "edit":
+		return commentEdit(ctx, o, args[1:])
+	case "delete":
+		return commentDelete(ctx, o, args[1:])
+	case "hide":
+		return commentHide(ctx, o, args[1:], true)
+	case "unhide":
+		return commentHide(ctx, o, args[1:], false)
+	default:
+		return usageError{msg: fmt.Sprintf("unknown comment command %q", args[0])}
+	}
+}
+
+// commentTarget parses the (issue, comment) positional pair the
+// moderation leaves share: N is the issue number, C the comment id.
+func commentTarget(rest []string) (issueID, commentID int64, err error) {
+	issueID, err = issueNumber(rest, 0)
+	if err != nil {
+		return 0, 0, err
+	}
+	commentID, err = argNumber(rest, 1, "comment")
+	if err != nil {
+		return 0, 0, err
+	}
+	return issueID, commentID, nil
+}
+
+// readCommentBody resolves --body/--body-file and applies the shared
+// body validation (empty maps to the usage error, the rest to exit 1).
+func (o Options) readCommentBody(body, bodyFile string) (string, error) {
+	bodyText, err := o.readBody(body, bodyFile)
+	if err != nil {
+		return "", err
+	}
+	bodyText = strings.TrimSpace(bodyText)
+	if msg := store.ValidateCommentBody(bodyText); msg != "" {
+		if bodyText == "" {
+			return "", usageError{msg: "--body is required (or --body-file)"}
+		}
+		return "", fmt.Errorf("invalid comment: %s", msg)
+	}
+	return bodyText, nil
+}
+
+// zatu comment create N --body B | --body-file -
+func commentCreate(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("comment create", flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
 	body := fs.String("body", "", "comment body")
 	bodyFile := fs.String("body-file", "", "read body from file (- for stdin)")
-	rest, err := o.parseLeaf(fs, "N --body B", args[1:], 1)
+	rest, err := o.parseLeaf(fs, "N --body B", args, 1)
 	if err != nil {
 		return err
 	}
@@ -388,16 +441,9 @@ func commentCmd(ctx context.Context, o Options, args []string) error {
 	if err != nil {
 		return err
 	}
-	bodyText, err := o.readBody(*body, *bodyFile)
+	bodyText, err := o.readCommentBody(*body, *bodyFile)
 	if err != nil {
 		return err
-	}
-	bodyText = strings.TrimSpace(bodyText)
-	if msg := store.ValidateCommentBody(bodyText); msg != "" {
-		if bodyText == "" {
-			return usageError{msg: "--body is required (or --body-file)"}
-		}
-		return fmt.Errorf("invalid comment: %s", msg)
 	}
 	b, closer, err := o.backend(ctx, bf)
 	if err != nil {
@@ -410,6 +456,103 @@ func commentCmd(ctx context.Context, o Options, args []string) error {
 		return err
 	}
 	fmt.Fprintf(o.Stdout, "created comment #%d on issue #%d\n", cid, id)
+	return nil
+}
+
+// zatu comment edit N C --body B | --body-file -
+func commentEdit(ctx context.Context, o Options, args []string) error {
+	fs := flag.NewFlagSet("comment edit", flag.ContinueOnError)
+	bf := o.addBackendFlags(fs)
+	body := fs.String("body", "", "new comment body")
+	bodyFile := fs.String("body-file", "", "read body from file (- for stdin)")
+	rest, err := o.parseLeaf(fs, "N C --body B", args, 2)
+	if err != nil {
+		return err
+	}
+	id, cid, err := commentTarget(rest)
+	if err != nil {
+		return err
+	}
+	bodyText, err := o.readCommentBody(*body, *bodyFile)
+	if err != nil {
+		return err
+	}
+	b, closer, err := o.backend(ctx, bf)
+	if err != nil {
+		return err
+	}
+	defer closeQuietly(closer)
+
+	if err := b.UpdateComment(ctx, id, cid, bodyText); err != nil {
+		return err
+	}
+	fmt.Fprintf(o.Stdout, "updated comment #%d on issue #%d\n", cid, id)
+	return nil
+}
+
+// zatu comment delete N C
+func commentDelete(ctx context.Context, o Options, args []string) error {
+	fs := flag.NewFlagSet("comment delete", flag.ContinueOnError)
+	bf := o.addBackendFlags(fs)
+	rest, err := o.parseLeaf(fs, "N C", args, 2)
+	if err != nil {
+		return err
+	}
+	id, cid, err := commentTarget(rest)
+	if err != nil {
+		return err
+	}
+	b, closer, err := o.backend(ctx, bf)
+	if err != nil {
+		return err
+	}
+	defer closeQuietly(closer)
+
+	if err := b.DeleteComment(ctx, id, cid); err != nil {
+		return err
+	}
+	fmt.Fprintf(o.Stdout, "deleted comment #%d on issue #%d\n", cid, id)
+	return nil
+}
+
+// zatu comment hide|unhide N C [--reason R]
+func commentHide(ctx context.Context, o Options, args []string, hide bool) error {
+	name := "comment hide"
+	if !hide {
+		name = "comment unhide"
+	}
+	fs := flag.NewFlagSet(name, flag.ContinueOnError)
+	bf := o.addBackendFlags(fs)
+	reason := fs.String("reason", "", "hide reason: "+strings.Join(store.HideReasons, "|"))
+	rest, err := o.parseLeaf(fs, "N C --reason R", args, 2)
+	if err != nil {
+		return err
+	}
+	if hide && !store.ValidHideReason(*reason) {
+		return usageError{msg: "--reason is required: " + strings.Join(store.HideReasons, ", ")}
+	}
+	id, cid, err := commentTarget(rest)
+	if err != nil {
+		return err
+	}
+	b, closer, err := o.backend(ctx, bf)
+	if err != nil {
+		return err
+	}
+	defer closeQuietly(closer)
+
+	r := ""
+	if hide {
+		r = *reason
+	}
+	if err := b.SetCommentHidden(ctx, id, cid, r); err != nil {
+		return err
+	}
+	if hide {
+		fmt.Fprintf(o.Stdout, "hidden comment #%d on issue #%d (%s)\n", cid, id, r)
+	} else {
+		fmt.Fprintf(o.Stdout, "unhidden comment #%d on issue #%d\n", cid, id)
+	}
 	return nil
 }
 
