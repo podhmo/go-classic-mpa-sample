@@ -238,7 +238,7 @@
   merge_base/head（pin ref `refs/zatudan/pr/<id>/head`）で固定する。
 - [正] **行アンカーコメントは `<details>` 折りたたみフォーム**（summary
   にアンカー位置）。anchor path は files 表示の Old/New パス集合に属する
-  もののみ受け付け、範囲外は 422 でフォームへ差し戻す。
+  もののみ受け付け、範囲外は 422 のエラーページで拒否する。
 - [正] **hidden コメントは `<details class="comment-hidden-body">
   <summary>Show comment</summary>`** で展開可能なまま最小化表示（セクション
   5-6 のコメント規約と同型）。
