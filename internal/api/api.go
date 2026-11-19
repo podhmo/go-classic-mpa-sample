@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/podhmo/go-classic-mpa-sample/internal/gitrepo"
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
@@ -63,6 +64,22 @@ type Store interface {
 	CreateWorkspace(ctx context.Context, in store.WorkspaceInput) (int64, error)
 	DeleteWorkspace(ctx context.Context, slug string) error
 	APITokenUser(ctx context.Context, token string) (*store.User, error)
+
+	// Pull requests — workspace-independent (docs/sketch/ja/
+	// pull-requests.md §6). These mount only with a *gitrepo.Repo.
+	ListPullRequests(ctx context.Context, f store.PRListFilter) ([]*store.PullRequest, int, error)
+	GetPullRequest(ctx context.Context, id int64) (*store.PullRequest, error)
+	CreatePullRequest(ctx context.Context, in store.PRInput, authorID int64, pin func(prID int64) error) (int64, error)
+	UpdatePullRequest(ctx context.Context, id int64, in store.PRInput) error
+	DeletePullRequest(ctx context.Context, id int64) error
+	ClosePullRequest(ctx context.Context, id int64, headSHA, mergeBaseSHA string) error
+	ReopenPullRequest(ctx context.Context, id int64) error
+	MarkMerged(ctx context.Context, id int64, mi store.PRMergeInfo) error
+	ListPRComments(ctx context.Context, prID int64) ([]*store.PRComment, error)
+	CreatePRComment(ctx context.Context, prID int64, in store.PRCommentInput, authorID int64) (int64, error)
+	UpdatePRComment(ctx context.Context, prID, commentID int64, body string) error
+	DeletePRComment(ctx context.Context, prID, commentID int64) error
+	SetPRCommentHidden(ctx context.Context, prID, commentID int64, reason string) error
 }
 
 const (
@@ -78,8 +95,8 @@ const (
 // credential (constant-time compared; its requests are anonymous); any
 // other token is resolved through the store's api_tokens table and its
 // requests run as that user.
-func New(st Store, envToken string) http.Handler {
-	h := &handler{store: st}
+func New(st Store, envToken string, repo *gitrepo.Repo) http.Handler {
+	h := &handler{store: st, repo: repo}
 	mux := http.NewServeMux()
 
 	// Routes are registered methodless per path and dispatched on
@@ -127,6 +144,26 @@ func New(st Store, envToken string) http.Handler {
 	}
 	for path, methods := range routes {
 		mux.HandleFunc(path, methodDispatch(methods))
+	}
+
+	// Pull requests mount only when the server has a git repo — on a
+	// repo-less deployment /api/v1/pulls* falls to the JSON 404 below,
+	// matching the HTML nav's hidden link.
+	if repo != nil {
+		for path, methods := range map[string]map[string]http.HandlerFunc{
+			"/api/v1/pulls":                            {"GET": h.listPulls, "POST": h.createPull},
+			"/api/v1/pulls/{id}":                       {"GET": h.getPull, "PATCH": h.updatePull, "DELETE": h.deletePull},
+			"/api/v1/pulls/{id}/comments":              {"GET": h.listPRComments, "POST": h.createPRComment},
+			"/api/v1/pulls/{id}/comments/{cid}":        {"PATCH": h.updatePRComment, "DELETE": h.deletePRComment},
+			"/api/v1/pulls/{id}/comments/{cid}/hide":   {"POST": h.hidePRComment},
+			"/api/v1/pulls/{id}/comments/{cid}/unhide": {"POST": h.unhidePRComment},
+			"/api/v1/pulls/{id}/status":                {"POST": h.setPullStatus},
+			"/api/v1/pulls/{id}/merge":                 {"POST": h.mergePull},
+			"/api/v1/pulls/{id}/diff":                  {"GET": h.pullDiff},
+			"/api/v1/pulls/{id}/markdown":              {"GET": h.pullMarkdown},
+		} {
+			mux.HandleFunc(path, methodDispatch(methods))
+		}
 	}
 
 	// Anything else under /api/v1 is a JSON 404 (HTML 404s would confuse
@@ -212,6 +249,7 @@ func actorID(r *http.Request) int64 {
 
 type handler struct {
 	store Store
+	repo  *gitrepo.Repo // nil → /api/v1/pulls* unmounted
 }
 
 type User struct {

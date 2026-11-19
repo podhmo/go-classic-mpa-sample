@@ -35,6 +35,7 @@ import (
 	"strings"
 
 	"github.com/podhmo/go-classic-mpa-sample/internal/client"
+	"github.com/podhmo/go-classic-mpa-sample/internal/gitrepo"
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
@@ -75,6 +76,24 @@ type Backend interface {
 	SetDiscussionCommentHidden(ctx context.Context, discussionID, threadID, commentID int64, reason string) error
 	ListDiscussionCategories(ctx context.Context) ([]*store.DiscussionCategory, error)
 
+	// Pull requests — workspace-independent (docs/sketch/ja/
+	// pull-requests.md §7). `zatu pr` drives these; local mode does the
+	// git work itself and calls the store-level verbs, remote mode maps
+	// them onto /api/v1/pulls*.
+	ListPullRequests(ctx context.Context, f store.PRListFilter) ([]*store.PullRequest, int, error)
+	GetPullRequest(ctx context.Context, id int64) (*store.PullRequest, error)
+	CreatePullRequest(ctx context.Context, in store.PRInput, authorID int64, pin func(int64) error) (int64, error)
+	UpdatePullRequest(ctx context.Context, id int64, in store.PRInput) error
+	DeletePullRequest(ctx context.Context, id int64) error
+	ClosePullRequest(ctx context.Context, id int64, headSHA, mergeBaseSHA string) error
+	ReopenPullRequest(ctx context.Context, id int64) error
+	MarkMerged(ctx context.Context, id int64, mi store.PRMergeInfo) error
+	ListPRComments(ctx context.Context, prID int64) ([]*store.PRComment, error)
+	CreatePRComment(ctx context.Context, prID int64, in store.PRCommentInput, authorID int64) (int64, error)
+	UpdatePRComment(ctx context.Context, prID, commentID int64, body string) error
+	DeletePRComment(ctx context.Context, prID, commentID int64) error
+	SetPRCommentHidden(ctx context.Context, prID, commentID int64, reason string) error
+
 	// Workspace management is unscoped — the same backend serves them
 	// regardless of which workspace it was opened for.
 	ListWorkspaces(ctx context.Context) ([]*store.Workspace, error)
@@ -107,6 +126,10 @@ type Options struct {
 
 	// Factory seams for tests (and for keeping package cli independent of
 	// *store.Store's concrete type). Defaults hit the real implementations.
+	// ResolveRepo opens the git repo for local `pr` commands; nil (repo
+	// undetected) is the "not a git repository" exit path, an error only
+	// for an explicit --repo. Unused in remote mode.
+	ResolveRepo    func(ctx context.Context, dbPath, repoPath string) (*gitrepo.Repo, error)
 	OpenLocal      func(ctx context.Context, dbPath, ws string) (Backend, io.Closer, error)
 	OpenRemote     func(server, token, ws string) (Backend, error)
 	OpenTokenStore func(dbPath string) (TokenStore, error)
@@ -142,6 +165,8 @@ func Run(ctx context.Context, o Options) int {
 		err = apiCmd(ctx, o, args[1:])
 	case "completion":
 		err = completionCmd(ctx, o, args[1:])
+	case "pr":
+		err = prCmd(ctx, o, args[1:])
 	case "discussion":
 		err = discussionCmd(ctx, o, args[1:])
 	case "workspace":
@@ -206,6 +231,15 @@ func (o Options) withDefaults() Options {
 			return be, st, nil
 		}
 	}
+	if o.ResolveRepo == nil {
+		o.ResolveRepo = func(ctx context.Context, dbPath, repoPath string) (*gitrepo.Repo, error) {
+			return gitrepo.Resolve(ctx, gitrepo.Options{
+				RepoPath: repoPath,
+				EnvRepo:  o.Getenv("ZATUDAN_REPO"),
+				DBPath:   dbPath,
+			})
+		}
+	}
 	if o.OpenRemote == nil {
 		o.OpenRemote = func(server, token, ws string) (Backend, error) {
 			return client.New(server, token).In(ws), nil
@@ -227,6 +261,8 @@ func (o Options) printUsage(w io.Writer) {
 
 Commands:
   issue list|view|create|edit|close|reopen|delete
+  pr list|view|diff|create|edit|close|reopen|merge|delete
+  pr comment create|edit|delete|hide|unhide
   comment create|edit|delete|hide|unhide
   label list [--kind issue|discussion]
   label create NAME --color HEX [--kind K] [--shared]

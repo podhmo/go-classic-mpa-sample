@@ -84,6 +84,7 @@ type Store interface {
 	GetPullRequest(ctx context.Context, id int64) (*store.PullRequest, error)
 	CreatePullRequest(ctx context.Context, in store.PRInput, authorID int64, pin func(prID int64) error) (int64, error)
 	UpdatePullRequest(ctx context.Context, id int64, in store.PRInput) error
+	DeletePullRequest(ctx context.Context, id int64) error
 	ClosePullRequest(ctx context.Context, id int64, headSHA, mergeBaseSHA string) error
 	ReopenPullRequest(ctx context.Context, id int64) error
 	MarkMerged(ctx context.Context, id int64, info store.PRMergeInfo) error
@@ -288,7 +289,7 @@ func New(st Store, opts ...Option) http.Handler {
 		// Method-scoped subtree patterns: a method-less "/api/v1/" would
 		// conflict with the catch-all "GET /" (more general path, fewer
 		// methods). Other verbs (PUT, OPTIONS, ...) keep the mux's 405.
-		apiHandler := api.New(st, cfg.apiToken)
+		apiHandler := api.New(st, cfg.apiToken, cfg.repo)
 		for _, method := range []string{"GET", "POST", "PATCH", "DELETE"} {
 			mux.Handle(method+" /api/v1/", apiHandler)
 		}

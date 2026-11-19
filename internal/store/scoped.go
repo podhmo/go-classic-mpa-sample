@@ -318,3 +318,45 @@ func (sc *ScopedStore) CreateWorkspace(ctx context.Context, in WorkspaceInput) (
 func (sc *ScopedStore) DeleteWorkspace(ctx context.Context, slug string) error {
 	return sc.s.DeleteWorkspace(ctx, slug)
 }
+
+// Pull requests are workspace-independent — the scoped view passes them
+// through unscoped (docs/sketch/ja/pull-requests.md §6).
+func (sc *ScopedStore) ListPullRequests(ctx context.Context, f PRListFilter) ([]*PullRequest, int, error) {
+	return sc.s.ListPullRequests(ctx, f)
+}
+func (sc *ScopedStore) GetPullRequest(ctx context.Context, id int64) (*PullRequest, error) {
+	return sc.s.GetPullRequest(ctx, id)
+}
+func (sc *ScopedStore) CreatePullRequest(ctx context.Context, in PRInput, authorID int64, pin func(int64) error) (int64, error) {
+	return sc.s.CreatePullRequest(ctx, in, authorID, pin)
+}
+func (sc *ScopedStore) UpdatePullRequest(ctx context.Context, id int64, in PRInput) error {
+	return sc.s.UpdatePullRequest(ctx, id, in)
+}
+func (sc *ScopedStore) DeletePullRequest(ctx context.Context, id int64) error {
+	return sc.s.DeletePullRequest(ctx, id)
+}
+func (sc *ScopedStore) ClosePullRequest(ctx context.Context, id int64, headSHA, mergeBaseSHA string) error {
+	return sc.s.ClosePullRequest(ctx, id, headSHA, mergeBaseSHA)
+}
+func (sc *ScopedStore) ReopenPullRequest(ctx context.Context, id int64) error {
+	return sc.s.ReopenPullRequest(ctx, id)
+}
+func (sc *ScopedStore) MarkMerged(ctx context.Context, id int64, mi PRMergeInfo) error {
+	return sc.s.MarkMerged(ctx, id, mi)
+}
+func (sc *ScopedStore) ListPRComments(ctx context.Context, prID int64) ([]*PRComment, error) {
+	return sc.s.ListPRComments(ctx, prID)
+}
+func (sc *ScopedStore) CreatePRComment(ctx context.Context, prID int64, in PRCommentInput, authorID int64) (int64, error) {
+	return sc.s.CreatePRComment(ctx, prID, in, authorID)
+}
+func (sc *ScopedStore) UpdatePRComment(ctx context.Context, prID, commentID int64, body string) error {
+	return sc.s.UpdatePRComment(ctx, prID, commentID, body)
+}
+func (sc *ScopedStore) DeletePRComment(ctx context.Context, prID, commentID int64) error {
+	return sc.s.DeletePRComment(ctx, prID, commentID)
+}
+func (sc *ScopedStore) SetPRCommentHidden(ctx context.Context, prID, commentID int64, reason string) error {
+	return sc.s.SetPRCommentHidden(ctx, prID, commentID, reason)
+}

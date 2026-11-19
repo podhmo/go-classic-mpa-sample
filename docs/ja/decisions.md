@@ -662,3 +662,17 @@ issue コメント・discussion スレッド（開設ポスト）・返信の3�
 - **API 形状**: PATCH `{"body"}` / DELETE → 204 / POST `.../hide` `{"reason"}` / `.../unhide` `{}` → 200 + 最新 DTO。DTO は `edited_at`（omitempty）・`hidden`・`hidden_reason`（omitempty）を inline embed（`api.Moderation` — CLI の --json view も同型を再利用）。
 - **CLI 構文**: issue 側は `zatu comment edit|delete|hide|unhide N C`、discussion 側は `zatu discussion comment <action> N --thread T [--comment C]`（`--comment` 省略でスレッド自体が対象）。
 - **検証**: `go test ./...` / `go vet` / `gofmt` 全パス。store（moderation_test.go）、web handler（comments_test.go: edit/delete/hide/unhide/404/partial 契約）、API（comments_test.go: 3種の PATCH/DELETE/hide + スコープ 404 + フィールド 422）にテスト追加。storybook に edited/hidden fixture と edit/delete/hide/unhide partial story を追加。
+
+## pull requests 機能（2026-11-19、`docs/sketch/ja/pull-requests.md` §7 の実装）
+
+issue tracker に git の pull request 相当を再現する機能。実体は DB の `pull_requests` 行（base_ref/head_ref + 記録済み SHA）で、コミット列・diff・conflict は open 中 git で都度計算する。
+
+- **repo の不在は機能の不在**: `zatudan` は `-repo`/`ZATUDAN_REPO`/`-db` 起点の `.git` 上方探索で解決（`off` で明示無効化）。未検出なら /pulls・/api/v1/pulls*・nav リンク・storybook 登録を全てマウントしない — 404 と機能消失は同じ扱い。解決は起動時1回で、後から現れた repo は再起動まで見えない（-api-token と同じポリシー）。
+- **pin `refs/zatudan/pr/<id>/head` が履歴保全の役**: open 中は head ref 追従、close/merge 時は記録済み `head_sha` で pin を更新し、アーカイブ済みコミットが gc されないことを保証。pin 失敗は操作自体を中断する。
+- **merge は web/CLI 2経路・同じ gitrepo.Merge**: `merge|squash|rebase` の3メソッド。squash の既定メッセージは `タイトル (#N)`。merge 後の pin は res.HeadSHA を使う（解決と merge の間に head が進みうるため）。
+- **diff 意味論の分割**: コミット列は two-dot `base..head`、files ビューは three-dot（open は merge-base→head の GitHub 同等、closed/merged は記録 SHA で固定）。rename コメントは旧/新パス両方へグルーピングする。
+- **API は unscoped**: `/api/v1/pulls*` は workspace スコープを持たない（client の `wsPath` を使わない）。repo 無効時はルート自体が未登録（404）。`/diff`（text/plain）と `/markdown`（export.PrMarkdown）を専用エンドポイントにした。
+- **`zatu pr` は Backend iface の13メソッドで両モードを吸収**: local は gitrepo.Resolve で repo を自前解決し git 作業（pin・merge・snippet 採取）を CLI 層が行い store 動詞を呼ぶ。remote は `/api/v1/pulls*` を叩き `--repo` は警告して無視。`--head` 省略は local のみ current branch 解決。
+- **form errors は構造体アダプタ**: ページモデルの `Errors` は `pullFormErrors{Title,Body,Ref}` + `any()`（store.FieldErrors ではない既存規約に準拠）。
+- **export は純粋関数**: `export.PullRequestMarkdown` は収集済みの metadata+commits+comments+snippet を受けて描画だけ行う。review comment は `path:L<n> (side)` 見出し + locator 行 + 行番号なし fence（エージェント誤カウント対策）。
+- **検証**: `go test ./...` 全パス（api: 新規 pulls_test.go、export: pulls_test.go、cli: fake 拡張）。実サーバで create→detail→files→comment→SSE→merge→close を curl 検証済み。`zatu pr` 実バイナリで list/create/view/markdown/diff/comment/merge を local mode 検証済み。

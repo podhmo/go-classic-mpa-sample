@@ -1451,6 +1451,10 @@ func (f *fakeStore) UpdatePullRequest(context.Context, int64, store.PRInput) err
 	return store.ErrNotFound
 }
 
+func (f *fakeStore) DeletePullRequest(context.Context, int64) error {
+	return store.ErrNotFound
+}
+
 func (f *fakeStore) ClosePullRequest(context.Context, int64, string, string) error {
 	return store.ErrNotFound
 }

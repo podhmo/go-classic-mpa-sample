@@ -157,3 +157,8 @@
 - [x] Pull requests を git コマンドで再現する > **store: pull_requests / pr_comments**: schemaDDL + migrateV5 の両方に DDL（changesDDL/migrateV2 パターン）。status 遷移（open→closed/merged、reopen は closed のみ）、`(base_ref, head_ref) WHERE status='open'` の部分一意 index、anchor（path+line+side+anchor_sha+diff_snippet）付き review comment、moderation 3 列は既存と同型（§2, §3）
 
 - [x] Pull requests を git コマンドで再現する > **web: /pulls 系**: 一覧・new・詳細（commits/conflict バッジ/コメント時系列）・edit・files（diff + anchored comment `<details>` フォーム）・comment 動詞（edit/delete/hide/unhide）・status（close/reopen）・merge 確認→POST。repo 無効時は nav 非表示 + ルート未マウント（404）。live-updates.js に `"pr"` kind 分岐、topic `pr:{id}`/`pulls`、fragment/SSE 追加（§6, §8）
+
+- [x] Pull requests を git コマンドで再現する > **api: /api/v1/pulls\***: pulls GET/POST、{id} GET/PATCH/DELETE、comments GET/POST、comments/{cid} PATCH/DELETE + hide/unhide、status POST、merge POST、diff GET（text/plain）、markdown GET。repo 無効 server では未マウント（404）（§7）
+- [x] Pull requests を git コマンドで再現する > **cli: zatu pr**: list/view/diff/create/edit/close/reopen/merge/comment 動詞（create は `--path P --line L [--side left]`）。local モードは `--db` 起点の repo 解決（`--repo` 上書き、未検出は `not a git repository` で exit 1）、remote は /api/v1/pulls\* 経由（`--repo` は警告して無視）。completion.go と printUsage の機械的更新（§7）
+- [x] Pull requests を git コマンドで再現する > **export: PrMarkdown**: review comment を `path:L42` (side) + `path L<開始>-<終了>` + プレーン fenced スニペット（DB の diff_snippet、行番号プレフィックスなし）+ 本文の形で出力。呼び出し側が集めた構造体を受ける純粋関数。`--json` は同構造の struct（§7）
+- [x] Pull requests を git コマンドで再現する > **docs 更新**: decisions.md（PR の実体・ref pin・merge 2 経路・auto-detect の解決規則）、roadmap.md、ui-rules.md（/pulls の UI 規約）
