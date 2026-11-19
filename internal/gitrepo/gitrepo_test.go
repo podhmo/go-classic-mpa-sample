@@ -482,3 +482,49 @@ func TestChangedFilesQuotedAndDiffLiteral(t *testing.T) {
 		t.Fatalf("show = %q, %v", got, err)
 	}
 }
+
+func TestRebasePlumbingRootCommit(t *testing.T) {
+	// head merged an unrelated branch's history: --no-merges still walks
+	// that side's root commit, which has no parent to graft onto.
+	ctx := context.Background()
+	dir := initRepo(t)
+	r := openRepo(t, dir)
+
+	// Unrelated history with its own root.
+	git(t, dir, "checkout", "-q", "--orphan", "imported")
+	git(t, dir, "rm", "-q", "--cached", "a.txt")
+	if err := os.Remove(filepath.Join(dir, "a.txt")); err != nil {
+		t.Fatal(err)
+	}
+	write(t, dir, "legacy.txt", "legacy\n")
+	// Back to main, merge the unrelated branch in, then one more commit.
+	git(t, dir, "checkout", "-q", "main")
+	git(t, dir, "merge", "-q", "--allow-unrelated-histories", "-m", "merge imported", "imported")
+	write(t, dir, "b.txt", "two\n")
+	git(t, dir, "branch", "release")
+	git(t, dir, "checkout", "-qb", "feat")
+	write(t, dir, "c.txt", "three\n")
+	git(t, dir, "checkout", "-q", "main")
+	// Give feat the unrelated history too, so release must replay it.
+	git(t, dir, "checkout", "-q", "feat")
+	git(t, dir, "merge", "-q", "-m", "pick up main", "main")
+	git(t, dir, "checkout", "-q", "main")
+	// rewind: release lacks both the merge and feat's commits.
+	git(t, dir, "checkout", "-q", "release")
+	git(t, dir, "reset", "-q", "--hard", "main~1")
+	git(t, dir, "checkout", "-q", "main")
+	git(t, dir, "reset", "-q", "--hard", "main~1")
+
+	res, err := r.Merge(ctx, "release", "feat", MethodRebase, "")
+	if err != nil {
+		t.Fatalf("rebase with imported root: %v", err)
+	}
+	if res.MergeSHA == "" {
+		t.Fatal("no merge sha")
+	}
+	for _, p := range []string{"legacy.txt", "a.txt", "b.txt", "c.txt"} {
+		if _, err := r.ShowFile(ctx, "release", p); err != nil {
+			t.Fatalf("release:%s missing after replay: %v", p, err)
+		}
+	}
+}

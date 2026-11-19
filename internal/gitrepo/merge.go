@@ -324,32 +324,64 @@ func (r *Repo) rebasePlumbing(ctx context.Context, env []string, mergeBase, newB
 	if err != nil {
 		return "", err
 	}
+	// emptyTree + a lazily-created root commit wrapping it: replaying a
+	// root commit (e.g. unrelated history merged into head) needs both
+	// merge sides grafted onto a shared empty root, because merge-tree
+	// refuses unrelated histories outright.
 	const emptyTree = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+	var emptyRoot string
+	treeOf := func(rev string) (string, error) {
+		res, err := r.run(ctx, nil, "rev-parse", rev+"^{tree}")
+		if err != nil {
+			return "", err
+		}
+		return strings.TrimSpace(res.stdout), nil
+	}
 	tip := newBase
 	for line := range strings.Lines(res.stdout) {
 		f := strings.Fields(line)
 		if len(f) == 0 {
 			continue
 		}
-		c, parent := f[0], emptyTree
-		if len(f) > 1 {
-			parent = f[1]
-		}
+		c := f[0]
 		// merge-tree --merge-base=parent would name the replay base
 		// directly, but it needs git >= 2.40 while --write-tree works on
 		// 2.38. Grafting achieves the same on every supported version:
 		// commit the current tip's tree with c's original parent as its
 		// parent, and merge-tree infers exactly that parent as the fork
-		// point. The graft commit stays dangling — nothing references it.
-		tipTree, err := r.run(ctx, nil, "rev-parse", tip+"^{tree}")
+		// point. The graft commits stay dangling — nothing references them.
+		tipTree, err := treeOf(tip)
 		if err != nil {
 			return "", err
 		}
-		graft, err := r.commitTree(ctx, env, strings.TrimSpace(tipTree.stdout), []string{"-p", parent}, "rebase graft")
-		if err != nil {
-			return "", err
+		var ours, theirs string
+		if len(f) > 1 {
+			// Normal case: graft the tip onto c's original parent.
+			if ours, err = r.commitTree(ctx, env, tipTree, []string{"-p", f[1]}, "rebase graft"); err != nil {
+				return "", err
+			}
+			theirs = c
+		} else {
+			// Root commit: graft both sides onto a synthetic empty root
+			// so merge-tree's fork point is the empty tree — the replay
+			// then applies c's whole tree, matching cherry-pick.
+			if emptyRoot == "" {
+				if emptyRoot, err = r.commitTree(ctx, env, emptyTree, nil, "rebase empty root"); err != nil {
+					return "", err
+				}
+			}
+			if ours, err = r.commitTree(ctx, env, tipTree, []string{"-p", emptyRoot}, "rebase graft"); err != nil {
+				return "", err
+			}
+			cTree, err := treeOf(c)
+			if err != nil {
+				return "", err
+			}
+			if theirs, err = r.commitTree(ctx, env, cTree, []string{"-p", emptyRoot}, "rebase graft"); err != nil {
+				return "", err
+			}
 		}
-		tree, err := r.mergeTree(ctx, graft, c)
+		tree, err := r.mergeTree(ctx, ours, theirs)
 		if err != nil {
 			if ce, ok := err.(*ConflictError); ok {
 				return "", fmt.Errorf("gitrepo: replaying %s: %w", c, ce)
