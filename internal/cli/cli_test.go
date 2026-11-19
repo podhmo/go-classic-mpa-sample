@@ -219,6 +219,75 @@ func TestUsageErrors(t *testing.T) {
 	}
 }
 
+// -h/--help works at every level — top, group and leaf — and always
+// exits 0 with the help text on stdout (stderr stays clean for errors).
+func TestHelp(t *testing.T) {
+	db := t.TempDir() + "/test.db"
+	o := localOptions(t, db)
+
+	// Top level: bare invocation, "help" and the flag forms.
+	for _, args := range [][]string{
+		{}, {"help"}, {"--help"}, {"-h"},
+	} {
+		code, out, errOut := run(t, o, args...)
+		if code != ExitOK || !strings.Contains(out, "issue list|view|create") {
+			t.Fatalf("args %v: exit %d, want usage on stdout:\n%s\nstderr: %s", args, code, out, errOut)
+		}
+	}
+
+	// Group level prints the group's actions.
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"issue", "--help"}, "usage: zatu issue <action>"},
+		{[]string{"issue", "help"}, "usage: zatu issue <action>"},
+		{[]string{"discussion", "-h"}, "usage: zatu discussion <action>"},
+		{[]string{"comment", "--help"}, "usage: zatu comment <action>"},
+		{[]string{"label", "--help"}, "usage: zatu label <action>"},
+		{[]string{"auth", "--help"}, "usage: zatu auth token"},
+		{[]string{"workspace", "--help"}, "usage: zatu workspace <action>"},
+		{[]string{"discussion", "comment", "--help"}, "usage: zatu discussion comment create"},
+	} {
+		code, out, _ := run(t, o, tc.args...)
+		if code != ExitOK || !strings.Contains(out, tc.want) {
+			t.Fatalf("args %v: exit %d, want %q:\n%s", tc.args, code, tc.want, out)
+		}
+	}
+
+	// Leaf level prints the usage line plus the flag list (the flag
+	// definitions themselves, e.g. -state).
+	for _, tc := range []struct {
+		args []string
+		want []string
+	}{
+		{[]string{"issue", "list", "--help"}, []string{"usage: zatu issue list [flags]", "-state"}},
+		{[]string{"issue", "view", "-h"}, []string{"usage: zatu issue view N [flags]", "-comments"}},
+		{[]string{"issue", "create", "--help"}, []string{"usage: zatu issue create --title T", "-body-file"}},
+		{[]string{"comment", "create", "--help"}, []string{"usage: zatu comment create N --body B", "-body-file"}},
+		{[]string{"discussion", "answer", "--help"}, []string{"usage: zatu discussion answer N --thread T", "-unmark"}},
+		{[]string{"auth", "token", "--help"}, []string{"usage: zatu auth token --user NAME", "-user"}},
+		{[]string{"api", "--help"}, []string{"usage: zatu api <path>", "-method"}},
+		{[]string{"completion", "--help"}, []string{"usage: zatu completion bash|zsh|fish"}},
+	} {
+		code, out, _ := run(t, o, tc.args...)
+		if code != ExitOK {
+			t.Fatalf("args %v: exit %d, want %d", tc.args, code, ExitOK)
+		}
+		for _, w := range tc.want {
+			if !strings.Contains(out, w) {
+				t.Fatalf("args %v: help missing %q:\n%s", tc.args, w, out)
+			}
+		}
+	}
+
+	// --help after a positional still resolves (flag re-parse in parseLeaf).
+	code, out, _ := run(t, o, "issue", "view", "1", "--help")
+	if code != ExitOK || !strings.Contains(out, "usage: zatu issue view N") {
+		t.Fatalf("view 1 --help: exit %d\n%s", code, out)
+	}
+}
+
 func TestAuthTokenLocal(t *testing.T) {
 	db := t.TempDir() + "/test.db"
 	st, err := store.Open(db)

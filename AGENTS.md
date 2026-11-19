@@ -21,6 +21,7 @@
 - `.agents/skills/modern-web-guidance/` — HTML/CSS・クライアント側UIの実装・更新前に `npx -y modern-web-guidance@latest search "<query>"` でモダンなベストプラクティスを検索するスキル。テンプレートや app.css を触る作業では先に実行する
 - `.agents/skills/iterate-ui/` — UI を変更すると決めたときのスキル。デザイン部分(templates/static/story_pages.go)の試行錯誤をアプリ本体の環境構築なしで行う。自作 storybook(`make storybook` → :6006)を使う。UI を触る作業では必ず参照する
 - `.agents/skills/verify-ui/` — UI 変更後に動作確認をアプリ全体へ広げるときのスキル。実サーバ(`go run ./cmd/zatudan -seed` → :8080、`-seed` で demo データ投入)と playwright-cli で実ブラウザ検証を行う
+- `.agents/skills/zatu-cli/` — issue/discussion を gh 風 CLI `zatu` で操作するスキル。検索・参照・作成・進捗コメント・状態変更などトラッカーへの記録はこの CLI 経由で行う（使い方の正は `zatu --help`）
 
 ## 主要コマンド
 
@@ -28,6 +29,8 @@
 go run ./cmd/zatudan                    # 起動 (http://localhost:8080、マスターデータのみ)
 go run ./cmd/zatudan -seed              # 起動 + demo データ投入（動作確認時はこちら）
 go run ./cmd/zatudan -db app.db init    # DB スキーマ+index を明示的に初期化
+go run ./cmd/zatu --help                # issue/discussion を操作する gh 風 CLI（全階層で --help 有効）
+tools/demo-history.sh [DB]              # zatu のみでデモ履歴をリプレイ（CLI の実行リファレンスでもある）
 go test ./...               # 全テスト（unit + store + E2E）
 go vet ./... && gofmt -l .  # 静的解析・フォーマット確認（コミット前に）
 go fix ./...                # モダナイズ（必要に応じて）

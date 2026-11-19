@@ -36,7 +36,7 @@ func apiCmd(ctx context.Context, o Options, args []string) error {
 	fs.Var(&rawFields, "F", "add a typed parameter name=value — value parsed as int/float/bool/null (repeatable)")
 	fs.Var(&rawFields, "raw-field", "long form of -F")
 	tmpl := fs.String("template", "", "render the JSON body through a Go text/template")
-	rest, err := parseLeaf(fs, args, 1)
+	rest, err := o.parseLeaf(fs, "<path>", args, 1)
 	if err != nil {
 		return err
 	}

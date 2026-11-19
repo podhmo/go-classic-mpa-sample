@@ -14,7 +14,7 @@ import (
 func completionCmd(ctx context.Context, o Options, args []string) error {
 	_ = ctx // completions are static; nothing to fetch
 	fs := flag.NewFlagSet("completion", flag.ContinueOnError)
-	rest, err := parseLeaf(fs, args, 1)
+	rest, err := o.parseLeaf(fs, "bash|zsh|fish", args, 1)
 	if err != nil {
 		return err
 	}

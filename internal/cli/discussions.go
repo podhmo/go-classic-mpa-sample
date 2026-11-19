@@ -13,10 +13,28 @@ import (
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
+const discussionUsage = `usage: zatu discussion <action> [flags]
+
+actions:
+  list      list discussions (--category, --answered, --search, --sort, --limit, --page)
+  view      show a discussion: N [--comments|--markdown] [-w]
+  create    start a discussion: --title T --category SLUG [--body B|--body-file -] [-w]
+  edit      update a discussion: N [--title T] [--body B] [--category SLUG] [--label L]...
+  delete    delete a discussion: N
+  comment   reply on a discussion: comment create N --body B [--thread T]
+  answer    mark the answer thread: answer N --thread T [--unmark]
+
+"zatu discussion <action> --help" shows an action's flags.
+`
+
 // discussionCmd dispatches `zatu discussion <action>`.
 func discussionCmd(ctx context.Context, o Options, args []string) error {
 	if len(args) == 0 {
 		return usageError{msg: "usage: zatu discussion list|view|create|edit|delete|comment|answer"}
+	}
+	if isHelpArg(args[0]) {
+		fmt.Fprint(o.Stdout, discussionUsage)
+		return nil
 	}
 	switch args[0] {
 	case "list":
@@ -51,7 +69,7 @@ func discussionList(ctx context.Context, o Options, args []string) error {
 	page := fs.Int("page", 1, "page number")
 	jsonFields := fs.String("json", "", "output JSON with the named fields (comma-separated)")
 	tmpl := fs.String("template", "", "render output through a Go text/template")
-	if _, err := parseLeaf(fs, args, 0); err != nil {
+	if _, err := o.parseLeaf(fs, "", args, 0); err != nil {
 		return err
 	}
 	if *jsonFields != "" && *tmpl != "" {
@@ -104,7 +122,7 @@ func discussionView(ctx context.Context, o Options, args []string) error {
 	tmpl := fs.String("template", "", "render output through a Go text/template")
 	web := fs.Bool("web", false, "open the discussion page in a browser (requires --server)")
 	fs.BoolVar(web, "w", false, "shorthand for --web")
-	rest, err := parseLeaf(fs, args, 1)
+	rest, err := o.parseLeaf(fs, "N", args, 1)
 	if err != nil {
 		return err
 	}
@@ -212,7 +230,7 @@ func discussionCreate(ctx context.Context, o Options, args []string) error {
 	fs.Var(&labels, "label", "attach a label by name (repeatable)")
 	web := fs.Bool("web", false, "open the new discussion in a browser (requires --server)")
 	fs.BoolVar(web, "w", false, "shorthand for --web")
-	if _, err := parseLeaf(fs, args, 0); err != nil {
+	if _, err := o.parseLeaf(fs, "--title T --category SLUG", args, 0); err != nil {
 		return err
 	}
 	if strings.TrimSpace(*title) == "" {
@@ -270,7 +288,7 @@ func discussionEdit(ctx context.Context, o Options, args []string) error {
 	category := fs.String("category", "", "new category slug")
 	var labels nameFlag
 	fs.Var(&labels, "label", "replace labels with this name set (repeatable)")
-	rest, err := parseLeaf(fs, args, 1)
+	rest, err := o.parseLeaf(fs, "N", args, 1)
 	if err != nil {
 		return err
 	}
@@ -334,7 +352,7 @@ func discussionEdit(ctx context.Context, o Options, args []string) error {
 func discussionDelete(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("discussion delete", flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
-	rest, err := parseLeaf(fs, args, 1)
+	rest, err := o.parseLeaf(fs, "N", args, 1)
 	if err != nil {
 		return err
 	}
@@ -357,6 +375,10 @@ func discussionDelete(ctx context.Context, o Options, args []string) error {
 
 // zatu discussion comment create N --body B [--thread T]
 func discussionCommentCmd(ctx context.Context, o Options, args []string) error {
+	if len(args) > 0 && isHelpArg(args[0]) {
+		fmt.Fprint(o.Stdout, "usage: zatu discussion comment create N --body B [--thread T]\n\n\"zatu discussion comment create --help\" shows the flags.\n")
+		return nil
+	}
 	if len(args) == 0 || args[0] != "create" {
 		return usageError{msg: "usage: zatu discussion comment create N --body B [--thread T]"}
 	}
@@ -365,7 +387,7 @@ func discussionCommentCmd(ctx context.Context, o Options, args []string) error {
 	body := fs.String("body", "", "comment body")
 	bodyFile := fs.String("body-file", "", "read body from file (- for stdin)")
 	thread := fs.Int64("thread", 0, "reply to this thread")
-	rest, err := parseLeaf(fs, args[1:], 1)
+	rest, err := o.parseLeaf(fs, "N --body B", args[1:], 1)
 	if err != nil {
 		return err
 	}
@@ -413,7 +435,7 @@ func discussionAnswer(ctx context.Context, o Options, args []string) error {
 	bf := o.addBackendFlags(fs)
 	thread := fs.Int64("thread", 0, "thread to mark as the answer (required)")
 	unmark := fs.Bool("unmark", false, "clear the answer mark instead of setting it")
-	rest, err := parseLeaf(fs, args, 1)
+	rest, err := o.parseLeaf(fs, "N --thread T", args, 1)
 	if err != nil {
 		return err
 	}

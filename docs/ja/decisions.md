@@ -622,3 +622,14 @@ podhmo からの改善要望（grid と story のリンク誤押・見た目・s
 - **`SeedDemoData` 内の `ensureCategories` は残す**: demo discussions が category_id を参照するため、テスト等で `SeedDemoData` を直接呼んでも自足するように（冪等）。
 - **e2e は demo 非依存**: `internal/e2etests` の fixture は全て自作なので `-seed` なしのまま通る。
 - **検証**: `go test ./...` / `go vet` / `gofmt` 全パス。`TestSeedMasterData` 追加（workspace・labels・categories 有・issues/discussions/users 無）。実バイナリで `init`（master のみ）→ 起動（issues 空・200）→ 同 DB に `-seed` 起動（demo 投入）を確認。
+
+## zatu CLI の --help 整備とエージェント向け skill（2026-11-19、`devin/zatu-help-skill` ブランチ）
+
+「開発中の記録を issue/discussion にリプレイする」用途に向けて、新しいエージェントが `gh` のように zatu を独学できる形にした。要点は skill を薄く保ち、使い方の正を `--help` に集約すること。
+
+- **3 階層の --help**: top（`zatu [--help|-h|help]`）= 全コマンド面 + backend 選択、group（`zatu issue --help` 等）= そのグループの action 一覧、leaf（`zatu issue list --help`）= usage 行 + `flag.PrintDefaults` の flag 一覧。いずれも stdout・exit 0。`isHelpArg` が `help`/`-h`/`--help` を各 dispatcher で処理する。
+- **flag 定義を leaf help の single source に**: leaf の flag 一覧はヘルプ文字列に複写せず `PrintDefaults` で生成する（flag 追加時のドリフト防止）。usage 行の引数ヒントだけ `parseLeaf` の `argHint` 引数で渡す。誤用時の flag パッケージ出力は従来どおり io.Discard に潰し、明示的な help 要求時のみ stdout へ出す。
+- **`flag.ErrHelp` を `errHelp` sentinel に写像**: flagset が -h/--help を検出したら leaf usage を stdout に出して `errHelp` を返し、Run は exit 0 に写像。誤用（不明 flag・引数不足）は従来どおり usageError → exit 2 + usage を stderr。
+- **コメント編集は未実装のまま**: store/web/API いずれもコメント update を持たないため、訂正は追記コメントで行う（gh でも他人のコメントは編集できず自然な型）。issue/discussion 本体の title/body は `edit` で訂正可能。
+- **`tools/demo-history.sh`**: zatu のみでリアルな開発履歴（7 issues・4 discussions・answer マーク・label 作成・edit による訂正）をリプレイする実行可能なリファレンス。`zatudan -db X init` で master data（discussion categories）を入れてから流す — 新規 DB は categories が無く `discussion create` が通らないため。
+- **検証**: `go test ./internal/cli` の `TestHelp`（全階層の exit 0 + usage 内容）、`go test ./...` / `go vet` / `gofmt` 全パス。実バイナリで全 --help 経路とスクリプトのリプレイを確認済み。
