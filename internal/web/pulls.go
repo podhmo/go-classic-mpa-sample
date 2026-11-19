@@ -611,6 +611,24 @@ func (h *handler) createPRComment(w http.ResponseWriter, r *http.Request) {
 		if side == "" {
 			side = "right"
 		}
+		// The comment must anchor to a file the PR touches — accepting
+		// any repo path would let anyone post snippets of unrelated files.
+		from, to := h.diffRange(pr)
+		changes, cherr := h.repo.ChangedFiles(ctx, from, to)
+		inDiff := false
+		if cherr == nil {
+			for _, c := range changes {
+				if c.NewPath == path || c.OldPath == path {
+					inDiff = true
+					break
+				}
+			}
+		}
+		if cherr != nil || !inDiff {
+			h.renderError(w, r, http.StatusUnprocessableEntity, "Unprocessable entity",
+				"The anchor path is not part of the pull request diff.")
+			return
+		}
 		in.Path, in.Line, in.Side = path, line, side
 		// Anchor to the head tip: live ref while open (branches still
 		// move), the recorded sha once closed/merged.
