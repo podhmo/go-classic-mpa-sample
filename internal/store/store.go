@@ -144,7 +144,7 @@ CREATE TABLE IF NOT EXISTS discussion_comments (
 	hidden_at INTEGER,
 	hidden_reason TEXT CHECK(hidden_reason IN ('spam','abuse','off-topic','outdated','duplicate','resolved','low-quality'))
 );
-` + changesDDL + `
+` + pullsDDL + changesDDL + `
 CREATE INDEX IF NOT EXISTS idx_issues_workspace_status_created ON issues(workspace_id, status, created_at);
 CREATE INDEX IF NOT EXISTS idx_comments_issue_created ON comments(issue_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_issue_labels_label ON issue_labels(label_id);
@@ -199,6 +199,7 @@ var migrations = []func(ctx context.Context, tx *sql.Tx) error{
 	migrateV2, // changes table — reaches databases already stamped v1
 	migrateV3, // labels gain workspace_id/kind/archived + discussion_labels
 	migrateV4, // comment-moderation columns on the three post tables
+	migrateV5, // pull_requests + pr_comments
 }
 
 // schemaVersion is the user_version a fully migrated database reports.
@@ -345,6 +346,67 @@ func migrateV4(ctx context.Context, tx *sql.Tx) error {
 		}
 	}
 	return nil
+}
+
+// pullsDDL is kept out of line so migrateV5 can apply it alone to
+// databases stamped v4 before the tables existed — schemaDDL concatenates
+// it so fresh databases get the identical definition (the changesDDL /
+// migrateV2 pattern).
+const pullsDDL = `
+-- Pull requests: the DB row is the PR's identity; code-derived data
+-- (commits, diff, conflicts) is always computed from git. The *_sha
+-- columns record close/merge-time resolutions so a completed PR's diff
+-- stays reproducible after its branches are deleted — the pinned
+-- refs/zatudan/pr/<id>/head keeps the commits reachable
+-- (docs/sketch/ja/pull-requests.md).
+CREATE TABLE IF NOT EXISTS pull_requests (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	base_ref TEXT NOT NULL,                -- normalized (symbolic-full-name) or sha
+	head_ref TEXT NOT NULL,
+	title TEXT NOT NULL,
+	body TEXT NOT NULL DEFAULT '',
+	status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','closed','merged')),
+	author_id INTEGER REFERENCES users(id),
+	base_sha TEXT,                         -- resolved at create time (display)
+	head_sha TEXT,                         -- resolved at close/merge time
+	merge_base_sha TEXT,                   -- merge-base at close/merge time
+	merge_sha TEXT,                        -- merged only: result commit
+	merge_method TEXT,                     -- merged only: merge|squash|rebase
+	created_at INTEGER NOT NULL,
+	updated_at INTEGER NOT NULL,
+	closed_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_pull_requests_status_created ON pull_requests(status, created_at DESC);
+-- At most one open PR per (base, head) pair — closed/merged pairs may
+-- be recreated (the idx_dthreads_answer precedent).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pull_requests_open_pair ON pull_requests(base_ref, head_ref) WHERE status = 'open';
+CREATE TABLE IF NOT EXISTS pr_comments (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	pr_id INTEGER NOT NULL REFERENCES pull_requests(id) ON DELETE CASCADE,
+	-- anchor: NULL = conversation comment, set = review comment. line is a
+	-- 1-based line number inside the blob anchor_sha names.
+	path TEXT,
+	line INTEGER,
+	side TEXT NOT NULL DEFAULT 'right' CHECK(side IN ('left','right')),
+	anchor_sha TEXT,                       -- commit whose blob the line refers to
+	diff_snippet TEXT,                     -- surrounding lines captured at post time
+	body TEXT NOT NULL,
+	author_id INTEGER REFERENCES users(id),
+	edited_at INTEGER,
+	hidden_at INTEGER,
+	hidden_reason TEXT CHECK(hidden_reason IN ('spam','abuse','off-topic','outdated','duplicate','resolved','low-quality')),
+	created_at INTEGER NOT NULL,
+	CHECK ((path IS NULL) = (line IS NULL))
+);
+CREATE INDEX IF NOT EXISTS idx_pr_comments_pr ON pr_comments(pr_id, created_at);
+`
+
+// migrateV5 adds the pull_requests/pr_comments tables to a database
+// stamped v4 (migrateV1 is skipped for those, so the tables would never
+// appear otherwise).
+func migrateV5(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, pullsDDL)
+	return err
 }
 
 // migrateWithFKOff runs one migration on a dedicated connection with

@@ -35,6 +35,7 @@ const (
 const (
 	IssuesTopic      = "issues"
 	DiscussionsTopic = "discussions"
+	PullsTopic       = "pulls"
 )
 
 // IssueTopic is the per-issue channel ("issue:5").
@@ -42,6 +43,9 @@ func IssueTopic(id int64) string { return "issue:" + strconv.FormatInt(id, 10) }
 
 // DiscussionTopic is the per-discussion channel ("discussion:3").
 func DiscussionTopic(id int64) string { return "discussion:" + strconv.FormatInt(id, 10) }
+
+// PullRequestTopic is the per-pull-request channel ("pr:5").
+func PullRequestTopic(id int64) string { return "pr:" + strconv.FormatInt(id, 10) }
 
 // Change is one mutation hint. Seq is assigned by Hub.Publish and is
 // monotonically increasing per process, so subscribers can dedupe and
