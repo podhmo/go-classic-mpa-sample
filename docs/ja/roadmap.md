@@ -28,4 +28,6 @@
 ## v3 候補（検討メモあり・未着手）
 
 - JSON Web API + gh 風 CLI — `/api/v1` + `issues issue list` 風サブコマンド — `docs/sketch/ja/cli-and-web-api.md`（2026-11-16 再検討済み。actor の前提は accounts Phase 1 で解消、残る論点は API credential の粒度）
+- Pull requests — git コマンドで再現（ローカル repo 対象、メタデータは DB・コミット/diff/conflict は都度 git、完了時は `refs/zatudan/pr/N/head` ピン+結果記録。merge/squash/rebase-merge は web/CLI 両方可、エージェント向け `zatu pr` + file:line アンカー付きコメント抽出） — `docs/sketch/ja/pull-requests.md`
+- インフラ適用例 — Cloud Run + Litestream + GCS + IAP の最小構成（デプロイ・SQLite 永続化・authorization 未導入の補完としての認証境界。terraform スケッチ程度） — [issue #91](https://github.com/podhmo/go-classic-mpa-sample/issues/91)
 - reactions・権限制御・issue→discussion 変換・pin・カテゴリ管理 UI — 各設計メモの「見送り」節を参照
