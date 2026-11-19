@@ -31,6 +31,7 @@ go run ./cmd/zatudan -seed              # 起動 + demo データ投入（動作
 go run ./cmd/zatudan -db app.db init    # DB スキーマ+index を明示的に初期化
 go run ./cmd/zatu --help                # issue/discussion を操作する gh 風 CLI（全階層で --help 有効）
 tools/demo-history.sh [DB]              # zatu のみでデモ履歴をリプレイ（CLI の実行リファレンスでもある）
+tools/demo-pr-history.sh [DB] [REPO]    # 実 git repo + `zatu pr` で PR 履歴をリプレイ
 go test ./...               # 全テスト（unit + store + E2E）
 go vet ./... && gofmt -l .  # 静的解析・フォーマット確認（コミット前に）
 go fix ./...                # モダナイズ（必要に応じて）
