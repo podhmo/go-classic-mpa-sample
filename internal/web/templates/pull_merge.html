@@ -1,0 +1,58 @@
+{{define "content"}}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <ol>
+    <li><a href="/pulls">Pull requests</a></li>
+    <li><a href="/pulls/{{.PR.ID}}">#{{.PR.ID}}</a></li>
+    <li><a href="#" aria-current="page">Merge</a></li>
+  </ol>
+</nav>
+
+<div class="page-head">
+  <h1>Merge pull request <span class="issue-num">#{{.PR.ID}}</span></h1>
+</div>
+
+<div class="card issue-form">
+  <p><strong>{{.PR.Title}}</strong></p>
+  <p class="pr-refs"><code>{{shortRef .PR.BaseRef}}</code> ← <code>{{shortRef .PR.HeadRef}}</code></p>
+
+  {{if .Error}}
+  <p class="merge-state merge-conflicting" role="alert">{{.Error}}</p>
+  {{end}}
+
+  {{if .Check}}
+  {{if eq .Check.Status 1}}
+  <p class="merge-state merge-clean">This branch can be merged cleanly.</p>
+  {{else if eq .Check.Status 2}}
+  <p class="merge-state merge-conflicting">This branch has conflicts in:
+    {{range $i, $f := .Check.Files}}{{if $i}}, {{end}}<code>{{$f}}</code>{{end}}</p>
+  <p class="muted">Merging is blocked until the conflicts are resolved in the branches.</p>
+  {{else}}
+  <p class="merge-state">Mergeability could not be checked (shallow clone or old git). Merging may still fail.</p>
+  {{end}}
+  {{else}}
+  <p class="merge-state">Mergeability could not be checked — merging may fail.</p>
+  {{end}}
+
+  <form method="post" action="/pulls/{{.PR.ID}}/merge">
+    <fieldset class="field">
+      <legend>Merge method</legend>
+      <label class="label-option" for="m-merge">
+        <input type="radio" id="m-merge" name="method" value="merge" checked>
+        <span>Merge commit — create a merge commit joining the histories.</span>
+      </label>
+      <label class="label-option" for="m-squash">
+        <input type="radio" id="m-squash" name="method" value="squash">
+        <span>Squash — combine every commit into one commit on base.</span>
+      </label>
+      <label class="label-option" for="m-rebase">
+        <input type="radio" id="m-rebase" name="method" value="rebase">
+        <span>Rebase — replay the commits on top of base (linear history).</span>
+      </label>
+    </fieldset>
+    <div class="form-actions">
+      <a class="btn btn-quiet" href="/pulls/{{.PR.ID}}">Cancel</a>
+      <button type="submit" class="btn btn-primary">Merge pull request</button>
+    </div>
+  </form>
+</div>
+{{end}}

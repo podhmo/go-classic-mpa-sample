@@ -1,0 +1,63 @@
+{{define "content"}}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <ol>
+    <li><a href="/pulls">Pull requests</a></li>
+    <li><a href="/pulls/{{.PR.ID}}">#{{.PR.ID}}</a></li>
+    <li><a href="#" aria-current="page">Files changed</a></li>
+  </ol>
+</nav>
+
+<nav class="tabs" aria-label="Pull request views">
+  <a class="tab" href="/pulls/{{.PR.ID}}">Conversation</a>
+  <a class="tab tab-active" href="/pulls/{{.PR.ID}}/files" aria-current="page">Files changed</a>
+</nav>
+
+<div class="page-head">
+  <h1>Files changed <span class="issue-num">#{{.PR.ID}}</span></h1>
+</div>
+<p class="pr-refs"><code>{{shortRef .PR.BaseRef}}</code> ← <code>{{shortRef .PR.HeadRef}}</code></p>
+
+{{if .Error}}
+<p class="card" role="alert">{{.Error}}</p>
+{{else if not .Files}}
+<div class="empty-state">
+  <p class="empty-lead">No changed files.</p>
+</div>
+{{else}}
+{{range .Files}}
+{{$f := .}}
+<section class="card diff-file" id="{{.Anchor}}">
+  <header class="diff-file-head">
+    <span class="badge badge-file-{{.StatusLetter}}">{{.Change.Status}}</span>
+    <h2>{{if .Change.OldPath}}{{.Change.OldPath}} → {{end}}{{.Change.NewPath}}</h2>
+  </header>
+
+  {{if .Binary}}
+  <p class="muted">Binary file — diff not shown.</p>
+  {{else}}
+  <pre class="diff">{{range .Lines}}<div class="diff-line diff-{{.Kind}}">{{if or (eq .Kind "ctx") (eq .Kind "add")}}<details class="line-comment"><summary title="Comment on this line"><span class="line-no">{{.NewNo}}</span></summary><form method="post" action="/pulls/{{$.PR.ID}}/comments" class="line-comment-form"><input type="hidden" name="path" value="{{$f.CommentPath}}"><input type="hidden" name="line" value="{{.NewNo}}"><input type="hidden" name="side" value="right"><input type="hidden" name="back" value="files"><textarea name="body" rows="3" required placeholder="Comment on line {{.NewNo}}"></textarea><button type="submit" class="btn">Comment</button></form></details>{{else if eq .Kind "del"}}<details class="line-comment"><summary title="Comment on this line"><span class="line-no">{{.OldNo}}</span></summary><form method="post" action="/pulls/{{$.PR.ID}}/comments" class="line-comment-form"><input type="hidden" name="path" value="{{$f.CommentPath}}"><input type="hidden" name="line" value="{{.OldNo}}"><input type="hidden" name="side" value="left"><input type="hidden" name="back" value="files"><textarea name="body" rows="3" required placeholder="Comment on line {{.OldNo}} (left)"></textarea><button type="submit" class="btn">Comment</button></form></details>{{else}}<span class="line-no">{{if .NewNo}}{{.NewNo}}{{end}}</span>{{end}}<span class="line-text">{{.Text}}</span></div>{{end}}</pre>
+  {{end}}
+
+  {{if .Comments}}
+  <div class="review-comments">
+    {{range .Comments}}
+    <div class="card comment{{if .Moderation.Hidden}} comment-hidden{{end}}" id="comment-{{.ID}}">
+      <header class="comment-meta">
+        <span class="comment-author">{{authorName .Author}}</span>
+        <span class="review-anchor">on <code>{{.Path}}:L{{.Line}}</code>{{if eq .Side "left"}} (left){{end}}</span>
+        <a class="comment-permalink" href="/pulls/{{.PRID}}#comment-{{.ID}}"><time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .CreatedAt}}</time></a>
+        {{if .Moderation.Edited}}· <span class="comment-edited">edited</span>{{end}}
+      </header>
+      {{if .Moderation.Hidden}}
+      <p class="comment-hidden-note">This comment was marked as {{.Moderation.HiddenReason}}.</p>
+      {{else}}
+      <div class="comment-body markdown-body">{{markdown .Body}}</div>
+      {{end}}
+    </div>
+    {{end}}
+  </div>
+  {{end}}
+</section>
+{{end}}
+{{end}}
+{{end}}

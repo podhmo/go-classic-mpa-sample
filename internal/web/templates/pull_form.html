@@ -1,0 +1,54 @@
+{{define "content"}}
+<script type="module" src="/static/page-form.js"></script>
+<div class="page-head">
+  <h1>{{.Heading}}</h1>
+</div>
+
+<form method="post" action="{{.Action}}" class="card issue-form" novalidate>
+  <p class="form-note">Fields marked <span class="req">*</span> are required.</p>
+
+  {{if .PR}}
+  {{/* The base/head pair is the PR's identity — editing keeps it. */}}
+  <div class="field">
+    <span class="field-label" id="f-refs-label">Branches</span>
+    <p class="pr-refs" aria-labelledby="f-refs-label"><code>{{shortRef .PR.BaseRef}}</code> ← <code>{{shortRef .PR.HeadRef}}</code></p>
+  </div>
+  {{else}}
+  <div class="field">
+    <label for="f-base">Base branch <span class="req" aria-hidden="true">*</span></label>
+    <select id="f-base" name="base" required>
+      {{range .Refs}}
+      <option value="{{.Name}}"{{if eq .Name $.Input.BaseRef}} selected{{end}}>{{.Short}}</option>
+      {{end}}
+    </select>
+  </div>
+  <div class="field">
+    <label for="f-head">Compare branch <span class="req" aria-hidden="true">*</span></label>
+    <select id="f-head" name="head" required>
+      {{range .Refs}}
+      <option value="{{.Name}}"{{if or (eq .Name $.Input.HeadRef) (and (not $.Input.HeadRef) (eq .Name $.Current))}} selected{{end}}>{{.Short}}</option>
+      {{end}}
+    </select>
+    {{if .Errors.refs}}<p class="field-error" id="f-refs-error">{{.Errors.refs}}</p>{{end}}
+  </div>
+  {{end}}
+
+  <div class="field">
+    <label for="f-title">Title <span class="req" aria-hidden="true">*</span></label>
+    <input type="text" id="f-title" name="title" value="{{.Input.Title}}" maxlength="{{maxTitleLen}}" pattern=".*\S.*" required data-error="f-title-error"{{if .Errors.Title}} aria-invalid="true" aria-describedby="f-title-error" autofocus{{else}} aria-invalid="false"{{end}}>
+    <p class="field-error{{if not .Errors.Title}} field-error-pending{{end}}" id="f-title-error">{{or .Errors.Title "Title is required."}}</p>
+  </div>
+
+  <div class="field">
+    <label for="f-body">Body</label>
+    <textarea id="f-body" name="body" rows="10" aria-keyshortcuts="Control+Enter Meta+Enter"{{if .Errors.Body}} aria-invalid="true" aria-describedby="f-body-error f-body-hint"{{if not .Errors.Title}} autofocus{{end}}{{else}} aria-invalid="false" aria-describedby="f-body-hint"{{end}}>{{.Input.Body}}</textarea>
+    {{if .Errors.Body}}<p class="field-error" id="f-body-error">{{.Errors.Body}}</p>{{end}}
+    <p class="field-hint" id="f-body-hint">Markdown (GFM) supported. Raw HTML is not rendered; line breaks are preserved. Ctrl+Enter (Cmd+Enter on macOS) submits.</p>
+  </div>
+
+  <div class="form-actions">
+    <a class="btn btn-quiet" href="/pulls{{if .PR}}/{{.PR.ID}}{{end}}">Cancel</a>
+    <button type="submit" class="btn btn-primary">{{if .PR}}Save{{else}}Create pull request{{end}}</button>
+  </div>
+</form>
+{{end}}
