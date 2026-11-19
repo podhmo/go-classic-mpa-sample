@@ -119,3 +119,23 @@ func ValidateCommentBody(body string) string {
 	}
 	return ""
 }
+
+// ValidatePullRequestInput validates a PRInput value: title rules are the
+// issue/discussion ones, and both refs are required (already normalized
+// by the caller — sameness is a store error, not a field error).
+func ValidatePullRequestInput(in PRInput) FieldErrors {
+	errs := ValidateIssueInput(IssueInput{Title: in.Title, Body: in.Body})
+	if in.BaseRef == "" {
+		if errs == nil {
+			errs = FieldErrors{}
+		}
+		errs["base"] = "Base ref is required."
+	}
+	if in.HeadRef == "" {
+		if errs == nil {
+			errs = FieldErrors{}
+		}
+		errs["head"] = "Head ref is required."
+	}
+	return errs
+}
