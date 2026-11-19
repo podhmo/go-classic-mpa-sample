@@ -301,17 +301,27 @@ zatu pr comment create N --body B|--body-file F \
   review comment は次の形 — 「どのファイルのどこへの言及か」を機械
   可読に保つのが目的:
 
-  ```markdown
+  ````markdown
   ### Review comment on `internal/web/issues.go:L42` (right) · @alice · 2026-11-19T...
-  > 41 | func resolve(...) {
-  > 42 |     ws, err := ...
-  > 43 |     ...
-  この行の nil チェックが抜けています
+
+  `internal/web/issues.go` L40-L44:
+
+  ```go
+  func resolve(...) {
+      ws, err := ...
+      ...
   ```
 
+  この行の nil チェックが抜けています
+  ````
+
   スニペットは `git show <anchor_sha>:<path>` から対象行前後 2 行。
-  sha が死んでいても `path:L42` と本文は残る。`--json` は同構造を
-  struct で返す（エージェントが jq で絞れる）。
+  **各行に `41 |` のような行番号プレフィックスは付けない** — AI は
+  行番号付きコードの番号を取り違えやすいので、範囲は直前の 1 行に
+  「`path` L<開始>-<終了>」とだけ載せ、コードはプレーンに載せる。
+  anchor の行番号は見出しの `path:L42` が担う。sha が死んでいても
+  `path:L42` と本文は残る。`--json` は同構造を struct で返す
+  （エージェントが jq で絞れる）。
 - API: `/api/v1/pulls`（GET/POST）、`/api/v1/pulls/{id}`（GET/PATCH/
   DELETE 相当は POST ベースの既存 API スタイルに合わせる）、
   `/comments`、`/merge`、`/diff`（text/plain で返す案）。
