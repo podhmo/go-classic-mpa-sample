@@ -31,15 +31,22 @@ func parsePages() map[string]*template.Template {
 	names := []string{"issues", "issue_detail", "issue_form", "issue_delete", "error", "auth_form",
 		"discussions", "discussion_detail", "discussion_form", "discussion_delete",
 		"workspaces", "workspace_form", "workspace_delete", "labels", "label_form",
-		"comment_edit", "comment_delete"}
-	// The detail pages also parse fragments.html: its defines power both
-	// their inline markup and the standalone partial-update responses.
-	fragments := map[string]bool{"issue_detail": true, "discussion_detail": true}
+		"comment_edit", "comment_delete",
+		"pulls", "pull_detail", "pull_form", "pull_files", "pull_merge"}
+	// The detail pages also parse their fragment file: its defines power
+	// both their inline markup and the standalone partial-update responses.
+	fragments := map[string][]string{
+		"issue_detail":      {"templates/fragments.html"},
+		"discussion_detail": {"templates/fragments.html"},
+		// pull_detail needs both: its own defines plus the shared
+		// comment_actions it borrows for moderation controls.
+		"pull_detail": {"templates/pull_fragments.html", "templates/fragments.html"},
+	}
 	pages := make(map[string]*template.Template, len(names))
 	for _, name := range names {
 		files := []string{"templates/layout.html", "templates/" + name + ".html"}
-		if fragments[name] {
-			files = append(files, "templates/fragments.html")
+		if frags, ok := fragments[name]; ok {
+			files = append(files, frags...)
 		}
 		pages[name] = template.Must(template.New(name).Funcs(funcMap).ParseFS(templateFS, files...))
 	}
@@ -156,6 +163,31 @@ func (r *Renderer) renderCommentEdit(w http.ResponseWriter, status int, data com
 // renderCommentDelete renders the shared comment delete confirmation.
 func (r *Renderer) renderCommentDelete(w http.ResponseWriter, status int, data commentDeletePage) {
 	r.execute(w, "comment_delete", status, data)
+}
+
+// renderPullList renders GET /pulls.
+func (r *Renderer) renderPullList(w http.ResponseWriter, status int, data pullListPage) {
+	r.execute(w, "pulls", status, data)
+}
+
+// renderPullDetail renders GET /pulls/{id}.
+func (r *Renderer) renderPullDetail(w http.ResponseWriter, status int, data pullDetailPage) {
+	r.execute(w, "pull_detail", status, data)
+}
+
+// renderPullForm renders the new/edit pull request form.
+func (r *Renderer) renderPullForm(w http.ResponseWriter, status int, data pullFormPage) {
+	r.execute(w, "pull_form", status, data)
+}
+
+// renderPullFiles renders GET /pulls/{id}/files.
+func (r *Renderer) renderPullFiles(w http.ResponseWriter, status int, data pullFilesPage) {
+	r.execute(w, "pull_files", status, data)
+}
+
+// renderPullMerge renders GET /pulls/{id}/merge.
+func (r *Renderer) renderPullMerge(w http.ResponseWriter, status int, data pullMergePage) {
+	r.execute(w, "pull_merge", status, data)
 }
 
 type errorPageData struct {

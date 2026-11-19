@@ -30,6 +30,9 @@
           <a href="/w/{{.Workspace.Slug}}/discussions"{{if eq .Section "discussions"}} aria-current="page"{{end}}>Discussions</a>
           <a href="/w/{{.Workspace.Slug}}/labels"{{if eq .Section "labels"}} aria-current="page"{{end}}>Labels</a>
           {{end}}
+          {{if pullsOn}}
+          <a href="/pulls"{{if eq .Section "pulls"}} aria-current="page"{{end}}>Pull requests</a>
+          {{end}}
           <a href="/workspaces"{{if eq .Section "workspaces"}} aria-current="page"{{end}}>Workspaces</a>
           {{if .Workspace}}
           {{if eq .Section "discussions"}}

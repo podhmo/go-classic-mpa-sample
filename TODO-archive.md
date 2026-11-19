@@ -155,3 +155,5 @@
 
 - [x] Pull requests を git コマンドで再現する > **internal/gitrepo**: repo 解決（auto-detect + `-repo` + `git --version` プローブ）＋ git 実行ラッパ（log/diff/name-status/merge-base/merge-tree/commit-tree/update-ref/worktree list/status/symbolic-full-name/check-ref-format）＋ merge 実行 2 経路（checked-out → in-worktree、非 checked-out → plumbing）。git <2.38 は conflict 判定 unknown + plumbing merge 不可。web/api/cli から呼べる interface seam（§1, §4, §5, §9）
 - [x] Pull requests を git コマンドで再現する > **store: pull_requests / pr_comments**: schemaDDL + migrateV5 の両方に DDL（changesDDL/migrateV2 パターン）。status 遷移（open→closed/merged、reopen は closed のみ）、`(base_ref, head_ref) WHERE status='open'` の部分一意 index、anchor（path+line+side+anchor_sha+diff_snippet）付き review comment、moderation 3 列は既存と同型（§2, §3）
+
+- [x] Pull requests を git コマンドで再現する > **web: /pulls 系**: 一覧・new・詳細（commits/conflict バッジ/コメント時系列）・edit・files（diff + anchored comment `<details>` フォーム）・comment 動詞（edit/delete/hide/unhide）・status（close/reopen）・merge 確認→POST。repo 無効時は nav 非表示 + ルート未マウント（404）。live-updates.js に `"pr"` kind 分岐、topic `pr:{id}`/`pulls`、fragment/SSE 追加（§6, §8）

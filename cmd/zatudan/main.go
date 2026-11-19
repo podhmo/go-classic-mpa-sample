@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/podhmo/go-classic-mpa-sample/internal/events"
+	"github.com/podhmo/go-classic-mpa-sample/internal/gitrepo"
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 	"github.com/podhmo/go-classic-mpa-sample/internal/web"
 )
@@ -52,6 +53,9 @@ func main() {
 	seed := flag.Bool("seed", envBool("ZATUDAN_SEED"),
 		"insert demo issues, discussions and the demo user (env ZATUDAN_SEED); "+
 			"master data (workspace, labels, categories) is ensured either way")
+	repoPath := flag.String("repo", "",
+		"git repository for pull requests (env ZATUDAN_REPO); "+
+			"'off' disables the feature, empty auto-detects near -db")
 	flag.Parse()
 
 	// An explicitly empty -db would open an unnamed ephemeral SQLite
@@ -104,6 +108,21 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Pull requests exist only with a git repo: explicit -repo failures
+	// are startup errors, auto-detect failures silently leave the feature
+	// unmounted (docs/sketch/ja/pull-requests.md §1).
+	repo, err := gitrepo.Resolve(ctx, gitrepo.Options{
+		RepoPath: *repoPath,
+		EnvRepo:  os.Getenv("ZATUDAN_REPO"),
+		DBPath:   *dbPath,
+	})
+	if err != nil {
+		log.Fatalf("resolve repository: %v", err)
+	}
+	if repo != nil {
+		log.Printf("git repository: %s (git %s)", repo.Dir, repo.Version)
+	}
+
 	// Live updates: every mutator records its hints in the changes table
 	// inside the mutation's own tx, and WatchChanges re-publishes new rows
 	// to the hub — so writes from other processes (the local CLI) reach
@@ -119,7 +138,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:              *addr,
-		Handler:           web.New(st, web.WithAPIToken(*apiToken), web.WithAPIEnabled(*apiToken != "" || hasAPITokens), web.WithHub(hub)),
+		Handler:           web.New(st, web.WithAPIToken(*apiToken), web.WithAPIEnabled(*apiToken != "" || hasAPITokens), web.WithHub(hub), web.WithRepo(repo)),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		// WriteTimeout covers SSE too, but each events handler lifts its

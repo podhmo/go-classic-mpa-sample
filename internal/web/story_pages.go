@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/podhmo/go-classic-mpa-sample/internal/gitrepo"
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
@@ -1218,4 +1219,237 @@ func (storyStore) CreateWorkspace(ctx context.Context, in store.WorkspaceInput) 
 }
 func (storyStore) DeleteWorkspace(ctx context.Context, slug string) error {
 	panic("storybook: DeleteWorkspace not implemented")
+}
+
+// ---------------------------------------------------------------------------
+var storyPullAuthors = []*store.User{
+	{ID: 1, Name: "demo"},
+	{ID: 2, Name: "taro"},
+}
+
+// Pull request fixtures — the storybook nav shows the Pull requests link and
+// the pages render without a real git repo: fixtures feed the page models
+// directly, and storyStore's PR methods mirror them for replayed requests.
+var storyPulls = []*store.PullRequest{
+	{ID: 12, BaseRef: "refs/heads/main", HeadRef: "refs/heads/feat/pulls-index",
+		Title: "Add the /pulls index page", Body: "Implements the list + tab filters.",
+		Status: store.PRStatusOpen, Author: storyPullAuthors[0],
+		HeadSHA: "1a2b3c4d5e6f", MergeBaseSHA: "9f8e7d6c5b4a",
+		CreatedAt: time.Now().Add(-26 * time.Hour), UpdatedAt: time.Now().Add(-3 * time.Hour)},
+	{ID: 11, BaseRef: "refs/heads/main", HeadRef: "refs/heads/fix/nav-order",
+		Title: "Reorder nav links", Body: "Issues, Discussions, Pull requests.",
+		Status: store.PRStatusMerged, Author: storyPullAuthors[1],
+		HeadSHA: "aabbccddeeff", MergeBaseSHA: "112233445566", MergeSHA: "deadbeefcafe",
+		MergeMethod: "squash",
+		CreatedAt:   time.Now().Add(-96 * time.Hour), UpdatedAt: time.Now().Add(-48 * time.Hour)},
+	{ID: 10, BaseRef: "refs/heads/main", HeadRef: "refs/heads/try/sidebar",
+		Title: "Experiment: collapsible sidebar", Body: "Abandoned in favor of a top bar.",
+		Status: store.PRStatusClosed, Author: storyPullAuthors[0],
+		HeadSHA: "feedface1234", MergeBaseSHA: "112233445566",
+		CreatedAt: time.Now().Add(-200 * time.Hour), UpdatedAt: time.Now().Add(-150 * time.Hour)},
+}
+
+var storyPRComments = []*store.PRComment{
+	{ID: 30, PRID: 12, Body: "First pass — the tab bar mirrors the issues one.",
+		Author: storyPullAuthors[0], CreatedAt: time.Now().Add(-20 * time.Hour)},
+	{ID: 31, PRID: 12, Path: "internal/web/templates/pulls.html", Line: 14, Side: "right",
+		AnchorSHA: "1a2b3c4d5e6f", DiffSnippet: "@@ -12,6 +12,8 @@\n <nav>\n+  <a href=\"/pulls\">Pull requests</a>\n </nav>",
+		Body:   "The link should live outside the workspace gate.",
+		Author: storyPullAuthors[1], CreatedAt: time.Now().Add(-18 * time.Hour)},
+	{ID: 32, PRID: 12, Body: "Done — moved next to Discussions.",
+		Author: storyPullAuthors[0], CreatedAt: time.Now().Add(-17 * time.Hour)},
+}
+
+func (storyStore) ListPullRequests(ctx context.Context, f store.PRListFilter) ([]*store.PullRequest, int, error) {
+	return storyPulls, len(storyPulls), nil
+}
+func (storyStore) GetPullRequest(ctx context.Context, id int64) (*store.PullRequest, error) {
+	for _, p := range storyPulls {
+		if p.ID == id {
+			return p, nil
+		}
+	}
+	return nil, store.ErrNotFound
+}
+func (storyStore) CreatePullRequest(ctx context.Context, in store.PRInput, authorID int64, pin func(int64) error) (int64, error) {
+	return 99, nil
+}
+func (storyStore) UpdatePullRequest(ctx context.Context, id int64, in store.PRInput) error {
+	return nil
+}
+func (storyStore) ClosePullRequest(ctx context.Context, id int64, headSHA, mergeBaseSHA string) error {
+	return nil
+}
+func (storyStore) ReopenPullRequest(ctx context.Context, id int64) error {
+	return nil
+}
+func (storyStore) MarkMerged(ctx context.Context, id int64, mi store.PRMergeInfo) error {
+	return nil
+}
+func (storyStore) ListPRComments(ctx context.Context, prID int64) ([]*store.PRComment, error) {
+	return storyPRComments, nil
+}
+func (storyStore) CreatePRComment(ctx context.Context, prID int64, in store.PRCommentInput, authorID int64) (int64, error) {
+	return 99, nil
+}
+func (storyStore) UpdatePRComment(ctx context.Context, prID, commentID int64, body string) error {
+	return nil
+}
+func (storyStore) DeletePRComment(ctx context.Context, prID, commentID int64) error {
+	return nil
+}
+func (storyStore) SetPRCommentHidden(ctx context.Context, prID, commentID int64, reason string) error {
+	return nil
+}
+
+func renderPullList(status int, data pullListPage) {
+	rec := httptest.NewRecorder()
+	NewRenderer().renderPullList(rec, status, data)
+	printRec(rec)
+}
+func renderPullDetail(status int, data pullDetailPage) {
+	rec := httptest.NewRecorder()
+	NewRenderer().renderPullDetail(rec, status, data)
+	printRec(rec)
+}
+func renderPullForm(status int, data pullFormPage) {
+	rec := httptest.NewRecorder()
+	NewRenderer().renderPullForm(rec, status, data)
+	printRec(rec)
+}
+func renderPullFiles(status int, data pullFilesPage) {
+	rec := httptest.NewRecorder()
+	NewRenderer().renderPullFiles(rec, status, data)
+	printRec(rec)
+}
+func renderPullMerge(status int, data pullMergePage) {
+	rec := httptest.NewRecorder()
+	NewRenderer().renderPullMerge(rec, status, data)
+	printRec(rec)
+}
+
+// StoryPullList renders the pull request index with open/merged/closed rows.
+func StoryPullList() {
+	pullsEnabled = true
+	renderPullList(http.StatusOK, pullListPage{
+		Title: "Pull requests", Section: "pulls",
+		Filter: store.PRListFilter{Status: "all"},
+		Pulls:  storyPulls,
+		Total:  3, Page: 1, TotalPages: 1,
+		RangeStart: 1, RangeEnd: 3,
+	})
+}
+
+// StoryPullDetail renders an open PR's conversation: merge-clean badge,
+// commits, and an anchored review comment.
+func StoryPullDetail() {
+	pullsEnabled = true
+	renderPullDetail(http.StatusOK, pullDetailPage{
+		Title: storyPulls[0].Title, Section: "pulls",
+		PR: storyPulls[0],
+		Commits: []gitrepo.Commit{
+			{SHA: "1a2b3c4d5e6f7a8b9c0d", ShortSHA: "1a2b3c4", Subject: "List handler + routes", Author: "demo", Date: time.Now().Add(-25 * time.Hour)},
+			{SHA: "2b3c4d5e6f7a8b9c0d1e", ShortSHA: "2b3c4d5", Subject: "Tab filter bar", Author: "demo", Date: time.Now().Add(-24 * time.Hour)},
+		},
+		Merge:    &gitrepo.MergeCheck{Status: gitrepo.MergeClean},
+		Comments: storyPRComments,
+	})
+}
+
+// StoryPullDetailMerged renders the conversation of a merged PR — static
+// merge info, no live mergeability probe.
+func StoryPullDetailMerged() {
+	pullsEnabled = true
+	renderPullDetail(http.StatusOK, pullDetailPage{
+		Title: storyPulls[1].Title, Section: "pulls",
+		PR:       storyPulls[1],
+		Comments: nil,
+	})
+}
+
+// StoryPullNew renders the create form with base/head selects.
+func StoryPullNew() {
+	pullsEnabled = true
+	renderPullForm(http.StatusOK, pullFormPage{
+		Title: "New pull request", Heading: "Open a pull request",
+		Action: "/pulls", Section: "pulls",
+		Current: "refs/heads/feat/pulls-index",
+		Refs: []gitrepo.RefName{
+			{Name: "refs/heads/main", Short: "main"},
+			{Name: "refs/heads/feat/pulls-index", Short: "feat/pulls-index"},
+			{Name: "refs/heads/feat/comments", Short: "feat/comments"},
+		},
+	})
+}
+
+// StoryPullEdit renders the edit form: refs frozen as text, only title/body.
+func StoryPullEdit() {
+	pullsEnabled = true
+	renderPullForm(http.StatusOK, pullFormPage{
+		Title: "Edit pull request", Heading: "Edit pull request",
+		Action: "/pulls/12/edit", Section: "pulls",
+		PR:    storyPulls[0],
+		Input: store.PRInput{Title: storyPulls[0].Title, Body: storyPulls[0].Body},
+	})
+}
+
+// StoryPullFiles renders the files-changed page: one modified file with an
+// inline comment form and one anchored comment.
+func StoryPullFiles() {
+	pullsEnabled = true
+	renderPullFiles(http.StatusOK, pullFilesPage{
+		Title: storyPulls[0].Title, Section: "pulls",
+		PR: storyPulls[0],
+		Files: []pullFileView{
+			{
+				Change:       gitrepo.FileChange{Status: "M", NewPath: "internal/web/templates/pulls.html"},
+				CommentPath:  "internal/web/templates/pulls.html",
+				StatusLetter: "M",
+				Anchor:       "file-internal-web-templates-pulls-html",
+				Lines: []diffLine{
+					{Kind: "meta", Text: "diff --git a/internal/web/templates/pulls.html b/internal/web/templates/pulls.html"},
+					{Kind: "hunk", Text: "@@ -12,6 +12,8 @@"},
+					{Kind: "ctx", OldNo: 12, NewNo: 12, Text: " <nav>"},
+					{Kind: "add", NewNo: 13, Text: "+  <a href=\"/pulls\">Pull requests</a>"},
+					{Kind: "del", OldNo: 13, Text: "-  <a href=\"/old\">Old</a>"},
+					{Kind: "ctx", OldNo: 14, NewNo: 14, Text: " </nav>"},
+				},
+				Comments: []*store.PRComment{storyPRComments[1]},
+			},
+			{
+				Change:       gitrepo.FileChange{Status: "A", NewPath: "internal/web/pulls.go"},
+				CommentPath:  "internal/web/pulls.go",
+				StatusLetter: "A",
+				Anchor:       "file-internal-web-pulls-go",
+				Lines: []diffLine{
+					{Kind: "hunk", Text: "@@ -0,0 +1,3 @@"},
+					{Kind: "add", NewNo: 1, Text: "+package web"},
+					{Kind: "add", NewNo: 2, Text: "+"},
+					{Kind: "add", NewNo: 3, Text: "+// Pull request pages."},
+				},
+			},
+		},
+	})
+}
+
+// StoryPullMerge renders the merge confirmation page on a clean probe.
+func StoryPullMerge() {
+	pullsEnabled = true
+	renderPullMerge(http.StatusOK, pullMergePage{
+		Title: "Merge pull request", Section: "pulls",
+		PR:    storyPulls[0],
+		Check: &gitrepo.MergeCheck{Status: gitrepo.MergeClean},
+	})
+}
+
+// StoryPullMergeConflict renders the merge page when the probe reports a
+// conflict — the merge button is gone, the file list is shown.
+func StoryPullMergeConflict() {
+	pullsEnabled = true
+	renderPullMerge(http.StatusOK, pullMergePage{
+		Title: "Merge pull request", Section: "pulls",
+		PR: storyPulls[0],
+		Check: &gitrepo.MergeCheck{Status: gitrepo.MergeConflicting,
+			Files: []string{"internal/web/templates/pulls.html"}},
+	})
 }

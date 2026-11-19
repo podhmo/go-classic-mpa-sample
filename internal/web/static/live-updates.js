@@ -17,11 +17,20 @@ const section = document.querySelector("[data-live-events]");
 if (section && typeof EventSource === "function") start(section);
 
 function start(section) {
-  const kind = section.dataset.liveKind; // "issue" | "discussion"
+  const kind = section.dataset.liveKind; // "issue" | "discussion" | "pr"
   const eventsURL = section.dataset.liveEvents;
   const fragBase = section.dataset.liveFragments;
   const listURL = section.dataset.liveList;
   const list = section.querySelector(".comment-list");
+  // PRs share the issue shape (one flat comment timeline) — only the
+  // wording and the discussion's thread/reply paths differ.
+  const noun =
+    { issue: "issue", discussion: "discussion", pr: "pull request" }[kind] ??
+    "issue";
+  const listName =
+    { issue: "issues", discussion: "discussions", pr: "pull requests" }[kind] ??
+    "issues";
+  const fragPath = kind === "discussion" ? "threads" : "comments";
   let lost = false;
 
   // Events accumulate into one pending batch; flush() runs ~250ms after
@@ -191,7 +200,7 @@ function start(section) {
   // id already exists get replaced, everything else appended, and stale
   // leftovers (deleted rows) are dropped — replaceChildren owns the list.
   async function resync() {
-    const url = `${fragBase}/${kind === "issue" ? "comments" : "threads"}`;
+    const url = `${fragBase}/${fragPath}`;
     const res = await fetch(url);
     if (!res.ok) return;
     const nodes = parseFragment(await res.text()).filter(
@@ -245,19 +254,14 @@ function start(section) {
           p.dataset.liveDeleted = "";
           const a = document.createElement("a");
           a.href = listURL;
-          a.textContent =
-            kind === "issue" ? "Back to issues" : "Back to discussions";
+          a.textContent = "Back to " + listName;
           p.append(
-            document.createTextNode("This " + kind + " was deleted. "),
+            document.createTextNode("This " + noun + " was deleted. "),
             a,
           );
           section.before(p);
         }
-        announce(
-          kind === "issue"
-            ? "This issue was deleted."
-            : "This discussion was deleted.",
-        );
+        announce("This " + noun + " was deleted.");
         return;
       }
       if (pending.resync) {
@@ -274,9 +278,7 @@ function start(section) {
               await runScopedTransition(commonScope([old]), () =>
                 old.replaceWith(nodes[0]),
               );
-              announce(
-                kind === "issue" ? "Issue updated." : "Discussion updated.",
-              );
+              announce(noun[0].toUpperCase() + noun.slice(1) + " updated.");
             }
           }
         }
@@ -291,15 +293,14 @@ function start(section) {
         }
         if (pending.ids.size) {
           const ids = [...pending.ids].join(",");
-          const path = kind === "issue" ? "comments" : "threads";
           const appended = await applyFragment(
-            `${fragBase}/${path}?ids=${ids}`,
+            `${fragBase}/${fragPath}?ids=${ids}`,
             () => list,
           );
           if (appended?.length) {
             highlight(appended);
             announce(
-              kind === "issue" ? "New comment." : "New thread.",
+              kind === "discussion" ? "New thread." : "New comment.",
             );
           }
         }
@@ -320,7 +321,9 @@ function start(section) {
         }
         for (const { target, parent } of pending.removes) {
           const node = document.getElementById(
-            parent || kind === "issue" ? `comment-${target}` : `thread-${target}`,
+            parent || kind !== "discussion"
+              ? `comment-${target}`
+              : `thread-${target}`,
           );
           if (!node) continue;
           const ol = node.parentElement;

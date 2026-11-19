@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -1429,4 +1430,55 @@ func TestSpeculationRules(t *testing.T) {
 			t.Errorf("selector_matches %q lacks %q", rules.Prefetch[0].Where.SelectorMatches, sel)
 		}
 	}
+}
+
+// Pull requests — the fake holds no PR state: /pulls routes mount only
+// when New got a repo, which the web tests never supply, so these are
+// plain stubs keeping fakeStore a Store.
+func (f *fakeStore) ListPullRequests(_ context.Context, _ store.PRListFilter) ([]*store.PullRequest, int, error) {
+	return nil, 0, nil
+}
+
+func (f *fakeStore) GetPullRequest(context.Context, int64) (*store.PullRequest, error) {
+	return nil, store.ErrNotFound
+}
+
+func (f *fakeStore) CreatePullRequest(context.Context, store.PRInput, int64, func(int64) error) (int64, error) {
+	return 0, errors.New("fakeStore: unimplemented")
+}
+
+func (f *fakeStore) UpdatePullRequest(context.Context, int64, store.PRInput) error {
+	return store.ErrNotFound
+}
+
+func (f *fakeStore) ClosePullRequest(context.Context, int64, string, string) error {
+	return store.ErrNotFound
+}
+
+func (f *fakeStore) ReopenPullRequest(context.Context, int64) error {
+	return store.ErrNotFound
+}
+
+func (f *fakeStore) MarkMerged(context.Context, int64, store.PRMergeInfo) error {
+	return store.ErrNotFound
+}
+
+func (f *fakeStore) ListPRComments(context.Context, int64) ([]*store.PRComment, error) {
+	return nil, nil
+}
+
+func (f *fakeStore) CreatePRComment(context.Context, int64, store.PRCommentInput, int64) (int64, error) {
+	return 0, errors.New("fakeStore: unimplemented")
+}
+
+func (f *fakeStore) UpdatePRComment(context.Context, int64, int64, string) error {
+	return store.ErrNotFound
+}
+
+func (f *fakeStore) DeletePRComment(context.Context, int64, int64) error {
+	return store.ErrNotFound
+}
+
+func (f *fakeStore) SetPRCommentHidden(context.Context, int64, int64, string) error {
+	return store.ErrNotFound
 }

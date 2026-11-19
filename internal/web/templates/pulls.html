@@ -1,0 +1,79 @@
+{{define "content"}}
+<div class="page-head">
+  <h1>Pull requests</h1>
+  <a class="btn btn-primary" href="/pulls/new">New pull request</a>
+</div>
+
+<nav class="tabs" aria-label="Filter by status">
+  <a class="tab {{if eq .Filter.Status "open"}}tab-active{{end}}" href="/pulls?status=open{{if .Filter.Query}}&amp;q={{.Filter.Query}}{{end}}"{{if eq .Filter.Status "open"}} aria-current="page"{{end}}>Open</a>
+  <a class="tab {{if eq .Filter.Status "closed"}}tab-active{{end}}" href="/pulls?status=closed{{if .Filter.Query}}&amp;q={{.Filter.Query}}{{end}}"{{if eq .Filter.Status "closed"}} aria-current="page"{{end}}>Closed</a>
+  <a class="tab {{if eq .Filter.Status "merged"}}tab-active{{end}}" href="/pulls?status=merged{{if .Filter.Query}}&amp;q={{.Filter.Query}}{{end}}"{{if eq .Filter.Status "merged"}} aria-current="page"{{end}}>Merged</a>
+  <a class="tab {{if eq .Filter.Status "all"}}tab-active{{end}}" href="/pulls?status=all{{if .Filter.Query}}&amp;q={{.Filter.Query}}{{end}}"{{if eq .Filter.Status "all"}} aria-current="page"{{end}}>All</a>
+</nav>
+
+<form method="get" action="/pulls" class="filter-bar" role="search" aria-label="Filter pull requests">
+  <input type="hidden" name="status" value="{{.Filter.Status}}">
+  <div class="filter-field">
+    <label for="filter-q">Search</label>
+    <input type="search" id="filter-q" name="q" value="{{.Filter.Query}}" placeholder="Title or body">
+  </div>
+  <div class="filter-field">
+    <label for="filter-sort">Sort</label>
+    <select id="filter-sort" name="sort">
+      <option value="newest"{{if ne .Filter.Sort "oldest"}} selected{{end}}>Newest first</option>
+      <option value="oldest"{{if eq .Filter.Sort "oldest"}} selected{{end}}>Oldest first</option>
+    </select>
+  </div>
+  <div class="filter-actions">
+    <button type="submit" class="btn">Apply</button>
+    {{if .HasActiveFilter}}<a class="btn btn-quiet" href="/pulls">Clear</a>{{end}}
+  </div>
+</form>
+
+{{if .Pulls}}
+<p class="result-count">Showing {{.RangeStart}}–{{.RangeEnd}} of {{.Total}} pull requests</p>
+<ul class="issue-list" role="list">
+  {{range .Pulls}}
+  <li class="issue-row">
+    <div class="issue-row-main">
+      <a class="issue-title" href="/pulls/{{.ID}}">{{.Title}}</a>
+      <span class="issue-num">#{{.ID}}</span>
+    </div>
+    <div class="issue-row-meta">
+      <span class="badge badge-{{.Status}}">{{if eq .Status "open"}}Open{{else if eq .Status "merged"}}Merged{{else}}Closed{{end}}</span>
+      <span class="pr-refs"><code>{{shortRef .BaseRef}}</code> ← <code>{{shortRef .HeadRef}}</code></span>
+      <span class="issue-time">by {{authorName .Author}}</span>
+      <time class="issue-time" datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">opened {{fmtTime .CreatedAt}}</time>
+    </div>
+  </li>
+  {{end}}
+</ul>
+
+{{if gt .TotalPages 1}}
+<nav class="pagination" aria-label="Pagination">
+  {{if gt .Page 1}}
+  <a class="btn" href="/pulls?status={{.Filter.Status}}&amp;q={{.Filter.Query}}&amp;sort={{.Filter.Sort}}&amp;page={{sub .Page 1}}">Previous</a>
+  {{else}}
+  <span class="btn btn-disabled" aria-disabled="true">Previous</span>
+  {{end}}
+  <span class="page-info">Page {{.Page}} of {{.TotalPages}}</span>
+  {{if lt .Page .TotalPages}}
+  <a class="btn" href="/pulls?status={{.Filter.Status}}&amp;q={{.Filter.Query}}&amp;sort={{.Filter.Sort}}&amp;page={{add .Page 1}}">Next</a>
+  {{else}}
+  <span class="btn btn-disabled" aria-disabled="true">Next</span>
+  {{end}}
+</nav>
+{{end}}
+
+{{else}}
+<div class="empty-state">
+  {{if .HasActiveFilter}}
+  <p class="empty-lead">No pull requests match the current filters.</p>
+  <p>Try a different keyword or <a href="/pulls">clear the filters</a>.</p>
+  {{else}}
+  <p class="empty-lead">No pull requests here yet.</p>
+  <p><a class="btn btn-primary" href="/pulls/new">Create the first pull request</a></p>
+  {{end}}
+</div>
+{{end}}
+{{end}}

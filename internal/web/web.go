@@ -15,10 +15,12 @@ import (
 	"mime"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/podhmo/go-classic-mpa-sample/internal/api"
 	"github.com/podhmo/go-classic-mpa-sample/internal/events"
+	"github.com/podhmo/go-classic-mpa-sample/internal/gitrepo"
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
@@ -76,6 +78,20 @@ type Store interface {
 	SessionUser(ctx context.Context, token string, ttl time.Duration) (*store.User, error)
 	DeleteSession(ctx context.Context, token string) error
 	APITokenUser(ctx context.Context, token string) (*store.User, error)
+	// Pull requests (docs/sketch/ja/pull-requests.md) — workspace-independent;
+	// used only when the repo was resolved at startup.
+	ListPullRequests(ctx context.Context, f store.PRListFilter) ([]*store.PullRequest, int, error)
+	GetPullRequest(ctx context.Context, id int64) (*store.PullRequest, error)
+	CreatePullRequest(ctx context.Context, in store.PRInput, authorID int64, pin func(prID int64) error) (int64, error)
+	UpdatePullRequest(ctx context.Context, id int64, in store.PRInput) error
+	ClosePullRequest(ctx context.Context, id int64, headSHA, mergeBaseSHA string) error
+	ReopenPullRequest(ctx context.Context, id int64) error
+	MarkMerged(ctx context.Context, id int64, info store.PRMergeInfo) error
+	ListPRComments(ctx context.Context, prID int64) ([]*store.PRComment, error)
+	CreatePRComment(ctx context.Context, prID int64, in store.PRCommentInput, authorID int64) (int64, error)
+	UpdatePRComment(ctx context.Context, prID, commentID int64, body string) error
+	DeletePRComment(ctx context.Context, prID, commentID int64) error
+	SetPRCommentHidden(ctx context.Context, prID, commentID int64, reason string) error
 }
 
 const (
@@ -91,6 +107,7 @@ type config struct {
 	apiToken   string
 	apiEnabled bool
 	hub        *events.Hub
+	repo       *gitrepo.Repo
 }
 
 // WithAPIToken mounts the JSON API (docs/sketch/ja/cli-and-web-api.md)
@@ -125,6 +142,23 @@ func WithHub(hub *events.Hub) Option {
 	return func(c *config) { c.hub = hub }
 }
 
+// WithRepo enables the pull-requests feature (docs/sketch/ja/pull-requests.md):
+// a nil repo mounts no /pulls routes and hides the nav link — the feature
+// simply does not exist without a repository.
+func WithRepo(repo *gitrepo.Repo) Option {
+	return func(c *config) { c.repo = repo }
+}
+
+// pullsEnabled reports whether /pulls is mounted — drives the layout's nav
+// link. The process runs a single handler and it is set once in New before
+// serving, so a plain var suffices; pages that never see a repo stay hidden.
+var pullsEnabled bool
+
+// shortRef renders a full ref name for display: refs/heads/main → main.
+func shortRef(ref string) string {
+	return strings.TrimPrefix(strings.TrimPrefix(ref, "refs/heads/"), "refs/")
+}
+
 // New returns the root http.Handler for the application.
 func New(st Store, opts ...Option) http.Handler {
 	var cfg config
@@ -134,7 +168,8 @@ func New(st Store, opts ...Option) http.Handler {
 	if cfg.hub == nil {
 		cfg.hub = events.NewHub()
 	}
-	h := &handler{store: st, r: NewRenderer(), hub: cfg.hub}
+	h := &handler{store: st, r: NewRenderer(), hub: cfg.hub, repo: cfg.repo}
+	pullsEnabled = cfg.repo != nil
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", h.home)
@@ -225,6 +260,29 @@ func New(st Store, opts ...Option) http.Handler {
 		mux.HandleFunc(m+" /issues/{rest...}", h.legacySub("issues"))
 		mux.HandleFunc(m+" /discussions", h.legacyCollection("discussions"))
 		mux.HandleFunc(m+" /discussions/{rest...}", h.legacySub("discussions"))
+	}
+	if h.repo != nil {
+		// Pull requests — workspace-independent, mounted only with a repo.
+		mux.HandleFunc("GET /pulls", h.listPulls)
+		mux.HandleFunc("GET /pulls/new", h.newPullForm)
+		mux.HandleFunc("POST /pulls", h.createPull)
+		mux.HandleFunc("GET /pulls/{id}", h.pullDetail)
+		mux.HandleFunc("GET /pulls/{id}/edit", h.editPullForm)
+		mux.HandleFunc("POST /pulls/{id}/edit", h.updatePull)
+		mux.HandleFunc("GET /pulls/{id}/files", h.pullFiles)
+		mux.HandleFunc("POST /pulls/{id}/comments", h.createPRComment)
+		mux.HandleFunc("GET /pulls/{id}/comments/{cid}/edit", h.editPRCommentForm)
+		mux.HandleFunc("POST /pulls/{id}/comments/{cid}/edit", h.updatePRComment)
+		mux.HandleFunc("GET /pulls/{id}/comments/{cid}/delete", h.confirmDeletePRComment)
+		mux.HandleFunc("POST /pulls/{id}/comments/{cid}/delete", h.deletePRComment)
+		mux.HandleFunc("POST /pulls/{id}/comments/{cid}/hide", h.hidePRComment)
+		mux.HandleFunc("POST /pulls/{id}/comments/{cid}/unhide", h.unhidePRComment)
+		mux.HandleFunc("POST /pulls/{id}/status", h.updatePullStatus)
+		mux.HandleFunc("GET /pulls/{id}/merge", h.mergePullForm)
+		mux.HandleFunc("POST /pulls/{id}/merge", h.mergePull)
+		mux.HandleFunc("GET /pulls/{id}/events", h.pullEvents)
+		mux.HandleFunc("GET /pulls/{id}/fragments/comments", h.pullCommentsFragment)
+		mux.HandleFunc("GET /pulls/{id}/fragments/article", h.pullArticleFragment)
 	}
 	if cfg.apiEnabled {
 		// Method-scoped subtree patterns: a method-less "/api/v1/" would
@@ -421,6 +479,7 @@ type handler struct {
 	store Store
 	r     *Renderer
 	hub   *events.Hub
+	repo  *gitrepo.Repo
 }
 
 var funcMap = template.FuncMap{
@@ -437,6 +496,8 @@ var funcMap = template.FuncMap{
 	"maxTitleLen": func() int { return store.MaxTitleRunes },
 	"hideReasons": func() []string { return store.HideReasons },
 	"dict":        dict,
+	"pullsOn":     func() bool { return pullsEnabled },
+	"shortRef":    shortRef,
 }
 
 // dict builds a map from alternating key/value pairs so templates can pass
