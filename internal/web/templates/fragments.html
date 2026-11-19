@@ -132,13 +132,13 @@
    fragment self-swap, .Noun its kind for accessible names. */}}
 <a class="comment-action" href="{{.Base}}/edit" aria-label="Edit {{.Noun}} {{.C.ID}}">Edit</a>
 {{if .C.Moderation.Hidden}}
-<form method="post" action="{{.Base}}/unhide" class="inline-form" data-partial data-partial-mode="replace" data-partial-target="{{.Target}}" data-partial-announce="Comment restored.">
+<form method="post" action="{{.Base}}/unhide" class="inline-form" data-partial data-partial-mode="replace" data-partial-target="{{.Target}}" data-partial-announce="{{if eq .Noun "thread"}}Thread{{else}}Comment{{end}} restored.">
   <button type="submit" class="comment-action" aria-label="Unhide {{.Noun}} {{.C.ID}}">Unhide</button>
 </form>
 {{else}}
 <details class="comment-hide">
   <summary class="comment-action" aria-label="Hide {{.Noun}} {{.C.ID}}">Hide</summary>
-  <form method="post" action="{{.Base}}/hide" class="hide-form" data-partial data-partial-mode="replace" data-partial-target="{{.Target}}" data-partial-announce="Comment hidden.">
+  <form method="post" action="{{.Base}}/hide" class="hide-form" data-partial data-partial-mode="replace" data-partial-target="{{.Target}}" data-partial-announce="{{if eq .Noun "thread"}}Thread{{else}}Comment{{end}} hidden.">
     <label for="hide-reason-{{.Noun}}-{{.C.ID}}">Reason</label>
     <select id="hide-reason-{{.Noun}}-{{.C.ID}}" name="reason" required>
       <option value="" disabled selected>Select…</option>
@@ -231,7 +231,7 @@
   {{if .C.Moderation.Hidden}}
   <p class="comment-hidden-note">This thread was marked as {{.C.Moderation.HiddenReason}}.</p>
   <details class="comment-hidden-body">
-    <summary>Show comment</summary>
+    <summary>Show thread</summary>
     <div class="comment-body markdown-body">{{markdown .C.Body}}</div>
   </details>
   {{else}}

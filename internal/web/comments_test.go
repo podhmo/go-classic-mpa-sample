@@ -190,6 +190,96 @@ func TestCommentHidePartial(t *testing.T) {
 	}
 }
 
+// The thread partial swap re-renders the whole thread <li> — the
+// hidden state, the kept replies and the Unhide row.
+func TestThreadHidePartial(t *testing.T) {
+	srv, _, tid, cid := seedThread(t)
+	resp := postFormWithHeaders(t,
+		srv.URL+"/w/default/discussions/1/threads/"+itoa(tid)+"/hide",
+		url.Values{"reason": {"duplicate"}}, map[string]string{"X-Partial": "1"})
+	body := getBody(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	for _, want := range []string{
+		`id="thread-` + itoa(tid) + `"`, "comment-hidden",
+		"marked as duplicate", "Show thread", "Unhide",
+		// replies survive the swap
+		`id="comment-` + itoa(cid) + `"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("thread hide fragment missing %q", want)
+		}
+	}
+	if strings.Contains(body, "<!DOCTYPE") {
+		t.Error("partial response must be a fragment")
+	}
+
+	resp = postFormWithHeaders(t,
+		srv.URL+"/w/default/discussions/1/threads/"+itoa(tid)+"/unhide",
+		nil, map[string]string{"X-Partial": "1"})
+	body = getBody(t, resp)
+	if strings.Contains(body, "comment-hidden") {
+		t.Error("unhide fragment should render the thread normally")
+	}
+}
+
+// The reply partial swap re-renders only the reply <li> inside its
+// thread — parent thread markup is untouched.
+func TestReplyHidePartial(t *testing.T) {
+	srv, _, tid, cid := seedThread(t)
+	resp := postFormWithHeaders(t,
+		srv.URL+"/w/default/discussions/1/threads/"+itoa(tid)+"/comments/"+itoa(cid)+"/hide",
+		url.Values{"reason": {"abuse"}}, map[string]string{"X-Partial": "1"})
+	body := getBody(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	for _, want := range []string{
+		`id="comment-` + itoa(cid) + `"`, "comment-hidden", "marked as abuse", "Unhide",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("reply hide fragment missing %q", want)
+		}
+	}
+	if strings.Contains(body, `id="thread-`) {
+		t.Error("reply fragment must not re-render the whole thread")
+	}
+}
+
+// A reply addressed under a sibling thread answers 404 — every id in
+// the chain must line up.
+func TestReplyCrossThread404(t *testing.T) {
+	srv, f, tid, cid := seedThread(t)
+	if _, err := f.CreateDiscussionThread(context.Background(), 1, "second", 0); err != nil {
+		t.Fatal(err)
+	}
+	bad := "/w/default/discussions/1/threads/2/comments/" + itoa(cid)
+	good := "/w/default/discussions/1/threads/" + itoa(tid) + "/comments/" + itoa(cid)
+
+	for _, path := range []string{bad + "/edit", bad + "/delete"} {
+		resp, err := srv.Client().Get(srv.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("GET %s status = %d, want 404", path, resp.StatusCode)
+		}
+	}
+	resp := postForm(t, srv.Client(), srv.URL+bad+"/hide", url.Values{"reason": {"spam"}})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("cross-thread hide status = %d, want 404", resp.StatusCode)
+	}
+	// The correct chain still works.
+	resp = postForm(t, noRedirectClient(), srv.URL+good+"/hide", url.Values{"reason": {"spam"}})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("correct-chain hide status = %d, want 303", resp.StatusCode)
+	}
+}
+
 func TestCommentModerationNotFound(t *testing.T) {
 	srv, f := newTestServer(t)
 	f.addIssue("No comments", "", store.StatusOpen, time.Now())

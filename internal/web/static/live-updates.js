@@ -320,7 +320,7 @@ function start(section) {
         }
         for (const { target, parent } of pending.removes) {
           const node = document.getElementById(
-            parent ? `comment-${target}` : kind === "issue" ? `comment-${target}` : `thread-${target}`,
+            parent || kind === "issue" ? `comment-${target}` : `thread-${target}`,
           );
           if (!node) continue;
           const ol = node.parentElement;

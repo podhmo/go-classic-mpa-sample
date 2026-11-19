@@ -524,12 +524,19 @@ func commentHide(ctx context.Context, o Options, args []string, hide bool) error
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
 	reason := fs.String("reason", "", "hide reason: "+strings.Join(store.HideReasons, "|"))
-	rest, err := o.parseLeaf(fs, "N C --reason R", args, 2)
+	hint := "N C"
+	if hide {
+		hint = "N C --reason R"
+	}
+	rest, err := o.parseLeaf(fs, hint, args, 2)
 	if err != nil {
 		return err
 	}
 	if hide && !store.ValidHideReason(*reason) {
 		return usageError{msg: "--reason is required: " + strings.Join(store.HideReasons, ", ")}
+	}
+	if !hide && *reason != "" {
+		return usageError{msg: "--reason applies to hide only"}
 	}
 	id, cid, err := commentTarget(rest)
 	if err != nil {

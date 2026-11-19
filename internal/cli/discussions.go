@@ -431,6 +431,9 @@ func discussionCommentCreate(ctx context.Context, o Options, args []string) erro
 	if err != nil {
 		return err
 	}
+	if *thread < 0 {
+		return usageError{msg: "--thread must be a positive id"}
+	}
 	bodyText, err := o.readCommentBody(*body, *bodyFile)
 	if err != nil {
 		return err
@@ -475,6 +478,9 @@ func discussionPostTarget(fs *flag.FlagSet, o Options, args []string) (id, tid, 
 	}
 	if *tidf < 1 {
 		return 0, 0, 0, nil, usageError{msg: "--thread is required"}
+	}
+	if *cidf < 0 {
+		return 0, 0, 0, nil, usageError{msg: "--comment must be a positive id"}
 	}
 	return id, *tidf, *cidf, bf, nil
 }
@@ -553,6 +559,9 @@ func discussionCommentHide(ctx context.Context, o Options, args []string, hide b
 	}
 	if hide && !store.ValidHideReason(*reason) {
 		return usageError{msg: "--reason is required: " + strings.Join(store.HideReasons, ", ")}
+	}
+	if !hide && *reason != "" {
+		return usageError{msg: "--reason applies to hide only"}
 	}
 	b, closer, err := o.backend(ctx, bf)
 	if err != nil {

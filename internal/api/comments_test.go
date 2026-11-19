@@ -69,6 +69,21 @@ func TestCommentModeration(t *testing.T) {
 		t.Fatalf("cross-issue patch = %d, want 404", code)
 	}
 
+	// Workspace scope: the same comment under another workspace slug 404s.
+	do(t, srv, "POST", "/api/v1/workspaces", `{"slug":"other"}`)
+	for _, tc := range []struct {
+		method, path, body string
+	}{
+		{"PATCH", fmt.Sprintf("/api/v1/w/other/issues/%d/comments/%d", id, cid), `{"body":"x"}`},
+		{"DELETE", fmt.Sprintf("/api/v1/w/other/issues/%d/comments/%d", id, cid), ""},
+		{"POST", fmt.Sprintf("/api/v1/w/other/issues/%d/comments/%d/hide", id, cid), `{"reason":"spam"}`},
+	} {
+		code, _ = do(t, srv, tc.method, tc.path, tc.body)
+		if code != http.StatusNotFound {
+			t.Fatalf("%s %s = %d, want 404", tc.method, tc.path, code)
+		}
+	}
+
 	code, _ = do(t, srv, "DELETE", path, "")
 	if code != http.StatusNoContent {
 		t.Fatalf("delete = %d, want 204", code)
@@ -155,6 +170,13 @@ func TestThreadAndReplyModeration(t *testing.T) {
 	code, _ = do(t, srv, "PATCH", fmt.Sprintf("/api/v1/w/default/discussions/%d/threads/%d/comments/%d", did, tid2, rid), `{"body":"x"}`)
 	if code != http.StatusNotFound {
 		t.Fatalf("cross-thread reply patch = %d, want 404", code)
+	}
+
+	// Workspace scope on the discussion chain: /w/other/ 404s.
+	do(t, srv, "POST", "/api/v1/workspaces", `{"slug":"other"}`)
+	code, _ = do(t, srv, "POST", fmt.Sprintf("/api/v1/w/other/discussions/%d/threads/%d/hide", did, tid), `{"reason":"spam"}`)
+	if code != http.StatusNotFound {
+		t.Fatalf("cross-workspace thread hide = %d, want 404", code)
 	}
 	code, _ = do(t, srv, "DELETE", rbase, "")
 	if code != http.StatusNoContent {

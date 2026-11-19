@@ -172,12 +172,15 @@ async function postPartial(form) {
         // The submitted form went away with its host element: move focus to
         // its re-rendered counterpart (same action ⇒ same control). This is
         // focus continuity, not a jump — no announcement conflicts.
+        // hide/unhide swap the action URL itself (…/hide ⇄ …/unhide), so
+        // the action lookup misses there — fall back to the swapped-in
+        // post's first moderation control instead of dropping to <body>.
         const action = form.getAttribute("action");
-        if (action) {
-          document
-            .querySelector(`form[action="${CSS.escape(action)}"] button[type="submit"]`)
-            ?.focus();
-        }
+        const refocus = (action &&
+          document.querySelector(`form[action="${CSS.escape(action)}"] button[type="submit"]`)) ||
+          (form.dataset.partialTarget &&
+            document.querySelector(form.dataset.partialTarget)?.querySelector(".comment-action"));
+        refocus?.focus();
       });
       toast(form.dataset.partialAnnounce || "Updated.");
       return;

@@ -193,6 +193,13 @@ func TestCommentHideUnhide(t *testing.T) {
 	if err := s.SetCommentHidden(ctx, issueID, 9999, HideReasonSpam); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("missing comment = %v, want ErrNotFound", err)
 	}
+	other, err := s.CreateIssue(ctx, 1, IssueInput{Title: "y"}, 0)
+	if err != nil {
+		t.Fatalf("CreateIssue: %v", err)
+	}
+	if err := s.SetCommentHidden(ctx, other, cid, HideReasonSpam); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("cross-issue hide = %v, want ErrNotFound", err)
+	}
 }
 
 // TestThreadModeration covers update/hide/delete on discussion threads,

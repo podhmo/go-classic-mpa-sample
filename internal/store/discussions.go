@@ -1,5 +1,5 @@
-// Discussions: GitHub Discussions-style open conversations (schema version
-// 5, see migrations in store.go). Unlike issues, discussions never close —
+// Discussions: GitHub Discussions-style open conversations (see migrations
+// in store.go). Unlike issues, discussions never close —
 // a Q&A-category discussion reports "answered" through a marked thread
 // instead. A discussion holds threads; a thread is its opening post plus
 // a flat list of comment replies. Design: docs/sketch/ja/discussions.md

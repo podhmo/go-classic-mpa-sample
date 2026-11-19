@@ -330,7 +330,7 @@ func (h *handler) storeError(w http.ResponseWriter, err error) {
 	case errors.Is(err, store.ErrNotAnswerable):
 		writeError(w, http.StatusUnprocessableEntity, "This thread cannot be marked as the answer.", nil)
 	case errors.Is(err, store.ErrInvalidHideReason):
-		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", map[string]string{"reason": "Unknown hide reason. Valid values: " + strings.Join(store.HideReasons, ", ")})
+		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", hideReasonField())
 	default:
 		writeError(w, http.StatusInternalServerError, "Internal server error.", nil)
 	}

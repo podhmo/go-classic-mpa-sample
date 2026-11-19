@@ -303,8 +303,15 @@ func (h *handler) setCommentHidden(w http.ResponseWriter, r *http.Request, ws *s
 			h.internalError(w, r, err)
 			return
 		}
+		nc := findComment(comments, c.ID)
+		if nc == nil {
+			// A concurrent delete removed the row between requireComment
+			// and this re-list — render would template-error on nil.
+			h.notFound(w, r)
+			return
+		}
 		h.r.renderFragment(w, "issue_detail", "issue_comment", http.StatusOK,
-			dict("C", findComment(comments, c.ID), "Workspace", ws))
+			dict("C", nc, "Workspace", ws))
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("%s#comment-%d", issueURL(ws, issue.ID), c.ID), http.StatusSeeOther)
@@ -435,8 +442,13 @@ func (h *handler) setThreadHidden(w http.ResponseWriter, r *http.Request, ws *st
 			h.internalError(w, r, err)
 			return
 		}
+		nt := findThread(threads, t.ID)
+		if nt == nil {
+			h.notFound(w, r)
+			return
+		}
 		h.r.renderFragment(w, "discussion_detail", "discussion_comment", http.StatusOK,
-			dict("Discussion", discussion, "C", findThread(threads, t.ID), "Workspace", ws))
+			dict("Discussion", discussion, "C", nt, "Workspace", ws))
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("%s#thread-%d", discussionURL(ws, discussion.ID), t.ID), http.StatusSeeOther)
@@ -566,6 +578,10 @@ func (h *handler) setReplyHidden(w http.ResponseWriter, r *http.Request, ws *sto
 		var reply *store.DiscussionComment
 		if nt := findThread(threads, t.ID); nt != nil {
 			reply = findReply(nt, c.ID)
+		}
+		if reply == nil {
+			h.notFound(w, r)
+			return
 		}
 		h.r.renderFragment(w, "discussion_detail", "discussion_reply", http.StatusOK,
 			dict("Discussion", discussion, "C", reply, "Workspace", ws))

@@ -82,48 +82,49 @@ func (h *handler) requireIssueComment(w http.ResponseWriter, r *http.Request, ws
 	return c, true
 }
 
-// requireThread resolves /discussions/{id}/threads/{tid} the same way.
-func (h *handler) requireThread(w http.ResponseWriter, r *http.Request, ws *store.Workspace) (*store.DiscussionThread, bool) {
+// requireThread resolves /discussions/{id}/threads/{tid} the same way
+// and returns the discussion id for the follow-up store call.
+func (h *handler) requireThread(w http.ResponseWriter, r *http.Request, ws *store.Workspace) (int64, *store.DiscussionThread, bool) {
 	id, ok := h.pathID(w, r, "id")
 	if !ok {
-		return nil, false
+		return 0, nil, false
 	}
 	tid, ok := h.pathID(w, r, "tid")
 	if !ok {
-		return nil, false
+		return 0, nil, false
 	}
 	d, err := h.store.GetDiscussion(r.Context(), id)
 	if err != nil {
 		h.storeError(w, err)
-		return nil, false
+		return 0, nil, false
 	}
 	if !h.requireScope(w, ws, d.WorkspaceID) {
-		return nil, false
+		return 0, nil, false
 	}
 	t := findDiscussionThread(h.store, r, id, tid)
 	if t == nil {
 		writeError(w, http.StatusNotFound, "Not found.", nil)
-		return nil, false
+		return 0, nil, false
 	}
-	return t, true
+	return id, t, true
 }
 
 // requireReply resolves /discussions/{id}/threads/{tid}/comments/{cid}.
-func (h *handler) requireReply(w http.ResponseWriter, r *http.Request, ws *store.Workspace) (*store.DiscussionComment, bool) {
-	t, ok := h.requireThread(w, r, ws)
+func (h *handler) requireReply(w http.ResponseWriter, r *http.Request, ws *store.Workspace) (int64, *store.DiscussionComment, bool) {
+	id, t, ok := h.requireThread(w, r, ws)
 	if !ok {
-		return nil, false
+		return 0, nil, false
 	}
 	cid, ok := h.pathID(w, r, "cid")
 	if !ok {
-		return nil, false
+		return 0, nil, false
 	}
 	c := findDiscussionComment(t, cid)
 	if c == nil {
 		writeError(w, http.StatusNotFound, "Not found.", nil)
-		return nil, false
+		return 0, nil, false
 	}
-	return c, true
+	return id, c, true
 }
 
 // decodeHideBody reads {"reason": "..."} for a hide POST; an invalid
@@ -160,12 +161,14 @@ func decodeEditBody(w http.ResponseWriter, r *http.Request) (string, bool) {
 }
 
 // PATCH /api/v1/w/{ws}/issues/{id}/comments/{cid} {"body"} → 200 {"comment"}
+// Like updateIssue the body decodes before the resource chain resolves:
+// a malformed payload is a 400/422, not a 404.
 func (h *handler) updateComment(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
-	c, ok := h.requireIssueComment(w, r, ws)
+	body, ok := decodeEditBody(w, r)
 	if !ok {
 		return
 	}
-	body, ok := decodeEditBody(w, r)
+	c, ok := h.requireIssueComment(w, r, ws)
 	if !ok {
 		return
 	}
@@ -204,15 +207,16 @@ func (h *handler) unhideComment(w http.ResponseWriter, r *http.Request, ws *stor
 }
 
 func (h *handler) setCommentHidden(w http.ResponseWriter, r *http.Request, ws *store.Workspace, hide bool) {
-	c, ok := h.requireIssueComment(w, r, ws)
-	if !ok {
-		return
-	}
 	reason := ""
 	if hide {
+		var ok bool
 		if reason, ok = decodeHideBody(w, r); !ok {
 			return
 		}
+	}
+	c, ok := h.requireIssueComment(w, r, ws)
+	if !ok {
+		return
 	}
 	if err := h.store.SetCommentHidden(r.Context(), c.IssueID, c.ID, reason); err != nil {
 		h.storeError(w, err)
@@ -227,15 +231,11 @@ func (h *handler) setCommentHidden(w http.ResponseWriter, r *http.Request, ws *s
 
 // PATCH /api/v1/w/{ws}/discussions/{id}/threads/{tid} {"body"} → 200 {"thread"}
 func (h *handler) updateThread(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
-	id, ok := h.pathID(w, r, "id")
-	if !ok {
-		return
-	}
-	t, ok := h.requireThread(w, r, ws)
-	if !ok {
-		return
-	}
 	body, ok := decodeEditBody(w, r)
+	if !ok {
+		return
+	}
+	id, t, ok := h.requireThread(w, r, ws)
 	if !ok {
 		return
 	}
@@ -253,11 +253,7 @@ func (h *handler) updateThread(w http.ResponseWriter, r *http.Request, ws *store
 // DELETE /api/v1/w/{ws}/discussions/{id}/threads/{tid} → 204 — the
 // thread's replies go with it (ON DELETE CASCADE).
 func (h *handler) deleteThread(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
-	id, ok := h.pathID(w, r, "id")
-	if !ok {
-		return
-	}
-	t, ok := h.requireThread(w, r, ws)
+	id, t, ok := h.requireThread(w, r, ws)
 	if !ok {
 		return
 	}
@@ -279,19 +275,16 @@ func (h *handler) unhideThread(w http.ResponseWriter, r *http.Request, ws *store
 }
 
 func (h *handler) setThreadHidden(w http.ResponseWriter, r *http.Request, ws *store.Workspace, hide bool) {
-	id, ok := h.pathID(w, r, "id")
-	if !ok {
-		return
-	}
-	t, ok := h.requireThread(w, r, ws)
-	if !ok {
-		return
-	}
 	reason := ""
 	if hide {
+		var ok bool
 		if reason, ok = decodeHideBody(w, r); !ok {
 			return
 		}
+	}
+	id, t, ok := h.requireThread(w, r, ws)
+	if !ok {
+		return
 	}
 	if err := h.store.SetDiscussionThreadHidden(r.Context(), id, t.ID, reason); err != nil {
 		h.storeError(w, err)
@@ -306,15 +299,11 @@ func (h *handler) setThreadHidden(w http.ResponseWriter, r *http.Request, ws *st
 
 // PATCH .../threads/{tid}/comments/{cid} {"body"} → 200 {"comment"}
 func (h *handler) updateReply(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
-	id, ok := h.pathID(w, r, "id")
-	if !ok {
-		return
-	}
-	c, ok := h.requireReply(w, r, ws)
-	if !ok {
-		return
-	}
 	body, ok := decodeEditBody(w, r)
+	if !ok {
+		return
+	}
+	id, c, ok := h.requireReply(w, r, ws)
 	if !ok {
 		return
 	}
@@ -333,11 +322,7 @@ func (h *handler) updateReply(w http.ResponseWriter, r *http.Request, ws *store.
 
 // DELETE .../threads/{tid}/comments/{cid} → 204
 func (h *handler) deleteReply(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
-	id, ok := h.pathID(w, r, "id")
-	if !ok {
-		return
-	}
-	c, ok := h.requireReply(w, r, ws)
+	id, c, ok := h.requireReply(w, r, ws)
 	if !ok {
 		return
 	}
@@ -359,19 +344,16 @@ func (h *handler) unhideReply(w http.ResponseWriter, r *http.Request, ws *store.
 }
 
 func (h *handler) setReplyHidden(w http.ResponseWriter, r *http.Request, ws *store.Workspace, hide bool) {
-	id, ok := h.pathID(w, r, "id")
-	if !ok {
-		return
-	}
-	c, ok := h.requireReply(w, r, ws)
-	if !ok {
-		return
-	}
 	reason := ""
 	if hide {
+		var ok bool
 		if reason, ok = decodeHideBody(w, r); !ok {
 			return
 		}
+	}
+	id, c, ok := h.requireReply(w, r, ws)
+	if !ok {
+		return
 	}
 	if err := h.store.SetDiscussionCommentHidden(r.Context(), id, c.ThreadID, c.ID, reason); err != nil {
 		h.storeError(w, err)
