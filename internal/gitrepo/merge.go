@@ -281,18 +281,7 @@ func (r *Repo) mergePlumbing(ctx context.Context, baseRef, baseSHA string, res *
 // mergeTree runs merge-tree --write-tree and returns the result tree OID,
 // translating exit 1 into *ConflictError.
 func (r *Repo) mergeTree(ctx context.Context, base, head string) (string, error) {
-	return r.mergeTreeOn(ctx, "", base, head)
-}
-
-// mergeTreeOn is mergeTree with an explicit merge-base — needed by the
-// replay path, where the rewritten tip shares no ancestry with the
-// commit being replayed and merge-tree's inferred fork point is wrong.
-func (r *Repo) mergeTreeOn(ctx context.Context, mergeBase, base, head string) (string, error) {
-	args := []string{"merge-tree", "--write-tree", "--name-only", "--no-messages", "-z"}
-	if mergeBase != "" {
-		args = append(args, "--merge-base", mergeBase)
-	}
-	args = append(args, base, head)
+	args := []string{"merge-tree", "--write-tree", "--name-only", "--no-messages", "-z", base, head}
 	res, err := r.run(ctx, nil, args...)
 	if err == nil {
 		return strings.TrimRight(res.stdout, "\x00"), nil
@@ -346,7 +335,21 @@ func (r *Repo) rebasePlumbing(ctx context.Context, env []string, mergeBase, newB
 		if len(f) > 1 {
 			parent = f[1]
 		}
-		tree, err := r.mergeTreeOn(ctx, parent, tip, c)
+		// merge-tree --merge-base=parent would name the replay base
+		// directly, but it needs git >= 2.40 while --write-tree works on
+		// 2.38. Grafting achieves the same on every supported version:
+		// commit the current tip's tree with c's original parent as its
+		// parent, and merge-tree infers exactly that parent as the fork
+		// point. The graft commit stays dangling — nothing references it.
+		tipTree, err := r.run(ctx, nil, "rev-parse", tip+"^{tree}")
+		if err != nil {
+			return "", err
+		}
+		graft, err := r.commitTree(ctx, env, strings.TrimSpace(tipTree.stdout), []string{"-p", parent}, "rebase graft")
+		if err != nil {
+			return "", err
+		}
+		tree, err := r.mergeTree(ctx, graft, c)
 		if err != nil {
 			if ce, ok := err.(*ConflictError); ok {
 				return "", fmt.Errorf("gitrepo: replaying %s: %w", c, ce)
