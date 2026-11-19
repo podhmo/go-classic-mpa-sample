@@ -62,10 +62,21 @@ type pullFormPage struct {
 	Refs      []gitrepo.RefName
 	Current   string // repo's current branch — the create form's head default
 	Input     store.PRInput
-	Errors    store.FieldErrors
+	Errors    pullFormErrors
 	Workspace *store.Workspace
 	User      *store.User
 }
+
+// pullFormErrors is the form's per-field error view — the store's
+// FieldErrors map keeps lowercase keys while the template reads Title /
+// Body / Refs, matching the issue/discussion form adapters.
+type pullFormErrors struct {
+	Title string
+	Body  string
+	Refs  string
+}
+
+func (e pullFormErrors) any() bool { return e.Title != "" || e.Body != "" || e.Refs != "" }
 
 // pullMergePage is GET /pulls/{id}/merge — the confirmation page carrying
 // the live mergeability probe; a failed POST re-renders it with Error.
@@ -330,19 +341,21 @@ func (h *handler) createPull(w http.ResponseWriter, r *http.Request) {
 	if in.HeadRef, normErr = h.repo.NormalizeRef(ctx, head); normErr != nil {
 		in.HeadRef = head
 	}
-	errs := store.ValidatePullRequestInput(in)
+	var ferrs pullFormErrors
+	if fe := store.ValidatePullRequestInput(in); fe != nil {
+		ferrs.Title = fe["title"]
+		ferrs.Body = fe["body"]
+		ferrs.Refs = strings.TrimSpace(strings.Join([]string{fe["base"], fe["head"]}, " "))
+	}
 	if normErr != nil && !errors.Is(normErr, gitrepo.ErrBadRef) {
 		h.internalError(w, r, normErr)
 		return
 	}
 	if normErr != nil {
-		if errs == nil {
-			errs = store.FieldErrors{}
-		}
-		errs["refs"] = "Base and head must name existing refs or commits."
+		ferrs.Refs = "Base and head must name existing refs or commits."
 	}
-	if len(errs) > 0 {
-		h.renderPullFormErr(w, r, http.StatusUnprocessableEntity, in, errs)
+	if ferrs.any() {
+		h.renderPullFormErr(w, r, http.StatusUnprocessableEntity, in, ferrs)
 		return
 	}
 	var shaErr error
@@ -370,7 +383,7 @@ func (h *handler) createPull(w http.ResponseWriter, r *http.Request) {
 }
 
 // renderPullFormErr re-renders the create/edit form with field errors.
-func (h *handler) renderPullFormErr(w http.ResponseWriter, r *http.Request, status int, in store.PRInput, errs store.FieldErrors) {
+func (h *handler) renderPullFormErr(w http.ResponseWriter, r *http.Request, status int, in store.PRInput, errs pullFormErrors) {
 	refs, _ := h.repo.Refs(r.Context())
 	h.r.renderPullForm(w, status, pullFormPage{
 		Title:     "New pull request",
@@ -464,7 +477,9 @@ func (h *handler) updatePull(w http.ResponseWriter, r *http.Request) {
 		Title:   strings.TrimSpace(r.PostFormValue("title")),
 		Body:    strings.TrimSpace(r.PostFormValue("body")),
 	}
-	if errs := store.ValidatePullRequestInput(in); len(errs) > 0 {
+	if fe := store.ValidatePullRequestInput(in); len(fe) > 0 {
+		ferrs := pullFormErrors{Title: fe["title"], Body: fe["body"],
+			Refs: strings.TrimSpace(strings.Join([]string{fe["base"], fe["head"]}, " "))}
 		h.r.renderPullForm(w, http.StatusUnprocessableEntity, pullFormPage{
 			Title:     fmt.Sprintf("Edit pull request #%d", pr.ID),
 			Heading:   fmt.Sprintf("Edit pull request #%d", pr.ID),
@@ -472,7 +487,7 @@ func (h *handler) updatePull(w http.ResponseWriter, r *http.Request) {
 			Section:   "pulls",
 			PR:        pr,
 			Input:     in,
-			Errors:    errs,
+			Errors:    ferrs,
 			Workspace: h.navWorkspace(r),
 			User:      userFromContext(r.Context()),
 		})
@@ -511,6 +526,14 @@ func (h *handler) pullFiles(w http.ResponseWriter, r *http.Request) {
 		User:      userFromContext(r.Context()),
 	}
 	from, to := h.diffRange(pr)
+	if pr.Open() {
+		// A "files changed" view shows what the head adds, like GitHub's
+		// three-dot diff: base-side commits land after the merge-base and
+		// must not render as pull-request deletions.
+		if mb, err := h.repo.MergeBase(r.Context(), pr.BaseRef, pr.HeadRef); err == nil && mb != "" {
+			from = mb
+		}
+	}
 	changed, err := h.repo.ChangedFiles(r.Context(), from, to)
 	if err != nil {
 		// A deleted head (or an empty recorded range) degrades the page
@@ -532,7 +555,11 @@ func (h *handler) pullFiles(w http.ResponseWriter, r *http.Request) {
 			Anchor:       fileAnchor(path),
 			Comments:     byPath[path],
 		}
-		diff, binary, err := h.repo.Diff(r.Context(), from, to, path)
+		paths := []string{path}
+		if ch.OldPath != "" && ch.OldPath != path {
+			paths = append(paths, ch.OldPath)
+		}
+		diff, binary, err := h.repo.Diff(r.Context(), from, to, paths...)
 		if err != nil {
 			log.Printf("web: pulls: diff #%d %s: %v", pr.ID, path, err)
 		} else if binary {
@@ -576,15 +603,28 @@ func (h *handler) createPRComment(w http.ResponseWriter, r *http.Request) {
 			side = "right"
 		}
 		in.Path, in.Line, in.Side = path, line, side
-		// Anchor to the head tip (falling back to the recorded sha) and
-		// snapshot the surrounding lines into diff_snippet.
-		anchorSHA, err := h.repo.RevParse(ctx, pr.HeadRef)
-		if err != nil {
-			anchorSHA = pr.HeadSHA
+		// Anchor to the head tip: live ref while open (branches still
+		// move), the recorded sha once closed/merged.
+		anchorSHA := pr.HeadSHA
+		if pr.Open() {
+			if sha, err := h.repo.RevParse(ctx, pr.HeadRef); err == nil {
+				anchorSHA = sha
+			}
 		}
 		in.AnchorSHA = anchorSHA
-		if anchorSHA != "" {
-			if snippet, _, err := h.repo.Snippet(ctx, anchorSHA, path, line, 2); err == nil {
+		// The snippet comes from the blob the comment anchors to: the
+		// head side for "right", the merge-base (old) side for "left".
+		snippetSHA := anchorSHA
+		if side == "left" {
+			snippetSHA = pr.MergeBaseSHA
+			if pr.Open() {
+				if mb, err := h.repo.MergeBase(ctx, pr.BaseRef, pr.HeadRef); err == nil {
+					snippetSHA = mb
+				}
+			}
+		}
+		if snippetSHA != "" {
+			if snippet, _, err := h.repo.Snippet(ctx, snippetSHA, path, line, 2); err == nil {
 				in.DiffSnippet = snippet
 			}
 		}
@@ -837,6 +877,14 @@ func (h *handler) updatePullStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
+	if !pr.Open() {
+		// Stale resubmission: reject before touching git so a reused head
+		// branch cannot repoint the archived pin (the store would reject
+		// the transition only afterward).
+		h.renderError(w, r, http.StatusConflict, "Invalid transition",
+			"Only an open pull request can change status.")
+		return
+	}
 	switch r.PostFormValue("status") {
 	case "closed":
 		headSHA, err := h.repo.RevParse(ctx, pr.HeadRef)
@@ -844,8 +892,11 @@ func (h *handler) updatePullStatus(w http.ResponseWriter, r *http.Request) {
 			headSHA = "" // head may be deleted already — close anyway
 		}
 		if headSHA != "" {
+			// The pin is what keeps the recorded commits reachable; a
+			// failed update means closing would archive the wrong sha.
 			if err := h.repo.UpdatePin(ctx, pr.ID, headSHA); err != nil {
-				log.Printf("web: pulls: pin #%d on close: %v", pr.ID, err)
+				h.pullError(w, r, err)
+				return
 			}
 		}
 		mergeBase, _ := h.repo.MergeBase(ctx, pr.BaseRef, pr.HeadRef)
@@ -904,6 +955,11 @@ func (h *handler) mergePull(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
+	if !pr.Open() {
+		h.renderError(w, r, http.StatusConflict, "Not mergeable",
+			"Only an open pull request can be merged.")
+		return
+	}
 	method := gitrepo.MergeMethod(r.PostFormValue("method"))
 	if !method.Valid() {
 		h.renderError(w, r, http.StatusBadRequest, "Bad request", "Unknown merge method.")
@@ -912,6 +968,15 @@ func (h *handler) mergePull(w http.ResponseWriter, r *http.Request) {
 	msg := ""
 	if method == gitrepo.MethodSquash {
 		msg = fmt.Sprintf("%s (#%d)", pr.Title, pr.ID)
+	}
+	// Pin the head tip before merging — squash/rebase leave the head
+	// commits dangling on the feature branch, and the pin is what keeps
+	// them reachable once that branch is deleted.
+	if headSHA, err := h.repo.RevParse(ctx, pr.HeadRef); err == nil {
+		if err := h.repo.UpdatePin(ctx, pr.ID, headSHA); err != nil {
+			h.pullError(w, r, err)
+			return
+		}
 	}
 	res, err := h.repo.Merge(ctx, pr.BaseRef, pr.HeadRef, method, msg)
 	if err != nil {
@@ -940,9 +1005,6 @@ func (h *handler) mergePull(w http.ResponseWriter, r *http.Request) {
 			User:      userFromContext(r.Context()),
 		})
 		return
-	}
-	if err := h.repo.UpdatePin(ctx, pr.ID, res.HeadSHA); err != nil {
-		log.Printf("web: pulls: pin #%d on merge: %v", pr.ID, err)
 	}
 	if err := h.store.MarkMerged(ctx, pr.ID, store.PRMergeInfo{
 		MergeSHA:     res.MergeSHA,

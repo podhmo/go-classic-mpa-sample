@@ -29,7 +29,7 @@
       <option value="{{.Name}}"{{if or (eq .Name $.Input.HeadRef) (and (not $.Input.HeadRef) (eq .Name $.Current))}} selected{{end}}>{{.Short}}</option>
       {{end}}
     </select>
-    {{if .Errors.refs}}<p class="field-error" id="f-refs-error">{{.Errors.refs}}</p>{{end}}
+    {{if .Errors.Refs}}<p class="field-error" id="f-refs-error">{{.Errors.Refs}}</p>{{end}}
   </div>
   {{end}}
 

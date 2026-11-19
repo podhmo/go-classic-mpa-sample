@@ -234,12 +234,16 @@ func (r *Repo) ChangedFiles(ctx context.Context, from, to string) ([]FileChange,
 
 // Diff returns the unified diff of path ("" for the whole patch) between
 // from and to. The bool reports truncation at the output cap.
-func (r *Repo) Diff(ctx context.Context, from, to, path string) (string, bool, error) {
+func (r *Repo) Diff(ctx context.Context, from, to string, paths ...string) (string, bool, error) {
 	args := []string{"diff", "-U3", from, to}
-	if path != "" {
+	for _, path := range paths {
+		if path == "" {
+			continue
+		}
 		// :(literal): ValidatePath allows glob metacharacters like [] in
 		// filenames; without the magic prefix git would glob other files
-		// into this file's diff.
+		// into this file's diff. Renames pass both old and new paths so
+		// the file's whole entry (old-side content included) is selected.
 		args = append(args, "--", ":(literal)"+path)
 	}
 	res, err := r.run(ctx, nil, args...)
