@@ -10,6 +10,7 @@
 //	zatu discussion list|view|create|edit|delete
 //	zatu discussion comment create N --body B [--thread T]
 //	zatu discussion answer N --thread T [--unmark]
+//	zatu discussion categories
 //	zatu workspace list|create SLUG|delete SLUG
 //	zatu auth token --user NAME | token list | token revoke  (local mode only)
 //	zatu api <path> [-X METHOD] [-f k=v]... [-F k=v]...       (remote mode only)

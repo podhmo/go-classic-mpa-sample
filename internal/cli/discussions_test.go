@@ -173,6 +173,42 @@ func TestDiscussionEditDeleteAndJSON(t *testing.T) {
 	}
 }
 
+// `discussion categories` enumerates the slugs --category takes. The
+// rows are global master data, so the verb opens the backend unscoped —
+// --workspace is ignored like the workspace commands.
+func TestDiscussionCategories(t *testing.T) {
+	db := t.TempDir() + "/test.db"
+	seedCategories(t, db)
+	o := localOptions(t, db)
+
+	code, out, _ := run(t, o, "discussion", "categories")
+	if code != ExitOK {
+		t.Fatalf("categories: exit %d", code)
+	}
+	for _, want := range []string{"announcements", "general", "ideas", "qa"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("categories missing %q:\n%s", want, out)
+		}
+	}
+	// rows are slug\tname\tformat\tdescription
+	if !strings.Contains(out, "qa\tQ&A\tqa\t") {
+		t.Fatalf("categories row shape:\n%s", out)
+	}
+
+	code, out, _ = run(t, o, "discussion", "categories", "--json", "name,slug")
+	if code != ExitOK || !strings.Contains(out, `"slug": "qa"`) || !strings.Contains(out, `"name": "Ideas"`) {
+		t.Fatalf("categories --json: exit %d\n%s", code, out)
+	}
+	if strings.Contains(out, `"description"`) {
+		t.Fatalf("--json leaked unrequested field:\n%s", out)
+	}
+
+	code, out, _ = run(t, o, "discussion", "categories", "--workspace", "nope")
+	if code != ExitOK || !strings.Contains(out, "qa") {
+		t.Fatalf("categories --workspace nope: exit %d\n%s", code, out)
+	}
+}
+
 func TestDiscussionUsageAndErrors(t *testing.T) {
 	db := t.TempDir() + "/test.db"
 	seedCategories(t, db)

@@ -92,6 +92,14 @@ func categoryView(c store.DiscussionCategory) api.DiscussionCategory {
 	}
 }
 
+func categoryViews(cats []*store.DiscussionCategory) []api.DiscussionCategory {
+	out := make([]api.DiscussionCategory, 0, len(cats))
+	for _, c := range cats {
+		out = append(out, categoryView(*c))
+	}
+	return out
+}
+
 func discussionViewJSON(d *store.Discussion) api.Discussion {
 	out := api.Discussion{
 		ID: d.ID, Title: d.Title, Body: d.Body,
