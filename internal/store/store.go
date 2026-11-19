@@ -70,12 +70,18 @@ CREATE TABLE IF NOT EXISTS issues (
 	updated_at INTEGER NOT NULL,
 	author_id INTEGER REFERENCES users(id)
 );
+-- The comment-moderation columns (edited_at/hidden_at/hidden_reason)
+-- are shared by comments, discussion_threads and discussion_comments;
+-- hidden_reason holds one of the store.HideReason* values.
 CREATE TABLE IF NOT EXISTS comments (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	issue_id INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
 	author_id INTEGER REFERENCES users(id),
 	body TEXT NOT NULL,
-	created_at INTEGER NOT NULL
+	created_at INTEGER NOT NULL,
+	edited_at INTEGER,
+	hidden_at INTEGER,
+	hidden_reason TEXT CHECK(hidden_reason IN ('spam','abuse','off-topic','outdated','duplicate','resolved','low-quality'))
 );
 -- Labels are managed data, not constants: workspace_id NULL marks a
 -- shared master row, a set one scopes the label to that workspace. kind
@@ -123,14 +129,20 @@ CREATE TABLE IF NOT EXISTS discussion_threads (
 	author_id INTEGER REFERENCES users(id),
 	is_answer INTEGER NOT NULL DEFAULT 0,
 	body TEXT NOT NULL,
-	created_at INTEGER NOT NULL
+	created_at INTEGER NOT NULL,
+	edited_at INTEGER,
+	hidden_at INTEGER,
+	hidden_reason TEXT CHECK(hidden_reason IN ('spam','abuse','off-topic','outdated','duplicate','resolved','low-quality'))
 );
 CREATE TABLE IF NOT EXISTS discussion_comments (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	thread_id INTEGER NOT NULL REFERENCES discussion_threads(id) ON DELETE CASCADE,
 	author_id INTEGER REFERENCES users(id),
 	body TEXT NOT NULL,
-	created_at INTEGER NOT NULL
+	created_at INTEGER NOT NULL,
+	edited_at INTEGER,
+	hidden_at INTEGER,
+	hidden_reason TEXT CHECK(hidden_reason IN ('spam','abuse','off-topic','outdated','duplicate','resolved','low-quality'))
 );
 ` + changesDDL + `
 CREATE INDEX IF NOT EXISTS idx_issues_workspace_status_created ON issues(workspace_id, status, created_at);
@@ -186,6 +198,7 @@ var migrations = []func(ctx context.Context, tx *sql.Tx) error{
 	migrateV1, // current schema in one shot
 	migrateV2, // changes table — reaches databases already stamped v1
 	migrateV3, // labels gain workspace_id/kind/archived + discussion_labels
+	migrateV4, // comment-moderation columns on the three post tables
 }
 
 // schemaVersion is the user_version a fully migrated database reports.
@@ -301,6 +314,37 @@ CREATE TABLE IF NOT EXISTS discussion_labels (
 CREATE INDEX IF NOT EXISTS idx_discussion_labels_label ON discussion_labels(label_id);
 `+defaultLabelsDDL)
 	return err
+}
+
+// migrateV4 adds the comment-moderation columns shared by the three
+// post tables (comments, discussion_threads, discussion_comments):
+// edited_at stamps a body change, hidden_at+hidden_reason carry a
+// minimize state. Each ALTER is guarded by a pragma_table_info probe
+// because a fresh database already has the columns via schemaDDL — the
+// squashed v1 — and would otherwise fail on "duplicate column name".
+func migrateV4(ctx context.Context, tx *sql.Tx) error {
+	const reasonCheck = " TEXT CHECK(hidden_reason IN ('spam','abuse','off-topic','outdated','duplicate','resolved','low-quality'))"
+	cols := []struct{ name, ddl string }{
+		{"edited_at", "edited_at INTEGER"},
+		{"hidden_at", "hidden_at INTEGER"},
+		{"hidden_reason", "hidden_reason" + reasonCheck},
+	}
+	for _, table := range []string{"comments", "discussion_threads", "discussion_comments"} {
+		for _, col := range cols {
+			var n int
+			if err := tx.QueryRowContext(ctx, fmt.Sprintf(
+				"SELECT COUNT(*) FROM pragma_table_info('%s') WHERE name = ?", table), col.name).Scan(&n); err != nil {
+				return err
+			}
+			if n > 0 {
+				continue
+			}
+			if _, err := tx.ExecContext(ctx, "ALTER TABLE "+table+" ADD COLUMN "+col.ddl); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // migrateWithFKOff runs one migration on a dedicated connection with

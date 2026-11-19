@@ -73,6 +73,14 @@
 - [正] **ネスト返信は親カード内・左縦線インデント・最大 1 段**
   （store 層でも 2 段目の返信を拒否）。
 - [正] **時系列は上→下（古い順）**、新規入力欄は一番下。
+- [正] **編集済みの投稿はメタ行に `· edited` マーカー**を付ける
+  （`store.Moderation.EditedAt` が非ゼロのとき。編集履歴・diff は
+  持たない。2026-11-19）。
+- [正] **hide された投稿は本文を `<details>` で畳む**。カード自体は
+  消さず `.comment-hidden` で視覚を落とし、「marked as {reason}」の
+  注記と `<summary>`「Show comment」でアクセス可能に保つ（hidden
+  content がページ内検索やスクリーンリーダーから見えるようにする
+  ため、削除や display:none ではなく `<details>`。2026-11-19）。
 
 ## 6. コメント追加 UI
 
@@ -97,6 +105,16 @@
   "Copy as markdown" もアクション行の `.btn` ボタン（fetch→clipboard の
   JS-only 操作、copy link と同じく非 JS では無操作のまま）。
 - [正（代案）] アクション行で Edit と Delete は隣接するが、削除は必ず確認モーダル / 確認ページ経由のため誤操作防止は確認側で担保する。（元の規定: 7-2 編集と削除は隣接させない）
+- [正] **コメント系のモデレーション（Edit / Delete / Hide / Unhide）は
+  投稿カードの `.comment-actions` 行に並べる**（issue コメント・
+  discussion スレッド・返信で共通の `comment_actions` パーシャル。
+  Edit / Delete はリンクで専用ページへ、hide/unhide はその場の
+  POST + partial 差し替え。2026-11-19）。
+- [正] **hide の理由選択は `<details>` 内の必須 `<select>`**。
+  7 値の単一選択リストなので radio ではなく `<select>` + 明示
+  submit（`required` で空送信はネイティブに弾く。有効値は
+  `store.HideReasons`: spam / abuse / off-topic / outdated /
+  duplicate / resolved / low-quality。2026-11-19）。
 
 ## 8. 画面状態・メタデータ
 

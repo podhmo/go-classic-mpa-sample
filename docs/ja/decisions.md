@@ -646,3 +646,19 @@ TODO.md の項目。「`discussion create --category SLUG` が必須なのに sl
 - **backend は unscoped で開く**: `o.backend(ctx, bf)`（= `--workspace` の scoped backend）ではなく `backendIn(ctx, bf, "")` を使う。categories は workspace 非依存の master data で、remote も `/api/v1/discussion-categories` のグローバル経路（`client.In` でも ws 不変）— scoped で開くと local だけが「存在しない workspace で ErrNotFound」になりモード間で非対称になるため、workspace コマンドと同型の unscoped open にした。`--workspace` は無視される。
 - **出力は `SLUG\tNAME\tFORMAT\tDESCRIPTION`**: `--category` に渡す slug を先頭列に（`label list` が参照キーの name を先頭に置くのと同じ約束）。`--json`/`--template` は `categoryViews`（api.DiscussionCategory DTO）経由で他コマンドと同じ語彙。
 - **検証**: `go test ./internal/cli`（`TestDiscussionCategories` 追加: plain 出力の slug 網羅・行フォーマット・`--json` フィールド選択・`--workspace` 無視）。実バイナリで local（`init` した DB）・remote（`-api-token` サーバ）両モードの列挙と、列挙した slug での `discussion create` を確認。
+
+## コメントの編集・削除・hide（モデレーション）（2026-11-19、main ブランチ）
+
+issue コメント・discussion スレッド（開設ポスト）・返信の3種に対して、edit / delete / hide / unhide を全層（store・web・API・client・CLI・export・SSE・storybook）で実装した。これまでの「コメントは編集できない、訂正は追記で」（zatu-help skill 節の記述）を置き換える決定。
+
+- **moderation state は `store.Moderation` に集約**: `EditedAt` / `Hidden` / `HiddenReason` の3項目を3種の投稿型に embed。DB は `edited_at` / `hidden_at` / `hidden_reason` カラム（schema v4 migration）。hidden は `hidden_at` 非NULLで表現し、reason を別カラムに保持 — 「解除後も理由を履歴として残す」設計ではなく、unhide（reason="" 書き込み）で両方 NULL に戻るシンプルな状態機械。
+- **hide 理由は固定7値**: `store.HideReasons`（spam / abuse / off-topic / outdated / duplicate / resolved / low-quality）を唯一の真実にし、store・API・HTML select・CLI flag validation が同じセットを参照。理由は必須 — 「理由なし hide」は API でも HTML でも 422/400。
+- **edit は body が実際に変わったときだけ `edited_at` を打つ**: 同値 PATCH は no-op（updated_at も触らない）。GitHub の "edited" 印と同様に履歴は持たず、最新時刻のみ。
+- **delete はハードデリート**: 復元 UI・ゴミ箱は持たない。スレッド削除は既存の `ON DELETE CASCADE` で返信ごと消える（web の確認ページに「and its N replies」と警告を出す）。
+- **親の `updated_at` は触らない**: moderation 操作は「新しいアクティビティ」ではないため issue/discussion の updated_at を更新しない。新規コメント投稿・answer マークは従来どおり bump する。
+- **スコープはパスの全階層で検証**: `/discussions/{id}/threads/{tid}/comments/{cid}` のように、別 discussion / 別スレッド配下の id を指定した場合は 404（404 は情報漏洩も防ぐ）。
+- **SSE は新イベント種別 `remove` を追加**: 既存 kind は全て「追加 or 更新」だったため、行の物理削除を表す `KindRemove` を新設（payload は target=li id + parent=一覧 ul id）。live-updates.js は pending map で remove を追跡し、empty-state の復帰とカウント減算まで面倒を見る。edit/hide/unhide は既存の更新イベント（KindEdit 系）に乗せ、部分再描画は既存 fragment refresh に委譲。
+- **web UI の操作分割**: Edit は専用ページ（ui-rules §1-7 の「インライン編集なし」方針に合わせ GET フォーム + POST）、Delete は GET 確認ページ→POST（§7 の確認経由義務）、hide/unhide はカード内 POST + partial 差し替え。hide の理由選択は `<details>` 収納の必須 `<select>` — 7 値単一選択なので radio 群より 1 コントロールが適切（modern-web-guidance 調査済み）。hidden カードは `<details>` で本文を畳み、ページ内検索・支援技術から残す。
+- **API 形状**: PATCH `{"body"}` / DELETE → 204 / POST `.../hide` `{"reason"}` / `.../unhide` `{}` → 200 + 最新 DTO。DTO は `edited_at`（omitempty）・`hidden`・`hidden_reason`（omitempty）を inline embed（`api.Moderation` — CLI の --json view も同型を再利用）。
+- **CLI 構文**: issue 側は `zatu comment edit|delete|hide|unhide N C`、discussion 側は `zatu discussion comment <action> N --thread T [--comment C]`（`--comment` 省略でスレッド自体が対象）。
+- **検証**: `go test ./...` / `go vet` / `gofmt` 全パス。store（moderation_test.go）、web handler（comments_test.go: edit/delete/hide/unhide/404/partial 契約）、API（comments_test.go: 3種の PATCH/DELETE/hide + スコープ 404 + フィールド 422）にテスト追加。storybook に edited/hidden fixture と edit/delete/hide/unhide partial story を追加。

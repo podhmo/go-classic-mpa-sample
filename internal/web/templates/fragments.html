@@ -79,7 +79,7 @@
    a data-swap node (the store bumped updated_at) while the <li> is
    appended to the comment list. */}}
 {{template "issue_meta" .Issue}}
-{{template "issue_comment" .Comment}}
+{{template "issue_comment" (dict "C" .Comment "Workspace" .Workspace)}}
 {{end}}
 
 {{define "issue_comments_update"}}
@@ -88,21 +88,67 @@
    followed by every comment <li> to upsert — ?ids= picks a subset, no
    parameter means the whole list (resync). */}}
 {{template "issue_meta" .Issue}}
-{{range .Comments}}{{template "issue_comment" .}}{{end}}
+{{range .Comments}}{{template "issue_comment" (dict "C" . "Workspace" $.Workspace)}}{{end}}
 {{end}}
 
 {{define "issue_comment"}}
-<li class="card comment" id="comment-{{.ID}}">
+{{/* .C is the *store.Comment; .Workspace scopes the action URLs. A
+   hidden comment keeps its body behind a <details> (still in the
+   accessibility tree and find-in-page — guide search-hidden-content),
+   the note carries the reason. The li self-targets by id in the
+   client's replace swap. */}}
+<li class="card comment{{if .C.Moderation.Hidden}} comment-hidden{{end}}" id="comment-{{.C.ID}}">
   <header class="comment-meta">
-    <span class="comment-author">{{authorName .Author}} commented</span>
-    <a class="comment-permalink" href="#comment-{{.ID}}"><time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .CreatedAt}}</time> <span class="visually-hidden">(comment {{.ID}})</span></a>
+    <span class="comment-author">{{authorName .C.Author}} commented</span>
+    <a class="comment-permalink" href="#comment-{{.C.ID}}"><time datetime="{{.C.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .C.CreatedAt}}</time> <span class="visually-hidden">(comment {{.C.ID}})</span></a>
+    {{if .C.Moderation.Edited}}· <span class="comment-edited">edited</span>{{end}}
     <span class="copy-wrap">
-      <button type="button" class="copy-btn" command="--copy-permalink" commandfor="comment-{{.ID}}" data-url="/issues/{{.IssueID}}#comment-{{.ID}}" aria-label="Copy link to comment {{.ID}}">copy link</button>
+      <button type="button" class="copy-btn" command="--copy-permalink" commandfor="comment-{{.C.ID}}" data-url="/w/{{$.Workspace.Slug}}/issues/{{.C.IssueID}}#comment-{{.C.ID}}" aria-label="Copy link to comment {{.C.ID}}">copy link</button>
       <span class="copy-tip" role="status"></span>
     </span>
   </header>
-  <div class="comment-body markdown-body">{{markdown .Body}}</div>
+  {{if .C.Moderation.Hidden}}
+  <p class="comment-hidden-note">This comment was marked as {{.C.Moderation.HiddenReason}}.</p>
+  <details class="comment-hidden-body">
+    <summary>Show comment</summary>
+    <div class="comment-body markdown-body">{{markdown .C.Body}}</div>
+  </details>
+  {{else}}
+  <div class="comment-body markdown-body">{{markdown .C.Body}}</div>
+  {{end}}
+  <div class="comment-actions">
+    {{template "comment_actions" (dict "C" .C "Noun" "comment" "Base" (printf "/w/%s/issues/%d/comments/%d" $.Workspace.Slug .C.IssueID .C.ID) "Target" (printf "#comment-%d" .C.ID))}}
+  </div>
 </li>
+{{end}}
+
+{{define "comment_actions"}}
+{{/* Per-post moderation row shared by issue comments, threads and
+   replies: Edit navigates to the dedicated form page, Delete to the
+   GET confirmation page (links, not POST shortcuts — ui-rules §7),
+   hide/unhide are in-place POSTs. The hide <details> keeps the reason
+   picker collapsed until needed; a hidden post swaps it for Unhide.
+   .Base is the post's URL prefix, .Target its li anchor for the
+   fragment self-swap, .Noun its kind for accessible names. */}}
+<a class="comment-action" href="{{.Base}}/edit" aria-label="Edit {{.Noun}} {{.C.ID}}">Edit</a>
+{{if .C.Moderation.Hidden}}
+<form method="post" action="{{.Base}}/unhide" class="inline-form" data-partial data-partial-mode="replace" data-partial-target="{{.Target}}" data-partial-announce="{{if eq .Noun "thread"}}Thread{{else}}Comment{{end}} restored.">
+  <button type="submit" class="comment-action" aria-label="Unhide {{.Noun}} {{.C.ID}}">Unhide</button>
+</form>
+{{else}}
+<details class="comment-hide">
+  <summary class="comment-action" aria-label="Hide {{.Noun}} {{.C.ID}}">Hide</summary>
+  <form method="post" action="{{.Base}}/hide" class="hide-form" data-partial data-partial-mode="replace" data-partial-target="{{.Target}}" data-partial-announce="{{if eq .Noun "thread"}}Thread{{else}}Comment{{end}} hidden.">
+    <label for="hide-reason-{{.Noun}}-{{.C.ID}}">Reason</label>
+    <select id="hide-reason-{{.Noun}}-{{.C.ID}}" name="reason" required>
+      <option value="" disabled selected>Select…</option>
+      {{range hideReasons}}<option value="{{.}}">{{.}}</option>{{end}}
+    </select>
+    <button type="submit" class="comment-action">Hide {{.Noun}}</button>
+  </form>
+</details>
+{{end}}
+<a class="comment-action comment-action-danger" href="{{.Base}}/delete" aria-label="Delete {{.Noun}} {{.C.ID}}">Delete</a>
 {{end}}
 
 {{define "issue_comment_form"}}
@@ -168,20 +214,31 @@
 
 {{define "discussion_comment"}}
 {{/* Threads get a thread-N anchor namespace: thread and reply ids come
-   from separate tables, so sharing comment-N would collide. */}}
-<li class="card comment{{if .C.IsAnswer}} comment-answer{{end}}" id="thread-{{.C.ID}}">
+   from separate tables, so sharing comment-N would collide. A hidden
+   thread minimizes only its body — replies and the reply form below
+   are other posts and stay visible. */}}
+<li class="card comment{{if .C.IsAnswer}} comment-answer{{end}}{{if .C.Moderation.Hidden}} comment-hidden{{end}}" id="thread-{{.C.ID}}">
   <header class="comment-meta">
     {{if .C.IsAnswer}}<span class="badge badge-answer">Answer</span>{{end}}
     <span class="comment-author">{{authorName .C.Author}}</span>
     <a class="comment-permalink" href="#thread-{{.C.ID}}"><time datetime="{{.C.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .C.CreatedAt}}</time> <span class="visually-hidden">(thread {{.C.ID}})</span></a>
+    {{if .C.Moderation.Edited}}· <span class="comment-edited">edited</span>{{end}}
     <span class="copy-wrap">
       <button type="button" class="copy-btn" command="--copy-permalink" commandfor="thread-{{.C.ID}}" data-url="/w/{{.Workspace.Slug}}/discussions/{{.Discussion.ID}}#thread-{{.C.ID}}" aria-label="Copy link to thread {{.C.ID}}">copy link</button>
       <span class="copy-tip" role="status"></span>
     </span>
   </header>
+  {{if .C.Moderation.Hidden}}
+  <p class="comment-hidden-note">This thread was marked as {{.C.Moderation.HiddenReason}}.</p>
+  <details class="comment-hidden-body">
+    <summary>Show thread</summary>
+    <div class="comment-body markdown-body">{{markdown .C.Body}}</div>
+  </details>
+  {{else}}
   <div class="comment-body markdown-body">{{markdown .C.Body}}</div>
-  {{if eq .Discussion.Category.Format "qa"}}
+  {{end}}
   <div class="comment-actions">
+    {{if eq .Discussion.Category.Format "qa"}}
     <form method="post" action="/w/{{.Workspace.Slug}}/discussions/{{.Discussion.ID}}/comments/{{.C.ID}}/answer" class="inline-form" data-partial data-partial-mode="replace" data-partial-target="#thread-{{.C.ID}}" data-partial-announce="Answer updated.">
       {{/* Per-comment controls repeat with identical looks on every row,
          so each gets an accessible name carrying the thread id (the same
@@ -195,8 +252,9 @@
       <button type="submit" class="btn btn-quiet" aria-label="Mark as answer on thread {{.C.ID}}">Mark as answer</button>
       {{end}}
     </form>
+    {{end}}
+    {{template "comment_actions" (dict "C" .C "Noun" "thread" "Base" (printf "/w/%s/discussions/%d/threads/%d" $.Workspace.Slug $.Discussion.ID .C.ID) "Target" (printf "#thread-%d" .C.ID))}}
   </div>
-  {{end}}
   <ol class="comment-replies" role="list"{{if not .C.Comments}} hidden{{end}}>
     {{range .C.Comments}}{{template "discussion_reply" (dict "Discussion" $.Discussion "Workspace" $.Workspace "C" .)}}{{end}}
   </ol>
@@ -260,16 +318,28 @@
 {{end}}
 
 {{define "discussion_reply"}}
-<li class="card comment comment-reply" id="comment-{{.C.ID}}">
+<li class="card comment comment-reply{{if .C.Moderation.Hidden}} comment-hidden{{end}}" id="comment-{{.C.ID}}">
   <header class="comment-meta">
     <span class="comment-author">{{authorName .C.Author}} commented</span>
     <a class="comment-permalink" href="#comment-{{.C.ID}}"><time datetime="{{.C.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .C.CreatedAt}}</time> <span class="visually-hidden">(comment {{.C.ID}})</span></a>
+    {{if .C.Moderation.Edited}}· <span class="comment-edited">edited</span>{{end}}
     <span class="copy-wrap">
       <button type="button" class="copy-btn" command="--copy-permalink" commandfor="comment-{{.C.ID}}" data-url="/w/{{.Workspace.Slug}}/discussions/{{.Discussion.ID}}#comment-{{.C.ID}}" aria-label="Copy link to comment {{.C.ID}}">copy link</button>
       <span class="copy-tip" role="status"></span>
     </span>
   </header>
+  {{if .C.Moderation.Hidden}}
+  <p class="comment-hidden-note">This comment was marked as {{.C.Moderation.HiddenReason}}.</p>
+  <details class="comment-hidden-body">
+    <summary>Show comment</summary>
+    <div class="comment-body markdown-body">{{markdown .C.Body}}</div>
+  </details>
+  {{else}}
   <div class="comment-body markdown-body">{{markdown .C.Body}}</div>
+  {{end}}
+  <div class="comment-actions">
+    {{template "comment_actions" (dict "C" .C "Noun" "comment" "Base" (printf "/w/%s/discussions/%d/threads/%d/comments/%d" $.Workspace.Slug $.Discussion.ID .C.ThreadID .C.ID) "Target" (printf "#comment-%d" .C.ID))}}
+  </div>
 </li>
 {{end}}
 

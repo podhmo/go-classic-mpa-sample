@@ -148,3 +148,7 @@
 
 - [x] **ラベルを DB 管理化（定数の廃止）**: `labels` に `workspace_id`（NULL=マスター）・`kind`（issue/discussion）・`archived` を追加し、既定ラベルは `defaultLabelsDDL` のデータマイグレーションで投入。管理画面 `/w/{ws}/labels`（追加/編集/削除=アーカイブ/復帰）と discussion のラベル選択 UI、API `/api/v1/w/{ws}/labels`、CLI `zatu label create|delete` を実装（PR 参照）
 - [x] **issue/discussion の Markdown エクスポート**: `internal/export` の共有 serializer を `GET /w/{ws}/issues|discussions/{id}/markdown`・`GET /api/v1/w/{ws}/.../{id}/markdown`（`text/markdown`）・詳細ページの "Copy as markdown" ボタン（`copy-markdown.js` + 共有 `clipboard.js`）・CLI `zatu issue|discussion view --markdown` の 4 surface に接線。設計は `docs/ja/decisions.md`「Markdown エクスポート」
+
+- [x] **zatu の --help 整備と agent 向け zatu-cli skill**: 全階層（top/group/leaf）で `-h/--help` を stdout・exit 0 にし、leaf の flag 一覧は `flag.PrintDefaults` から生成して正を flag 定義に一元化。skill `.agents/skills/zatu-cli/` は「--help を引け」に絞り、リプレイ例は `tools/demo-history.sh` が担う。
+- [x] **`zatu` に discussion categories の一覧コマンドがない**: `discussion create --category SLUG` が必須なのに slug を列挙する術がない。`discussion list` の2列目か、未知 slug を渡したときのエラー "valid: ..." からしか発見できない（`zatu discussion categories` のような listing verb を検討。2エージェントによる実使用テストで発覚）。→ `zatu discussion categories` を実装（slug/name/format/description のタブ区切り、`--json`/`--template` 対応）。
+- [x] **コメントの編集・削除・hide（理由付き最小化）**: issue コメント・discussion スレッド・返信の3種すべてに edit（専用 /edit ページ）/delete（確認ページ）/hide・unhide（spam/abuse/off-topic/outdated/duplicate/resolved/low-quality の理由選択、`<details>` 折りたたみ表示）を web/api/cli で実装。schema v4 で `edited_at`/`hidden_at`/`hidden_reason` 追加、編集済みは "edited" マーカー表示

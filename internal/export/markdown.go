@@ -33,7 +33,7 @@ func IssueMarkdown(i *store.Issue, comments []*store.Comment, wsSlug string) str
 	if len(comments) > 0 {
 		b.WriteString("\n## Comments\n")
 		for _, c := range comments {
-			fmt.Fprintf(&b, "\n### Comment by %s · %s\n", author(c.Author), rfc3339(c.CreatedAt))
+			fmt.Fprintf(&b, "\n### Comment by %s · %s%s\n", author(c.Author), rfc3339(c.CreatedAt), moderationSuffix(c.Moderation))
 			body(&b, c.Body)
 		}
 	}
@@ -68,15 +68,29 @@ func DiscussionMarkdown(d *store.Discussion, threads []*store.DiscussionThread, 
 			if t.IsAnswer {
 				answer = " · answer"
 			}
-			fmt.Fprintf(&b, "\n### Thread by %s · %s%s\n", author(t.Author), rfc3339(t.CreatedAt), answer)
+			fmt.Fprintf(&b, "\n### Thread by %s · %s%s%s\n", author(t.Author), rfc3339(t.CreatedAt), answer, moderationSuffix(t.Moderation))
 			body(&b, t.Body)
 			for _, c := range t.Comments {
-				fmt.Fprintf(&b, "\n#### Reply by %s · %s\n", author(c.Author), rfc3339(c.CreatedAt))
+				fmt.Fprintf(&b, "\n#### Reply by %s · %s%s\n", author(c.Author), rfc3339(c.CreatedAt), moderationSuffix(c.Moderation))
 				body(&b, c.Body)
 			}
 		}
 	}
 	return b.String()
+}
+
+// moderationSuffix renders the edited/hidden markers on a post heading
+// — "· edited" and "· hidden (spam)". A hidden post keeps its body in
+// the export (it is still the record); the marker says it is minimized.
+func moderationSuffix(m store.Moderation) string {
+	var s string
+	if m.Edited() {
+		s += " · edited"
+	}
+	if m.Hidden {
+		s += " · hidden (" + m.HiddenReason + ")"
+	}
+	return s
 }
 
 // body writes a verbatim markdown block separated by one blank line; an

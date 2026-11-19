@@ -49,7 +49,7 @@ _issues_completions() {
 	# Flag words complete anywhere; values of flags that take one are left
 	# to the shell's file completion.
 	if [[ "$cur" == -* ]]; then
-		COMPREPLY=( $(compgen -W "--db --server --token --json --template --state --search --sort --limit --page --label --category --answered --title --body --body-file --comments --thread --unmark --user --method --field --raw-field --web" -- "$cur") )
+		COMPREPLY=( $(compgen -W "--db --server --token --json --template --state --search --sort --limit --page --label --category --answered --title --body --body-file --comments --thread --comment --reason --unmark --user --method --field --raw-field --web" -- "$cur") )
 		return 0
 	fi
 
@@ -61,7 +61,7 @@ _issues_completions() {
 		;;
 	comment)
 		if [ "$COMP_CWORD" -eq 2 ]; then
-			COMPREPLY=( $(compgen -W "create" -- "$cur") )
+			COMPREPLY=( $(compgen -W "create edit delete hide unhide" -- "$cur") )
 		fi
 		;;
 	label)
@@ -73,7 +73,7 @@ _issues_completions() {
 		if [ "$COMP_CWORD" -eq 2 ]; then
 			COMPREPLY=( $(compgen -W "list view create edit delete comment answer categories" -- "$cur") )
 		elif [ "${COMP_WORDS[2]}" = "comment" ] && [ "$COMP_CWORD" -eq 3 ]; then
-			COMPREPLY=( $(compgen -W "create" -- "$cur") )
+			COMPREPLY=( $(compgen -W "create edit delete hide unhide" -- "$cur") )
 		fi
 		;;
 	auth)
@@ -95,6 +95,8 @@ _issues_completions() {
 		COMPREPLY=( $(compgen -W "yes no" -- "$cur") )
 	elif [ "$prev" = "--method" ] || [ "$prev" = "-X" ]; then
 		COMPREPLY=( $(compgen -W "GET POST PATCH PUT DELETE" -- "$cur") )
+	elif [ "$prev" = "--reason" ]; then
+		COMPREPLY=( $(compgen -W "spam abuse off-topic outdated duplicate resolved low-quality" -- "$cur") )
 	fi
 	return 0
 }
@@ -108,7 +110,7 @@ _zatu() {
 	local -a commands
 	commands=(
 		'issue:issue list|view|create|edit|close|reopen|delete'
-		'comment:create an issue comment'
+		'comment:issue comment create|edit|delete|hide|unhide'
 		'label:list labels'
 		'discussion:discussion list|view|create|edit|delete|comment|answer|categories'
 		'auth:API token management (local)'
@@ -126,7 +128,7 @@ _zatu() {
 				list view create edit close reopen delete
 			)' ;;
 		comment)
-			_describe -t actions 'comment action' '(create)' ;;
+			_describe -t actions 'comment action' '(create edit delete hide unhide)' ;;
 		label)
 			_describe -t actions 'label action' '(list create delete)' ;;
 		discussion)
@@ -135,7 +137,7 @@ _zatu() {
 					list view create edit delete comment answer categories
 				)'
 			elif [[ "$words[3]" == comment ]]; then
-				_describe -t actions 'comment action' '(create)'
+				_describe -t actions 'comment action' '(create edit delete hide unhide)'
 			fi ;;
 		auth)
 			if (( CURRENT == 3 )); then
@@ -158,10 +160,10 @@ const completionFish = `# fish completion for zatu — save to ~/.config/fish/co
 complete -c zatu -f
 complete -c zatu -n '__fish_use_subcommand' -a 'issue comment label discussion auth api completion help'
 complete -c zatu -n '__fish_seen_subcommand_from issue' -a 'list view create edit close reopen delete'
-complete -c zatu -n '__fish_seen_subcommand_from comment' -a 'create'
+complete -c zatu -n '__fish_seen_subcommand_from comment' -a 'create edit delete hide unhide'
 complete -c zatu -n '__fish_seen_subcommand_from label' -a 'list create delete'
 complete -c zatu -n '__fish_seen_subcommand_from discussion' -a 'list view create edit delete comment answer categories'
-complete -c zatu -n '__fish_seen_subcommand_from discussion; and __fish_seen_subcommand_from comment' -a 'create'
+complete -c zatu -n '__fish_seen_subcommand_from discussion; and __fish_seen_subcommand_from comment' -a 'create edit delete hide unhide'
 complete -c zatu -n '__fish_seen_subcommand_from auth' -a 'token'
 complete -c zatu -n '__fish_seen_subcommand_from auth; and __fish_seen_subcommand_from token' -a 'list revoke'
 complete -c zatu -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish'

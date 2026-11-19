@@ -139,6 +139,34 @@ func (c *Client) CreateComment(ctx context.Context, issueID int64, body string, 
 	return res.Comment.ID, nil
 }
 
+// UpdateComment PATCHes the comment's body.
+func (c *Client) UpdateComment(ctx context.Context, issueID, commentID int64, body string) error {
+	return c.do(ctx, "PATCH",
+		c.wsPath("issues/")+fmt.Sprint(issueID)+"/comments/"+fmt.Sprint(commentID),
+		map[string]any{"body": body}, nil)
+}
+
+// DeleteComment removes the comment permanently.
+func (c *Client) DeleteComment(ctx context.Context, issueID, commentID int64) error {
+	return c.do(ctx, "DELETE",
+		c.wsPath("issues/")+fmt.Sprint(issueID)+"/comments/"+fmt.Sprint(commentID), nil, nil)
+}
+
+// SetCommentHidden minimizes the comment with a reason, or restores it
+// when reason is "" — same convention as the store: empty = unhide.
+func (c *Client) SetCommentHidden(ctx context.Context, issueID, commentID int64, reason string) error {
+	action := "hide"
+	var body map[string]any
+	if reason != "" {
+		body = map[string]any{"reason": reason}
+	} else {
+		action = "unhide"
+	}
+	return c.do(ctx, "POST",
+		c.wsPath("issues/")+fmt.Sprint(issueID)+"/comments/"+fmt.Sprint(commentID)+"/"+action,
+		body, nil)
+}
+
 func issueFromDTO(i api.Issue) *store.Issue {
 	out := &store.Issue{
 		ID: i.ID, Title: i.Title, Body: i.Body, Status: i.Status,
@@ -154,9 +182,20 @@ func issueFromDTO(i api.Issue) *store.Issue {
 func commentFromDTO(c api.Comment, issueID int64) *store.Comment {
 	return &store.Comment{
 		ID: c.ID, IssueID: issueID, Body: c.Body,
-		Author:    userFromDTO(c.Author),
-		CreatedAt: parseTime(c.CreatedAt),
+		Author:     userFromDTO(c.Author),
+		CreatedAt:  parseTime(c.CreatedAt),
+		Moderation: moderationFromDTO(c.Hidden, c.HiddenReason, c.EditedAt),
 	}
+}
+
+// moderationFromDTO maps the shared moderation triple the DTOs carry
+// inline (edited_at / hidden / hidden_reason) onto store.Moderation.
+func moderationFromDTO(hidden bool, reason string, editedAt *string) store.Moderation {
+	m := store.Moderation{Hidden: hidden, HiddenReason: reason}
+	if editedAt != nil {
+		m.EditedAt = parseTime(*editedAt)
+	}
+	return m
 }
 
 func userFromDTO(u *api.User) *store.User {

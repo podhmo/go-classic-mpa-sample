@@ -12,14 +12,18 @@ import (
 
 // Change kinds delivered to SSE subscribers.
 const (
-	KindComment = "comment" // new issue comment (Target = comment id)
-	KindThread  = "thread"  // new discussion thread (Target = thread id)
-	KindReply   = "reply"   // new discussion reply (Parent = thread id)
+	KindComment = "comment" // issue comment added/edited/hidden (Target = comment id)
+	KindThread  = "thread"  // discussion thread added/edited/hidden (Target = thread id)
+	KindReply   = "reply"   // discussion reply added/edited/hidden (Parent = thread id)
 	KindAnswer  = "answer"  // answer mark moved (Target = marked, Parent = unmarked)
 	KindStatus  = "status"  // issue open/closed toggled
 	KindEdit    = "edit"    // issue/discussion title, body or labels changed
 	KindNew     = "new"     // new issue/discussion (list topics only)
 	KindDelete  = "delete"  // the watched issue/discussion was deleted
+	// KindRemove covers comment-level rows deleted below a watched
+	// resource (issue comment, thread, reply — Target = row id, Parent =
+	// thread id for replies, 0 otherwise); subscribers drop that node.
+	KindRemove = "remove"
 	// KindResync is synthesized by the Hub itself: a subscriber that fell
 	// behind gets its backlog replaced by this single hint meaning "fetch
 	// the whole list again". Stores never publish it.

@@ -40,6 +40,9 @@ type Store interface {
 	DeleteIssue(ctx context.Context, id int64) error
 	ListComments(ctx context.Context, issueID int64) ([]*store.Comment, error)
 	CreateComment(ctx context.Context, issueID int64, body string, authorID int64) (int64, error)
+	UpdateComment(ctx context.Context, issueID, commentID int64, body string) error
+	DeleteComment(ctx context.Context, issueID, commentID int64) error
+	SetCommentHidden(ctx context.Context, issueID, commentID int64, reason string) error
 	ListLabels(ctx context.Context, wsID int64, kind string) ([]*store.Label, error)
 	ListArchivedLabels(ctx context.Context, wsID int64, kind string) ([]*store.Label, error)
 	GetLabel(ctx context.Context, id int64) (*store.Label, error)
@@ -55,6 +58,12 @@ type Store interface {
 	CreateDiscussionThread(ctx context.Context, discussionID int64, body string, authorID int64) (int64, error)
 	CreateDiscussionComment(ctx context.Context, discussionID, threadID int64, body string, authorID int64) (int64, error)
 	SetThreadAnswer(ctx context.Context, discussionID, threadID int64, answer bool) error
+	UpdateDiscussionThread(ctx context.Context, discussionID, threadID int64, body string) error
+	DeleteDiscussionThread(ctx context.Context, discussionID, threadID int64) error
+	SetDiscussionThreadHidden(ctx context.Context, discussionID, threadID int64, reason string) error
+	UpdateDiscussionComment(ctx context.Context, discussionID, threadID, commentID int64, body string) error
+	DeleteDiscussionComment(ctx context.Context, discussionID, threadID, commentID int64) error
+	SetDiscussionCommentHidden(ctx context.Context, discussionID, threadID, commentID int64, reason string) error
 	ListDiscussionCategories(ctx context.Context) ([]*store.DiscussionCategory, error)
 	ListWorkspaces(ctx context.Context) ([]*store.Workspace, error)
 	WorkspaceBySlug(ctx context.Context, slug string) (*store.Workspace, error)
@@ -153,6 +162,15 @@ func New(st Store, opts ...Option) http.Handler {
 	mux.HandleFunc("GET /w/{ws}/issues/{id}/delete", h.scoped(h.confirmDelete))
 	mux.HandleFunc("POST /w/{ws}/issues/{id}/delete", h.scoped(h.deleteIssue))
 	mux.HandleFunc("POST /w/{ws}/issues/{id}/comments", h.scoped(h.createComment))
+	// Comment moderation (internal/web/comments.go): edit via a dedicated
+	// page, delete via a GET confirmation page, hide/unhide as in-place
+	// POSTs — the same shapes the issue resource itself uses.
+	mux.HandleFunc("GET /w/{ws}/issues/{id}/comments/{cid}/edit", h.scoped(h.editCommentForm))
+	mux.HandleFunc("POST /w/{ws}/issues/{id}/comments/{cid}/edit", h.scoped(h.updateComment))
+	mux.HandleFunc("GET /w/{ws}/issues/{id}/comments/{cid}/delete", h.scoped(h.confirmDeleteComment))
+	mux.HandleFunc("POST /w/{ws}/issues/{id}/comments/{cid}/delete", h.scoped(h.deleteComment))
+	mux.HandleFunc("POST /w/{ws}/issues/{id}/comments/{cid}/hide", h.scoped(h.hideComment))
+	mux.HandleFunc("POST /w/{ws}/issues/{id}/comments/{cid}/unhide", h.scoped(h.unhideComment))
 	// Label management (docs/ja/decisions.md — labels are DB-managed, not
 	// constants): /w/{ws}/labels administers both the workspace's own
 	// labels and the shared master labels.
@@ -172,6 +190,21 @@ func New(st Store, opts ...Option) http.Handler {
 	mux.HandleFunc("POST /w/{ws}/discussions/{id}/delete", h.scoped(h.deleteDiscussion))
 	mux.HandleFunc("POST /w/{ws}/discussions/{id}/comments", h.scoped(h.createDiscussionComment))
 	mux.HandleFunc("POST /w/{ws}/discussions/{id}/comments/{cid}/answer", h.scoped(h.setCommentAnswer))
+	// Thread and reply moderation — the same edit/delete/hide shapes as
+	// issue comments (internal/web/comments.go). Threads own the
+	// threads/{tid} tree; replies live one level under it.
+	mux.HandleFunc("GET /w/{ws}/discussions/{id}/threads/{tid}/edit", h.scoped(h.editThreadForm))
+	mux.HandleFunc("POST /w/{ws}/discussions/{id}/threads/{tid}/edit", h.scoped(h.updateThread))
+	mux.HandleFunc("GET /w/{ws}/discussions/{id}/threads/{tid}/delete", h.scoped(h.confirmDeleteThread))
+	mux.HandleFunc("POST /w/{ws}/discussions/{id}/threads/{tid}/delete", h.scoped(h.deleteThread))
+	mux.HandleFunc("POST /w/{ws}/discussions/{id}/threads/{tid}/hide", h.scoped(h.hideThread))
+	mux.HandleFunc("POST /w/{ws}/discussions/{id}/threads/{tid}/unhide", h.scoped(h.unhideThread))
+	mux.HandleFunc("GET /w/{ws}/discussions/{id}/threads/{tid}/comments/{cid}/edit", h.scoped(h.editReplyForm))
+	mux.HandleFunc("POST /w/{ws}/discussions/{id}/threads/{tid}/comments/{cid}/edit", h.scoped(h.updateReply))
+	mux.HandleFunc("GET /w/{ws}/discussions/{id}/threads/{tid}/comments/{cid}/delete", h.scoped(h.confirmDeleteReply))
+	mux.HandleFunc("POST /w/{ws}/discussions/{id}/threads/{tid}/comments/{cid}/delete", h.scoped(h.deleteReply))
+	mux.HandleFunc("POST /w/{ws}/discussions/{id}/threads/{tid}/comments/{cid}/hide", h.scoped(h.hideReply))
+	mux.HandleFunc("POST /w/{ws}/discussions/{id}/threads/{tid}/comments/{cid}/unhide", h.scoped(h.unhideReply))
 	// Live updates (docs/sketch/ja/live-updates.md): SSE change channels
 	// plus the fragment endpoints live-updates.js refetches after a hint.
 	mux.HandleFunc("GET /w/{ws}/issues/{id}/events", h.scoped(h.issueEvents))
@@ -402,6 +435,7 @@ var funcMap = template.FuncMap{
 	"statusURL":   statusURL,
 	"labelURL":    labelURL,
 	"maxTitleLen": func() int { return store.MaxTitleRunes },
+	"hideReasons": func() []string { return store.HideReasons },
 	"dict":        dict,
 }
 

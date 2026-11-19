@@ -38,6 +38,7 @@ type Comment struct {
 	Body      string
 	CreatedAt time.Time
 	Author    *User
+	Moderation
 }
 
 // IssueInput carries validated form values for create/update.
@@ -269,7 +270,9 @@ func (s *Store) DeleteIssue(ctx context.Context, id int64) error {
 // ListComments returns comments for an issue in chronological order.
 func (s *Store) ListComments(ctx context.Context, issueID int64) ([]*Comment, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT c.id, c.issue_id, c.body, c.created_at, u.id, u.name, u.created_at
+		`SELECT c.id, c.issue_id, c.body, c.created_at,
+			c.edited_at, c.hidden_at, c.hidden_reason,
+			u.id, u.name, u.created_at
 			FROM comments c LEFT JOIN users u ON u.id = c.author_id
 			WHERE c.issue_id = ? ORDER BY c.created_at ASC, c.id ASC`,
 		issueID)
@@ -408,13 +411,16 @@ func scanIssue(s scanner) (*Issue, error) {
 func scanComment(s scanner) (*Comment, error) {
 	var c Comment
 	var ts int64
+	var ed, hid sql.NullInt64
+	var reason sql.NullString
 	var aid sql.NullInt64
 	var aname sql.NullString
 	var acreated sql.NullInt64
-	if err := s.Scan(&c.ID, &c.IssueID, &c.Body, &ts, &aid, &aname, &acreated); err != nil {
+	if err := s.Scan(&c.ID, &c.IssueID, &c.Body, &ts, &ed, &hid, &reason, &aid, &aname, &acreated); err != nil {
 		return nil, err
 	}
 	c.CreatedAt = time.Unix(ts, 0).UTC()
+	c.Moderation = scanModeration(ed, hid, reason)
 	c.Author = scanUser(aid, aname, acreated)
 	return &c, nil
 }

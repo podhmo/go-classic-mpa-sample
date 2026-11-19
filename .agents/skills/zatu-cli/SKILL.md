@@ -27,8 +27,6 @@ Facts not covered by `--help`:
 - A brand-new DB has no discussion categories until
   `go run ./cmd/zatudan -db PATH init` runs once (labels and the default
   workspace come with the schema itself).
-- Comments cannot be edited anywhere in the app — corrections go in a
-  follow-up comment; issue/discussion title/body take `edit`.
 - `tools/demo-history.sh` replays a full example history through the CLI
   (issues, progress comments, corrections, closes, discussions, answer
   marks) — a runnable reference for the usual flows.

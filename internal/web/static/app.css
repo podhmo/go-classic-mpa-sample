@@ -1444,13 +1444,118 @@ fieldset.field:has(:is(:user-invalid, [aria-invalid="true"])) {
   overflow-wrap: anywhere;
 }
 
-/* Per-thread action row: currently just the qa-only answer toggle. */
+/* Per-post action row: the qa answer toggle plus the moderation
+   actions (Edit / Hide / Delete, Unhide when hidden). */
 .comment-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   margin-top: 8px;
   font-size: 0.82rem;
+}
+
+/* Moderation actions render as quiet text — the row repeats under
+   every post, so borders on each would read as noise. Danger is only
+   a hover/focus color; the delete confirm page does the real guard. */
+.comment-action {
+  font: inherit;
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .comment-action:hover {
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .comment-action-danger:hover {
+    color: var(--danger);
+  }
+}
+
+/* The hide reason picker lives inside a <details> so it stays one
+   quiet word until opened; the summary drops its disclosure marker
+   because the action row has its own affordance (the form below). */
+.comment-hide > summary {
+  display: inline-block;
+  list-style: none;
+}
+
+.comment-hide > summary::-webkit-details-marker {
+  display: none;
+}
+
+.comment-hide > summary::marker {
+  content: none;
+}
+
+.hide-form {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-inline-start: 4px;
+}
+
+.hide-form select {
+  font: inherit;
+  padding: 1px 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface, #fff);
+}
+
+/* Hidden posts keep their frame (permalink, actions) but dim the card
+   and minimize the body behind a <details>. The reason note replaces
+   the body in flow. */
+.comment-hidden {
+  border-style: dashed;
+  opacity: 0.75;
+}
+
+.comment-hidden-note {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin: 0 0 4px;
+}
+
+.comment-hidden-body > summary {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  width: fit-content;
+}
+
+@media (hover: hover) {
+  .comment-hidden-body > summary:hover {
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}
+
+.comment-hidden-body .comment-body {
+  margin-top: 6px;
+}
+
+/* "edited" sits inside .comment-meta which is already muted — just
+   keep it visually subordinate to the permalink. */
+.comment-edited {
+  font-size: 0.75rem;
+}
+
+/* One-line body excerpt on the delete confirmation page. */
+.comment-delete-preview {
+  margin: 8px 0;
+  padding: 4px 12px;
+  border-inline-start: 3px solid var(--border-muted);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
 }
 
 /* Collapsed reply entry: a <summary> styled as a quiet single-line

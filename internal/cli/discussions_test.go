@@ -244,3 +244,76 @@ func TestDiscussionUsageAndErrors(t *testing.T) {
 		t.Fatalf("answer on open category: exit %d, want %d", code, ExitError)
 	}
 }
+
+// Thread-vs-reply branching on the moderation verbs: --thread alone
+// targets the opening post, --thread + --comment targets the reply.
+func TestDiscussionCommentModerationLocal(t *testing.T) {
+	db := t.TempDir() + "/test.db"
+	seedCategories(t, db)
+	o := localOptions(t, db)
+
+	id := createDiscussion(t, o, "mod question", "qa")
+	tid := createDThread(t, o, id, "opening")
+	var rid int64
+	code, out, _ := run(t, o, "discussion", "comment", "create", itoa(id),
+		"--thread", itoa(tid), "--body", "a reply")
+	if code != ExitOK {
+		t.Fatalf("reply create: exit %d", code)
+	}
+	if _, err := fmt.Sscanf(out, "created reply #%d", &rid); err != nil || rid == 0 {
+		t.Fatalf("reply output: %q", out)
+	}
+
+	// Non-positive ids are usage errors, not backend 404s.
+	for _, args := range [][]string{
+		{"discussion", "comment", "edit", itoa(id), "--thread", itoa(tid), "--comment", "-3", "--body", "x"},
+		{"discussion", "comment", "create", itoa(id), "--thread", "-1", "--body", "x"},
+		{"discussion", "comment", "hide", itoa(id), "--thread", itoa(tid), "--reason", "bogus"},
+		{"discussion", "comment", "unhide", itoa(id), "--thread", itoa(tid), "--reason", "spam"},
+	} {
+		if code, _, _ := run(t, o, args...); code != ExitUsage {
+			t.Fatalf("args %v: want exit %d, got %d", args, ExitUsage, code)
+		}
+	}
+
+	// Reply edit + hide + delete.
+	code, out, _ = run(t, o, "discussion", "comment", "edit", itoa(id),
+		"--thread", itoa(tid), "--comment", itoa(rid), "--body", "better reply")
+	if code != ExitOK || !strings.Contains(out, "updated reply #") {
+		t.Fatalf("reply edit: exit %d\n%s", code, out)
+	}
+	code, out, _ = run(t, o, "discussion", "comment", "hide", itoa(id),
+		"--thread", itoa(tid), "--comment", itoa(rid), "--reason", "off-topic")
+	if code != ExitOK || !strings.Contains(out, "hidden reply #") {
+		t.Fatalf("reply hide: exit %d\n%s", code, out)
+	}
+	code, out, _ = run(t, o, "discussion", "view", itoa(id), "--comments")
+	if code != ExitOK || !strings.Contains(out, "[hidden: off-topic]") || !strings.Contains(out, "[edited]") {
+		t.Fatalf("view after reply moderation:\n%s", out)
+	}
+	code, out, _ = run(t, o, "discussion", "comment", "delete", itoa(id),
+		"--thread", itoa(tid), "--comment", itoa(rid))
+	if code != ExitOK || !strings.Contains(out, "deleted reply #") {
+		t.Fatalf("reply delete: exit %d\n%s", code, out)
+	}
+
+	// Thread edit + hide + unhide + delete (no --comment → the thread).
+	code, out, _ = run(t, o, "discussion", "comment", "edit", itoa(id),
+		"--thread", itoa(tid), "--body", "edited opening")
+	if code != ExitOK || !strings.Contains(out, "updated thread #") {
+		t.Fatalf("thread edit: exit %d\n%s", code, out)
+	}
+	code, out, _ = run(t, o, "discussion", "comment", "hide", itoa(id),
+		"--thread", itoa(tid), "--reason", "duplicate")
+	if code != ExitOK || !strings.Contains(out, "hidden thread #") {
+		t.Fatalf("thread hide: exit %d\n%s", code, out)
+	}
+	code, out, _ = run(t, o, "discussion", "comment", "unhide", itoa(id), "--thread", itoa(tid))
+	if code != ExitOK || !strings.Contains(out, "unhidden thread #") {
+		t.Fatalf("thread unhide: exit %d\n%s", code, out)
+	}
+	code, out, _ = run(t, o, "discussion", "comment", "delete", itoa(id), "--thread", itoa(tid))
+	if code != ExitOK || !strings.Contains(out, "deleted thread #") {
+		t.Fatalf("thread delete: exit %d\n%s", code, out)
+	}
+}

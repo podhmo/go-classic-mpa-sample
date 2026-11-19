@@ -313,6 +313,60 @@ func (f *fakeStore) CreateComment(_ context.Context, issueID int64, body string,
 	return c.ID, nil
 }
 
+// The moderation trio mirrors the real store's contract: ErrNotFound
+// when the (issue, comment) chain does not resolve; an edit stamps
+// EditedAt only on a real change; hide/unhide never bumps updated_at.
+func (f *fakeStore) UpdateComment(_ context.Context, issueID, commentID int64, body string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, ok := f.issues[issueID]; !ok {
+		return store.ErrNotFound
+	}
+	c := findComment(f.comments[issueID], commentID)
+	if c == nil {
+		return store.ErrNotFound
+	}
+	if c.Body != body {
+		c.Body = body
+		c.EditedAt = time.Now()
+	}
+	return nil
+}
+
+func (f *fakeStore) DeleteComment(_ context.Context, issueID, commentID int64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, ok := f.issues[issueID]; !ok {
+		return store.ErrNotFound
+	}
+	src := f.comments[issueID]
+	for i, c := range src {
+		if c.ID == commentID {
+			f.comments[issueID] = append(src[:i:i], src[i+1:]...)
+			return nil
+		}
+	}
+	return store.ErrNotFound
+}
+
+func (f *fakeStore) SetCommentHidden(_ context.Context, issueID, commentID int64, reason string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, ok := f.issues[issueID]; !ok {
+		return store.ErrNotFound
+	}
+	c := findComment(f.comments[issueID], commentID)
+	if c == nil {
+		return store.ErrNotFound
+	}
+	if reason != "" && !store.ValidHideReason(reason) {
+		return store.ErrInvalidHideReason
+	}
+	c.Hidden = reason != ""
+	c.HiddenReason = reason
+	return nil
+}
+
 func (f *fakeStore) ListLabels(_ context.Context, wsID int64, kind string) ([]*store.Label, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -681,6 +735,127 @@ func (f *fakeStore) SetThreadAnswer(_ context.Context, discussionID, threadID in
 	}
 	d.UpdatedAt = time.Now()
 	return nil
+}
+
+// Discussion-side moderation, same contract as the issue-comment trio:
+// ErrNotFound when the (discussion, thread[, reply]) chain does not
+// resolve. A deleted thread drops its replies along — the real schema
+// cascades them.
+func (f *fakeStore) UpdateDiscussionThread(_ context.Context, discussionID, threadID int64, body string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, ok := f.discussions[discussionID]; !ok {
+		return store.ErrNotFound
+	}
+	t := findThread(f.dthreads[discussionID], threadID)
+	if t == nil {
+		return store.ErrNotFound
+	}
+	if t.Body != body {
+		t.Body = body
+		t.EditedAt = time.Now()
+	}
+	return nil
+}
+
+func (f *fakeStore) DeleteDiscussionThread(_ context.Context, discussionID, threadID int64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, ok := f.discussions[discussionID]; !ok {
+		return store.ErrNotFound
+	}
+	src := f.dthreads[discussionID]
+	for i, t := range src {
+		if t.ID == threadID {
+			f.dthreads[discussionID] = append(src[:i:i], src[i+1:]...)
+			return nil
+		}
+	}
+	return store.ErrNotFound
+}
+
+func (f *fakeStore) SetDiscussionThreadHidden(_ context.Context, discussionID, threadID int64, reason string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, ok := f.discussions[discussionID]; !ok {
+		return store.ErrNotFound
+	}
+	t := findThread(f.dthreads[discussionID], threadID)
+	if t == nil {
+		return store.ErrNotFound
+	}
+	if reason != "" && !store.ValidHideReason(reason) {
+		return store.ErrInvalidHideReason
+	}
+	t.Hidden = reason != ""
+	t.HiddenReason = reason
+	return nil
+}
+
+func (f *fakeStore) UpdateDiscussionComment(_ context.Context, discussionID, threadID, commentID int64, body string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	t, err := f.lockedThread(discussionID, threadID)
+	if err != nil {
+		return err
+	}
+	c := findReply(t, commentID)
+	if c == nil {
+		return store.ErrNotFound
+	}
+	if c.Body != body {
+		c.Body = body
+		c.EditedAt = time.Now()
+	}
+	return nil
+}
+
+func (f *fakeStore) DeleteDiscussionComment(_ context.Context, discussionID, threadID, commentID int64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	t, err := f.lockedThread(discussionID, threadID)
+	if err != nil {
+		return err
+	}
+	for i, c := range t.Comments {
+		if c.ID == commentID {
+			t.Comments = append(t.Comments[:i:i], t.Comments[i+1:]...)
+			return nil
+		}
+	}
+	return store.ErrNotFound
+}
+
+func (f *fakeStore) SetDiscussionCommentHidden(_ context.Context, discussionID, threadID, commentID int64, reason string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	t, err := f.lockedThread(discussionID, threadID)
+	if err != nil {
+		return err
+	}
+	c := findReply(t, commentID)
+	if c == nil {
+		return store.ErrNotFound
+	}
+	if reason != "" && !store.ValidHideReason(reason) {
+		return store.ErrInvalidHideReason
+	}
+	c.Hidden = reason != ""
+	c.HiddenReason = reason
+	return nil
+}
+
+// lockedThread resolves the (discussion, thread) pair for the reply
+// methods — callers hold f.mu.
+func (f *fakeStore) lockedThread(discussionID, threadID int64) (*store.DiscussionThread, error) {
+	if _, ok := f.discussions[discussionID]; !ok {
+		return nil, store.ErrNotFound
+	}
+	t := findThread(f.dthreads[discussionID], threadID)
+	if t == nil {
+		return nil, store.ErrNotFound
+	}
+	return t, nil
 }
 
 func (f *fakeStore) ListDiscussionCategories(_ context.Context) ([]*store.DiscussionCategory, error) {

@@ -247,7 +247,7 @@ func TestHelp(t *testing.T) {
 		{[]string{"label", "--help"}, "usage: zatu label <action>"},
 		{[]string{"auth", "--help"}, "usage: zatu auth token"},
 		{[]string{"workspace", "--help"}, "usage: zatu workspace <action>"},
-		{[]string{"discussion", "comment", "--help"}, "usage: zatu discussion comment create"},
+		{[]string{"discussion", "comment", "--help"}, "usage: zatu discussion comment <action>"},
 	} {
 		code, out, _ := run(t, o, tc.args...)
 		if code != ExitOK || !strings.Contains(out, tc.want) {
@@ -496,5 +496,61 @@ func TestTemplateAndNoColor(t *testing.T) {
 	}
 	if code, _, _ := run(t, o, "issue", "list", "--template", "{{."); code != ExitUsage {
 		t.Fatalf("bad template: want %d got %d", ExitUsage, code)
+	}
+}
+
+// Comment moderation verbs on issue comments: edit/delete/hide/unhide
+// with reason validation and the unhide --reason guard.
+func TestCommentModerationLocal(t *testing.T) {
+	db := t.TempDir() + "/test.db"
+	id := seedIssue(t, db, "moderate me")
+	o := localOptions(t, db)
+
+	code, out, _ := run(t, o, "comment", "create", itoa(id), "--body", "first")
+	if code != ExitOK || !strings.Contains(out, "created comment #1") {
+		t.Fatalf("create: exit %d\n%s", code, out)
+	}
+
+	code, out, _ = run(t, o, "comment", "edit", itoa(id), "1", "--body", "revised")
+	if code != ExitOK || !strings.Contains(out, "updated comment #1") {
+		t.Fatalf("edit: exit %d\n%s", code, out)
+	}
+	code, out, _ = run(t, o, "issue", "view", itoa(id), "--comments")
+	if code != ExitOK || !strings.Contains(out, "revised") || !strings.Contains(out, "[edited]") {
+		t.Fatalf("view after edit:\n%s", out)
+	}
+
+	// Reason validation: missing and unknown reasons are usage errors.
+	for _, args := range [][]string{
+		{"comment", "hide", itoa(id), "1"},
+		{"comment", "hide", itoa(id), "1", "--reason", "bogus"},
+		{"comment", "unhide", itoa(id), "1", "--reason", "spam"},
+	} {
+		if code, _, _ := run(t, o, args...); code != ExitUsage {
+			t.Fatalf("args %v: want exit %d, got %d", args, ExitUsage, code)
+		}
+	}
+
+	code, out, _ = run(t, o, "comment", "hide", itoa(id), "1", "--reason", "spam")
+	if code != ExitOK || !strings.Contains(out, "hidden comment #1") {
+		t.Fatalf("hide: exit %d\n%s", code, out)
+	}
+	code, out, _ = run(t, o, "issue", "view", itoa(id), "--comments")
+	if code != ExitOK || !strings.Contains(out, "[hidden: spam]") {
+		t.Fatalf("view after hide:\n%s", out)
+	}
+
+	code, out, _ = run(t, o, "comment", "unhide", itoa(id), "1")
+	if code != ExitOK || !strings.Contains(out, "unhidden comment #1") {
+		t.Fatalf("unhide: exit %d\n%s", code, out)
+	}
+
+	code, out, _ = run(t, o, "comment", "delete", itoa(id), "1")
+	if code != ExitOK || !strings.Contains(out, "deleted comment #1") {
+		t.Fatalf("delete: exit %d\n%s", code, out)
+	}
+	code, out, _ = run(t, o, "issue", "view", itoa(id), "--comments")
+	if strings.Contains(out, "revised") {
+		t.Fatalf("deleted comment still shows:\n%s", out)
 	}
 }

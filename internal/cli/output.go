@@ -62,10 +62,35 @@ func commentViews(cs []*store.Comment) []api.Comment {
 	for _, c := range cs {
 		out = append(out, api.Comment{
 			ID: c.ID, Body: c.Body, Author: userView(c.Author),
-			CreatedAt: c.CreatedAt.Format(time.RFC3339),
+			CreatedAt:  c.CreatedAt.Format(time.RFC3339),
+			Moderation: moderationView(c.Moderation),
 		})
 	}
 	return out
+}
+
+// moderationView maps a store moderation triple onto the api wire
+// shape so --json output matches /api/v1 verbatim.
+func moderationView(m store.Moderation) api.Moderation {
+	out := api.Moderation{Hidden: m.Hidden, HiddenReason: m.HiddenReason}
+	if m.Edited() {
+		s := m.EditedAt.Format(time.RFC3339)
+		out.EditedAt = &s
+	}
+	return out
+}
+
+// moderationMarks renders the trailing "[edited]"/"[hidden: reason]"
+// markers on a post's header line in text output.
+func moderationMarks(m store.Moderation) string {
+	var s string
+	if m.Edited() {
+		s += " [edited]"
+	}
+	if m.Hidden {
+		s += " [hidden: " + m.HiddenReason + "]"
+	}
+	return s
 }
 
 func labelView(l store.Label) api.Label {
@@ -134,8 +159,9 @@ func discussionThreadViews(ts []*store.DiscussionThread) []api.DiscussionThread 
 func discussionThreadView(t *store.DiscussionThread) api.DiscussionThread {
 	out := api.DiscussionThread{
 		ID: t.ID, IsAnswer: t.IsAnswer, Body: t.Body,
-		Author:    userView(t.Author),
-		CreatedAt: t.CreatedAt.Format(time.RFC3339),
+		Author:     userView(t.Author),
+		CreatedAt:  t.CreatedAt.Format(time.RFC3339),
+		Moderation: moderationView(t.Moderation),
 	}
 	for _, c := range t.Comments {
 		out.Comments = append(out.Comments, discussionCommentView(c))
@@ -146,8 +172,9 @@ func discussionThreadView(t *store.DiscussionThread) api.DiscussionThread {
 func discussionCommentView(c *store.DiscussionComment) api.DiscussionComment {
 	return api.DiscussionComment{
 		ID: c.ID, Body: c.Body,
-		Author:    userView(c.Author),
-		CreatedAt: c.CreatedAt.Format(time.RFC3339),
+		Author:     userView(c.Author),
+		CreatedAt:  c.CreatedAt.Format(time.RFC3339),
+		Moderation: moderationView(c.Moderation),
 	}
 }
 

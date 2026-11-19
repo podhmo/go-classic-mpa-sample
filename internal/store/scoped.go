@@ -106,6 +106,31 @@ func (sc *ScopedStore) CreateComment(ctx context.Context, issueID int64, body st
 	return sc.s.CreateComment(ctx, issueID, body, authorID)
 }
 
+// Comment moderation passes through after the issue scope check — the
+// store methods then confine the row to that issue id, so a comment of
+// another issue answers ErrNotFound.
+
+func (sc *ScopedStore) UpdateComment(ctx context.Context, issueID, commentID int64, body string) error {
+	if err := sc.inScope(ctx, issueID); err != nil {
+		return err
+	}
+	return sc.s.UpdateComment(ctx, issueID, commentID, body)
+}
+
+func (sc *ScopedStore) DeleteComment(ctx context.Context, issueID, commentID int64) error {
+	if err := sc.inScope(ctx, issueID); err != nil {
+		return err
+	}
+	return sc.s.DeleteComment(ctx, issueID, commentID)
+}
+
+func (sc *ScopedStore) SetCommentHidden(ctx context.Context, issueID, commentID int64, reason string) error {
+	if err := sc.inScope(ctx, issueID); err != nil {
+		return err
+	}
+	return sc.s.SetCommentHidden(ctx, issueID, commentID, reason)
+}
+
 // ListLabels returns the labels of kind visible in this workspace: master
 // rows plus its own. Kind is ""-safe — pass KindLabelIssue/Discussion.
 func (sc *ScopedStore) ListLabels(ctx context.Context, kind string) ([]*Label, error) {
@@ -224,6 +249,52 @@ func (sc *ScopedStore) SetThreadAnswer(ctx context.Context, discussionID, thread
 		return err
 	}
 	return sc.s.SetThreadAnswer(ctx, discussionID, threadID, answer)
+}
+
+// Thread and reply moderation passes through after the discussion scope
+// check; the store methods additionally verify the discussion→thread→
+// reply chain, so mismatched ids answer ErrNotFound.
+
+func (sc *ScopedStore) UpdateDiscussionThread(ctx context.Context, discussionID, threadID int64, body string) error {
+	if err := sc.inScopeDiscussion(ctx, discussionID); err != nil {
+		return err
+	}
+	return sc.s.UpdateDiscussionThread(ctx, discussionID, threadID, body)
+}
+
+func (sc *ScopedStore) DeleteDiscussionThread(ctx context.Context, discussionID, threadID int64) error {
+	if err := sc.inScopeDiscussion(ctx, discussionID); err != nil {
+		return err
+	}
+	return sc.s.DeleteDiscussionThread(ctx, discussionID, threadID)
+}
+
+func (sc *ScopedStore) SetDiscussionThreadHidden(ctx context.Context, discussionID, threadID int64, reason string) error {
+	if err := sc.inScopeDiscussion(ctx, discussionID); err != nil {
+		return err
+	}
+	return sc.s.SetDiscussionThreadHidden(ctx, discussionID, threadID, reason)
+}
+
+func (sc *ScopedStore) UpdateDiscussionComment(ctx context.Context, discussionID, threadID, commentID int64, body string) error {
+	if err := sc.inScopeDiscussion(ctx, discussionID); err != nil {
+		return err
+	}
+	return sc.s.UpdateDiscussionComment(ctx, discussionID, threadID, commentID, body)
+}
+
+func (sc *ScopedStore) DeleteDiscussionComment(ctx context.Context, discussionID, threadID, commentID int64) error {
+	if err := sc.inScopeDiscussion(ctx, discussionID); err != nil {
+		return err
+	}
+	return sc.s.DeleteDiscussionComment(ctx, discussionID, threadID, commentID)
+}
+
+func (sc *ScopedStore) SetDiscussionCommentHidden(ctx context.Context, discussionID, threadID, commentID int64, reason string) error {
+	if err := sc.inScopeDiscussion(ctx, discussionID); err != nil {
+		return err
+	}
+	return sc.s.SetDiscussionCommentHidden(ctx, discussionID, threadID, commentID, reason)
 }
 
 func (sc *ScopedStore) ListDiscussionCategories(ctx context.Context) ([]*DiscussionCategory, error) {

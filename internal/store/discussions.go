@@ -1,5 +1,5 @@
-// Discussions: GitHub Discussions-style open conversations (schema version
-// 5, see migrations in store.go). Unlike issues, discussions never close —
+// Discussions: GitHub Discussions-style open conversations (see migrations
+// in store.go). Unlike issues, discussions never close —
 // a Q&A-category discussion reports "answered" through a marked thread
 // instead. A discussion holds threads; a thread is its opening post plus
 // a flat list of comment replies. Design: docs/sketch/ja/discussions.md
@@ -71,6 +71,7 @@ type DiscussionThread struct {
 	CreatedAt    time.Time
 	Author       *User // nil for an anonymous post
 	Comments     []*DiscussionComment
+	Moderation
 }
 
 // DiscussionComment is a reply inside a thread.
@@ -80,6 +81,7 @@ type DiscussionComment struct {
 	Body      string
 	CreatedAt time.Time
 	Author    *User // nil for an anonymous post
+	Moderation
 }
 
 // DiscussionInput carries validated form values for create/update.
@@ -414,6 +416,7 @@ func (s *Store) DeleteDiscussion(ctx context.Context, id int64) error {
 func (s *Store) ListDiscussionThreads(ctx context.Context, discussionID int64) ([]*DiscussionThread, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT t.id, t.discussion_id, t.is_answer, t.body, t.created_at,
+			t.edited_at, t.hidden_at, t.hidden_reason,
 			u.id, u.name, u.created_at
 			FROM discussion_threads t LEFT JOIN users u ON u.id = t.author_id
 			WHERE t.discussion_id = ? ORDER BY t.created_at ASC, t.id ASC`,
@@ -442,6 +445,7 @@ func (s *Store) ListDiscussionThreads(ctx context.Context, discussionID int64) (
 
 	replies, err := s.db.QueryContext(ctx,
 		`SELECT c.id, c.thread_id, c.body, c.created_at,
+			c.edited_at, c.hidden_at, c.hidden_reason,
 			u.id, u.name, u.created_at
 			FROM discussion_comments c LEFT JOIN users u ON u.id = c.author_id
 			WHERE c.thread_id IN (SELECT id FROM discussion_threads WHERE discussion_id = ?)
@@ -658,14 +662,17 @@ func scanDiscussion(s scanner) (*Discussion, error) {
 func scanDiscussionThread(s scanner) (*DiscussionThread, error) {
 	var t DiscussionThread
 	var ts int64
+	var ed, hid sql.NullInt64
+	var reason sql.NullString
 	var aid sql.NullInt64
 	var aname sql.NullString
 	var acreated sql.NullInt64
 	if err := s.Scan(&t.ID, &t.DiscussionID, &t.IsAnswer, &t.Body, &ts,
-		&aid, &aname, &acreated); err != nil {
+		&ed, &hid, &reason, &aid, &aname, &acreated); err != nil {
 		return nil, err
 	}
 	t.CreatedAt = time.Unix(ts, 0).UTC()
+	t.Moderation = scanModeration(ed, hid, reason)
 	t.Author = scanUser(aid, aname, acreated)
 	return &t, nil
 }
@@ -673,14 +680,17 @@ func scanDiscussionThread(s scanner) (*DiscussionThread, error) {
 func scanDiscussionComment(s scanner) (*DiscussionComment, error) {
 	var c DiscussionComment
 	var ts int64
+	var ed, hid sql.NullInt64
+	var reason sql.NullString
 	var aid sql.NullInt64
 	var aname sql.NullString
 	var acreated sql.NullInt64
 	if err := s.Scan(&c.ID, &c.ThreadID, &c.Body, &ts,
-		&aid, &aname, &acreated); err != nil {
+		&ed, &hid, &reason, &aid, &aname, &acreated); err != nil {
 		return nil, err
 	}
 	c.CreatedAt = time.Unix(ts, 0).UTC()
+	c.Moderation = scanModeration(ed, hid, reason)
 	c.Author = scanUser(aid, aname, acreated)
 	return &c, nil
 }

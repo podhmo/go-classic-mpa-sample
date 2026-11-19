@@ -21,7 +21,7 @@ actions:
   create     start a discussion: --title T --category SLUG [--body B|--body-file -] [-w]
   edit       update a discussion: N [--title T] [--body B] [--category SLUG] [--label L]...
   delete     delete a discussion: N
-  comment    reply on a discussion: comment create N --body B [--thread T]
+  comment    thread/reply commands: create|edit|delete|hide|unhide
   answer     mark the answer thread: answer N --thread T [--unmark]
   categories list discussion categories (slugs for --category)
 
@@ -209,14 +209,14 @@ func printDiscussionThread(o Options, t *store.DiscussionThread, indent string) 
 	if t.IsAnswer {
 		answer = " " + o.paint("32", "[answer]")
 	}
-	fmt.Fprintf(o.Stdout, "%s#%d %s (%s)%s\n%s  %s\n",
-		indent, t.ID, authorName(t.Author), fmtTimeShort(t.CreatedAt), answer,
+	fmt.Fprintf(o.Stdout, "%s#%d %s (%s)%s%s\n%s  %s\n",
+		indent, t.ID, authorName(t.Author), fmtTimeShort(t.CreatedAt), answer, moderationMarks(t.Moderation),
 		indent, strings.ReplaceAll(t.Body, "\n", "\n"+indent+"  "))
 }
 
 func printDiscussionComment(o Options, c *store.DiscussionComment, indent string) {
-	fmt.Fprintf(o.Stdout, "%s#%d %s (%s)\n%s  %s\n",
-		indent, c.ID, authorName(c.Author), fmtTimeShort(c.CreatedAt),
+	fmt.Fprintf(o.Stdout, "%s#%d %s (%s)%s\n%s  %s\n",
+		indent, c.ID, authorName(c.Author), fmtTimeShort(c.CreatedAt), moderationMarks(c.Moderation),
 		indent, strings.ReplaceAll(c.Body, "\n", "\n"+indent+"  "))
 }
 
@@ -376,21 +376,54 @@ func discussionDelete(ctx context.Context, o Options, args []string) error {
 	return nil
 }
 
-// zatu discussion comment create N --body B [--thread T]
+const discussionCommentUsage = `usage: zatu discussion comment <action> [flags]
+
+actions:
+  create   open a thread or reply: create N --body B [--thread T]
+  edit     edit a thread or reply: edit N --thread T [--comment C] --body B
+  delete   delete a thread or reply: delete N --thread T [--comment C]
+  hide     hide a thread or reply: hide N --thread T [--comment C] --reason R
+  unhide   restore a hidden thread or reply: unhide N --thread T [--comment C]
+
+--thread picks the thread; --comment picks a reply inside it (a thread's
+"comments" are its replies — the opening post is the thread itself).
+
+"zatu discussion comment <action> --help" shows an action's flags.
+`
+
+// zatu discussion comment create|edit|delete|hide|unhide
 func discussionCommentCmd(ctx context.Context, o Options, args []string) error {
 	if len(args) > 0 && isHelpArg(args[0]) {
-		fmt.Fprint(o.Stdout, "usage: zatu discussion comment create N --body B [--thread T]\n\n\"zatu discussion comment create --help\" shows the flags.\n")
+		fmt.Fprint(o.Stdout, discussionCommentUsage)
 		return nil
 	}
-	if len(args) == 0 || args[0] != "create" {
-		return usageError{msg: "usage: zatu discussion comment create N --body B [--thread T]"}
+	if len(args) == 0 {
+		return usageError{msg: "usage: zatu discussion comment create|edit|delete|hide|unhide"}
 	}
+	switch args[0] {
+	case "create":
+		return discussionCommentCreate(ctx, o, args[1:])
+	case "edit":
+		return discussionCommentEdit(ctx, o, args[1:])
+	case "delete":
+		return discussionCommentDelete(ctx, o, args[1:])
+	case "hide":
+		return discussionCommentHide(ctx, o, args[1:], true)
+	case "unhide":
+		return discussionCommentHide(ctx, o, args[1:], false)
+	default:
+		return usageError{msg: fmt.Sprintf("unknown discussion comment command %q", args[0])}
+	}
+}
+
+// zatu discussion comment create N --body B [--thread T]
+func discussionCommentCreate(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("discussion comment create", flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
 	body := fs.String("body", "", "comment body")
 	bodyFile := fs.String("body-file", "", "read body from file (- for stdin)")
 	thread := fs.Int64("thread", 0, "reply to this thread")
-	rest, err := o.parseLeaf(fs, "N --body B", args[1:], 1)
+	rest, err := o.parseLeaf(fs, "N --body B", args, 1)
 	if err != nil {
 		return err
 	}
@@ -398,16 +431,12 @@ func discussionCommentCmd(ctx context.Context, o Options, args []string) error {
 	if err != nil {
 		return err
 	}
-	bodyText, err := o.readBody(*body, *bodyFile)
+	if *thread < 0 {
+		return usageError{msg: "--thread must be a positive id"}
+	}
+	bodyText, err := o.readCommentBody(*body, *bodyFile)
 	if err != nil {
 		return err
-	}
-	bodyText = strings.TrimSpace(bodyText)
-	if msg := store.ValidateCommentBody(bodyText); msg != "" {
-		if bodyText == "" {
-			return usageError{msg: "--body is required (or --body-file)"}
-		}
-		return fmt.Errorf("invalid comment: %s", msg)
 	}
 	b, closer, err := o.backend(ctx, bf)
 	if err != nil {
@@ -428,6 +457,138 @@ func discussionCommentCmd(ctx context.Context, o Options, args []string) error {
 		fmt.Fprintf(o.Stdout, "created reply #%d on thread #%d of discussion #%d\n", cid, *thread, id)
 	} else {
 		fmt.Fprintf(o.Stdout, "created thread #%d on discussion #%d\n", cid, id)
+	}
+	return nil
+}
+
+// discussionPostTarget parses the flags every thread/reply leaf shares:
+// the discussion number N, --thread T (required), and --comment C which
+// switches the target from the thread itself to one of its replies.
+func discussionPostTarget(fs *flag.FlagSet, o Options, hint string, args []string) (id, tid, cid int64, bf *backendFlags, err error) {
+	bf = o.addBackendFlags(fs)
+	tidf := fs.Int64("thread", 0, "thread id (required)")
+	cidf := fs.Int64("comment", 0, "reply id under --thread (omit to target the thread itself)")
+	rest, err := o.parseLeaf(fs, hint, args, 1)
+	if err != nil {
+		return 0, 0, 0, nil, err
+	}
+	id, err = argNumber(rest, 0, "discussion")
+	if err != nil {
+		return 0, 0, 0, nil, err
+	}
+	if *tidf < 1 {
+		return 0, 0, 0, nil, usageError{msg: "--thread is required"}
+	}
+	if *cidf < 0 {
+		return 0, 0, 0, nil, usageError{msg: "--comment must be a positive id"}
+	}
+	return id, *tidf, *cidf, bf, nil
+}
+
+// zatu discussion comment edit N --thread T [--comment C] --body B
+func discussionCommentEdit(ctx context.Context, o Options, args []string) error {
+	fs := flag.NewFlagSet("discussion comment edit", flag.ContinueOnError)
+	body := fs.String("body", "", "new body")
+	bodyFile := fs.String("body-file", "", "read body from file (- for stdin)")
+	id, tid, cid, bf, err := discussionPostTarget(fs, o, "N --thread T [--comment C] --body B", args)
+	if err != nil {
+		return err
+	}
+	bodyText, err := o.readCommentBody(*body, *bodyFile)
+	if err != nil {
+		return err
+	}
+	b, closer, err := o.backend(ctx, bf)
+	if err != nil {
+		return err
+	}
+	defer closeQuietly(closer)
+
+	if cid != 0 {
+		if err := b.UpdateDiscussionComment(ctx, id, tid, cid, bodyText); err != nil {
+			return err
+		}
+		fmt.Fprintf(o.Stdout, "updated reply #%d on thread #%d of discussion #%d\n", cid, tid, id)
+	} else {
+		if err := b.UpdateDiscussionThread(ctx, id, tid, bodyText); err != nil {
+			return err
+		}
+		fmt.Fprintf(o.Stdout, "updated thread #%d on discussion #%d\n", tid, id)
+	}
+	return nil
+}
+
+// zatu discussion comment delete N --thread T [--comment C]
+func discussionCommentDelete(ctx context.Context, o Options, args []string) error {
+	fs := flag.NewFlagSet("discussion comment delete", flag.ContinueOnError)
+	id, tid, cid, bf, err := discussionPostTarget(fs, o, "N --thread T [--comment C]", args)
+	if err != nil {
+		return err
+	}
+	b, closer, err := o.backend(ctx, bf)
+	if err != nil {
+		return err
+	}
+	defer closeQuietly(closer)
+
+	if cid != 0 {
+		if err := b.DeleteDiscussionComment(ctx, id, tid, cid); err != nil {
+			return err
+		}
+		fmt.Fprintf(o.Stdout, "deleted reply #%d on thread #%d of discussion #%d\n", cid, tid, id)
+	} else {
+		if err := b.DeleteDiscussionThread(ctx, id, tid); err != nil {
+			return err
+		}
+		fmt.Fprintf(o.Stdout, "deleted thread #%d on discussion #%d (replies removed)\n", tid, id)
+	}
+	return nil
+}
+
+// zatu discussion comment hide|unhide N --thread T [--comment C] [--reason R]
+func discussionCommentHide(ctx context.Context, o Options, args []string, hide bool) error {
+	name := "discussion comment hide"
+	if !hide {
+		name = "discussion comment unhide"
+	}
+	fs := flag.NewFlagSet(name, flag.ContinueOnError)
+	reason := ""
+	hint := "N --thread T [--comment C]"
+	if hide {
+		fs.StringVar(&reason, "reason", "", "hide reason: "+strings.Join(store.HideReasons, "|"))
+		hint = "N --thread T [--comment C] --reason R"
+	}
+	id, tid, cid, bf, err := discussionPostTarget(fs, o, hint, args)
+	if err != nil {
+		return err
+	}
+	if hide && !store.ValidHideReason(reason) {
+		return usageError{msg: "--reason is required: " + strings.Join(store.HideReasons, ", ")}
+	}
+	b, closer, err := o.backend(ctx, bf)
+	if err != nil {
+		return err
+	}
+	defer closeQuietly(closer)
+
+	if cid != 0 {
+		if err := b.SetDiscussionCommentHidden(ctx, id, tid, cid, reason); err != nil {
+			return err
+		}
+		if hide {
+			fmt.Fprintf(o.Stdout, "hidden reply #%d on thread #%d of discussion #%d (%s)\n", cid, tid, id, reason)
+		} else {
+			fmt.Fprintf(o.Stdout, "unhidden reply #%d on thread #%d of discussion #%d\n", cid, tid, id)
+		}
+	} else {
+		if err := b.SetDiscussionThreadHidden(ctx, id, tid, reason); err != nil {
+			return err
+		}
+		if hide {
+			fmt.Fprintf(o.Stdout, "hidden thread #%d on discussion #%d (%s)\n", tid, id, reason)
+		} else {
+			fmt.Fprintf(o.Stdout, "unhidden thread #%d on discussion #%d\n", tid, id)
+		}
 	}
 	return nil
 }
