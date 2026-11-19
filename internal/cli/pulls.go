@@ -195,12 +195,11 @@ func prList(ctx context.Context, o Options, args []string) error {
 	if *sort != "newest" && *sort != "oldest" {
 		return usageError{msg: fmt.Sprintf("--sort must be newest|oldest, got %q", *sort)}
 	}
-	b, closer, err := o.backend(ctx, bf)
+	b, closer, _, _, err := o.prEnv(ctx, bf, *repoF)
 	if err != nil {
 		return err
 	}
 	defer closeQuietly(closer)
-	_ = repoF
 	pulls, _, err := b.ListPullRequests(ctx, store.PRListFilter{
 		Status: *state, Query: strings.TrimSpace(*query), Sort: *sort,
 		Page: *page, PerPage: *limit,
@@ -232,6 +231,9 @@ func prView(ctx context.Context, o Options, args []string) error {
 	rest, err := o.parseLeaf(fs, "N", args, 1)
 	if err != nil {
 		return err
+	}
+	if len(rest) == 0 {
+		return usageError{msg: "N is required"}
 	}
 	if *jsonFields != "" && *tmpl != "" {
 		return usageError{msg: "--json and --template are mutually exclusive"}
@@ -283,6 +285,14 @@ func prView(ctx context.Context, o Options, args []string) error {
 			return err
 		}
 		m["comments"] = prCommentViews(v.Comments)
+		if len(v.Commits) > 0 {
+			cs := make([]api.PRCommit, 0, len(v.Commits))
+			for _, c := range v.Commits {
+				cs = append(cs, api.PRCommit{SHA: c.SHA, Subject: c.Subject,
+					Author: c.Author, Date: c.Date.UTC().Format("2006-01-02T15:04:05Z07:00")})
+			}
+			m["commits"] = cs
+		}
 		if v.Mergeable != "" {
 			m["mergeable"] = v.Mergeable
 		}
@@ -337,6 +347,9 @@ func prDiff(ctx context.Context, o Options, args []string) error {
 	if err != nil {
 		return err
 	}
+	if len(rest) == 0 {
+		return usageError{msg: "N is required"}
+	}
 	id, err := strconv.ParseInt(rest[0], 10, 64)
 	if err != nil || id < 1 {
 		return usageError{msg: fmt.Sprintf("invalid pull request id %q", rest[0])}
@@ -365,6 +378,12 @@ func prDiff(ctx context.Context, o Options, args []string) error {
 		}
 	} else {
 		from, to = pr.MergeBaseSHA, pr.HeadSHA
+		if from == "" {
+			from = pr.BaseRef
+		}
+		if to == "" {
+			to = gitrepo.PinRef(pr.ID)
+		}
 	}
 	diff, _, err := repo.Diff(ctx, from, to)
 	if err != nil {
@@ -450,7 +469,7 @@ func prCreate(ctx context.Context, o Options, args []string) error {
 // zatu pr edit N [--title T] [--body B|--body-file F]
 func prEdit(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("pr edit", flag.ContinueOnError)
-	bf, _ := o.addPRFlags(fs)
+	bf, repoF := o.addPRFlags(fs)
 	title := fs.String("title", "", "new title")
 	body := fs.String("body", "", "new body")
 	bodyFile := fs.String("body-file", "", "read body from file (- for stdin)")
@@ -458,11 +477,14 @@ func prEdit(ctx context.Context, o Options, args []string) error {
 	if err != nil {
 		return err
 	}
+	if len(rest) == 0 {
+		return usageError{msg: "N is required"}
+	}
 	id, err := strconv.ParseInt(rest[0], 10, 64)
 	if err != nil || id < 1 {
 		return usageError{msg: fmt.Sprintf("invalid pull request id %q", rest[0])}
 	}
-	b, closer, err := o.backend(ctx, bf)
+	b, closer, _, _, err := o.prEnv(ctx, bf, *repoF)
 	if err != nil {
 		return err
 	}
@@ -476,7 +498,13 @@ func prEdit(ctx context.Context, o Options, args []string) error {
 	if *title != "" {
 		in.Title = *title
 	}
-	if *body != "" || *bodyFile != "" {
+	bodySet := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "body" || f.Name == "body-file" {
+			bodySet = true
+		}
+	})
+	if bodySet {
 		if in.Body, err = o.readBody(*body, *bodyFile); err != nil {
 			return err
 		}
@@ -495,6 +523,9 @@ func prStateChange(ctx context.Context, o Options, action string, args []string)
 	rest, err := o.parseLeaf(fs, "N", args, 1)
 	if err != nil {
 		return err
+	}
+	if len(rest) == 0 {
+		return usageError{msg: "N is required"}
 	}
 	id, err := strconv.ParseInt(rest[0], 10, 64)
 	if err != nil || id < 1 {
@@ -613,6 +644,17 @@ func prCommentCmd(ctx context.Context, o Options, args []string) error {
 	if len(args) == 0 {
 		return usageError{msg: "usage: zatu pr comment create|edit|delete|hide|unhide"}
 	}
+	if isHelpArg(args[0]) {
+		fmt.Fprint(o.Stdout, `zatu pr comment — comments and review comments on a pull request
+
+  create  N --body B|--body-file F [--path P --line L [--side left]]
+  edit    N COMMENT_ID --body B|--body-file F
+  delete  N COMMENT_ID
+  hide    N COMMENT_ID --reason spam|abuse|off-topic|outdated|duplicate|resolved|low-quality
+  unhide  N COMMENT_ID
+`)
+		return nil
+	}
 	switch args[0] {
 	case "create":
 		return prCommentCreate(ctx, o, args[1:])
@@ -640,6 +682,9 @@ func prCommentCreate(ctx context.Context, o Options, args []string) error {
 	if err != nil {
 		return err
 	}
+	if len(rest) == 0 {
+		return usageError{msg: "N is required"}
+	}
 	id, err := strconv.ParseInt(rest[0], 10, 64)
 	if err != nil || id < 1 {
 		return usageError{msg: fmt.Sprintf("invalid pull request id %q", rest[0])}
@@ -653,6 +698,9 @@ func prCommentCreate(ctx context.Context, o Options, args []string) error {
 	text, err := o.readBody(*body, *bodyFile)
 	if err != nil {
 		return err
+	}
+	if msg := store.ValidateCommentBody(strings.TrimSpace(text)); msg != "" {
+		return usageError{msg: "body: " + msg}
 	}
 	b, closer, repo, rc, err := o.prEnv(ctx, bf, *repoF)
 	if err != nil {
@@ -706,12 +754,15 @@ func prCommentCreate(ctx context.Context, o Options, args []string) error {
 // zatu pr comment edit PR_ID COMMENT_ID --body B
 func prCommentEdit(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("pr comment edit", flag.ContinueOnError)
-	bf, _ := o.addPRFlags(fs)
+	bf, repoF := o.addPRFlags(fs)
 	body := fs.String("body", "", "new body")
 	bodyFile := fs.String("body-file", "", "read body from file (- for stdin)")
 	rest, err := o.parseLeaf(fs, "PR_ID COMMENT_ID", args, 2)
 	if err != nil {
 		return err
+	}
+	if len(rest) < 2 {
+		return usageError{msg: "PR_ID and COMMENT_ID are required"}
 	}
 	prID, cid, err := twoIDs(rest)
 	if err != nil {
@@ -721,7 +772,10 @@ func prCommentEdit(ctx context.Context, o Options, args []string) error {
 	if err != nil {
 		return err
 	}
-	b, closer, err := o.backend(ctx, bf)
+	if msg := store.ValidateCommentBody(strings.TrimSpace(text)); msg != "" {
+		return usageError{msg: "body: " + msg}
+	}
+	b, closer, _, _, err := o.prEnv(ctx, bf, *repoF)
 	if err != nil {
 		return err
 	}
@@ -735,16 +789,19 @@ func prCommentEdit(ctx context.Context, o Options, args []string) error {
 
 func prCommentDelete(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("pr comment delete", flag.ContinueOnError)
-	bf, _ := o.addPRFlags(fs)
+	bf, repoF := o.addPRFlags(fs)
 	rest, err := o.parseLeaf(fs, "PR_ID COMMENT_ID", args, 2)
 	if err != nil {
 		return err
+	}
+	if len(rest) < 2 {
+		return usageError{msg: "PR_ID and COMMENT_ID are required"}
 	}
 	prID, cid, err := twoIDs(rest)
 	if err != nil {
 		return err
 	}
-	b, closer, err := o.backend(ctx, bf)
+	b, closer, _, _, err := o.prEnv(ctx, bf, *repoF)
 	if err != nil {
 		return err
 	}
@@ -759,11 +816,14 @@ func prCommentDelete(ctx context.Context, o Options, args []string) error {
 // zatu pr comment hide PR_ID COMMENT_ID --reason R / unhide PR_ID COMMENT_ID
 func prCommentHide(ctx context.Context, o Options, action string, args []string) error {
 	fs := flag.NewFlagSet("pr comment "+action, flag.ContinueOnError)
-	bf, _ := o.addPRFlags(fs)
+	bf, repoF := o.addPRFlags(fs)
 	reason := fs.String("reason", "", "hide reason: "+strings.Join(store.HideReasons, "|"))
 	rest, err := o.parseLeaf(fs, "PR_ID COMMENT_ID", args, 2)
 	if err != nil {
 		return err
+	}
+	if len(rest) < 2 {
+		return usageError{msg: "PR_ID and COMMENT_ID are required"}
 	}
 	prID, cid, err := twoIDs(rest)
 	if err != nil {
@@ -776,7 +836,7 @@ func prCommentHide(ctx context.Context, o Options, action string, args []string)
 	} else {
 		*reason = ""
 	}
-	b, closer, err := o.backend(ctx, bf)
+	b, closer, _, _, err := o.prEnv(ctx, bf, *repoF)
 	if err != nil {
 		return err
 	}

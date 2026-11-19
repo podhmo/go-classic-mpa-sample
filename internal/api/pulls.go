@@ -437,6 +437,25 @@ func (h *handler) createPRComment(w http.ResponseWriter, r *http.Request) {
 		if side == "" {
 			side = "right"
 		}
+		// A review comment must anchor to a file the PR actually touches:
+		// accepting any repo path would let a token holder read unrelated
+		// files via the returned diff_snippet.
+		from, to := h.diffRange(r, pr)
+		changes, cherr := h.repo.ChangedFiles(ctx, from, to)
+		inDiff := false
+		if cherr == nil {
+			for _, c := range changes {
+				if c.NewPath == *in.Path || c.OldPath == *in.Path {
+					inDiff = true
+					break
+				}
+			}
+		}
+		if cherr != nil || !inDiff {
+			writeError(w, http.StatusUnprocessableEntity, "Validation failed.",
+				map[string]string{"path": "Path is not part of the pull request diff."})
+			return
+		}
 		input.Path, input.Line, input.Side = *in.Path, line, side
 		// Anchor + snippet rules mirror the HTML handler: the head tip
 		// while open (recorded sha once closed), the merge-base blob for

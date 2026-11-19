@@ -6,8 +6,8 @@ package api
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -165,6 +165,14 @@ func TestPullsAPI_CommentsAndStatus(t *testing.T) {
 	if rcc["anchor_sha"] == nil || rcc["anchor_sha"] == "" {
 		t.Fatalf("want anchor in review comment, got %v", rc)
 	}
+	// Anchoring to a file the PR does not touch is rejected — accepting it
+	// would leak arbitrary repo files through diff_snippet.
+	status, bad := do(t, srv, "POST", fmt.Sprintf("/api/v1/pulls/%d/comments", id),
+		`{"body":"foreign","path":"a.txt","line":1,"side":"right"}`)
+	if status != http.StatusUnprocessableEntity {
+		t.Fatalf("foreign-path anchor: got %d %v, want 422", status, bad)
+	}
+
 	cid := int64(c["id"].(float64))
 	status, _ = do(t, srv, "PATCH", fmt.Sprintf("/api/v1/pulls/%d/comments/%d", id, cid), `{"body":"edited"}`)
 	if status != http.StatusOK {
