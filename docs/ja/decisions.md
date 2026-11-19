@@ -633,3 +633,5 @@ podhmo からの改善要望（grid と story のリンク誤押・見た目・s
 - **コメント編集は未実装のまま**: store/web/API いずれもコメント update を持たないため、訂正は追記コメントで行う（gh でも他人のコメントは編集できず自然な型）。issue/discussion 本体の title/body は `edit` で訂正可能。
 - **`tools/demo-history.sh`**: zatu のみでリアルな開発履歴（7 issues・4 discussions・answer マーク・label 作成・edit による訂正）をリプレイする実行可能なリファレンス。`zatudan -db X init` で master data（discussion categories）を入れてから流す — 新規 DB は categories が無く `discussion create` が通らないため。
 - **検証**: `go test ./internal/cli` の `TestHelp`（全階層の exit 0 + usage 内容）、`go test ./...` / `go vet` / `gofmt` 全パス。実バイナリで全 --help 経路とスクリプトのリプレイを確認済み。
+
+追記（同日、2エージェント実使用テスト）: 環境変数と「`/tmp/zatu --help` で自分で学べ」という指示のみを与えた2つの新規エージェント（alice/bob、それぞれ別ユーザーの API token で投稿）が、コマンド不教示のまま issue への再現報告→typo の訂正追記→qa discussion 作成→回答→answer マークまで自律的に完遂した。つまずき点は「`comment edit` が存在しない（追記コメントで代替 — 想定どおりの訂正導線）」「`view` は `--comments` が要る」「category slug を列挙するコマンドがない（TODO.md へ記録）」の3点のみで、いずれも `--help` とエラーメッセージから自力復帰。skill を薄く保ち使い方の正を `--help` に集約する設計は、この条件で成立することが確認できた。
