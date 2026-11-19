@@ -26,8 +26,9 @@
   **open 中は常に git コマンドで都度計算**し、同期テーブルを持たない。
 - **完了時の保存は「ref を刺す」**: close/merge のタイミングで
   `git update-ref refs/zatudan/pr/<id>/head <head_sha>` を打ち、DB には
-  base_sha/head_sha/merge_sha/method を記録する。コミットを DB にコピー
-  しない（GitHub の `refs/pull/N/head` と同じ仕組みで gc から守る）。
+  base_sha/head_sha/merge_base_sha/merge_sha/method を記録する。
+  コミットを DB にコピーしない（GitHub の `refs/pull/N/head` と同じ
+  仕組みで gc から守る）。
 - **repo 解決**: `-repo` フラグ（env `ZATUDAN_REPO`）。未指定なら `-db`
   ファイルのあるディレクトリから上方に `.git` を探索する **auto**。
   見つからなければ / `-repo=off` なら **機能ごと非表示**。単一 repo、
@@ -99,11 +100,6 @@ ref が指すオブジェクトは gc 対象外なので、ブランチ削除後
   <sha>`・`git show <sha>:<path>` が全部見える（実測済み）。
   個々のコミットへの ref は不要。保護されないのは pinned head の
   **祖先でない**コミット（force-push で押し出された旧版など）だけ。
-- **anchor_sha のピン（推奨オプション）**: review comment 作成時に
-  `refs/zatudan/pr/N/c/<comment_id>` をその anchor_sha に刺す。これで
-  force-push / rebase で押し出されたコミットも保持され、AI 向け
-  スニペット抽出（`git show <anchor_sha>:<path>`）が常に成功する。
-  コメント削除時に対応 ref も消す。
 - open 中は **head_ref 名を優先して live 解決**し、rev-parse 失敗時は
   pinned sha で描画（「head ブランチ消失」の表示を添える）。
 
@@ -121,13 +117,32 @@ ref が指すオブジェクトは gc 対象外なので、ブランチ削除後
 **明示的無効化**として用意する — auto 検出に引っかかる環境でも
 機能を確実に OFF にでき、テストの決定性にも効く。
 
+解決のエッジケース:
+
+- `.git` はディレクトリとは限らない — linked worktree・submodule
+  では `gitdir:` を指す **ファイル**。上方探索は file も受理する。
+- `-db` が `file:` DSN や `:memory:` のときは auto 起点がない →
+  機能無効扱い（明示 `-repo` があればそれを使う）。
+- **auto 失敗はサイレント無効、明示 `-repo` の失敗は起動エラー**
+  にする（`-db` が空で fail fast するのと同じ思想 — 指定したのに
+  黙って無効化されるほうが混乱する）。
+- `-repo` に **bare repo**（または `.git` dir 自体）を指した場合:
+  `--show-toplevel` が失敗する。plumbing 表示は可能だが
+  in-worktree 経路は成立しないので、受けるなら「plumbing 限定」
+  として明記（初版は非対応でエラーでもよい）。
+- zatu local モードの repo 探索起点は **cwd ではなく `--db` の
+  ディレクトリ** — git CLI 自身の慣習（cwd 起点）と違うので
+  `--repo` で明示できる旨を help に書く。
+
 **無効時の挙動**: repo が解決できなかったら「利用不可」ではなく
 **機能が存在しない**かのように振る舞う。
 
 - web: nav に Pull requests を出さない、`/pulls*` はルート自体を
   マウントしない（404）。
-- CLI: `zatu pr ...` は `Error: not a git repository (set --repo or
-  ZATUDAN_REPO)` で exit 1。
+- CLI: local モードの `zatu pr ...` は `Error: not a git repository
+  (set --repo or ZATUDAN_REPO)` で exit 1。**remote モードで server
+  側が無効な場合は API の 404 をこの文言と混同しない**
+  （"pull requests are not enabled on the server" 系に分ける）。
 - API: `/api/v1/pulls*` も未マウント（404）。
 - 起動時に一度だけ解決（実行中に repo が現れても再起動まで反映しない
   — `-api-token` の再評価が restart 必須なのと同じポリシー）。
@@ -141,9 +156,18 @@ remote に push する操作は載せない、読むだけ）。
 
 - **作成は明示**: `zatu pr create --base main --head feat` /
   web フォーム（base/head は `git branch --format` + `git for-each-ref`
-  の select）。同じ (base, head) の open PR の重複作成は拒否
-  （`UNIQUE` ではなくアプリ側チェック — closed/merged 済みの同名ペア
-  の再作成は許す、GitHub と同じ）。
+  の select）。`--head` 省略時は現在ブランチ（gh と同じ）。
+  `head == base`（同じ ref/sha）は作成時に拒否。
+- **ref 名は正規化して保存**: `main` / `refs/heads/main` / `origin/main`
+  / sha は文字列として別物だが同じ対象を指しうるので、create 時に
+  `git rev-parse --symbolic-full-name <ref>` で正規形にして保存する
+  （sha だけ指定された場合は sha のまま）。checked-out 判定・重複
+  チェック・merge 可否判定はすべてこの正規名で行う。
+- **重複チェック**: 同じ (base, head) の open PR の重複作成は拒否
+  （closed/merged 済みの同名ペアの再作成は許す、GitHub と同じ）。
+  アプリ側チェックには TOCTOU があるので `CREATE UNIQUE INDEX ...
+  WHERE status='open'` の部分一意 index（`idx_dthreads_answer` の
+  先例）を併用する。
 - **採番**: `INTEGER PRIMARY KEY AUTOINCREMENT` の独立番号。
   GitHub は issue/PR で番号を共有するが、このアプリは discussion も
   独立採番なので同じ方針。URL は `/pulls/{id}`。
@@ -155,7 +179,7 @@ remote に push する操作は載せない、読むだけ）。
 ```sql
 CREATE TABLE pull_requests (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  base_ref TEXT NOT NULL,               -- "main" / "origin/main" / sha 可
+  base_ref TEXT NOT NULL,               -- symbolic-full-name 正規形 or sha
   head_ref TEXT NOT NULL,
   title TEXT NOT NULL,
   body TEXT NOT NULL DEFAULT '',
@@ -164,6 +188,7 @@ CREATE TABLE pull_requests (
   author_id INTEGER REFERENCES users(id),
   base_sha TEXT,                        -- create 時点の解決値（表示用）
   head_sha TEXT,                        -- close/merge 時点の最終値
+  merge_base_sha TEXT,                  -- close/merge 時点の merge-base
   merge_sha TEXT,                       -- merged のみ: 結果コミット
   merge_method TEXT,                    -- merged のみ: merge|squash|rebase
   created_at INTEGER NOT NULL,
@@ -172,22 +197,28 @@ CREATE TABLE pull_requests (
 );
 CREATE INDEX idx_pull_requests_status_created
   ON pull_requests(status, created_at DESC);
+-- open 中の (base, head) 重複禁止（closed/merged の同名ペアは許す）
+CREATE UNIQUE INDEX idx_pull_requests_open_pair
+  ON pull_requests(base_ref, head_ref) WHERE status = 'open';
 
 CREATE TABLE pr_comments (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   pr_id INTEGER NOT NULL REFERENCES pull_requests(id) ON DELETE CASCADE,
   -- anchor: NULL なら会話コメント、非NULL なら review comment
   path TEXT,                            -- リポジトリ相対パス
-  line INTEGER,                         -- head 側の行番号（side=right）
-  side TEXT CHECK (side IN ('left','right')),  -- left=削除/旧側
-  anchor_sha TEXT,                      -- コメント時点の head sha
+  line INTEGER,                         -- anchor_sha の blob 上の行番号
+  side TEXT NOT NULL DEFAULT 'right'
+    CHECK (side IN ('left','right')),   -- left=削除/旧側
+  anchor_sha TEXT,                      -- 行番号が参照する blob を持つコミット
+  diff_snippet TEXT,                    -- 作成時に採取した周辺行（後述）
   body TEXT NOT NULL,
   author_id INTEGER REFERENCES users(id),
-  hidden INTEGER NOT NULL DEFAULT 0,    -- moderation 既存列と同型
-  hidden_reason TEXT NOT NULL DEFAULT '',
-  edited_at INTEGER,
+  edited_at INTEGER,                    -- 既存 moderation 3 列と同型
+  hidden_at INTEGER,
+  hidden_reason TEXT
+    CHECK (hidden_reason IN ('spam','abuse','off-topic','outdated',
+                             'duplicate','resolved','low-quality')),
   created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
   CHECK ((path IS NULL) = (line IS NULL))  -- anchor は path+line セット
 );
 CREATE INDEX idx_pr_comments_pr ON pr_comments(pr_id, created_at);
@@ -197,6 +228,36 @@ CREATE INDEX idx_pr_comments_pr ON pr_comments(pr_id, created_at);
 |---|---|---|
 | A. **1 テーブル + NULL anchor**（推奨） | `pr_comments` に path/line/side/anchor_sha を nullable で | 「PR へのコメント」は一つの時系列に並ぶ（GitHub の UI も混在表示）。テーブル数を増やさない。anchor 有無は CHECK で表現 |
 | B. review comments を別テーブル | `pr_review_comments` 分離 | GitHub API の分離に忠実だが、表示時に 2 ソースを時系列マージする必要がある |
+
+各列の意味論（レビュー指摘を反映した確定事項）:
+
+- **`anchor_sha`**: 「行番号が参照する blob を持つコミット」。
+  side=right → コメント時点の **head**、side=left → コメント時点の
+  **merge-base**（削除/旧側の行は head 側 blob に存在しないので、
+  スニペット取得元もそちらになる）。
+- **`diff_snippet`**: コメント作成時に `git show <anchor_sha>:<path>`
+  から対象行前後 2 行を採取して TEXT で保持（GitHub の review
+  comment が `diff_hunk` を持つのと同型）。anchor が指す「当時の
+  コード」は本来 immutable なので、DB 保持は「真実は git」原則の
+  例外ではなく **過去状態の記録**として正しい。これで per-comment
+  の ref ピン（`refs/zatudan/pr/N/c/<id>` 案）は不要になる —
+  force-push や gc で anchor_sha のコミットが消えてもスニペットは
+  表示でき、ref のリーク問題（コメント削除と ref 削除の連動）も
+  回避できる。
+- **`merge_base_sha`**: close/merge 時点の merge-base。closed/merged
+  後に `git diff base...head` を再現するには live の base ref が
+  必要で、base ブランチ削除後は base tip 自体が gc で死にうる
+  （pinned head の祖先でないので保護外）。merge-base は pinned head
+  の祖先なので確実に残る → closed 後の diff は
+  `merge_base_sha...head_sha` で描画する。
+- **moderation 列**: 既存コメント系テーブルと同じ
+  `(edited_at, hidden_at, hidden_reason CHECK)` に揃え、
+  `setHidden`/`scanModeration` を再利用する。動詞も
+  `zatu pr comment create|edit|delete|hide|unhide` と discussion
+  comment に合わせる（作成のみだと列が死に、削除と pin 系処理の
+  連動も破綻するため）。
+- **`merge_sha`**: method ごとの意味 — merge は merge commit、squash
+  は squash commit、**rebase は replay 後の tip**（複数コミット）。
 
 **outdated 判定**: anchor_sha が現 head でも `base..head` の歴でも
 到達不能になったコメントを「outdated」表示にするか — GitHub の
@@ -209,15 +270,31 @@ anchor_sha head_ref` で cheap に近似し、判定不能（sha 自体が無い
 | 目的 | コマンド | 備考 |
 |---|---|---|
 | コミット列 | `git log --format=%H%x00%h%x00%s%x00%an%x00%aI base..head` | NUL 区切りで安全に parse |
-| 変更ファイル一覧 | `git diff --name-status base...head` | 3dot = merge-base 起点（GitHub の Files changed と同じ意味論） |
+| 変更ファイル一覧 | `git diff --name-status base...head` | 3dot = merge-base 起点（GitHub の Files changed と同じ意味論）。rename 検出のため anchor path 照合はこの old+new 集合で行う |
 | diff 本体 | `git diff -U3 base...head -- <path>` | 巨大 diff は件数/行数でキャップしてリンク化 |
 | merge-base | `git merge-base base head` | diff の 3dot と整合させる |
-| conflict 判定 | `git merge-tree --write-tree --name-only base head` | exit 0=clean / exit 1=conflict+ファイル名。**要 git ≥ 2.38**（実測 2.56 で exit=1 と `a.txt` 一覧を確認）。古い git では判定を "unknown" 表示に落とす graceful degrade |
-| head/base 解決 | `git rev-parse --verify <ref>` | 不存在 → PR を「head 消失」表示 |
+| conflict 判定 | `git merge-tree --write-tree --name-only base head` | **要 git ≥ 2.38**。下記「merge-tree 出力の解釈」参照 |
+| head/base 解決 | `git rev-parse --verify <ref>` / `--symbolic-full-name <ref>` | 不存在 → PR を「head 消失」表示 |
+| version プローブ | `git --version` | repo 解決時に1回実行。「conflict 判定」「plumbing merge」の双方をゲート |
+
+**merge-tree 出力の解釈**（実測 2.56）: `--write-tree` は exit 0 =
+clean（stdout = tree OID）、exit 1 = conflict。`--name-only` 付きだと
+**先頭行が tree OID**、以降の非空行が衝突ファイル名、CONFLICT メッ
+セージは stderr に行く（`--no-messages` で抑制可）。exit!=0 を
+「conflict」と即断せず、先頭行が OID であることを確認してから
+残りを衝突ファイルとして読む（bad ref 等の別要因との区別）。
+**git <2.38 では `--write-tree` 自体がない**ので、conflict バッジは
+"unknown" に落とし、さらに §5 の plumbing merge 経路も使えない
+（in-worktree のみ）— version プローブで両方をゲートする。
+unrelated histories（`--no-merge-base` が必要な相手）はエラー →
+GitHub と同様に merge/作成を拒否でよい。
 
 実行は全て `os/exec` で `git -C <repo>` 直打ち（シェル経由なし、
-`--` でパスと引数を分離）。新パッケージ `internal/gitrepo`（仮）に
-集約し、web/api/cli の 3 surface から共有する。
+`--` でパスと引数を分離）。**`GIT_DIR`/`GIT_WORK_TREE`/
+`GIT_INDEX_FILE` 等の `GIT_*` 環境変数は exec 時に scrub する**
+（`os.Environ` をそのまま継ぐと `-C` の探索を上書きしうる）。
+新パッケージ `internal/gitrepo`（仮）に集約し、web/api/cli の
+3 surface から共有する。
 
 ### 5. merge 実行の 2 経路（実測に基づく）
 
@@ -237,43 +314,85 @@ PR の merge は repo を**書き換える**唯一の操作（close は DB の�
 
 | 条件 | 経路 | 手順 |
 |---|---|---|
-| base が **いずれかの worktree で checked-out** | in-worktree | `git -C <そのworktree> status --porcelain` が空なことを確認（dirty なら拒否して手動マージを促す）→ `git merge --no-ff <head>` / `git merge --squash <head> && git commit` / rebase-merge は `git cherry-pick base..head` |
+| base が **いずれかの worktree で checked-out** | in-worktree | `git -C <そのworktree> status --porcelain` が空なことを確認（dirty なら拒否して手動マージを促す）→ `git merge --no-ff <head>` / `git merge --squash <head> && git commit` / rebase-merge は `git cherry-pick --no-merges base..head` |
 | base が **どこにも checked-out されていない** | plumbing | `merge-tree --write-tree` → conflict なら即結果返却 → `commit-tree`（merge: `-p base -p head`、squash: `-p base`）→ `update-ref refs/heads/base` |
 
 - checked-out 判定: `git worktree list --porcelain` の各 worktree の
-  `branch refs/heads/X` 行。
-- **rebase merge の plumbing**: `git rev-list --reverse base..head` の
-  各コミットを順に `merge-tree --write-tree <newbase> <c>` →
-  `commit-tree -p <newbase>` で積む。conflict した時点で中断+報告。
-  in-worktree なら `git cherry-pick base..head` でよい（cherry-pick
-  は merge コミットを skip するので直線履歴の PR 想定に合う）。
-- squash の commit message: 既定 `title (#N)`、`-m` で上書き可。
+  `branch refs/heads/X` 行を、§2 で正規化した base_ref と照合する
+  （symbolic-ref `main` → `refs/heads/trunk` 等をすり抜けない）。
+- **merge 可能な base は `refs/heads/*` に限定**（GitHub でも merge 先は
+  ブランチ）。`origin/main` や sha 指定の PR は作成・表示・コメントは
+  可だが **merge は明示拒否**（remote-tracking や detached sha を
+  「進める ref」にできない）。
+- **`update-ref` は CAS で**: `git update-ref refs/heads/base <new>
+  <old_base_tip>`（第3引数に事前解決した base tip）— 並行 merge
+  （web+CLI 等）で last-write-wins のサイレント lost update を防ぐ。
+  close/merge 時の pin 更新も同様に oldvalue 付き。
+- **rebase merge の plumbing**: `git rev-list --reverse --no-merges
+  base..head` の各コミットを順に `merge-tree --write-tree <newbase>
+  <c>` → `commit-tree -p <newbase>` で積む。conflict した時点で中断
+  +報告。in-worktree なら `git cherry-pick --no-merges base..head`
+  — **cherry-pick は merge コミットを skip せず `-m` なしではエラー
+  になる**ので `--no-merges` 必須（GitHub の rebase-merge が
+  merge コミットを含まない直線化なのと同じ意味論）。
+- **author の保持**: plumbing の rebase replay は `commit-tree` を
+  コミットごとに呼ぶため、author は `GIT_AUTHOR_NAME/EMAIL/DATE` を
+  元コミットから渡さないと merge 実行者に上書きされる（cherry-pick
+  は自動継承するが commit-tree はしない）。GitHub 同様 author 保持。
+- **commit identity の解決**: `commit-tree`/`merge`/`commit` はいずれも
+  committer identity が要る。repo に user.name/email 未設定だと全て
+  `unable to auto-detect email address` で落ちるので、解決順を
+  `repo config → GIT_AUTHOR_*/GIT_COMMITTER_* env → フォールバック
+  "zatudan <zatudan@localhost>"`（または明示エラー）として決める。
+- **in-worktree 経路の副作用を明記**: worktree の index/ファイルが
+  実際に書き換わり、git hooks も実行される（plumbing 経路はどちらも
+  なし）。このプロジェクトは `.worktrees/` にサブエージェント用
+  worktree を置く運用なので「base が他 worktree で checked-out →
+  そちらが書き換わる」は実際に起こり得る。並行 git 操作との
+  `index.lock` 競合はエラーとして表面化させる。
+- squash の commit message: 既定 `title (#N)`、merge は git 既定の
+  `Merge branch '<head>'` 系、`-m` で上書き可。
+- **status 遷移ガード**: `merged` は終端（reopen 不可、GitHub 同様）。
+  `closed → reopen` は `closed_at` をクリア。`base..head` が空
+  （既に取り込み済み）の merge は拒否。closed PR の merge も拒否。
 - merge 成功時の DB 記録: `status=merged, merge_sha, merge_method,
-  head_sha(最終), closed_at` + ref ピン。close は `status=closed` +
-  head_sha + ref ピンのみ（git 操作なし）。
+  head_sha(最終), merge_base_sha, closed_at` + ref ピン。close は
+  `status=closed` + head_sha + merge_base_sha + ref ピンのみ
+  （git 操作なし）。
 - **失敗時は何も書き換えない**: conflict / dirty worktree / 実行
   エラーはすべて「実行前」に検出する設計（merge-tree で事前判定
-  してから本体操作）。in-worktree merge は `--no-commit` 系で
-  中途半端を残さない…いや、squash は `merge --squash` が index を
-  汚すので失敗時 `git merge --abort`/`reset` で復帰を試み、ダメ
-  ならユーザーに手動復帰を促すエラーを返す。
+  してから本体操作）。それでも in-worktree で中途失敗した場合の
+  復帰は method ごと: merge は `git merge --abort`、**squash は
+  `--squash` が MERGE_HEAD を作らないので `--abort` は効かず
+  `git reset --hard HEAD`**（dirty チェック済み前提なので安全）、
+  cherry-pick は `git cherry-pick --abort`。復帰自体が失敗したら
+  手動復帰を促すエラーを返す。
 
 ### 6. UI
 
 ```
-GET  /pulls                     一覧（open|closed|merged|all、issue 一覧と同じ filter-bar 構造）
-GET  /pulls/new                 作成フォーム（base/head select・title・body）
+GET  /pulls                       一覧（open|closed|merged|all、issue 一覧と同じ filter-bar 構造）
+GET  /pulls/new                   作成フォーム（base/head select・title・body）
 POST /pulls
-GET  /pulls/{id}                詳細: meta / commits / conflict バッジ / コメント時系列
-GET  /pulls/{id}/files          Files changed: ファイルごとの diff + anchored comments
-POST /pulls/{id}/comments       会話コメント
-POST /pulls/{id}/review-comments  path,line,side 付きコメント
-POST /pulls/{id}/status         close / reopen
-POST /pulls/{id}/merge          ?method=merge|squash|rebase → 結果/失敗を flash 表示
-GET  /pulls/{id}/markdown       export（下記）
+GET  /pulls/{id}                  詳細: meta / commits / conflict バッジ / コメント時系列
+GET|POST /pulls/{id}/edit         編集
+GET  /pulls/{id}/files            Files changed: ファイルごとの diff + anchored comments
+POST /pulls/{id}/comments         コメント投稿（optional path/line/side で review comment — discussions の parent_id と同じ「同じ POST に optional フィールド」パターン）
+POST /pulls/{id}/comments/{cid}/edit|delete|hide|unhide   コメント動詞（discussions と同型）
+POST /pulls/{id}/status           close / reopen
+GET  /pulls/{id}/merge            merge 確認（method 選択・conflict 予告表示）
+POST /pulls/{id}/merge            ?method=merge|squash|rebase → 結果/失敗を flash 表示
+GET  /pulls/{id}/markdown         export（下記）
+GET  /pulls/{id}/events           SSE（§8）
+GET  /pulls/{id}/fragments/*      部分更新 fragment
 ```
 
 - nav: `Issues | Discussions | Pull requests`（repo 無効時は非表示）。
+  `/pulls` 配下は workspace 非所属なので `.Workspace` が無い —
+  layout の Pull requests リンクは `{{if .Workspace}}` 条件の**外側**
+  に置き（Section="pulls"）、nav 用に default ws を埋める既存
+  パターン（workspaces ページと同じ）で Issues/Discussions 側の
+  リンクも機能させる。
 - conflict は merge-tree の結果を「This branch has conflicts in:
   a.txt, b.go」程度のバッジ表示（解決支援はしない = 要件どおり表示のみ）。
 - `/files` の各行差分に「この行にコメント」フォーム（`<details>` 畳み
@@ -284,19 +403,29 @@ GET  /pulls/{id}/markdown       export（下記）
 
 ```
 zatu pr list [--state open|closed|merged|all]
-zatu pr view N [--markdown|--json]   # title+body+commits+comments 一式
+zatu pr view N [--markdown|--json F,...|--template T|-w]
+                 # title+body+commits+mergeable+comments 一式
 zatu pr diff N                       # unified diff 出力（remote モードでも取れる）
-zatu pr create --base B --head H --title T [--body B|--body-file F]
+zatu pr create --base B [--head H] --title T [--body B|--body-file F]
+                                     # --head 省略時は現在ブランチ
 zatu pr edit N [--title T] [--body B]
 zatu pr close N / reopen N
 zatu pr merge N --method merge|squash|rebase
-zatu pr comment create N --body B|--body-file F \
-     [--path internal/web/x.go --line 42 [--side left]]
+zatu pr comment create|edit|delete|hide|unhide N ...
+                                     # create は [--path P --line L [--side left]]
 ```
 
-- Backend interface に PR メソッドを追加。local は `*store.Store` +
-  `internal/gitrepo` の合成、remote は `/api/v1/pulls*` 経由。
-  `zatu pr` は `--repo` フラグも受ける（local モードの repo 解決用）。
+- Backend interface に PR メソッドを追加（workspace 非所属なので
+  `In(ctx, "")` の passthrough でよい）。git 側の合成は seam を
+  決める: `Options.OpenLocal` が (Backend, Repo) を返す形にするか、
+  `pr` コマンドが `--repo`/`--db` から `gitrepo.Resolve` を別途呼ぶか
+  — 実装時に既存構造に合わせて確定。remote は `/api/v1/pulls*` 経由
+  で、`--repo` は remote では無意味（警告して無視）。
+- 出力規約は既存に揃える: `--json` はフィールド選択式
+  （`--json F,...`）、`--template`・`-w/--web` も共通オプション。
+  DTO は api パッケージの wire 型を使う。`zatu pr view` の人間向け
+  出力には mergeable/conflict 状態を含める（エージェントが
+  merge 可否を機械判断できるように）。
 - **AI 向けフォーマット**: `internal/export` に `PrMarkdown` を追加。
   review comment は次の形 — 「どのファイルのどこへの言及か」を機械
   可読に保つのが目的:
@@ -315,34 +444,52 @@ zatu pr comment create N --body B|--body-file F \
   この行の nil チェックが抜けています
   ````
 
-  スニペットは `git show <anchor_sha>:<path>` から対象行前後 2 行。
+  スニペットは DB の `diff_snippet`（作成時に `git show
+  <anchor_sha>:<path>` から対象行前後 2 行を採取したもの）をそのまま
+  出す — anchor_sha が gc で消えていても表示できる。
   **各行に `41 |` のような行番号プレフィックスは付けない** — AI は
   行番号付きコードの番号を取り違えやすいので、範囲は直前の 1 行に
   「`path` L<開始>-<終了>」とだけ載せ、コードはプレーンに載せる。
-  anchor の行番号は見出しの `path:L42` が担う。sha が死んでいても
-  `path:L42` と本文は残る。`--json` は同構造を struct で返す
-  （エージェントが jq で絞れる）。
-- API: `/api/v1/pulls`（GET/POST）、`/api/v1/pulls/{id}`（GET/PATCH/
-  DELETE 相当は POST ベースの既存 API スタイルに合わせる）、
-  `/comments`、`/merge`、`/diff`（text/plain で返す案）。
+  anchor の行番号は見出しの `path:L42` が担う。`--json` は同構造を
+  struct で返す（エージェントが jq で絞れる）。
+  `internal/export` は store 型だけを受ける純粋関数のまま保ち、
+  `PrMarkdown` は呼び出し側で集めた構造体（metadata + commits +
+  comments + snippets）を受ける形にする。
+- API（既存の実パターンに揃える — `/api/v1` は PATCH/DELETE を
+  普通に使っている）: `/api/v1/pulls`（GET/POST）、
+  `/api/v1/pulls/{id}`（GET/PATCH/DELETE）、`/comments`（GET/POST）、
+  `/comments/{cid}`（PATCH/DELETE + hide/unhide アクション）、
+  `/status`（POST）、`/merge`（POST）、`/diff`（GET、text/plain）、
+  `/markdown`（GET — remote の `view --markdown` がこれを叩く）。
+  repo 無効な server では未マウント（404）。remote 経由の
+  merge/status/comment は server 側で同じ gitrepo ロジックを実行。
 
 ### 8. events / SSE
 
 `changes` テーブルの既存機構に乗る。topic は `pr:{id}` と一覧用
 `pulls`（issue/discussion と同型）。コメント・status・merge で
 mutator が変更行を積む → live-updates.js が fragment を再描画。
-git 側の変化（誰かが head に push した等）はアプリ外イベントなので
-SSE では拾えない — **表示は常に都度計算なので鮮度問題は起きない**
-（これが「open 中は git を見る」設計の副産物）。
+ただし `live-updates.js` の `data-live-kind` は `"issue"|"discussion"`
+前提なので `"pr"` 用の分岐（resync 時の fragment 名選択・文言）は
+追加が要る。イベント kind は既存の `comment`/`status`/`edit`/`new`
+を再利用すれば JS 側は小変更で済む（`merge` を新 kind にすると
+listener 追加が要るので避ける）。git 側の変化（誰かが head に push
+した等）はアプリ外イベントなので SSE では拾えない — **表示は常に
+都度計算なので鮮度問題は起きない**（「open 中は git を見る」設計の
+副産物）。
 
 ### 9. セキュリティ・堅牢性
 
 - **git 引数インジェクション**: ref 名・path は全て引数として渡し
   shell を通さない。`--` 区切り、ref は `git check-ref-format` 相当の
   検証、`--repo` のパスは `--git-dir` ではなく `-C`（worktree 経由）。
-- **path の正当性**: review comment の `path` は `..`/先頭 `/` 禁止、
-  `git diff --name-only` の集合に含まれるかを投稿時に確認（存在
-  しないファイルへの anchor は拒否）。
+- **path の正当性**: review comment の `path` は `..`/先頭 `/`/先頭
+  `-`/pathspec magic（`:(`, `::`）禁止。`git diff --name-status` の
+  old+new パス集合に含まれるかを投稿時に確認（rename では
+  `--name-only` が post-image 名しか返さないので side=left の旧
+  パスが弾かれないよう old 側も集合に入れる）。`line` が実際に
+  diff hunk 内の行かまで検証するかは実装時に決める（GitHub は
+  diff 表示行のみコメント可 — 初版は hunk 内検証も入れる方向）。
 - **resource cap**: diff 表示はファイル数/行数上限（超過は「too
   large」+ CLI での取得を促す）。`git` プロセスは `context.Context`
   で timeout（例 10s）+ 出力サイズ cap。
@@ -353,25 +500,33 @@ SSE では拾えない — **表示は常に都度計算なので鮮度問題は
 
 ## 実装順序
 
-1. **`internal/gitrepo`**: repo 解決（auto-detect + `-repo`）＋ git
-   実行ラッパ（`log`/`diff`/`name-status`/`merge-base`/`merge-tree`/
-   `commit-tree`/`update-ref`/`worktree list`/`status --porcelain`）
+1. **`internal/gitrepo`**: repo 解決（auto-detect + `-repo` + version
+   プローブ）＋ git 実行ラッパ（`log`/`diff`/`name-status`/
+   `merge-base`/`merge-tree`/`commit-tree`/`update-ref`/`worktree
+   list`/`status --porcelain`/`symbolic-full-name`/`check-ref-format`）
    + merge 実行（plumbing/in-worktree 2 経路）。git <2.38 では
-   conflict 判定を "unknown" に落とす。
+   conflict 判定 "unknown" + plumbing merge 不可に落とす。
+   **web/api/cli から呼べる interface seam**（storybook の fake と
+   テストのため）。
 2. **store**: `pull_requests` / `pr_comments` migration + CRUD +
    `ClosePullRequest`/`MarkMerged`（status+sha+closed_at の tx）。
+   このリポジトリは squashed `schemaDDL` + `migrations` 配列の
+   二重管理なので、新テーブルは `schemaDDL` への追加 **と**
+   `migrateV<n>` からの適用の両方が要る（`changesDDL`/`migrateV2`
+   と同じパターン — `schemaDDL` だけだと既存 DB に適用されない）。
 3. **web**: `/pulls` 系ルート + テンプレート（一覧/詳細/files/new/
-   merge 確認）。view model に `PREnabled` + `Repo` を持たせ、
-   nil なら nav 非表示・ルート未マウント。
+   edit/merge 確認/comment 動詞）。view model に `PREnabled` +
+   `Repo` を持たせ、nil なら nav 非表示・ルート未マウント。
+   live-updates.js に `"pr"` kind 分岐。
 4. **cli/client/api**: Backend 拡張、`zatu pr` 群、`/api/v1/pulls*`。
    local モードの `zatu pr merge` は gitrepo を直接叩く（server 不要
-   — `--db` と同じく手元完結）。
-5. **export**: `PrMarkdown`（metadata + commits + comments + review
-   comments with スニペット）。
+   — `--db` と同じく手元完結）。`completion.go` の静的スクリプトと
+   `printUsage` 一覧は機械的更新。
+5. **export**: `PrMarkdown`（呼び出し側で集めた構造体を受ける形）。
 6. **seed/storybook**: `zatudan.db` 自身の repo を対象にした seed PR
    は難しい（他 repo の git 状態に依存）ので storybook story は
-   偽データ、実動作確認は `tools/demo-history.sh` 的な git 操作
-   スクリプトを別途用意するか要検討。
+   gitrepo の fake + 偽データ、実動作確認は `tools/demo-history.sh`
+   的な git 操作スクリプトを別途用意するか要検討。
 7. **docs**: decisions.md / roadmap.md / ui-rules.md 更新。
 
 ## テスト方針
@@ -404,6 +559,10 @@ SSE では拾えない — **表示は常に都度計算なので鮮度問題は
 - **outdated 精密判定**（force-push 後の anchor 追従）: 初版は
   ancestor 近似 + sha 消失時の "outdated" バッジのみ。
 - **workspace ごとの repo** / 複数 repo 同時表示。
-- **git < 2.38 の conflict 判定**: "unknown" 表示に落とすだけ
-  （旧式 `git merge-tree` の parse はしない）。
+- **git < 2.38**: conflict 判定は "unknown" 表示、plumbing merge 経路
+  も不可（in-worktree のみ）に落とす — 旧式 `git merge-tree` の
+  parse はしない。
+- **shallow clone**: `.git/shallow` がある repo は merge-base が
+  取れず diff/merge 判定が degrade する。制限事項として受け入れ
+  （検出したら "shallow repository" 表示で処理しないだけ）。
 - **conflict 解消 UI**: 表示のみ（要件どおり）。
