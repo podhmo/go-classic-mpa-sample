@@ -71,7 +71,7 @@ _issues_completions() {
 		;;
 	discussion)
 		if [ "$COMP_CWORD" -eq 2 ]; then
-			COMPREPLY=( $(compgen -W "list view create edit delete comment answer" -- "$cur") )
+			COMPREPLY=( $(compgen -W "list view create edit delete comment answer categories" -- "$cur") )
 		elif [ "${COMP_WORDS[2]}" = "comment" ] && [ "$COMP_CWORD" -eq 3 ]; then
 			COMPREPLY=( $(compgen -W "create" -- "$cur") )
 		fi
@@ -110,7 +110,7 @@ _zatu() {
 		'issue:issue list|view|create|edit|close|reopen|delete'
 		'comment:create an issue comment'
 		'label:list labels'
-		'discussion:discussion list|view|create|edit|delete|comment|answer'
+		'discussion:discussion list|view|create|edit|delete|comment|answer|categories'
 		'auth:API token management (local)'
 		'api:raw call to /api/v1'
 		'completion:print a shell completion script'
@@ -132,7 +132,7 @@ _zatu() {
 		discussion)
 			if (( CURRENT == 3 )); then
 				_describe -t actions 'discussion action' '(
-					list view create edit delete comment answer
+					list view create edit delete comment answer categories
 				)'
 			elif [[ "$words[3]" == comment ]]; then
 				_describe -t actions 'comment action' '(create)'
@@ -160,7 +160,7 @@ complete -c zatu -n '__fish_use_subcommand' -a 'issue comment label discussion a
 complete -c zatu -n '__fish_seen_subcommand_from issue' -a 'list view create edit close reopen delete'
 complete -c zatu -n '__fish_seen_subcommand_from comment' -a 'create'
 complete -c zatu -n '__fish_seen_subcommand_from label' -a 'list create delete'
-complete -c zatu -n '__fish_seen_subcommand_from discussion' -a 'list view create edit delete comment answer'
+complete -c zatu -n '__fish_seen_subcommand_from discussion' -a 'list view create edit delete comment answer categories'
 complete -c zatu -n '__fish_seen_subcommand_from discussion; and __fish_seen_subcommand_from comment' -a 'create'
 complete -c zatu -n '__fish_seen_subcommand_from auth' -a 'token'
 complete -c zatu -n '__fish_seen_subcommand_from auth; and __fish_seen_subcommand_from token' -a 'list revoke'

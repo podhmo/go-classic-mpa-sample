@@ -266,6 +266,7 @@ func TestHelp(t *testing.T) {
 		{[]string{"issue", "create", "--help"}, []string{"usage: zatu issue create --title T", "-body-file"}},
 		{[]string{"comment", "create", "--help"}, []string{"usage: zatu comment create N --body B", "-body-file"}},
 		{[]string{"discussion", "answer", "--help"}, []string{"usage: zatu discussion answer N --thread T", "-unmark"}},
+		{[]string{"discussion", "categories", "--help"}, []string{"usage: zatu discussion categories [flags]", "-json"}},
 		{[]string{"auth", "token", "--help"}, []string{"usage: zatu auth token --user NAME", "-user"}},
 		{[]string{"api", "--help"}, []string{"usage: zatu api <path>", "-method"}},
 		{[]string{"completion", "--help"}, []string{"usage: zatu completion bash|zsh|fish"}},

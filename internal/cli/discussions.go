@@ -16,13 +16,14 @@ import (
 const discussionUsage = `usage: zatu discussion <action> [flags]
 
 actions:
-  list      list discussions (--category, --answered, --search, --sort, --limit, --page)
-  view      show a discussion: N [--comments|--markdown] [-w]
-  create    start a discussion: --title T --category SLUG [--body B|--body-file -] [-w]
-  edit      update a discussion: N [--title T] [--body B] [--category SLUG] [--label L]...
-  delete    delete a discussion: N
-  comment   reply on a discussion: comment create N --body B [--thread T]
-  answer    mark the answer thread: answer N --thread T [--unmark]
+  list       list discussions (--category, --answered, --search, --sort, --limit, --page)
+  view       show a discussion: N [--comments|--markdown] [-w]
+  create     start a discussion: --title T --category SLUG [--body B|--body-file -] [-w]
+  edit       update a discussion: N [--title T] [--body B] [--category SLUG] [--label L]...
+  delete     delete a discussion: N
+  comment    reply on a discussion: comment create N --body B [--thread T]
+  answer     mark the answer thread: answer N --thread T [--unmark]
+  categories list discussion categories (slugs for --category)
 
 "zatu discussion <action> --help" shows an action's flags.
 `
@@ -30,7 +31,7 @@ actions:
 // discussionCmd dispatches `zatu discussion <action>`.
 func discussionCmd(ctx context.Context, o Options, args []string) error {
 	if len(args) == 0 {
-		return usageError{msg: "usage: zatu discussion list|view|create|edit|delete|comment|answer"}
+		return usageError{msg: "usage: zatu discussion list|view|create|edit|delete|comment|answer|categories"}
 	}
 	if isHelpArg(args[0]) {
 		fmt.Fprint(o.Stdout, discussionUsage)
@@ -51,6 +52,8 @@ func discussionCmd(ctx context.Context, o Options, args []string) error {
 		return discussionCommentCmd(ctx, o, args[1:])
 	case "answer":
 		return discussionAnswer(ctx, o, args[1:])
+	case "categories":
+		return discussionCategories(ctx, o, args[1:])
 	default:
 		return usageError{msg: fmt.Sprintf("unknown discussion command %q", args[0])}
 	}
@@ -459,6 +462,43 @@ func discussionAnswer(ctx context.Context, o Options, args []string) error {
 		fmt.Fprintf(o.Stdout, "unmarked thread #%d as answer on discussion #%d\n", *thread, id)
 	} else {
 		fmt.Fprintf(o.Stdout, "marked thread #%d as answer on discussion #%d\n", *thread, id)
+	}
+	return nil
+}
+
+// zatu discussion categories [--json F,...] [--template T]
+// Categories are global master data (not per-workspace), so the backend
+// opens unscoped like the workspace verbs — --workspace is ignored and
+// remote mode hits /discussion-categories either way.
+func discussionCategories(ctx context.Context, o Options, args []string) error {
+	fs := flag.NewFlagSet("discussion categories", flag.ContinueOnError)
+	bf := o.addBackendFlags(fs)
+	jsonFields := fs.String("json", "", "output JSON with the named fields (comma-separated)")
+	tmpl := fs.String("template", "", "render output through a Go text/template")
+	if _, err := o.parseLeaf(fs, "", args, 0); err != nil {
+		return err
+	}
+	if *jsonFields != "" && *tmpl != "" {
+		return usageError{msg: "--json and --template are mutually exclusive"}
+	}
+	b, closer, err := o.backendIn(ctx, bf, "")
+	if err != nil {
+		return err
+	}
+	defer closeQuietly(closer)
+
+	cats, err := b.ListDiscussionCategories(ctx)
+	if err != nil {
+		return err
+	}
+	if *jsonFields != "" {
+		return writeJSONFields(o.Stdout, categoryViews(cats), *jsonFields)
+	}
+	if *tmpl != "" {
+		return writeTemplate(o.Stdout, categoryViews(cats), *tmpl)
+	}
+	for _, c := range cats {
+		fmt.Fprintf(o.Stdout, "%s\t%s\t%s\t%s\n", c.Slug, c.Name, c.Format, c.Description)
 	}
 	return nil
 }

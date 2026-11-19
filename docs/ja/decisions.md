@@ -637,3 +637,12 @@ podhmo からの改善要望（grid と story のリンク誤押・見た目・s
 追記（同日、2エージェント実使用テスト）: 環境変数と「`/tmp/zatu --help` で自分で学べ」という指示のみを与えた2つの新規エージェント（alice/bob、それぞれ別ユーザーの API token で投稿）が、コマンド不教示のまま issue への再現報告→typo の訂正追記→qa discussion 作成→回答→answer マークまで自律的に完遂した。つまずき点は「`comment edit` が存在しない（追記コメントで代替 — 想定どおりの訂正導線）」「`view` は `--comments` が要る」「category slug を列挙するコマンドがない（TODO.md へ記録）」の3点のみで、いずれも `--help` とエラーメッセージから自力復帰。skill を薄く保ち使い方の正を `--help` に集約する設計は、この条件で成立することが確認できた。
 
 追記2（同日、クリーンルーム再検証）: リポジトリ参照の混入を除くため、バイナリのみを置いた `/tmp/zatu-room-<name>` を pwd・「それ以外のファイルを読まない」明示禁止の条件で carol/dave に再実施。結果: 外部ファイルアクセス 0・全コマンド一発成功で、carol は category slug を `discussion list` 出力列から自力発見（fallback の起票は不要と判断）、dave は answer マーク・issue 起票誘導まで完遂。1 回目の傍証（AGENTS.md 注入・ファイル到達可能だった点）はあったが、2 回目で非隔離への懸念は払拭 — `--help` 集約はリポジトリ知識なしでも成立する。新たな観察: `discussion comment --help` は create への誘導のみで一手間増える、削除済み番号（#8）の `view` が 404 になるのは意外感あり、`--thread` の ID 依存は自明でない。
+
+## `zatu discussion categories` の追加（2026-11-19、main ブランチ）
+
+TODO.md の項目。「`discussion create --category SLUG` が必須なのに slug を列挙する術がない」という、2エージェント実使用テストで発覚した発見性の穴を埋める。
+
+- **動詞は `discussion` グループの flat action**: `zatu discussion categories`。`category list` のような入れ子にしなかった — categories は discussion 専用の参照データで、リソースグループを分けるほどの動詞面を持たない（作成・削除は CLI に出さず master data のみ）。`label list` 等の「resource verb」形に揃え、help テキスト・completion（bash/zsh/fish）を一式更新。
+- **backend は unscoped で開く**: `o.backend(ctx, bf)`（= `--workspace` の scoped backend）ではなく `backendIn(ctx, bf, "")` を使う。categories は workspace 非依存の master data で、remote も `/api/v1/discussion-categories` のグローバル経路（`client.In` でも ws 不変）— scoped で開くと local だけが「存在しない workspace で ErrNotFound」になりモード間で非対称になるため、workspace コマンドと同型の unscoped open にした。`--workspace` は無視される。
+- **出力は `SLUG\tNAME\tFORMAT\tDESCRIPTION`**: `--category` に渡す slug を先頭列に（`label list` が参照キーの name を先頭に置くのと同じ約束）。`--json`/`--template` は `categoryViews`（api.DiscussionCategory DTO）経由で他コマンドと同じ語彙。
+- **検証**: `go test ./internal/cli`（`TestDiscussionCategories` 追加: plain 出力の slug 網羅・行フォーマット・`--json` フィールド選択・`--workspace` 無視）。実バイナリで local（`init` した DB）・remote（`-api-token` サーバ）両モードの列挙と、列挙した slug での `discussion create` を確認。
