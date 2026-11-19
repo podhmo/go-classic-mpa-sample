@@ -635,3 +635,5 @@ podhmo からの改善要望（grid と story のリンク誤押・見た目・s
 - **検証**: `go test ./internal/cli` の `TestHelp`（全階層の exit 0 + usage 内容）、`go test ./...` / `go vet` / `gofmt` 全パス。実バイナリで全 --help 経路とスクリプトのリプレイを確認済み。
 
 追記（同日、2エージェント実使用テスト）: 環境変数と「`/tmp/zatu --help` で自分で学べ」という指示のみを与えた2つの新規エージェント（alice/bob、それぞれ別ユーザーの API token で投稿）が、コマンド不教示のまま issue への再現報告→typo の訂正追記→qa discussion 作成→回答→answer マークまで自律的に完遂した。つまずき点は「`comment edit` が存在しない（追記コメントで代替 — 想定どおりの訂正導線）」「`view` は `--comments` が要る」「category slug を列挙するコマンドがない（TODO.md へ記録）」の3点のみで、いずれも `--help` とエラーメッセージから自力復帰。skill を薄く保ち使い方の正を `--help` に集約する設計は、この条件で成立することが確認できた。
+
+追記2（同日、クリーンルーム再検証）: リポジトリ参照の混入を除くため、バイナリのみを置いた `/tmp/zatu-room-<name>` を pwd・「それ以外のファイルを読まない」明示禁止の条件で carol/dave に再実施。結果: 外部ファイルアクセス 0・全コマンド一発成功で、carol は category slug を `discussion list` 出力列から自力発見（fallback の起票は不要と判断）、dave は answer マーク・issue 起票誘導まで完遂。1 回目の傍証（AGENTS.md 注入・ファイル到達可能だった点）はあったが、2 回目で非隔離への懸念は払拭 — `--help` 集約はリポジトリ知識なしでも成立する。新たな観察: `discussion comment --help` は create への誘導のみで一手間増える、削除済み番号（#8）の `view` が 404 になるのは意外感あり、`--thread` の ID 依存は自明でない。
