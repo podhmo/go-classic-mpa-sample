@@ -27,11 +27,6 @@ Facts not covered by `--help`:
 - A brand-new DB has no discussion categories until
   `go run ./cmd/zatudan -db PATH init` runs once (labels and the default
   workspace come with the schema itself).
-- Comments are full first-class posts: `zatu comment edit|delete|hide|
-  unhide` on issues and `zatu discussion comment edit|delete|hide|
-  unhide` (`--thread T`, `--comment C` to pick a reply) cover
-  moderation; `hide` requires `--reason` from a fixed set (see
-  `... hide --help`).
 - `tools/demo-history.sh` replays a full example history through the CLI
   (issues, progress comments, corrections, closes, discussions, answer
   marks) — a runnable reference for the usual flows.

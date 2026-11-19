@@ -464,11 +464,11 @@ func discussionCommentCreate(ctx context.Context, o Options, args []string) erro
 // discussionPostTarget parses the flags every thread/reply leaf shares:
 // the discussion number N, --thread T (required), and --comment C which
 // switches the target from the thread itself to one of its replies.
-func discussionPostTarget(fs *flag.FlagSet, o Options, args []string) (id, tid, cid int64, bf *backendFlags, err error) {
+func discussionPostTarget(fs *flag.FlagSet, o Options, hint string, args []string) (id, tid, cid int64, bf *backendFlags, err error) {
 	bf = o.addBackendFlags(fs)
 	tidf := fs.Int64("thread", 0, "thread id (required)")
 	cidf := fs.Int64("comment", 0, "reply id under --thread (omit to target the thread itself)")
-	rest, err := o.parseLeaf(fs, "N --thread T [--comment C]", args, 1)
+	rest, err := o.parseLeaf(fs, hint, args, 1)
 	if err != nil {
 		return 0, 0, 0, nil, err
 	}
@@ -490,7 +490,7 @@ func discussionCommentEdit(ctx context.Context, o Options, args []string) error 
 	fs := flag.NewFlagSet("discussion comment edit", flag.ContinueOnError)
 	body := fs.String("body", "", "new body")
 	bodyFile := fs.String("body-file", "", "read body from file (- for stdin)")
-	id, tid, cid, bf, err := discussionPostTarget(fs, o, args)
+	id, tid, cid, bf, err := discussionPostTarget(fs, o, "N --thread T [--comment C] --body B", args)
 	if err != nil {
 		return err
 	}
@@ -521,7 +521,7 @@ func discussionCommentEdit(ctx context.Context, o Options, args []string) error 
 // zatu discussion comment delete N --thread T [--comment C]
 func discussionCommentDelete(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("discussion comment delete", flag.ContinueOnError)
-	id, tid, cid, bf, err := discussionPostTarget(fs, o, args)
+	id, tid, cid, bf, err := discussionPostTarget(fs, o, "N --thread T [--comment C]", args)
 	if err != nil {
 		return err
 	}
@@ -552,16 +552,18 @@ func discussionCommentHide(ctx context.Context, o Options, args []string, hide b
 		name = "discussion comment unhide"
 	}
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
-	reason := fs.String("reason", "", "hide reason: "+strings.Join(store.HideReasons, "|"))
-	id, tid, cid, bf, err := discussionPostTarget(fs, o, args)
+	reason := ""
+	hint := "N --thread T [--comment C]"
+	if hide {
+		fs.StringVar(&reason, "reason", "", "hide reason: "+strings.Join(store.HideReasons, "|"))
+		hint = "N --thread T [--comment C] --reason R"
+	}
+	id, tid, cid, bf, err := discussionPostTarget(fs, o, hint, args)
 	if err != nil {
 		return err
 	}
-	if hide && !store.ValidHideReason(*reason) {
+	if hide && !store.ValidHideReason(reason) {
 		return usageError{msg: "--reason is required: " + strings.Join(store.HideReasons, ", ")}
-	}
-	if !hide && *reason != "" {
-		return usageError{msg: "--reason applies to hide only"}
 	}
 	b, closer, err := o.backend(ctx, bf)
 	if err != nil {
@@ -569,25 +571,21 @@ func discussionCommentHide(ctx context.Context, o Options, args []string, hide b
 	}
 	defer closeQuietly(closer)
 
-	r := ""
-	if hide {
-		r = *reason
-	}
 	if cid != 0 {
-		if err := b.SetDiscussionCommentHidden(ctx, id, tid, cid, r); err != nil {
+		if err := b.SetDiscussionCommentHidden(ctx, id, tid, cid, reason); err != nil {
 			return err
 		}
 		if hide {
-			fmt.Fprintf(o.Stdout, "hidden reply #%d on thread #%d of discussion #%d (%s)\n", cid, tid, id, r)
+			fmt.Fprintf(o.Stdout, "hidden reply #%d on thread #%d of discussion #%d (%s)\n", cid, tid, id, reason)
 		} else {
 			fmt.Fprintf(o.Stdout, "unhidden reply #%d on thread #%d of discussion #%d\n", cid, tid, id)
 		}
 	} else {
-		if err := b.SetDiscussionThreadHidden(ctx, id, tid, r); err != nil {
+		if err := b.SetDiscussionThreadHidden(ctx, id, tid, reason); err != nil {
 			return err
 		}
 		if hide {
-			fmt.Fprintf(o.Stdout, "hidden thread #%d on discussion #%d (%s)\n", tid, id, r)
+			fmt.Fprintf(o.Stdout, "hidden thread #%d on discussion #%d (%s)\n", tid, id, reason)
 		} else {
 			fmt.Fprintf(o.Stdout, "unhidden thread #%d on discussion #%d\n", tid, id)
 		}

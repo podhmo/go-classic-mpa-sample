@@ -523,20 +523,18 @@ func commentHide(ctx context.Context, o Options, args []string, hide bool) error
 	}
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
-	reason := fs.String("reason", "", "hide reason: "+strings.Join(store.HideReasons, "|"))
+	reason := ""
 	hint := "N C"
 	if hide {
+		fs.StringVar(&reason, "reason", "", "hide reason: "+strings.Join(store.HideReasons, "|"))
 		hint = "N C --reason R"
 	}
 	rest, err := o.parseLeaf(fs, hint, args, 2)
 	if err != nil {
 		return err
 	}
-	if hide && !store.ValidHideReason(*reason) {
+	if hide && !store.ValidHideReason(reason) {
 		return usageError{msg: "--reason is required: " + strings.Join(store.HideReasons, ", ")}
-	}
-	if !hide && *reason != "" {
-		return usageError{msg: "--reason applies to hide only"}
 	}
 	id, cid, err := commentTarget(rest)
 	if err != nil {
@@ -548,15 +546,11 @@ func commentHide(ctx context.Context, o Options, args []string, hide bool) error
 	}
 	defer closeQuietly(closer)
 
-	r := ""
-	if hide {
-		r = *reason
-	}
-	if err := b.SetCommentHidden(ctx, id, cid, r); err != nil {
+	if err := b.SetCommentHidden(ctx, id, cid, reason); err != nil {
 		return err
 	}
 	if hide {
-		fmt.Fprintf(o.Stdout, "hidden comment #%d on issue #%d (%s)\n", cid, id, r)
+		fmt.Fprintf(o.Stdout, "hidden comment #%d on issue #%d (%s)\n", cid, id, reason)
 	} else {
 		fmt.Fprintf(o.Stdout, "unhidden comment #%d on issue #%d\n", cid, id)
 	}
