@@ -13,9 +13,10 @@
 #   go run ./cmd/zatudan -db DB -repo REPO
 #
 # Notes:
-# - The fixture repo is created when REPO has no .git; re-running on an
-#   existing repo reuses it (branches must still exist — delete REPO for
-#   a clean replay) and appends duplicate PR rows to the DB.
+# - The fixture repo is created when REPO has no .git. Re-running on an
+#   existing repo keeps the branches as the last replay left them — a
+#   merged head has an empty base..head range, so `pr create` fails and
+#   the replay aborts. Delete REPO for a clean replay.
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -71,20 +72,20 @@ EOF
 	git -C "$REPO" checkout -q main
 fi
 
-zatu pr create --base main --head feature/search \
+pr1=$(zatu pr create --base main --head feature/search \
 	--title "Add search snippet view" \
-	--body "Shows matching lines with context in the results page." >/dev/null
-zatu pr comment create 1 --path app.txt --line 2 \
+	--body "Shows matching lines with context in the results page." | sed 's/.*#\([0-9][0-9]*\).*/\1/')
+zatu pr comment create "$pr1" --path app.txt --line 2 \
 	--body "Snippet line looks good; can we keep the dash separator?" >/dev/null
-zatu pr comment create 1 \
+zatu pr comment create "$pr1" \
 	--body "Rebased onto latest main; conflict badge should read clean." >/dev/null
 
-zatu pr create --base main --head feature/docs \
+pr2=$(zatu pr create --base main --head feature/docs \
 	--title "Document the pr flow" \
-	--body "Draft notes for contributors." >/dev/null
-zatu pr close 2 >/dev/null
+	--body "Draft notes for contributors." | sed 's/.*#\([0-9][0-9]*\).*/\1/')
+zatu pr close "$pr2" >/dev/null
 
-zatu pr merge 1 --method merge >/dev/null
+zatu pr merge "$pr1" --method merge >/dev/null
 
 zatu pr list --state all
 echo "replay done — browse with: go run ./cmd/zatudan -db $DB -repo $REPO"

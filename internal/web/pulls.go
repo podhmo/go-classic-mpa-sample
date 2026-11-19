@@ -333,6 +333,9 @@ func (h *handler) newPullForm(w http.ResponseWriter, r *http.Request) {
 				in.BaseRef = want
 			}
 		}
+		if in.BaseRef != "" {
+			break
+		}
 	}
 	h.r.renderPullForm(w, http.StatusOK, pullFormPage{
 		Title:     "New pull request",
