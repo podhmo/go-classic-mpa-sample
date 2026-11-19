@@ -19,13 +19,17 @@
   <p class="merge-state merge-conflicting" role="alert">{{.Error}}</p>
   {{end}}
 
-  {{if .Check}}
-  {{if eq .Check.Status 1}}
-  <p class="merge-state merge-clean">This branch can be merged cleanly.</p>
-  {{else if eq .Check.Status 2}}
+  {{if and .Check (eq .Check.Status 2)}}
   <p class="merge-state merge-conflicting">This branch has conflicts in:
     {{range $i, $f := .Check.Files}}{{if $i}}, {{end}}<code>{{$f}}</code>{{end}}</p>
   <p class="muted">Merging is blocked until the conflicts are resolved in the branches.</p>
+  <div class="form-actions">
+    <a class="btn btn-quiet" href="/pulls/{{.PR.ID}}">Back to pull request</a>
+  </div>
+  {{else}}
+  {{if .Check}}
+  {{if eq .Check.Status 1}}
+  <p class="merge-state merge-clean">This branch can be merged cleanly.</p>
   {{else}}
   <p class="merge-state">Mergeability could not be checked (shallow clone or old git). Merging may still fail.</p>
   {{end}}
@@ -54,5 +58,6 @@
       <button type="submit" class="btn btn-primary">Merge pull request</button>
     </div>
   </form>
+  {{end}}
 </div>
 {{end}}
