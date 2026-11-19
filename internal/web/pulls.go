@@ -6,6 +6,7 @@
 package web
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -248,6 +249,20 @@ func (h *handler) diffRange(pr *store.PullRequest) (from, to string) {
 	}
 	if to == "" {
 		to = gitrepo.PinRef(pr.ID)
+	}
+	return from, to
+}
+
+// filesRange is diffRange with GitHub's three-dot semantics for open
+// pull requests: base-side commits that land after the merge-base are
+// not part of what the head adds. pullFiles renders this range, so
+// anchored-comment validation must accept exactly the same file set.
+func (h *handler) filesRange(ctx context.Context, pr *store.PullRequest) (from, to string) {
+	from, to = h.diffRange(pr)
+	if pr.Open() {
+		if mb, err := h.repo.MergeBase(ctx, pr.BaseRef, pr.HeadRef); err == nil && mb != "" {
+			from = mb
+		}
 	}
 	return from, to
 }
@@ -526,15 +541,7 @@ func (h *handler) pullFiles(w http.ResponseWriter, r *http.Request) {
 		Workspace: h.navWorkspace(r),
 		User:      userFromContext(r.Context()),
 	}
-	from, to := h.diffRange(pr)
-	if pr.Open() {
-		// A "files changed" view shows what the head adds, like GitHub's
-		// three-dot diff: base-side commits land after the merge-base and
-		// must not render as pull-request deletions.
-		if mb, err := h.repo.MergeBase(r.Context(), pr.BaseRef, pr.HeadRef); err == nil && mb != "" {
-			from = mb
-		}
-	}
+	from, to := h.filesRange(r.Context(), pr)
 	changed, err := h.repo.ChangedFiles(r.Context(), from, to)
 	if err != nil {
 		// A deleted head (or an empty recorded range) degrades the page
@@ -613,7 +620,7 @@ func (h *handler) createPRComment(w http.ResponseWriter, r *http.Request) {
 		}
 		// The comment must anchor to a file the PR touches — accepting
 		// any repo path would let anyone post snippets of unrelated files.
-		from, to := h.diffRange(pr)
+		from, to := h.filesRange(ctx, pr)
 		changes, cherr := h.repo.ChangedFiles(ctx, from, to)
 		inDiff := false
 		if cherr == nil {
