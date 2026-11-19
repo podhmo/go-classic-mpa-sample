@@ -15,8 +15,22 @@ import (
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
+const authUsage = `usage: zatu auth token [<action>] [flags]   (local mode only)
+
+actions:
+  token --user NAME     issue a per-user API token
+  token list            list issued tokens [--user NAME]
+  token revoke          revoke a token (ID|--token T)
+
+"zatu auth token <action> --help" shows an action's flags.
+`
+
 // zatu auth token --user NAME | token list [--user NAME] | token revoke (ID|--token T)
 func authCmd(ctx context.Context, o Options, args []string) error {
+	if len(args) > 0 && isHelpArg(args[0]) {
+		fmt.Fprint(o.Stdout, authUsage)
+		return nil
+	}
 	if len(args) == 0 || args[0] != "token" {
 		return usageError{msg: "usage: zatu auth token --user NAME | token list [--user NAME] | token revoke (ID|--token T)"}
 	}
@@ -47,7 +61,7 @@ func authTokenCreate(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("auth token", flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
 	user := fs.String("user", "", "login name of the user to issue a token for (required)")
-	if _, err := parseLeaf(fs, args, 0); err != nil {
+	if _, err := o.parseLeaf(fs, "--user NAME", args, 0); err != nil {
 		return err
 	}
 	if *user == "" {
@@ -85,7 +99,7 @@ func authTokenList(ctx context.Context, o Options, args []string) error {
 	user := fs.String("user", "", "show only this user's tokens")
 	jsonFields := fs.String("json", "", "output JSON with the named fields (comma-separated)")
 	tmpl := fs.String("template", "", "render output through a Go text/template")
-	if _, err := parseLeaf(fs, args, 0); err != nil {
+	if _, err := o.parseLeaf(fs, "", args, 0); err != nil {
 		return err
 	}
 	if *jsonFields != "" && *tmpl != "" {
@@ -132,7 +146,7 @@ func authTokenList(ctx context.Context, o Options, args []string) error {
 func authTokenRevoke(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("auth token revoke", flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
-	rest, err := parseLeaf(fs, args, 1)
+	rest, err := o.parseLeaf(fs, "(ID|--token T)", args, 1)
 	if err != nil {
 		return err
 	}

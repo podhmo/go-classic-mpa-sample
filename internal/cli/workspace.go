@@ -11,9 +11,23 @@ import (
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
+const workspaceUsage = `usage: zatu workspace <action> [flags]
+
+actions:
+  list     list workspaces
+  create   create a workspace: SLUG [--name N] [--description D]
+  delete   delete a workspace and its contents: SLUG
+
+"zatu workspace <action> --help" shows an action's flags.
+`
+
 func workspaceCmd(ctx context.Context, o Options, args []string) error {
 	if len(args) == 0 {
 		return usageError{msg: "workspace requires a verb: list|create|delete"}
+	}
+	if isHelpArg(args[0]) {
+		fmt.Fprint(o.Stdout, workspaceUsage)
+		return nil
 	}
 	switch args[0] {
 	case "list":
@@ -30,7 +44,7 @@ func workspaceCmd(ctx context.Context, o Options, args []string) error {
 func workspaceList(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("workspace list", flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
-	pos, err := parseLeaf(fs, args, 0)
+	pos, err := o.parseLeaf(fs, "", args, 0)
 	if err != nil {
 		return err
 	}
@@ -57,7 +71,7 @@ func workspaceCreate(ctx context.Context, o Options, args []string) error {
 	bf := o.addBackendFlags(fs)
 	name := fs.String("name", "", "display name (defaults to the slug)")
 	desc := fs.String("description", "", "description")
-	pos, err := parseLeaf(fs, args, 1)
+	pos, err := o.parseLeaf(fs, "SLUG", args, 1)
 	if err != nil {
 		return err
 	}
@@ -92,7 +106,7 @@ func workspaceCreate(ctx context.Context, o Options, args []string) error {
 func workspaceDelete(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("workspace delete", flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
-	pos, err := parseLeaf(fs, args, 1)
+	pos, err := o.parseLeaf(fs, "SLUG", args, 1)
 	if err != nil {
 		return err
 	}

@@ -12,10 +12,28 @@ import (
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
+const issueUsage = `usage: zatu issue <action> [flags]
+
+actions:
+  list     list issues (--state, --label, --search, --sort, --limit, --page)
+  view     show an issue: N [--comments|--markdown] [-w]
+  create   file an issue: --title T [--body B|--body-file -] [--label L]... [-w]
+  edit     update an issue: N [--title T] [--body B] [--label L]...
+  close    close an issue: N
+  reopen   reopen an issue: N
+  delete   delete an issue: N
+
+"zatu issue <action> --help" shows an action's flags.
+`
+
 // issueCmd dispatches `zatu issue <action>`.
 func issueCmd(ctx context.Context, o Options, args []string) error {
 	if len(args) == 0 {
 		return usageError{msg: "usage: zatu issue list|view|create|edit|close|reopen|delete"}
+	}
+	if isHelpArg(args[0]) {
+		fmt.Fprint(o.Stdout, issueUsage)
+		return nil
 	}
 	switch args[0] {
 	case "list":
@@ -46,7 +64,7 @@ func issueList(ctx context.Context, o Options, args []string) error {
 	page := fs.Int("page", 1, "page number")
 	jsonFields := fs.String("json", "", "output JSON with the named fields (comma-separated)")
 	tmpl := fs.String("template", "", "render output through a Go text/template")
-	if _, err := parseLeaf(fs, args, 0); err != nil {
+	if _, err := o.parseLeaf(fs, "", args, 0); err != nil {
 		return err
 	}
 	if *jsonFields != "" && *tmpl != "" {
@@ -105,7 +123,7 @@ func issueView(ctx context.Context, o Options, args []string) error {
 	tmpl := fs.String("template", "", "render output through a Go text/template")
 	web := fs.Bool("web", false, "open the issue page in a browser (requires --server)")
 	fs.BoolVar(web, "w", false, "shorthand for --web")
-	rest, err := parseLeaf(fs, args, 1)
+	rest, err := o.parseLeaf(fs, "N", args, 1)
 	if err != nil {
 		return err
 	}
@@ -196,7 +214,7 @@ func issueCreate(ctx context.Context, o Options, args []string) error {
 	fs.Var(&labels, "label", "attach a label by name (repeatable)")
 	web := fs.Bool("web", false, "open the new issue in a browser (requires --server)")
 	fs.BoolVar(web, "w", false, "shorthand for --web")
-	if _, err := parseLeaf(fs, args, 0); err != nil {
+	if _, err := o.parseLeaf(fs, "--title T", args, 0); err != nil {
 		return err
 	}
 	if strings.TrimSpace(*title) == "" {
@@ -251,7 +269,7 @@ func issueEdit(ctx context.Context, o Options, args []string) error {
 	body := fs.String("body", "", "new body")
 	var labels nameFlag
 	fs.Var(&labels, "label", "replace labels with this name set (repeatable)")
-	rest, err := parseLeaf(fs, args, 1)
+	rest, err := o.parseLeaf(fs, "N", args, 1)
 	if err != nil {
 		return err
 	}
@@ -308,7 +326,7 @@ func issueEdit(ctx context.Context, o Options, args []string) error {
 func issueStateChange(ctx context.Context, o Options, action string, args []string) error {
 	fs := flag.NewFlagSet("issue "+action, flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
-	rest, err := parseLeaf(fs, args, 1)
+	rest, err := o.parseLeaf(fs, "N", args, 1)
 	if err != nil {
 		return err
 	}
@@ -341,8 +359,20 @@ func issueStateChange(ctx context.Context, o Options, action string, args []stri
 	return nil
 }
 
+const commentUsage = `usage: zatu comment <action> [flags]
+
+actions:
+  create   comment on an issue: create N --body B | --body-file -
+
+"zatu comment <action> --help" shows an action's flags.
+`
+
 // zatu comment create N --body B | --body-file -
 func commentCmd(ctx context.Context, o Options, args []string) error {
+	if len(args) > 0 && isHelpArg(args[0]) {
+		fmt.Fprint(o.Stdout, commentUsage)
+		return nil
+	}
 	if len(args) == 0 || args[0] != "create" {
 		return usageError{msg: "usage: zatu comment create N --body B"}
 	}
@@ -350,7 +380,7 @@ func commentCmd(ctx context.Context, o Options, args []string) error {
 	bf := o.addBackendFlags(fs)
 	body := fs.String("body", "", "comment body")
 	bodyFile := fs.String("body-file", "", "read body from file (- for stdin)")
-	rest, err := parseLeaf(fs, args[1:], 1)
+	rest, err := o.parseLeaf(fs, "N --body B", args[1:], 1)
 	if err != nil {
 		return err
 	}
@@ -383,10 +413,24 @@ func commentCmd(ctx context.Context, o Options, args []string) error {
 	return nil
 }
 
+const labelUsage = `usage: zatu label <action> [flags]
+
+actions:
+  list     list labels [--kind issue|discussion]
+  create   create a label: NAME --color HEX [--kind K] [--shared]
+  delete   archive a label: NAME [--kind K]
+
+"zatu label <action> --help" shows an action's flags.
+`
+
 // zatu label list|create|delete
 func labelCmd(ctx context.Context, o Options, args []string) error {
 	if len(args) == 0 {
 		return usageError{msg: "usage: zatu label list|create|delete"}
+	}
+	if isHelpArg(args[0]) {
+		fmt.Fprint(o.Stdout, labelUsage)
+		return nil
 	}
 	switch args[0] {
 	case "list":
@@ -419,7 +463,7 @@ func labelList(ctx context.Context, o Options, args []string) error {
 	kind := labelKindFlag(fs)
 	jsonFields := fs.String("json", "", "output JSON with the named fields (comma-separated)")
 	tmpl := fs.String("template", "", "render output through a Go text/template")
-	if _, err := parseLeaf(fs, args, 0); err != nil {
+	if _, err := o.parseLeaf(fs, "", args, 0); err != nil {
 		return err
 	}
 	if *jsonFields != "" && *tmpl != "" {
@@ -463,7 +507,7 @@ func labelCreate(ctx context.Context, o Options, args []string) error {
 	kind := labelKindFlag(fs)
 	color := fs.String("color", "", "label color as #RRGGBB (required)")
 	shared := fs.Bool("shared", false, "create a shared label visible in every workspace")
-	rest, err := parseLeaf(fs, args, 1)
+	rest, err := o.parseLeaf(fs, "NAME --color HEX", args, 1)
 	if err != nil {
 		return err
 	}
@@ -513,7 +557,7 @@ func labelDelete(ctx context.Context, o Options, args []string) error {
 	fs := flag.NewFlagSet("label delete", flag.ContinueOnError)
 	bf := o.addBackendFlags(fs)
 	kind := labelKindFlag(fs)
-	rest, err := parseLeaf(fs, args, 1)
+	rest, err := o.parseLeaf(fs, "NAME", args, 1)
 	if err != nil {
 		return err
 	}

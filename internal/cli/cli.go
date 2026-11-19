@@ -16,6 +16,9 @@
 //	zatu api <path> [-X METHOD] [-f k=v]... [-F k=v]...       (remote mode only)
 //	zatu completion bash|zsh|fish
 //
+// Every level accepts -h/--help: it prints that level's usage to stdout
+// and exits 0 (a leaf's flag list comes from flag.PrintDefaults).
+//
 // Exit codes: 0 success / 1 runtime error / 2 usage error.
 package cli
 
@@ -111,8 +114,8 @@ const (
 func Run(ctx context.Context, o Options) int {
 	o = o.withDefaults()
 	args := o.Args
-	if len(args) == 0 || args[0] == "help" {
-		o.printUsage()
+	if len(args) == 0 || isHelpArg(args[0]) {
+		o.printUsage(o.Stdout)
 		return ExitOK
 	}
 	var err error
@@ -139,10 +142,13 @@ func Run(ctx context.Context, o Options) int {
 	if err == nil {
 		return ExitOK
 	}
+	if errors.Is(err, errHelp) {
+		return ExitOK
+	}
 	var ue usageError
 	if errors.As(err, &ue) {
 		fmt.Fprintf(o.Stderr, "Error: %v\n\n", ue.msg)
-		o.printUsage()
+		o.printUsage(o.Stderr)
 		return ExitUsage
 	}
 	fmt.Fprintf(o.Stderr, "Error: %v\n", err)
@@ -153,6 +159,15 @@ func Run(ctx context.Context, o Options) int {
 type usageError struct{ msg string }
 
 func (e usageError) Error() string { return e.msg }
+
+// errHelp means -h/--help was passed and the relevant help text was
+// already printed; Run maps it to a clean exit rather than an error.
+var errHelp = errors.New("cli: help requested")
+
+// isHelpArg reports whether s asks for help at any command level.
+func isHelpArg(s string) bool {
+	return s == "help" || s == "--help" || s == "-h"
+}
 
 func (o Options) withDefaults() Options {
 	if o.Stdout == nil {
@@ -197,8 +212,8 @@ func (o Options) withDefaults() Options {
 	return o
 }
 
-func (o Options) printUsage() {
-	fmt.Fprint(o.Stderr, `Usage: zatu <command> [<flags>]
+func (o Options) printUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage: zatu <command> [<flags>]
 
 Commands:
   issue list|view|create|edit|close|reopen|delete
@@ -218,7 +233,10 @@ Commands:
   api <path>                 raw call to /api/v1 (remote mode only)
                              [-X METHOD] [-f name=value]... [-F name=value]...
   completion bash|zsh|fish   print a shell completion script
-  help
+  help                       show this text
+
+Every level accepts -h/--help: "zatu issue --help" lists a group's actions,
+"zatu issue list --help" prints one action's arguments and flags.
 
 Backend selection:
   --server URL   remote mode via /api/v1 (env ZATUDAN_SERVER); requires --token
@@ -334,14 +352,22 @@ func argNumber(args []string, i int, noun string) (int64, error) {
 }
 
 // parseLeaf parses a leaf command's args, rejecting leftover positionals.
-// flag.Parse stops at the first positional, so it is re-run on the
-// remainder — gh-style `issue view 1 --json title` parses the same as
-// `issue view --json title 1`.
-func parseLeaf(fs *flag.FlagSet, args []string, allow int) ([]string, error) {
+// argHint is the leaf's argument synopsis for the --help usage line
+// ("N --body B"); every leaf implicitly accepts the backend flags, so
+// "[flags]" is appended unconditionally. flag.Parse stops at the first
+// positional, so it is re-run on the remainder — gh-style
+// `issue view 1 --json title` parses the same as `issue view --json title 1`.
+// -h/--help prints the leaf's usage and flag list, then bubbles up as
+// errHelp.
+func (o Options) parseLeaf(fs *flag.FlagSet, argHint string, args []string, allow int) ([]string, error) {
 	fs.SetOutput(io.Discard)
 	var positional []string
 	for {
 		if err := fs.Parse(args); err != nil {
+			if errors.Is(err, flag.ErrHelp) {
+				o.printLeafUsage(fs, argHint)
+				return nil, errHelp
+			}
 			return nil, usageError{msg: err.Error()}
 		}
 		rest := fs.Args()
@@ -355,6 +381,21 @@ func parseLeaf(fs *flag.FlagSet, args []string, allow int) ([]string, error) {
 		args = rest[1:]
 	}
 	return positional, nil
+}
+
+// printLeafUsage writes one leaf command's usage line plus its flag set
+// (the flag definitions are the source of truth — no duplicated flag
+// lists in help strings). The flag package's own "Usage of ..." header
+// stays on io.Discard; this replaces it.
+func (o Options) printLeafUsage(fs *flag.FlagSet, argHint string) {
+	fmt.Fprintf(o.Stdout, "usage: zatu %s", fs.Name())
+	if argHint != "" {
+		fmt.Fprintf(o.Stdout, " %s", argHint)
+	}
+	fmt.Fprint(o.Stdout, " [flags]\n\noptions:\n")
+	fs.SetOutput(o.Stdout)
+	fs.PrintDefaults()
+	fs.SetOutput(io.Discard)
 }
 
 // readBody resolves --body / --body-file ("-" means stdin), exactly like
