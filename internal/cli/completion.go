@@ -42,14 +42,14 @@ _issues_completions() {
 	prev="${COMP_WORDS[COMP_CWORD-1]}"
 
 	if [ "$COMP_CWORD" -eq 1 ]; then
-		COMPREPLY=( $(compgen -W "issue comment label discussion auth api completion help" -- "$cur") )
+		COMPREPLY=( $(compgen -W "issue comment label discussion pr auth api completion help" -- "$cur") )
 		return 0
 	fi
 
 	# Flag words complete anywhere; values of flags that take one are left
 	# to the shell's file completion.
 	if [[ "$cur" == -* ]]; then
-		COMPREPLY=( $(compgen -W "--db --server --token --json --template --state --search --sort --limit --page --label --category --answered --title --body --body-file --comments --thread --comment --reason --unmark --user --method --field --raw-field --web" -- "$cur") )
+		COMPREPLY=( $(compgen -W "--db --server --token --repo --json --template --state --search --sort --limit --page --label --category --answered --title --body --body-file --comments --thread --comment --reason --unmark --user --method --field --raw-field --web" -- "$cur") )
 		return 0
 	fi
 
@@ -67,6 +67,13 @@ _issues_completions() {
 	label)
 		if [ "$COMP_CWORD" -eq 2 ]; then
 			COMPREPLY=( $(compgen -W "list create delete" -- "$cur") )
+		fi
+		;;
+	pr)
+		if [ "$COMP_CWORD" -eq 2 ]; then
+			COMPREPLY=( $(compgen -W "list view diff create edit close reopen merge delete comment" -- "$cur") )
+		elif [ "${COMP_WORDS[2]}" = "comment" ] && [ "$COMP_CWORD" -eq 3 ]; then
+			COMPREPLY=( $(compgen -W "create edit delete hide unhide" -- "$cur") )
 		fi
 		;;
 	discussion)
@@ -88,13 +95,17 @@ _issues_completions() {
 		;;
 	esac
 	if [ "$prev" = "--state" ]; then
-		COMPREPLY=( $(compgen -W "open closed all" -- "$cur") )
+		COMPREPLY=( $(compgen -W "open closed merged all" -- "$cur") )
 	elif [ "$prev" = "--sort" ]; then
 		COMPREPLY=( $(compgen -W "newest oldest" -- "$cur") )
 	elif [ "$prev" = "--answered" ]; then
 		COMPREPLY=( $(compgen -W "yes no" -- "$cur") )
 	elif [ "$prev" = "--method" ] || [ "$prev" = "-X" ]; then
 		COMPREPLY=( $(compgen -W "GET POST PATCH PUT DELETE" -- "$cur") )
+	elif [ "$prev" = "--side" ]; then
+		COMPREPLY=( $(compgen -W "right left" -- "$cur") )
+	elif [ "$prev" = "--merge-method" ]; then
+		COMPREPLY=( $(compgen -W "merge squash rebase" -- "$cur") )
 	elif [ "$prev" = "--reason" ]; then
 		COMPREPLY=( $(compgen -W "spam abuse off-topic outdated duplicate resolved low-quality" -- "$cur") )
 	fi
@@ -110,6 +121,7 @@ _zatu() {
 	local -a commands
 	commands=(
 		'issue:issue list|view|create|edit|close|reopen|delete'
+		'pr:pull request list|view|diff|create|edit|close|reopen|merge|comment'
 		'comment:issue comment create|edit|delete|hide|unhide'
 		'label:list labels'
 		'discussion:discussion list|view|create|edit|delete|comment|answer|categories'
@@ -127,6 +139,14 @@ _zatu() {
 			_describe -t actions 'issue action' '(
 				list view create edit close reopen delete
 			)' ;;
+		pr)
+			if (( CURRENT == 3 )); then
+				_describe -t actions 'pr action' '(
+					list view diff create edit close reopen merge delete comment
+				)'
+			elif [[ "$words[3]" == comment ]]; then
+				_describe -t actions 'comment action' '(create edit delete hide unhide)'
+			fi ;;
 		comment)
 			_describe -t actions 'comment action' '(create edit delete hide unhide)' ;;
 		label)
@@ -158,7 +178,7 @@ compdef _zatu zatu
 const completionFish = `# fish completion for zatu — save to ~/.config/fish/completions/zatu.fish
 # or: zatu completion fish | source
 complete -c zatu -f
-complete -c zatu -n '__fish_use_subcommand' -a 'issue comment label discussion auth api completion help'
+complete -c zatu -n '__fish_use_subcommand' -a 'issue comment label discussion pr auth api completion help'
 complete -c zatu -n '__fish_seen_subcommand_from issue' -a 'list view create edit close reopen delete'
 complete -c zatu -n '__fish_seen_subcommand_from comment' -a 'create edit delete hide unhide'
 complete -c zatu -n '__fish_seen_subcommand_from label' -a 'list create delete'
