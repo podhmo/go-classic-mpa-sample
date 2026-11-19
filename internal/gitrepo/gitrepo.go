@@ -210,6 +210,9 @@ func runGit(ctx context.Context, dir string, extraEnv []string, args ...string) 
 
 	argv := append([]string{"-C", dir}, args...)
 	cmd := exec.CommandContext(ctx, "git", argv...)
+	// CommandContext kills git itself; a child that inherited stdout/stderr
+	// (a hook) would otherwise keep cmd.Wait blocked on the pipes forever.
+	cmd.WaitDelay = 5 * time.Second
 	cmd.Env = scrubbedEnv(extraEnv)
 	var out, errb cappedBuffer
 	out.limit, errb.limit = maxOutput, maxErrOutput

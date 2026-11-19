@@ -6,7 +6,6 @@ package gitrepo
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -58,7 +57,7 @@ func ValidatePath(p string) error {
 		return ErrBadPath
 	case strings.HasPrefix(p, "/"), strings.HasPrefix(p, "-"), strings.HasPrefix(p, ":"):
 		return ErrBadPath
-	case strings.Contains(p, ".."), strings.Contains(p, "::"):
+	case strings.HasPrefix(p, "./"), strings.Contains(p, ".."), strings.Contains(p, "::"):
 		return ErrBadPath
 	}
 	return nil
@@ -205,24 +204,30 @@ func (r *Repo) Log(ctx context.Context, base, head string) ([]Commit, error) {
 // pass a merge-base as `from` for the three-dot semantics GitHub's
 // "Files changed" uses.
 func (r *Repo) ChangedFiles(ctx context.Context, from, to string) ([]FileChange, error) {
-	res, err := r.run(ctx, nil, "diff", "--name-status", from, to)
+	// -z: NUL-separated, unquoted — without it core.quotepath mangles
+	// non-ASCII paths into C escapes that name no real file.
+	res, err := r.run(ctx, nil, "diff", "--name-status", "-z", from, to)
 	if err != nil {
 		return nil, err
 	}
 	var out []FileChange
-	for line := range strings.Lines(res.stdout) {
-		line = strings.TrimRight(line, "\n")
-		parts := strings.Split(line, "\t")
-		fc := FileChange{Status: parts[0]}
-		switch len(parts) {
-		case 2:
-			fc.OldPath, fc.NewPath = parts[1], parts[1]
-		case 3: // rename/copy: status, old, new
-			fc.OldPath, fc.NewPath = parts[1], parts[2]
-		default:
+	fields := strings.Split(res.stdout, "\x00")
+	for i := 0; i+1 < len(fields); {
+		status := fields[i]
+		if status == "" {
+			i++
 			continue
 		}
-		out = append(out, fc)
+		if strings.HasPrefix(status, "R") || strings.HasPrefix(status, "C") {
+			if i+2 >= len(fields) {
+				break
+			}
+			out = append(out, FileChange{Status: status, OldPath: fields[i+1], NewPath: fields[i+2]})
+			i += 3
+			continue
+		}
+		out = append(out, FileChange{Status: status, OldPath: fields[i+1], NewPath: fields[i+1]})
+		i += 2
 	}
 	return out, nil
 }
@@ -232,7 +237,10 @@ func (r *Repo) ChangedFiles(ctx context.Context, from, to string) ([]FileChange,
 func (r *Repo) Diff(ctx context.Context, from, to, path string) (string, bool, error) {
 	args := []string{"diff", "-U3", from, to}
 	if path != "" {
-		args = append(args, "--", path)
+		// :(literal): ValidatePath allows glob metacharacters like [] in
+		// filenames; without the magic prefix git would glob other files
+		// into this file's diff.
+		args = append(args, "--", ":(literal)"+path)
 	}
 	res, err := r.run(ctx, nil, args...)
 	if err != nil {
@@ -284,7 +292,7 @@ func (r *Repo) CheckMerge(ctx context.Context, base, head string) (*MergeCheck, 
 	if !r.HasMergeTree() || r.Shallow {
 		return c, nil
 	}
-	res, err := r.run(ctx, nil, "merge-tree", "--write-tree", "--name-only", "--no-messages", base, head)
+	res, err := r.run(ctx, nil, "merge-tree", "--write-tree", "--name-only", "--no-messages", "-z", base, head)
 	if err == nil {
 		c.Status = MergeClean
 		return c, nil
@@ -293,18 +301,14 @@ func (r *Repo) CheckMerge(ctx context.Context, base, head string) (*MergeCheck, 
 	if !ok || e.ExitCode != 1 {
 		return nil, err
 	}
-	// Exit 1: the first line must be the result tree's OID — anything
+	// Exit 1: the first field must be the result tree's OID — anything
 	// else is a different failure (bad input) wearing the same code.
-	lines := strings.Split(strings.TrimRight(res.stdout, "\n"), "\n")
-	if len(lines) == 0 || !isHex(lines[0]) {
+	files, ok2 := parseMergeTreeNames(res.stdout)
+	if !ok2 {
 		return nil, err
 	}
 	c.Status = MergeConflicting
-	for _, f := range lines[1:] {
-		if f != "" {
-			c.Files = append(c.Files, f)
-		}
-	}
+	c.Files = files
 	return c, nil
 }
 
@@ -379,15 +383,10 @@ func (r *Repo) UpdatePin(ctx context.Context, id int64, sha string) error {
 
 // Unpin drops the pin ref; used if a pin must follow a comment/PR delete.
 func (r *Repo) Unpin(ctx context.Context, id int64) error {
+	// update-ref -d exits 0 on a missing ref, so there is no existence
+	// case to swallow — real failures (locks, permissions) must surface.
 	_, err := r.run(ctx, nil, "update-ref", "-d", PinRef(id))
-	if err != nil {
-		var ge *Error
-		if errors.As(err, &ge) {
-			return nil // deleting a nonexistent ref is fine
-		}
-		return err
-	}
-	return nil
+	return err
 }
 
 // Worktrees maps each checked-out branch's full ref name to its worktree

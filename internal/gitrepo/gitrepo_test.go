@@ -411,3 +411,74 @@ func TestLogDiffFiles(t *testing.T) {
 		t.Fatalf("normal path rejected: %v", err)
 	}
 }
+
+func TestRebasePlumbingConsecutiveSameLineEdits(t *testing.T) {
+	// Two consecutive commits extending the same line must replay
+	// cleanly: without an explicit merge-base, merge-tree infers the
+	// original fork and re-applies the first commit, a phantom conflict.
+	ctx := context.Background()
+	dir := initRepo(t)
+	r := openRepo(t, dir)
+	git(t, dir, "branch", "release")
+	git(t, dir, "checkout", "-qb", "feat")
+	write(t, dir, "a.txt", "one\ntwo\n")
+	write(t, dir, "a.txt", "one\ntwo\nthree\n")
+	git(t, dir, "checkout", "-q", "main")
+
+	res, err := r.Merge(ctx, "release", "feat", MethodRebase, "")
+	if err != nil {
+		t.Fatalf("rebase: %v", err)
+	}
+	if res.MergeSHA == "" {
+		t.Fatal("no merge sha")
+	}
+	if got := git(t, dir, "show", "release:a.txt"); got != "one\ntwo\nthree\n" {
+		t.Fatalf("release:a.txt = %q", got)
+	}
+	// Two replayed commits (tip descends 2 above the pre-rebase base).
+	count := strings.TrimSpace(git(t, dir, "rev-list", "--count", "main..release"))
+	if count != "2" {
+		t.Fatalf("replayed commits = %s", count)
+	}
+}
+
+func TestChangedFilesQuotedAndDiffLiteral(t *testing.T) {
+	ctx := context.Background()
+	dir := initRepo(t)
+	r := openRepo(t, dir)
+	git(t, dir, "checkout", "-qb", "feat")
+	// Non-ASCII name (core.quotepath would mangle it without -z) and a
+	// name that is also a glob pattern.
+	write(t, dir, "dir/ö.txt", "umlaut\n")
+	write(t, dir, "docs/[draft].md", "brackets\n")
+	write(t, dir, "docs/d.md", "globby\n")
+	git(t, dir, "checkout", "-q", "main")
+	mbase, err := r.MergeBase(ctx, "main", "feat")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	files, err := r.ChangedFiles(ctx, mbase, "feat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, f := range files {
+		got[f.NewPath] = f.Status
+	}
+	if got["dir/ö.txt"] != "A" || got["docs/[draft].md"] != "A" {
+		t.Fatalf("quoted/mangled names: %+v", files)
+	}
+	// The literal diff must NOT include the glob-adjacent docs/d.md.
+	diff, _, err := r.Diff(ctx, mbase, "feat", "docs/[draft].md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(diff, "+brackets") || strings.Contains(diff, "d.md") {
+		t.Fatalf("diff = %q", diff)
+	}
+	// ShowFile reads the non-ASCII path fine.
+	if got, err := r.ShowFile(ctx, "feat", "dir/ö.txt"); err != nil || got != "umlaut\n" {
+		t.Fatalf("show = %q, %v", got, err)
+	}
+}

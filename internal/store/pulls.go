@@ -133,7 +133,8 @@ func (s *Store) ListPullRequests(ctx context.Context, f PRListFilter) ([]*PullRe
 		conds = append(conds, "p.status = 'open'")
 	case "all":
 	case PRStatusClosed, PRStatusMerged:
-		conds = append(conds, "p.status = ?", f.Status)
+		conds = append(conds, "p.status = ?")
+		args = append(args, f.Status)
 	default:
 		// Unknown filters behave like "all" rather than erroring, the
 		// same tolerance the issue list's ?status= shows.

@@ -246,3 +246,30 @@ func TestMigrateV5(t *testing.T) {
 		t.Fatalf("missing index: %v", idx)
 	}
 }
+
+func TestListPullRequestsStatusFilter(t *testing.T) {
+	ctx := context.Background()
+	s := mustOpen(t, ":memory:")
+	open1, _ := s.CreatePullRequest(ctx, prInput(), 0, nil)
+	in := prInput()
+	in.HeadRef = "refs/heads/other"
+	closed1, _ := s.CreatePullRequest(ctx, in, 0, nil)
+	if err := s.ClosePullRequest(ctx, closed1, "h", "mb"); err != nil {
+		t.Fatal(err)
+	}
+
+	for status, want := range map[string]int{"": 1, "open": 1, "closed": 1, "merged": 0, "all": 2} {
+		prs, total, err := s.ListPullRequests(ctx, PRListFilter{Status: status})
+		if err != nil {
+			t.Fatalf("status %q: %v", status, err)
+		}
+		if total != want || len(prs) != want {
+			t.Fatalf("status %q: total=%d len=%d, want %d", status, total, len(prs), want)
+		}
+	}
+	// The open row is the expected one.
+	prs, _, _ := s.ListPullRequests(ctx, PRListFilter{Status: "open"})
+	if prs[0].ID != open1 {
+		t.Fatalf("open list = %+v", prs[0])
+	}
+}

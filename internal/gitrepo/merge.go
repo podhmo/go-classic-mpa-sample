@@ -124,7 +124,7 @@ func (r *Repo) Merge(ctx context.Context, base, head string, method MergeMethod,
 // checkConflict asks merge-tree whether base+head would merge cleanly and
 // reports a *ConflictError when not.
 func (r *Repo) checkConflict(ctx context.Context, baseSHA, headSHA string) error {
-	res, err := r.run(ctx, nil, "merge-tree", "--write-tree", "--name-only", "--no-messages", baseSHA, headSHA)
+	res, err := r.run(ctx, nil, "merge-tree", "--write-tree", "--name-only", "--no-messages", "-z", baseSHA, headSHA)
 	if err == nil {
 		return nil
 	}
@@ -132,17 +132,28 @@ func (r *Repo) checkConflict(ctx context.Context, baseSHA, headSHA string) error
 	if !ok || e.ExitCode != 1 {
 		return err
 	}
-	lines := strings.Split(strings.TrimRight(res.stdout, "\n"), "\n")
-	if len(lines) == 0 || !isHex(lines[0]) {
+	files, ok2 := parseMergeTreeNames(res.stdout)
+	if !ok2 {
 		return err
 	}
-	ce := &ConflictError{}
-	for _, f := range lines[1:] {
+	return &ConflictError{Files: files}
+}
+
+// parseMergeTreeNames reads the NUL-separated output of merge-tree
+// --name-only -z: first field is the result tree's OID, the rest are
+// conflicted paths (unquoted thanks to -z). ok=false means the output
+// was not in that shape — a different failure wearing exit 1.
+func parseMergeTreeNames(stdout string) (files []string, ok bool) {
+	fields := strings.Split(stdout, "\x00")
+	if len(fields) == 0 || !isHex(fields[0]) {
+		return nil, false
+	}
+	for _, f := range fields[1:] {
 		if f != "" {
-			ce.Files = append(ce.Files, f)
+			files = append(files, f)
 		}
 	}
-	return ce
+	return files, true
 }
 
 // revListCount counts commits in from..to.
@@ -165,7 +176,17 @@ func (r *Repo) mergeInWorktree(ctx context.Context, dir, baseRef string, res *Me
 	if strings.TrimSpace(status) != "" {
 		return "", &DirtyWorktreeError{Dir: dir, Status: status}
 	}
+	// The Worktrees map was a snapshot: another process may have switched
+	// the worktree's branch since — merging then would advance the wrong
+	// branch while the requested base stays put.
+	cur, err := runGit(ctx, dir, nil, "symbolic-ref", "-q", "HEAD")
+	if err != nil || strings.TrimSpace(cur.stdout) != baseRef {
+		return "", fmt.Errorf("%w: %s no longer checks out %s", ErrConcurrentUpdate, dir, baseRef)
+	}
 	env := r.identityEnv(ctx)
+	// Cleanup must outlive a caller cancellation: an aborted merge must
+	// still unwind the worktree, and a canceled ctx would kill the abort.
+	cleanupCtx := context.WithoutCancel(ctx)
 
 	var mergeSHA string
 	switch res.Method {
@@ -178,12 +199,12 @@ func (r *Repo) mergeInWorktree(ctx context.Context, dir, baseRef string, res *Me
 		}
 		args = append(args, res.HeadSHA)
 		if _, err := runGit(ctx, dir, env, args...); err != nil {
-			runGit(ctx, dir, nil, "merge", "--abort") //nolint:errcheck
+			runGit(cleanupCtx, dir, nil, "merge", "--abort") //nolint:errcheck
 			return "", err
 		}
 	case MethodSquash:
 		if _, err := runGit(ctx, dir, env, "merge", "--squash", res.HeadSHA); err != nil {
-			runGit(ctx, dir, nil, "reset", "--hard", "HEAD") //nolint:errcheck
+			runGit(cleanupCtx, dir, nil, "reset", "--hard", "HEAD") //nolint:errcheck
 			return "", err
 		}
 		// --squash leaves a prepared SQUASH_MSG; --no-edit takes it as the
@@ -195,14 +216,14 @@ func (r *Repo) mergeInWorktree(ctx context.Context, dir, baseRef string, res *Me
 			commitArgs = append(commitArgs, "--no-edit")
 		}
 		if _, err := runGit(ctx, dir, env, commitArgs...); err != nil {
-			runGit(ctx, dir, nil, "reset", "--hard", "HEAD") //nolint:errcheck
+			runGit(cleanupCtx, dir, nil, "reset", "--hard", "HEAD") //nolint:errcheck
 			return "", err
 		}
 	case MethodRebase:
 		// --no-merges keeps the replay linear (GitHub rebase-merge
 		// semantics): merge commits cannot be cherry-picked without -m.
 		if _, err := runGit(ctx, dir, env, "cherry-pick", "--no-merges", res.MergeBaseSHA+".."+res.HeadSHA); err != nil {
-			runGit(ctx, dir, nil, "cherry-pick", "--abort") //nolint:errcheck
+			runGit(cleanupCtx, dir, nil, "cherry-pick", "--abort") //nolint:errcheck
 			return "", err
 		}
 	}
@@ -260,25 +281,31 @@ func (r *Repo) mergePlumbing(ctx context.Context, baseRef, baseSHA string, res *
 // mergeTree runs merge-tree --write-tree and returns the result tree OID,
 // translating exit 1 into *ConflictError.
 func (r *Repo) mergeTree(ctx context.Context, base, head string) (string, error) {
-	res, err := r.run(ctx, nil, "merge-tree", "--write-tree", "--name-only", "--no-messages", base, head)
+	return r.mergeTreeOn(ctx, "", base, head)
+}
+
+// mergeTreeOn is mergeTree with an explicit merge-base — needed by the
+// replay path, where the rewritten tip shares no ancestry with the
+// commit being replayed and merge-tree's inferred fork point is wrong.
+func (r *Repo) mergeTreeOn(ctx context.Context, mergeBase, base, head string) (string, error) {
+	args := []string{"merge-tree", "--write-tree", "--name-only", "--no-messages", "-z"}
+	if mergeBase != "" {
+		args = append(args, "--merge-base", mergeBase)
+	}
+	args = append(args, base, head)
+	res, err := r.run(ctx, nil, args...)
 	if err == nil {
-		return strings.TrimSpace(res.stdout), nil
+		return strings.TrimRight(res.stdout, "\x00"), nil
 	}
 	e, ok := err.(*Error)
 	if !ok || e.ExitCode != 1 {
 		return "", err
 	}
-	lines := strings.Split(strings.TrimRight(res.stdout, "\n"), "\n")
-	if len(lines) == 0 || !isHex(lines[0]) {
+	files, ok2 := parseMergeTreeNames(res.stdout)
+	if !ok2 {
 		return "", err
 	}
-	ce := &ConflictError{}
-	for _, f := range lines[1:] {
-		if f != "" {
-			ce.Files = append(ce.Files, f)
-		}
-	}
-	return "", ce
+	return "", &ConflictError{Files: files}
 }
 
 // commitTree creates a commit object; env carries the identity (and for
@@ -299,14 +326,27 @@ func (r *Repo) commitTree(ctx context.Context, env []string, tree string, parent
 // cherry-pick does. The first conflict aborts with the offending commit
 // named; nothing has been written to any ref by then.
 func (r *Repo) rebasePlumbing(ctx context.Context, env []string, mergeBase, newBase, head string) (string, error) {
-	res, err := r.run(ctx, nil, "rev-list", "--reverse", "--no-merges", mergeBase+".."+head)
+	// --parents pairs each commit with its original parent: replaying c
+	// must merge against c^ as the base — the rewritten tip shares no
+	// ancestry with c, so merge-tree's inferred fork point would find
+	// the original merge-base and re-apply already-replayed changes,
+	// reporting phantom conflicts on consecutive same-line edits.
+	res, err := r.run(ctx, nil, "rev-list", "--reverse", "--parents", "--no-merges", mergeBase+".."+head)
 	if err != nil {
 		return "", err
 	}
-	commits := strings.Fields(res.stdout)
+	const emptyTree = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 	tip := newBase
-	for _, c := range commits {
-		tree, err := r.mergeTree(ctx, tip, c)
+	for line := range strings.Lines(res.stdout) {
+		f := strings.Fields(line)
+		if len(f) == 0 {
+			continue
+		}
+		c, parent := f[0], emptyTree
+		if len(f) > 1 {
+			parent = f[1]
+		}
+		tree, err := r.mergeTreeOn(ctx, parent, tip, c)
 		if err != nil {
 			if ce, ok := err.(*ConflictError); ok {
 				return "", fmt.Errorf("gitrepo: replaying %s: %w", c, ce)
@@ -317,17 +357,17 @@ func (r *Repo) rebasePlumbing(ctx context.Context, env []string, mergeBase, newB
 		if err != nil {
 			return "", err
 		}
-		f := strings.SplitN(meta.stdout, "\x00", 4)
-		if len(f) != 4 {
+		mf := strings.SplitN(meta.stdout, "\x00", 4)
+		if len(mf) != 4 {
 			return "", fmt.Errorf("gitrepo: unreadable commit %s", c)
 		}
 		authorEnv := append([]string{}, env...)
 		authorEnv = append(authorEnv,
-			"GIT_AUTHOR_NAME="+strings.TrimSpace(f[0]),
-			"GIT_AUTHOR_EMAIL="+strings.TrimSpace(f[1]),
-			"GIT_AUTHOR_DATE="+strings.TrimSpace(f[2]),
+			"GIT_AUTHOR_NAME="+strings.TrimSpace(mf[0]),
+			"GIT_AUTHOR_EMAIL="+strings.TrimSpace(mf[1]),
+			"GIT_AUTHOR_DATE="+strings.TrimSpace(mf[2]),
 		)
-		tip, err = r.commitTree(ctx, authorEnv, tree, []string{"-p", tip}, strings.TrimRight(f[3], "\n"))
+		tip, err = r.commitTree(ctx, authorEnv, tree, []string{"-p", tip}, strings.TrimRight(mf[3], "\n"))
 		if err != nil {
 			return "", err
 		}
