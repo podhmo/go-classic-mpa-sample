@@ -555,6 +555,10 @@ func (h *handler) pullFiles(w http.ResponseWriter, r *http.Request) {
 			Anchor:       fileAnchor(path),
 			Comments:     byPath[path],
 		}
+		// Left-side comments on a renamed file carry its old path.
+		if ch.OldPath != "" && ch.OldPath != path {
+			fv.Comments = append(fv.Comments, byPath[ch.OldPath]...)
+		}
 		paths := []string{path}
 		if ch.OldPath != "" && ch.OldPath != path {
 			paths = append(paths, ch.OldPath)
@@ -877,16 +881,16 @@ func (h *handler) updatePullStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	if !pr.Open() {
-		// Stale resubmission: reject before touching git so a reused head
-		// branch cannot repoint the archived pin (the store would reject
-		// the transition only afterward).
-		h.renderError(w, r, http.StatusConflict, "Invalid transition",
-			"Only an open pull request can change status.")
-		return
-	}
 	switch r.PostFormValue("status") {
 	case "closed":
+		if !pr.Open() {
+			// Stale resubmission: reject before touching git so a reused
+			// head branch cannot repoint the archived pin (the store
+			// would reject the transition only afterward).
+			h.renderError(w, r, http.StatusConflict, "Invalid transition",
+				"Only an open pull request can be closed.")
+			return
+		}
 		headSHA, err := h.repo.RevParse(ctx, pr.HeadRef)
 		if err != nil {
 			headSHA = "" // head may be deleted already — close anyway
@@ -969,15 +973,6 @@ func (h *handler) mergePull(w http.ResponseWriter, r *http.Request) {
 	if method == gitrepo.MethodSquash {
 		msg = fmt.Sprintf("%s (#%d)", pr.Title, pr.ID)
 	}
-	// Pin the head tip before merging — squash/rebase leave the head
-	// commits dangling on the feature branch, and the pin is what keeps
-	// them reachable once that branch is deleted.
-	if headSHA, err := h.repo.RevParse(ctx, pr.HeadRef); err == nil {
-		if err := h.repo.UpdatePin(ctx, pr.ID, headSHA); err != nil {
-			h.pullError(w, r, err)
-			return
-		}
-	}
 	res, err := h.repo.Merge(ctx, pr.BaseRef, pr.HeadRef, method, msg)
 	if err != nil {
 		var ce *gitrepo.ConflictError
@@ -1005,6 +1000,14 @@ func (h *handler) mergePull(w http.ResponseWriter, r *http.Request) {
 			User:      userFromContext(r.Context()),
 		})
 		return
+	}
+	// Pin the head tip Merge resolved — squash/rebase leave the head
+	// commits dangling on the feature branch and the pin is what keeps
+	// them reachable once that branch is deleted. The merge itself is
+	// already committed to git at this point, so a pin failure is
+	// logged rather than reported as a failed merge.
+	if err := h.repo.UpdatePin(ctx, pr.ID, res.HeadSHA); err != nil {
+		log.Printf("web: pulls: pin #%d on merge: %v", pr.ID, err)
 	}
 	if err := h.store.MarkMerged(ctx, pr.ID, store.PRMergeInfo{
 		MergeSHA:     res.MergeSHA,
