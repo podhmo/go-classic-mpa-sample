@@ -65,6 +65,14 @@ tools/visual-diff.sh check    # 再撮影して ImageMagick compare -metric AE �
 
 差分として「壊れた」と言える条件: (a) baseline 比で閾値超の pixel diff、かつ (b) 意図した変更差分でないこと。(a) だけだと fixture 非決定性や AA ノイズを拾うので、まず決定性の3条件を疑うのが運用のコツ。
 
+#### 編集→反映までのキャッシュ挙動（実測）
+
+max-age=3600 を入れたので「CSS を直しても反映されない」事故が起きうるかを `app.css` に一時変数を書き込んで追跡した:
+
+- **storybook は無問題**。`/static/` はディスク直読み（`http.FileServer`）で Cache-Control を付けないため、編集→通常リロードで即反映（実測: 値の書き換えが reload で反映）。さらに `make storybook-watch`（`-watch`）なら変更検知で自動リロード。**CSS 編集の主戦場は storybook でよい**
+- **実 app は max-age のとおり stale になる**。`go run` 再起動（embed に新CSS）後の通常リロードでも HTTP cache の古い bytes が使われる。回避は Ctrl+Shift+R（ハードリロード）、DevTools を開いた状態で Network の「Disable cache」、playwright なら CDP の `Network.clearBrowserCache`（実測で fresh を確認）
+- Fragment 系 story（`Story*Fragment`）は裸の HTML 断片で `app.css` を読み込まない。CSS の反映確認は `StoryIssueList` などページ系 story で行うこと
+
 ## 検証済みの流れ（再現手順）
 
 ```sh
