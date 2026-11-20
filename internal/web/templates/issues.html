@@ -4,45 +4,45 @@
    script-src 'self' allows it; browsers without CSS.highlights no-op. */}}
 <script src="/static/search-highlight.js" defer></script>
 <div class="page-head">
-  <h1>{{t "issues.title"}}</h1>
+  <h1>{{IssuesTitle}}</h1>
 </div>
 
-<nav class="tabs" aria-label="{{t "issues.tabs.aria"}}">
-  <a class="tab {{if eq .Filter.Status "open"}}tab-active{{end}}" href="{{statusURL .Workspace .Filter "open"}}"{{if eq .Filter.Status "open"}} aria-current="page"{{end}}>{{t "issues.tab.open"}}</a>
-  <a class="tab {{if eq .Filter.Status "closed"}}tab-active{{end}}" href="{{statusURL .Workspace .Filter "closed"}}"{{if eq .Filter.Status "closed"}} aria-current="page"{{end}}>{{t "issues.tab.closed"}}</a>
-  <a class="tab {{if eq .Filter.Status "all"}}tab-active{{end}}" href="{{statusURL .Workspace .Filter "all"}}"{{if eq .Filter.Status "all"}} aria-current="page"{{end}}>{{t "issues.tab.all"}}</a>
+<nav class="tabs" aria-label="{{IssuesTabsAria}}">
+  <a class="tab {{if eq .Filter.Status "open"}}tab-active{{end}}" href="{{statusURL .Workspace .Filter "open"}}"{{if eq .Filter.Status "open"}} aria-current="page"{{end}}>{{IssuesTabOpen}}</a>
+  <a class="tab {{if eq .Filter.Status "closed"}}tab-active{{end}}" href="{{statusURL .Workspace .Filter "closed"}}"{{if eq .Filter.Status "closed"}} aria-current="page"{{end}}>{{IssuesTabClosed}}</a>
+  <a class="tab {{if eq .Filter.Status "all"}}tab-active{{end}}" href="{{statusURL .Workspace .Filter "all"}}"{{if eq .Filter.Status "all"}} aria-current="page"{{end}}>{{IssuesTabAll}}</a>
 </nav>
 
-<form method="get" action="/w/{{.Workspace.Slug}}/issues" class="filter-bar" role="search" aria-label="{{t "issues.filter.aria"}}">
+<form method="get" action="/w/{{.Workspace.Slug}}/issues" class="filter-bar" role="search" aria-label="{{IssuesFilterAria}}">
   <input type="hidden" name="status" value="{{.Filter.Status}}">
   <div class="filter-field">
-    <label for="filter-q">{{t "issues.filter.search"}}</label>
-    <input type="search" id="filter-q" name="q" value="{{.Filter.Query}}" placeholder="{{t "issues.filter.search_ph"}}">
+    <label for="filter-q">{{IssuesFilterSearch}}</label>
+    <input type="search" id="filter-q" name="q" value="{{.Filter.Query}}" placeholder="{{IssuesFilterSearchPh}}">
   </div>
   <div class="filter-field">
-    <label for="filter-label">{{t "issues.filter.label"}}</label>
+    <label for="filter-label">{{IssuesFilterLabel}}</label>
     <select id="filter-label" name="label">
-      <option value="">{{t "issues.filter.all_labels"}}</option>
+      <option value="">{{IssuesFilterAllLabels}}</option>
       {{range .Labels}}
       <option value="{{.ID}}"{{if eq .ID $.Filter.LabelID}} selected{{end}}>{{.Name}}</option>
       {{end}}
     </select>
   </div>
   <div class="filter-field">
-    <label for="filter-sort">{{t "issues.filter.sort"}}</label>
+    <label for="filter-sort">{{IssuesFilterSort}}</label>
     <select id="filter-sort" name="sort">
-      <option value="newest"{{if ne .Filter.Sort "oldest"}} selected{{end}}>{{t "issues.sort.newest"}}</option>
-      <option value="oldest"{{if eq .Filter.Sort "oldest"}} selected{{end}}>{{t "issues.sort.oldest"}}</option>
+      <option value="newest"{{if ne .Filter.Sort "oldest"}} selected{{end}}>{{IssuesSortNewest}}</option>
+      <option value="oldest"{{if eq .Filter.Sort "oldest"}} selected{{end}}>{{IssuesSortOldest}}</option>
     </select>
   </div>
   <div class="filter-actions">
-    <button type="submit" class="btn">{{t "issues.filter.apply"}}</button>
-    {{if .HasActiveFilter}}<a class="btn btn-quiet" href="/w/{{.Workspace.Slug}}/issues">{{t "issues.filter.clear"}}</a>{{end}}
+    <button type="submit" class="btn">{{IssuesFilterApply}}</button>
+    {{if .HasActiveFilter}}<a class="btn btn-quiet" href="/w/{{.Workspace.Slug}}/issues">{{IssuesFilterClear}}</a>{{end}}
   </div>
 </form>
 
 {{if .Issues}}
-<p class="result-count">{{t "issues.count" .RangeStart .RangeEnd .Total}}</p>
+<p class="result-count">{{IssuesCount .RangeStart .RangeEnd .Total}}</p>
 <ul class="issue-list" role="list">
   {{range .Issues}}
   <li class="issue-row">
@@ -51,28 +51,28 @@
       <span class="issue-num">#{{.ID}}</span>
     </div>
     <div class="issue-row-meta">
-      <span class="badge badge-{{.Status}}">{{if eq .Status "open"}}{{t "issues.status.open"}}{{else}}{{t "issues.status.closed"}}{{end}}</span>
+      <span class="badge badge-{{.Status}}">{{if eq .Status "open"}}{{IssuesStatusOpen}}{{else}}{{IssuesStatusClosed}}{{end}}</span>
       {{range .Labels}}
       <a class="label-badge" style="--label-color: {{.Color}}" href="{{labelURL $.Workspace $.Filter .ID}}">{{.Name}}</a>
       {{end}}
-      <time class="issue-time" datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{t "issues.opened" (fmtTime .CreatedAt)}}</time>
+      <time class="issue-time" datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{IssuesOpened (fmtTime .CreatedAt)}}</time>
     </div>
   </li>
   {{end}}
 </ul>
 
 {{if gt .TotalPages 1}}
-<nav class="pagination" aria-label="{{t "issues.pager.aria"}}">
+<nav class="pagination" aria-label="{{IssuesPagerAria}}">
   {{if gt .Page 1}}
-  <a class="btn" href="{{listURL .Workspace .Filter (sub .Page 1)}}">{{t "issues.pager.prev"}}</a>
+  <a class="btn" href="{{listURL .Workspace .Filter (sub .Page 1)}}">{{IssuesPagerPrev}}</a>
   {{else}}
-  <span class="btn btn-disabled" aria-disabled="true">{{t "issues.pager.prev"}}</span>
+  <span class="btn btn-disabled" aria-disabled="true">{{IssuesPagerPrev}}</span>
   {{end}}
-  <span class="page-info">{{t "issues.pager.info" .Page .TotalPages}}</span>
+  <span class="page-info">{{IssuesPagerInfo .Page .TotalPages}}</span>
   {{if lt .Page .TotalPages}}
-  <a class="btn" href="{{listURL .Workspace .Filter (add .Page 1)}}">{{t "issues.pager.next"}}</a>
+  <a class="btn" href="{{listURL .Workspace .Filter (add .Page 1)}}">{{IssuesPagerNext}}</a>
   {{else}}
-  <span class="btn btn-disabled" aria-disabled="true">{{t "issues.pager.next"}}</span>
+  <span class="btn btn-disabled" aria-disabled="true">{{IssuesPagerNext}}</span>
   {{end}}
 </nav>
 {{end}}
@@ -80,11 +80,11 @@
 {{else}}
 <div class="empty-state">
   {{if .HasActiveFilter}}
-  <p class="empty-lead">{{t "issues.empty.filtered"}}</p>
-  <p>{{t "issues.empty.try"}} <a href="/w/{{.Workspace.Slug}}/issues">{{t "issues.empty.clear_link"}}</a>.</p>
+  <p class="empty-lead">{{IssuesEmptyFiltered}}</p>
+  <p>{{IssuesEmptyTry}} <a href="/w/{{.Workspace.Slug}}/issues">{{IssuesEmptyClearLink}}</a>.</p>
   {{else}}
-  <p class="empty-lead">{{t "issues.empty.none"}}</p>
-  <p><a class="btn btn-primary" href="/w/{{.Workspace.Slug}}/issues/new">{{t "issues.empty.create"}}</a></p>
+  <p class="empty-lead">{{IssuesEmptyNone}}</p>
+  <p><a class="btn btn-primary" href="/w/{{.Workspace.Slug}}/issues/new">{{IssuesEmptyCreate}}</a></p>
   {{end}}
 </div>
 {{end}}

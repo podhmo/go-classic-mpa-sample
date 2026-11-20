@@ -108,7 +108,7 @@ func (h *handler) listIssues(w http.ResponseWriter, r *http.Request, ws *store.W
 	}
 
 	data := issueListPage{
-		Title:      tr(r, "issues.title"),
+		Title:      msgFor(r).IssuesTitle,
 		Issues:     issues,
 		Labels:     labels,
 		Filter:     f,

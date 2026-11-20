@@ -16,8 +16,8 @@ import (
 // sync at compile time; the any parameter exists only in execute.
 type Renderer struct {
 	// pagesByLang holds one parsed set per supported locale: each parse
-	// binds {{t}} and {{lang}} to that locale so templates and the shared
-	// layout localize without the view model carrying the locale.
+	// binds the message functions and {{lang}} to that locale so templates
+	// and the shared layout localize without the view model carrying it.
 	pagesByLang map[string]map[string]*template.Template
 }
 
@@ -50,10 +50,11 @@ func parsePages(lang string) map[string]*template.Template {
 		// comment_actions it borrows for moderation controls.
 		"pull_detail": {"templates/pull_fragments.html", "templates/fragments.html"},
 	}
-	// Per-locale bindings: {{t "key"}} resolves the message catalog, {{lang}}
-	// prints the locale (used for the <html lang> attribute).
+	// Per-locale bindings: every messages field becomes a same-named
+	// function ({{IssuesTitle}}, {{IssuesCount args...}}), so a typo'd call
+	// is a parse error. {{lang}} prints the locale (<html lang>).
 	funcs := maps.Clone(funcMap)
-	funcs["t"] = T(lang)
+	messageFuncs(funcs, lang)
 	funcs["lang"] = func() string { return lang }
 	pages := make(map[string]*template.Template, len(names))
 	for _, name := range names {

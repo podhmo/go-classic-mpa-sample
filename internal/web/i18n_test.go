@@ -157,14 +157,14 @@ func TestUnknownLangCookieFallsBack(t *testing.T) {
 	}
 }
 
-func TestMissingMessageFallsBackToEnglish(t *testing.T) {
-	// A key present only in the en catalog still renders in a ja context.
-	delete(catalogs["ja"], "issues.title")
-	defer func() { catalogs["ja"]["issues.title"] = "イシュー" }()
-	if got := T("ja")("issues.title"); got != "Issues" {
-		t.Fatalf("fallback = %q, want Issues", got)
+func TestMessagesForFallsBackToEnglish(t *testing.T) {
+	if got := messagesFor("fr").IssuesTitle; got != "Issues" {
+		t.Fatalf("unknown locale = %q, want en catalog", got)
 	}
-	if got := T("ja")("no.such.key"); got != "no.such.key" {
-		t.Fatalf("missing key = %q, want the key itself", got)
+	if got := messagesFor("ja").IssuesTitle; got != "イシュー" {
+		t.Fatalf("ja = %q, want イシュー", got)
+	}
+	if got := messagesFor("en").IssuesTitle; got != "Issues" {
+		t.Fatalf("en = %q, want Issues", got)
 	}
 }

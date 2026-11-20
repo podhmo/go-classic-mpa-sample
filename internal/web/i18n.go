@@ -2,58 +2,209 @@ package web
 
 // Prototype localization (docs/sketch/ja/i18n.md): two locales, "en" default
 // and "ja", resolved per request into the context and bound into templates
-// as {{t "key"}} / {{lang}} at parse time.
+// as one function per message field — {{AppName}}, {{IssuesTitle}},
+// {{IssuesCount .RangeStart .RangeEnd .Total}} — at parse time.
+//
+// The catalog is a Go struct, not JSON: field names are compile-time
+// identifiers, so a typo'd field cannot exist, and a typo'd template call
+// is a parse error ("function not defined"). JSON keys would be silent on
+// both sides.
 
 import (
 	"context"
-	"embed"
-	"encoding/json"
 	"fmt"
+	"html/template"
 	"net/http"
 	"path"
+	"reflect"
 	"strings"
 )
 
-//go:embed i18n/*.json
-var i18nFS embed.FS
-
-// supportedLangs lists every locale with a catalog file. The first entry is
-// the fallback: a missing key in another catalog resolves to it, and it is
-// what unrecognized requests get.
+// supportedLangs lists every locale with a messages value below. The first
+// entry is the fallback: what unrecognized requests get, and what
+// executeLang falls back to.
 var supportedLangs = []string{"en", "ja"}
 
 // langCookieName persists the explicit choice made via ?lang=<code>.
 const langCookieName = "lang"
 
-// catalogs maps locale → key → printf-style message.
-var catalogs = map[string]map[string]string{}
+// messages is the whole UI-string catalog for one locale: one field per
+// user-facing string. printf-format strings keep their verbs and take the
+// args noted in the comment (templates pass positionals — a locale whose
+// phrasing needs a different order uses %[n]d).
+type messages struct {
+	AppName string
 
-func init() {
-	for _, lang := range supportedLangs {
-		var m map[string]string
-		b, err := i18nFS.ReadFile("i18n/" + lang + ".json")
-		if err != nil {
-			panic(fmt.Sprintf("i18n: %v", err))
-		}
-		if err := json.Unmarshal(b, &m); err != nil {
-			panic(fmt.Sprintf("i18n %s: %v", lang, err))
-		}
-		catalogs[lang] = m
+	LayoutSkip             string
+	LayoutNavMain          string
+	LayoutNavIssues        string
+	LayoutNavDiscussions   string
+	LayoutNavLabels        string
+	LayoutNavPulls         string
+	LayoutNavWorkspaces    string
+	LayoutNavNewIssue      string
+	LayoutNavNewDiscussion string
+	LayoutNavLogout        string
+	LayoutNavLogin         string
+	LayoutNavRegister      string
+	LayoutFooter           string
+
+	IssuesTitle           string
+	IssuesTabsAria        string
+	IssuesTabOpen         string
+	IssuesTabClosed       string
+	IssuesTabAll          string
+	IssuesFilterAria      string
+	IssuesFilterSearch    string
+	IssuesFilterSearchPh  string
+	IssuesFilterLabel     string
+	IssuesFilterAllLabels string
+	IssuesFilterSort      string
+	IssuesSortNewest      string
+	IssuesSortOldest      string
+	IssuesFilterApply     string
+	IssuesFilterClear     string
+	IssuesCount           string // args: range start, range end, total
+	IssuesStatusOpen      string
+	IssuesStatusClosed    string
+	IssuesOpened          string // args: formatted time
+	IssuesPagerAria       string
+	IssuesPagerPrev       string
+	IssuesPagerNext       string
+	IssuesPagerInfo       string // args: page, total pages
+	IssuesEmptyFiltered   string
+	IssuesEmptyTry        string
+	IssuesEmptyClearLink  string
+	IssuesEmptyNone       string
+	IssuesEmptyCreate     string
+}
+
+var messagesEN = messages{
+	AppName: "Issue Tracker",
+
+	LayoutSkip:             "Skip to main content",
+	LayoutNavMain:          "Main",
+	LayoutNavIssues:        "Issues",
+	LayoutNavDiscussions:   "Discussions",
+	LayoutNavLabels:        "Labels",
+	LayoutNavPulls:         "Pull requests",
+	LayoutNavWorkspaces:    "Workspaces",
+	LayoutNavNewIssue:      "New issue",
+	LayoutNavNewDiscussion: "New discussion",
+	LayoutNavLogout:        "Log out",
+	LayoutNavLogin:         "Log in",
+	LayoutNavRegister:      "Register",
+	LayoutFooter:           "A classic multi-page app built with Go's net/http and html/template. Declarative first; minimal JavaScript where it earns its place.",
+
+	IssuesTitle:           "Issues",
+	IssuesTabsAria:        "Filter by status",
+	IssuesTabOpen:         "Open",
+	IssuesTabClosed:       "Closed",
+	IssuesTabAll:          "All",
+	IssuesFilterAria:      "Filter issues",
+	IssuesFilterSearch:    "Search",
+	IssuesFilterSearchPh:  "Title or body",
+	IssuesFilterLabel:     "Label",
+	IssuesFilterAllLabels: "All labels",
+	IssuesFilterSort:      "Sort",
+	IssuesSortNewest:      "Newest first",
+	IssuesSortOldest:      "Oldest first",
+	IssuesFilterApply:     "Apply",
+	IssuesFilterClear:     "Clear",
+	IssuesCount:           "Showing %[1]d–%[2]d of %[3]d issues",
+	IssuesStatusOpen:      "Open",
+	IssuesStatusClosed:    "Closed",
+	IssuesOpened:          "opened %s",
+	IssuesPagerAria:       "Pagination",
+	IssuesPagerPrev:       "Previous",
+	IssuesPagerNext:       "Next",
+	IssuesPagerInfo:       "Page %d of %d",
+	IssuesEmptyFiltered:   "No issues match the current filters.",
+	IssuesEmptyTry:        "Try a different keyword or",
+	IssuesEmptyClearLink:  "clear the filters",
+	IssuesEmptyNone:       "No issues here yet.",
+	IssuesEmptyCreate:     "Create the first issue",
+}
+
+var messagesJA = messages{
+	AppName: "Issue Tracker",
+
+	LayoutSkip:             "メインコンテンツへスキップ",
+	LayoutNavMain:          "メイン",
+	LayoutNavIssues:        "イシュー",
+	LayoutNavDiscussions:   "ディスカッション",
+	LayoutNavLabels:        "ラベル",
+	LayoutNavPulls:         "プルリクエスト",
+	LayoutNavWorkspaces:    "ワークスペース",
+	LayoutNavNewIssue:      "新規イシュー",
+	LayoutNavNewDiscussion: "新規ディスカッション",
+	LayoutNavLogout:        "ログアウト",
+	LayoutNavLogin:         "ログイン",
+	LayoutNavRegister:      "登録",
+	LayoutFooter:           "Go の net/http と html/template で作ったクラシックなマルチページアプリ。宣言的ファースト、必要なところにだけ最小限の JavaScript。",
+
+	IssuesTitle:           "イシュー",
+	IssuesTabsAria:        "ステータスで絞り込み",
+	IssuesTabOpen:         "オープン",
+	IssuesTabClosed:       "クローズ",
+	IssuesTabAll:          "すべて",
+	IssuesFilterAria:      "イシューを絞り込み",
+	IssuesFilterSearch:    "検索",
+	IssuesFilterSearchPh:  "タイトルまたは本文",
+	IssuesFilterLabel:     "ラベル",
+	IssuesFilterAllLabels: "すべてのラベル",
+	IssuesFilterSort:      "並び替え",
+	IssuesSortNewest:      "新しい順",
+	IssuesSortOldest:      "古い順",
+	IssuesFilterApply:     "適用",
+	IssuesFilterClear:     "クリア",
+	IssuesCount:           "%[3]d 件中 %[1]d–%[2]d 件を表示",
+	IssuesStatusOpen:      "オープン",
+	IssuesStatusClosed:    "クローズ",
+	IssuesOpened:          "%s にオープン",
+	IssuesPagerAria:       "ページネーション",
+	IssuesPagerPrev:       "前へ",
+	IssuesPagerNext:       "次へ",
+	IssuesPagerInfo:       "%d / %d ページ",
+	IssuesEmptyFiltered:   "現在のフィルタに一致するイシューはありません。",
+	IssuesEmptyTry:        "別のキーワードを試すか、",
+	IssuesEmptyClearLink:  "フィルタをクリア",
+	IssuesEmptyNone:       "まだイシューはありません。",
+	IssuesEmptyCreate:     "最初のイシューを作成",
+}
+
+// messagesFor resolves the catalog for a locale; anything unrecognized —
+// including a bogus lang cookie — gets the default locale.
+func messagesFor(lang string) *messages {
+	switch lang {
+	case "ja":
+		return &messagesJA
+	default:
+		return &messagesEN
 	}
 }
 
-// T returns a printf-style message lookup bound to lang, for use in both
-// templates (as {{t}}) and handlers. Missing keys fall back to the default
-// locale, then to the key itself so an untranslated spot stays visible.
-func T(lang string) func(key string, args ...any) string {
-	return func(key string, args ...any) string {
-		if msg, ok := catalogs[lang][key]; ok {
+// messageFuncs registers every field of the locale's messages struct as a
+// template function named after the field ({{AppName}}, {{IssuesTitle}},
+// {{IssuesCount args...}}). Values are printf format strings: args are only
+// applied when the template passes them, so literal text needs no escaping.
+func messageFuncs(funcs template.FuncMap, lang string) {
+	v := reflect.ValueOf(*messagesFor(lang))
+	fallback := reflect.ValueOf(messagesEN)
+	typ := v.Type()
+	for i := range typ.NumField() {
+		msg := v.Field(i).String()
+		if msg == "" {
+			// A field not yet translated renders the en text, so a
+			// half-filled ja catalog degrades instead of going blank.
+			msg = fallback.Field(i).String()
+		}
+		funcs[typ.Field(i).Name] = func(args ...any) string {
+			if len(args) == 0 {
+				return msg
+			}
 			return fmt.Sprintf(msg, args...)
 		}
-		if msg, ok := catalogs[supportedLangs[0]][key]; ok {
-			return fmt.Sprintf(msg, args...)
-		}
-		return key
 	}
 }
 
@@ -70,10 +221,10 @@ func localeFromContext(ctx context.Context) string {
 	return supportedLangs[0]
 }
 
-// tr translates key in the request's locale, for handler-side strings
-// (page titles, headings) that are passed to templates via the view model.
-func tr(r *http.Request, key string, args ...any) string {
-	return T(localeFromContext(r.Context()))(key, args...)
+// msgFor returns the catalog for the request's locale, for handler-side
+// strings (page titles, headings) passed to templates via the view model.
+func msgFor(r *http.Request) *messages {
+	return messagesFor(localeFromContext(r.Context()))
 }
 
 // withLocale resolves the display language for the request. An explicit
