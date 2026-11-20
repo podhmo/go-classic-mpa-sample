@@ -1,11 +1,11 @@
 {{define "layout"}}<!DOCTYPE html>
-<html lang="en">
+<html lang="{{lang}}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
   <meta name="text-scale" content="scale">
-  <title>{{.Title}} · Issue Tracker</title>
+  <title>{{.Title}} · {{AppName}}</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cstyle%3E@media%20(prefers-color-scheme:dark)%7Brect%7Bfill:%2358a6ff%7Dcircle%7Bstroke:%230d1117%7D%7D%3C/style%3E%3Crect width='16' height='16' rx='3' fill='%232563eb'/%3E%3Ccircle cx='8' cy='8' r='3.5' fill='none' stroke='white' stroke-width='1.5'/%3E%3C/svg%3E">
   {{/* Cross-document view-transition opt-in as an inline style: Chrome
      checks @view-transition at pagereveal without reliably waiting for the
@@ -19,37 +19,42 @@
   <script src="/static/pagination-transition.js"></script>
 </head>
 <body>
-  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <a class="skip-link" href="#main-content">{{LayoutSkip}}</a>
   <header class="site-header">
     <div class="header-bar">
       <div class="container header-inner">
-        <a class="site-title" href="{{if .Workspace}}/w/{{.Workspace.Slug}}/issues{{else}}/{{end}}">Issue Tracker</a>
-        <nav class="site-nav" aria-label="Main">
+        <a class="site-title" href="{{if .Workspace}}/w/{{.Workspace.Slug}}/issues{{else}}/{{end}}">{{AppName}}</a>
+        <nav class="site-nav" aria-label="{{LayoutNavMain}}">
           {{if .Workspace}}
-          <a href="/w/{{.Workspace.Slug}}/issues"{{if eq .Section "issues"}} aria-current="page"{{end}}>Issues</a>
-          <a href="/w/{{.Workspace.Slug}}/discussions"{{if eq .Section "discussions"}} aria-current="page"{{end}}>Discussions</a>
-          <a href="/w/{{.Workspace.Slug}}/labels"{{if eq .Section "labels"}} aria-current="page"{{end}}>Labels</a>
+          <a href="/w/{{.Workspace.Slug}}/issues"{{if eq .Section "issues"}} aria-current="page"{{end}}>{{LayoutNavIssues}}</a>
+          <a href="/w/{{.Workspace.Slug}}/discussions"{{if eq .Section "discussions"}} aria-current="page"{{end}}>{{LayoutNavDiscussions}}</a>
+          <a href="/w/{{.Workspace.Slug}}/labels"{{if eq .Section "labels"}} aria-current="page"{{end}}>{{LayoutNavLabels}}</a>
           {{end}}
           {{if pullsOn}}
-          <a href="/pulls"{{if eq .Section "pulls"}} aria-current="page"{{end}}>Pull requests</a>
+          <a href="/pulls"{{if eq .Section "pulls"}} aria-current="page"{{end}}>{{LayoutNavPulls}}</a>
           {{end}}
-          <a href="/workspaces"{{if eq .Section "workspaces"}} aria-current="page"{{end}}>Workspaces</a>
+          <a href="/workspaces"{{if eq .Section "workspaces"}} aria-current="page"{{end}}>{{LayoutNavWorkspaces}}</a>
           {{if .Workspace}}
           {{if eq .Section "discussions"}}
-          <a class="btn" href="/w/{{.Workspace.Slug}}/discussions/new">New discussion</a>
+          <a class="btn" href="/w/{{.Workspace.Slug}}/discussions/new">{{LayoutNavNewDiscussion}}</a>
           {{else}}
-          <a class="btn" href="/w/{{.Workspace.Slug}}/issues/new">New issue</a>
+          <a class="btn" href="/w/{{.Workspace.Slug}}/issues/new">{{LayoutNavNewIssue}}</a>
           {{end}}
           {{end}}
           {{if .User}}
           <span class="user-handle">@{{.User.Name}}</span>
           <form method="post" action="/logout" class="inline-form">
-            <button type="submit" class="btn btn-quiet">Log out</button>
+            <button type="submit" class="btn btn-quiet">{{LayoutNavLogout}}</button>
           </form>
           {{else}}
-          <a href="/login">Log in</a>
-          <a href="/register">Register</a>
+          <a href="/login">{{LayoutNavLogin}}</a>
+          <a href="/register">{{LayoutNavRegister}}</a>
           {{end}}
+          {{/* Language switcher: ?lang= persists a cookie via withLocale
+             and redirects back clean. Other query params (filters) are
+             preserved on the redirect but dropped from this href — the
+             known limitation documented in docs/sketch/ja/i18n.md. */}}
+          {{if eq (lang) "en"}}<a href="?lang=ja" hreflang="ja" lang="ja">日本語</a>{{else}}<a href="?lang=en" hreflang="en" lang="en">English</a>{{end}}
         </nav>
       </div>
     </div>
@@ -59,7 +64,7 @@
   </main>
   <footer class="site-footer">
     <div class="container">
-      <p>A classic multi-page app built with Go's net/http and html/template. Declarative first; minimal JavaScript where it earns its place.</p>
+      <p>{{LayoutFooter}}</p>
     </div>
   </footer>
 </body>

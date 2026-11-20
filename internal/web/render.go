@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"log"
+	"maps"
 	"net/http"
 
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
@@ -14,20 +15,27 @@ import (
 // the typed renderXxx methods so page templates and their view models stay in
 // sync at compile time; the any parameter exists only in execute.
 type Renderer struct {
-	pages map[string]*template.Template
+	// pagesByLang holds one parsed set per supported locale: each parse
+	// binds the message functions and {{lang}} to that locale so templates
+	// and the shared layout localize without the view model carrying it.
+	pagesByLang map[string]map[string]*template.Template
 }
 
 // NewRenderer parses the embedded page templates and returns a Renderer.
 func NewRenderer() *Renderer {
-	return &Renderer{pages: parsePages()}
+	pages := make(map[string]map[string]*template.Template, len(supportedLangs))
+	for _, lang := range supportedLangs {
+		pages[lang] = parsePages(lang)
+	}
+	return &Renderer{pagesByLang: pages}
 }
 
-// parsePages builds one template set per page. Each set contains the shared
-// layout plus a single page template that defines the "content" block.
-// ParseFS works the same when this package is interpreted (e.g. by minigo
-// for the storybook preview): the bound template's ParseFS proxies a
-// script-side embed.FS through fs.FS.
-func parsePages() map[string]*template.Template {
+// parsePages builds one template set per page for the given locale. Each set
+// contains the shared layout plus a single page template that defines the
+// "content" block. ParseFS works the same when this package is interpreted
+// (e.g. by minigo for the storybook preview): the bound template's ParseFS
+// proxies a script-side embed.FS through fs.FS.
+func parsePages(lang string) map[string]*template.Template {
 	names := []string{"issues", "issue_detail", "issue_form", "issue_delete", "error", "auth_form",
 		"discussions", "discussion_detail", "discussion_form", "discussion_delete",
 		"workspaces", "workspace_form", "workspace_delete", "labels", "label_form",
@@ -42,13 +50,19 @@ func parsePages() map[string]*template.Template {
 		// comment_actions it borrows for moderation controls.
 		"pull_detail": {"templates/pull_fragments.html", "templates/fragments.html"},
 	}
+	// Per-locale bindings: every messages field becomes a same-named
+	// function ({{IssuesTitle}}, {{IssuesCount args...}}), so a typo'd call
+	// is a parse error. {{lang}} prints the locale (<html lang>).
+	funcs := maps.Clone(funcMap)
+	messageFuncs(funcs, lang)
+	funcs["lang"] = func() string { return lang }
 	pages := make(map[string]*template.Template, len(names))
 	for _, name := range names {
 		files := []string{"templates/layout.html", "templates/" + name + ".html"}
 		if frags, ok := fragments[name]; ok {
 			files = append(files, frags...)
 		}
-		pages[name] = template.Must(template.New(name).Funcs(funcMap).ParseFS(templateFS, files...))
+		pages[name] = template.Must(template.New(name).Funcs(funcs).ParseFS(templateFS, files...))
 	}
 	return pages
 }
@@ -57,8 +71,18 @@ func parsePages() map[string]*template.Template {
 // is rendered into a buffer first so template failures cannot produce a
 // half-written response.
 func (r *Renderer) execute(w http.ResponseWriter, page string, status int, data any) {
+	r.executeLang(w, page, supportedLangs[0], status, data)
+}
+
+// executeLang is execute for a non-default locale. Unknown locales fall back
+// to the default set so a half-localized page stays renderable.
+func (r *Renderer) executeLang(w http.ResponseWriter, page, lang string, status int, data any) {
+	pages := r.pagesByLang[lang]
+	if pages == nil {
+		pages = r.pagesByLang[supportedLangs[0]]
+	}
 	var buf bytes.Buffer
-	if err := r.pages[page].ExecuteTemplate(&buf, "layout", data); err != nil {
+	if err := pages[page].ExecuteTemplate(&buf, "layout", data); err != nil {
 		log.Printf("web: render %q: %v", page, err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
@@ -74,7 +98,7 @@ func (r *Renderer) execute(w http.ResponseWriter, page string, status int, data 
 // execute it buffers first so a template failure can't half-write a reply.
 func (r *Renderer) renderFragment(w http.ResponseWriter, page, name string, status int, data any) {
 	var buf bytes.Buffer
-	if err := r.pages[page].ExecuteTemplate(&buf, name, data); err != nil {
+	if err := r.pagesByLang[supportedLangs[0]][page].ExecuteTemplate(&buf, name, data); err != nil {
 		log.Printf("web: render fragment %q in %q: %v", name, page, err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
@@ -84,9 +108,10 @@ func (r *Renderer) renderFragment(w http.ResponseWriter, page, name string, stat
 	_, _ = buf.WriteTo(w)
 }
 
-// renderIssueList renders GET /issues.
-func (r *Renderer) renderIssueList(w http.ResponseWriter, status int, data issueListPage) {
-	r.execute(w, "issues", status, data)
+// renderIssueList renders GET /issues. The one prototype-localized page
+// takes the request locale; every other page renders with the default set.
+func (r *Renderer) renderIssueList(w http.ResponseWriter, status int, data issueListPage, lang string) {
+	r.executeLang(w, "issues", lang, status, data)
 }
 
 // renderIssueDetail renders GET /issues/{id}.

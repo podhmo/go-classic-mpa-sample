@@ -266,14 +266,15 @@ const sessionCookieName = "session"
 // browser still drops the session.
 const sessionTTL = 30 * 24 * time.Hour
 
-type contextKey int
-
-const userContextKey contextKey = iota
+// context keys are distinct empty-struct types per key: keys compare by
+// (type, value), so separate types can never collide the way a shared
+// iota-numbered type can.
+type userContextKey struct{}
 
 // userFromContext returns the logged-in user resolved by withUser, or nil
 // for an anonymous request.
 func userFromContext(ctx context.Context) *store.User {
-	u, _ := ctx.Value(userContextKey).(*store.User)
+	u, _ := ctx.Value(userContextKey{}).(*store.User)
 	return u
 }
 
@@ -299,7 +300,7 @@ func withUser(h *handler, next http.Handler) http.Handler {
 			u, err := h.store.SessionUser(r.Context(), c.Value, sessionTTL)
 			switch {
 			case err == nil:
-				r = r.WithContext(context.WithValue(r.Context(), userContextKey, u))
+				r = r.WithContext(context.WithValue(r.Context(), userContextKey{}, u))
 			case errors.Is(err, store.ErrNotFound):
 				// Unknown/expired session: continue anonymously.
 			default:

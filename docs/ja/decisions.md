@@ -685,3 +685,10 @@ chrome-devtools の trace insight で計測した結果、CSS はボトルネッ
 - **storybook fixture の時刻は `storyNow` に pin**: Pull 系 story が `time.Now()` を使っており、撮影ごとに 263–1687px の偽差分が出た。`storyTime*` と同列の固定時刻 `storyNow`（2026-11-19T12:00Z）に全置換 — 「現在っぽい時刻」を持つ fixture の正はこれ。
 - **視覚回帰は `tools/visual-diff.sh`（update/check）**: playwright-cli の fullPage スクリーンショット（`animations:'disabled'` + `document.fonts.ready` 待機）を ImageMagick `compare -metric AE` で閾値判定（既定 100px、AA ノイズは sub-10px）。baseline は `.visual-diff/`（gitignore）に撮り直す運用 — 固定 fixture があるから成立する。
 - **CSS coverage（CDP rule usage tracking）の解釈**: 未到達ルールは「storybook では検証不能な pseudo-state/JS 駆動」と「fixture gap」を含むため dead code 判定には使わない。storybook の検証盲点の定量化に使う。
+
+## i18n プロトタイプ（2026-11-20、`docs/sketch/ja/i18n.md`）
+
+- **ロケール解決は `withLocale` ミドルウェア**（`?lang=` → cookie → `Accept-Language` → `en`）。`?lang=` は cookie を Set して `lang=` を除いた URL へ 303 リダイレクト。URL に言語を残さない方針（SEO 不要の localhost アプリ）。
+- **カタログは自作の薄い層**: `internal/web/i18n.go` の `messages` struct（フィールド = メッセージ）に `messagesEN`/`messagesJA` を置く。初版は JSON+`{{t "key"}}` だったが、キーの typo が両面で検出不能とのレビュー指摘で struct + フィールド関数名化に変更（typo がコンパイル/パースエラーになる）。空フィールドは en にフォールバック（部分適用が壊れない）。go-i18n / x/text/message は ja/en のみ・複数形ほぼ不要の現要件では過剰と判断。JS 側でカタログが要るなら JSON + `{{t "key"}}` 突合 lint（minigo）が代替。
+- **テンプレートはロケール別にパース**: `parsePages(locale)` が `messageFuncs`（struct フィールド → 同名関数）と `{{lang}}` をそのロケールに束縛し、`pagesByLang[locale][page]` で保持。ビューモデル 15+ にフィールドを足さず `layout.html` の `<html lang>` まで届くのが採用理由。
+- **プロトタイプ範囲は issues 一覧 + layout のみ**。validation 文言・エラーページ・静的 JS 文字列・`fmtTime` 書式・UGC の `lang` は未対応（TODO.md の「i18n の全面適用」参照）。

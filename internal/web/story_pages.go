@@ -202,7 +202,9 @@ func printRec(rec *httptest.ResponseRecorder) {
 
 func renderIssueList(status int, data issueListPage) {
 	rec := httptest.NewRecorder()
-	NewRenderer().renderIssueList(rec, status, data)
+	// Stories render in the default locale; the ja set is covered by the
+	// locale tests and the real server.
+	NewRenderer().renderIssueList(rec, status, data, supportedLangs[0])
 	printRec(rec)
 }
 
