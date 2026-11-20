@@ -85,7 +85,9 @@ func (h *handler) renderLabels(w http.ResponseWriter, r *http.Request, ws *store
 		return
 	}
 	data.ArchivedLabels = append(archived, archivedD...)
-	data.Title = "Labels"
+	if data.Title == "" {
+		data.Title = msgFor(r).LabelsTitle
+	}
 	data.Section = "labels"
 	data.Workspace = ws
 	data.User = userFromContext(r.Context())
