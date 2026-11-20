@@ -12,6 +12,7 @@
 import { announce } from "./announcer.js";
 import { markDirty } from "./leave-guard.js";
 import { parseFragment, runScopedTransition, commonScope } from "./fragments.js";
+import { t } from "./i18n.js";
 
 const section = document.querySelector("[data-live-events]");
 if (section && typeof EventSource === "function") start(section);
@@ -25,11 +26,11 @@ function start(section) {
   // PRs share the issue shape (one flat comment timeline) — only the
   // wording and the discussion's thread/reply paths differ.
   const noun =
-    { issue: "issue", discussion: "discussion", pr: "pull request" }[kind] ??
-    "issue";
+    { issue: t("noun_issue"), discussion: t("noun_discussion"), pr: t("noun_pr") }[kind] ??
+    t("noun_issue");
   const listName =
-    { issue: "issues", discussion: "discussions", pr: "pull requests" }[kind] ??
-    "issues";
+    { issue: t("list_issues"), discussion: t("list_discussions"), pr: t("list_prs") }[kind] ??
+    t("list_issues");
   const fragPath = kind === "discussion" ? "threads" : "comments";
   let lost = false;
 
@@ -254,14 +255,14 @@ function start(section) {
           p.dataset.liveDeleted = "";
           const a = document.createElement("a");
           a.href = listURL;
-          a.textContent = "Back to " + listName;
+          a.textContent = t("back_to", listName);
           p.append(
-            document.createTextNode("This " + noun + " was deleted. "),
+            document.createTextNode(t("noun_deleted", noun) + " "),
             a,
           );
           section.before(p);
         }
-        announce("This " + noun + " was deleted.");
+        announce(t("noun_deleted", noun));
         return;
       }
       if (pending.resync) {
@@ -278,7 +279,7 @@ function start(section) {
               await runScopedTransition(commonScope([old]), () =>
                 old.replaceWith(nodes[0]),
               );
-              announce(noun[0].toUpperCase() + noun.slice(1) + " updated.");
+              announce(t("entity_updated", noun[0].toUpperCase() + noun.slice(1)));
             }
           }
         }
@@ -289,7 +290,7 @@ function start(section) {
             () => list,
           );
           if (appended?.length) highlight(appended);
-          announce("Answer updated.");
+          announce(t("answer_updated"));
         }
         if (pending.ids.size) {
           const ids = [...pending.ids].join(",");
@@ -299,9 +300,7 @@ function start(section) {
           );
           if (appended?.length) {
             highlight(appended);
-            announce(
-              kind === "discussion" ? "New thread." : "New comment.",
-            );
+            announce(t(kind === "discussion" ? "new_thread" : "new_comment"));
           }
         }
         for (const [threadId, ids] of pending.replies) {
@@ -316,7 +315,7 @@ function start(section) {
           if (appended?.length) {
             ol.hidden = false;
             highlight(appended);
-            announce("New reply.");
+            announce(t("new_reply"));
           }
         }
         for (const { target, parent } of pending.removes) {

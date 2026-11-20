@@ -699,8 +699,8 @@ func prCommentCreate(ctx context.Context, o Options, args []string) error {
 	if err != nil {
 		return err
 	}
-	if msg := store.ValidateCommentBody(strings.TrimSpace(text)); msg != "" {
-		return usageError{msg: "body: " + msg}
+	if fe := store.ValidateCommentBody(strings.TrimSpace(text)); fe.Code != "" {
+		return usageError{msg: "body: " + fe.Message}
 	}
 	b, closer, repo, rc, err := o.prEnv(ctx, bf, *repoF)
 	if err != nil {
@@ -772,8 +772,8 @@ func prCommentEdit(ctx context.Context, o Options, args []string) error {
 	if err != nil {
 		return err
 	}
-	if msg := store.ValidateCommentBody(strings.TrimSpace(text)); msg != "" {
-		return usageError{msg: "body: " + msg}
+	if fe := store.ValidateCommentBody(strings.TrimSpace(text)); fe.Code != "" {
+		return usageError{msg: "body: " + fe.Message}
 	}
 	b, closer, _, _, err := o.prEnv(ctx, bf, *repoF)
 	if err != nil {

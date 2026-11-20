@@ -1,5 +1,5 @@
 {{define "layout"}}<!DOCTYPE html>
-<html lang="{{lang}}">
+<html lang="{{lang}}" data-i18n='{{jsDict}}'>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -50,11 +50,10 @@
           <a href="/login">{{LayoutNavLogin}}</a>
           <a href="/register">{{LayoutNavRegister}}</a>
           {{end}}
-          {{/* Language switcher: ?lang= persists a cookie via withLocale
-             and redirects back clean. Other query params (filters) are
-             preserved on the redirect but dropped from this href — the
-             known limitation documented in docs/sketch/ja/i18n.md. */}}
-          {{if eq (lang) "en"}}<a href="?lang=ja" hreflang="ja" lang="ja">日本語</a>{{else}}<a href="?lang=en" hreflang="en" lang="en">English</a>{{end}}
+          {{/* Language switcher: GET /locale?lang= sets the cookie and
+             redirects back to the Referer, so filters (?q=, ?status=)
+             survive the switch — see docs/sketch/ja/i18n.md. */}}
+          {{if eq (lang) "en"}}<a href="/locale?lang=ja" hreflang="ja" lang="ja">日本語</a>{{else}}<a href="/locale?lang=en" hreflang="en" lang="en">English</a>{{end}}
         </nav>
       </div>
     </div>

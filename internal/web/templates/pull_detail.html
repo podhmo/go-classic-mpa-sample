@@ -1,29 +1,29 @@
 {{define "content"}}
 <script type="module" src="/static/page-detail.js"></script>
-<nav class="breadcrumb" aria-label="Breadcrumb">
+<nav class="breadcrumb" aria-label="{{BreadcrumbAria}}">
   <ol>
-    <li><a href="/pulls">Pull requests</a></li>
+    <li><a href="/pulls">{{LayoutNavPulls}}</a></li>
     <li><a href="#" aria-current="page">#{{.PR.ID}}</a></li>
   </ol>
 </nav>
 
-<nav class="tabs" aria-label="Pull request views">
-  <a class="tab tab-active" href="/pulls/{{.PR.ID}}" aria-current="page">Conversation</a>
-  <a class="tab" href="/pulls/{{.PR.ID}}/files">Files changed</a>
+<nav class="tabs" aria-label="{{PullViewsAria}}">
+  <a class="tab tab-active" href="/pulls/{{.PR.ID}}" aria-current="page">{{PullTabConversation}}</a>
+  <a class="tab" href="/pulls/{{.PR.ID}}/files">{{PullTabFiles}}</a>
 </nav>
 
 {{template "pr_article" .}}
 
 <section id="comments" class="comments" data-live-kind="pr" data-live-events="/pulls/{{.PR.ID}}/events" data-live-fragments="/pulls/{{.PR.ID}}/fragments" data-live-list="/pulls">
-  <h2>Comments<span class="comment-count"{{if not .Comments}} hidden{{end}}> (<span data-comment-count>{{len .Comments}}</span>)</span></h2>
+  <h2>{{CommentsHeading}}<span class="comment-count"{{if not .Comments}} hidden{{end}}> (<span data-comment-count>{{len .Comments}}</span>)</span></h2>
 
   <ol class="comment-list" role="list"{{if not .Comments}} hidden{{end}}>
     {{range .Comments}}{{template "pr_comment" (dict "C" . "PR" $.PR)}}{{end}}
   </ol>
-  <p class="muted" data-empty-note{{if .Comments}} hidden{{end}}>No comments yet.</p>
+  <p class="muted" data-empty-note{{if .Comments}} hidden{{end}}>{{CommentsEmpty}}</p>
 
   {{template "pr_comment_form" .}}
 </section>
 
-<a class="back-to-top" href="#main-content" aria-label="Back to top">↑ Top</a>
+<a class="back-to-top" href="#main-content" aria-label="{{BackToTopAria}}">{{BackToTop}}</a>
 {{end}}

@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
 func TestLangQuerySetsCookieAndRedirects(t *testing.T) {
@@ -67,7 +69,7 @@ func TestIssueListRendersJapaneseWithCookie(t *testing.T) {
 	}
 	body := getBody(t, resp)
 
-	for _, want := range []string{`<html lang="ja">`, "イシュー", "オープン", "すべてのラベル", "2 件中 1–2 件を表示"} {
+	for _, want := range []string{`<html lang="ja"`, "イシュー", "オープン", "すべてのラベル", "2 件中 1–2 件を表示"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("ja page missing %q", want)
 		}
@@ -92,7 +94,7 @@ func TestIssueListRendersJapaneseViaAcceptLanguage(t *testing.T) {
 	}
 	body := getBody(t, resp)
 
-	if !strings.Contains(body, `<html lang="ja">`) {
+	if !strings.Contains(body, `<html lang="ja"`) {
 		t.Error("Accept-Language: ja did not render the ja page")
 	}
 	if !strings.Contains(strings.Join(resp.Header.Values("Vary"), ","), "Accept-Language") {
@@ -110,7 +112,7 @@ func TestIssueListDefaultsToEnglish(t *testing.T) {
 	}
 	body := getBody(t, resp)
 
-	if !strings.Contains(body, `<html lang="en">`) {
+	if !strings.Contains(body, `<html lang="en"`) {
 		t.Error("default render is not lang=en")
 	}
 	if !strings.Contains(body, ">Issues</h1>") {
@@ -133,7 +135,7 @@ func TestIssueListCookieBeatsAcceptLanguage(t *testing.T) {
 		t.Fatalf("GET: %v", err)
 	}
 	body := getBody(t, resp)
-	if !strings.Contains(body, `<html lang="en">`) {
+	if !strings.Contains(body, `<html lang="en"`) {
 		t.Error("explicit cookie=en should override Accept-Language: ja")
 	}
 }
@@ -152,7 +154,7 @@ func TestUnknownLangCookieFallsBack(t *testing.T) {
 		t.Fatalf("GET: %v", err)
 	}
 	body := getBody(t, resp)
-	if !strings.Contains(body, `<html lang="en">`) {
+	if !strings.Contains(body, `<html lang="en"`) {
 		t.Error("unknown lang cookie should fall back to en")
 	}
 }
@@ -166,5 +168,100 @@ func TestMessagesForFallsBackToEnglish(t *testing.T) {
 	}
 	if got := messagesFor("en").IssuesTitle; got != "Issues" {
 		t.Fatalf("en = %q, want Issues", got)
+	}
+}
+
+func TestLocaleEndpointSetsCookieAndReturnsToReferer(t *testing.T) {
+	srv, _ := newTestServer(t)
+	client := noRedirectClient()
+
+	req, err := http.NewRequest(http.MethodGet, srv.URL+"/locale?lang=ja", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Referer", srv.URL+"/w/default/issues?status=open&q=x")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", resp.StatusCode)
+	}
+	if loc := resp.Header.Get("Location"); loc != "/w/default/issues?status=open&q=x" {
+		t.Fatalf("Location = %q, want referer path+query", loc)
+	}
+	var found bool
+	for _, c := range resp.Cookies() {
+		if c.Name == langCookieName && c.Value == "ja" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("no lang=ja cookie set")
+	}
+}
+
+func TestLocaleEndpointRejectsCrossOriginReferer(t *testing.T) {
+	srv, _ := newTestServer(t)
+	client := noRedirectClient()
+
+	req, err := http.NewRequest(http.MethodGet, srv.URL+"/locale?lang=ja", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Referer", "https://evil.example/x")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if loc := resp.Header.Get("Location"); loc != "/" {
+		t.Fatalf("Location = %q, want / for a cross-origin referer", loc)
+	}
+}
+
+func TestJSDictFollowsLocale(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	get := func(url string, cookie string) string {
+		req, err := http.NewRequest(http.MethodGet, url, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cookie != "" {
+			req.AddCookie(&http.Cookie{Name: langCookieName, Value: cookie})
+		}
+		resp, err := srv.Client().Do(req)
+		if err != nil {
+			t.Fatalf("GET: %v", err)
+		}
+		return getBody(t, resp)
+	}
+
+	if body := get(srv.URL+"/w/default/issues", ""); !strings.Contains(body, `comment_posted`) ||
+		!strings.Contains(body, `Comment posted.`) {
+		t.Error("en page missing en JS dictionary")
+	}
+	if body := get(srv.URL+"/w/default/issues", "ja"); !strings.Contains(body, `comment_posted`) ||
+		!strings.Contains(body, `コメントを投稿しました。`) {
+		t.Error("ja page missing ja JS dictionary")
+	}
+}
+
+func TestFieldErrText(t *testing.T) {
+	if got := fieldErrText("en", "title", store.FieldError{Code: store.ErrCodeRequired}); got != "Title is required." {
+		t.Fatalf("en required = %q", got)
+	}
+	if got := fieldErrText("ja", "body", store.FieldError{Code: store.ErrCodeRequired}); got != "本文は必須です。" {
+		t.Fatalf("ja required = %q", got)
+	}
+	got := fieldErrText("ja", "title", store.FieldError{Code: store.ErrCodeTooLong, Limit: 200})
+	if !strings.Contains(got, "200") {
+		t.Fatalf("ja too_long = %q, want the limit embedded", got)
+	}
+	if got := fieldErrText("en", "x", store.FieldError{Code: "bogus", Message: "keep me"}); got != "keep me" {
+		t.Fatalf("unknown code = %q, want the raw message", got)
 	}
 }

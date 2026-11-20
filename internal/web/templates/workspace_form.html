@@ -2,24 +2,24 @@
 <h1>{{.Heading}}</h1>
 <form method="post" action="{{.Action}}" class="form">
   <div class="field">
-    <label for="slug">Slug</label>
+    <label for="slug">{{FieldSlug}}</label>
     <input type="text" id="slug" name="slug" value="{{.Input.Slug}}" required pattern="[a-z0-9][a-z0-9_\-]*" maxlength="63" autocomplete="off">
     {{if .Errors.Slug}}<p class="field-error">{{.Errors.Slug}}</p>{{end}}
-    <p class="field-hint">Lowercase letters, digits, "-" and "_". Used in URLs: /w/&lt;slug&gt;/issues.</p>
+    <p class="field-hint">{{SlugHint}}</p>
   </div>
   <div class="field">
-    <label for="name">Name</label>
+    <label for="name">{{FieldName}}</label>
     <input type="text" id="name" name="name" value="{{.Input.Name}}" maxlength="200" autocomplete="off">
     {{if .Errors.Name}}<p class="field-error">{{.Errors.Name}}</p>{{end}}
-    <p class="field-hint">Optional display name; defaults to the slug.</p>
+    <p class="field-hint">{{NameHint}}</p>
   </div>
   <div class="field">
-    <label for="description">Description</label>
+    <label for="description">{{FieldDescription}}</label>
     <textarea id="description" name="description" rows="3">{{.Input.Description}}</textarea>
     {{if .Errors.Description}}<p class="field-error">{{.Errors.Description}}</p>{{end}}
   </div>
   <div class="form-actions">
-    <a class="btn btn-quiet" href="/workspaces">Cancel</a>
+    <a class="btn btn-quiet" href="/workspaces">{{BtnCancel}}</a>
     <button type="submit" class="btn btn-primary">{{.SubmitLabel}}</button>
   </div>
 </form>

@@ -4,9 +4,9 @@
    submit + fragment swap, empty-submit disable, unsaved-input guard.
    All progressive enhancement — without JS the forms post normally. */}}
 <script type="module" src="/static/page-detail.js"></script>
-<nav class="breadcrumb" aria-label="Breadcrumb">
+<nav class="breadcrumb" aria-label="{{BreadcrumbAria}}">
   <ol>
-    <li><a href="/w/{{.Workspace.Slug}}/discussions">Discussions</a></li>
+    <li><a href="/w/{{.Workspace.Slug}}/discussions">{{LayoutNavDiscussions}}</a></li>
     <li><a href="#" aria-current="page">#{{.Discussion.ID}}</a></li>
   </ol>
 </nav>
@@ -21,12 +21,12 @@
   <ol class="comment-list" role="list"{{if not .Threads}} hidden{{end}}>
     {{range .Threads}}{{template "discussion_comment" (dict "Discussion" $.Discussion "Workspace" $.Workspace "C" . "ThreadDraftID" $.ThreadDraftID "CommentDraft" $.CommentDraft "CommentError" $.CommentError)}}{{end}}
   </ol>
-  <p class="muted" data-empty-note{{if .Threads}} hidden{{end}}>No threads yet.</p>
+  <p class="muted" data-empty-note{{if .Threads}} hidden{{end}}>{{ThreadsEmpty}}</p>
 
   {{template "discussion_comment_form" .}}
 </section>
 
 {{/* Back to top: shown only once the page is scrolled down, via a
    scroll-state container query on the root scroller — no JS needed. */}}
-<a class="back-to-top" href="#main-content" aria-label="Back to top">↑ Top</a>
+<a class="back-to-top" href="#main-content" aria-label="{{BackToTopAria}}">{{BackToTop}}</a>
 {{end}}

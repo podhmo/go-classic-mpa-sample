@@ -12,16 +12,16 @@
   {{end}}
 
   <div class="field">
-    <label for="f-name">Name <span class="req" aria-hidden="true">*</span></label>
+    <label for="f-name">{{AuthName}} <span class="req" aria-hidden="true">*</span></label>
     <input type="text" id="f-name" name="name" value="{{.Name}}" maxlength="100" required autocomplete="username"{{if .NameError}} aria-invalid="true" aria-describedby="f-name-error" autofocus{{else}} aria-invalid="false"{{end}}>
-    <p class="field-error{{if not .NameError}} field-error-pending{{end}}" id="f-name-error">{{or .NameError "Name is required."}}</p>
+    <p class="field-error{{if not .NameError}} field-error-pending{{end}}" id="f-name-error">{{or .NameError (NameRequired)}}</p>
   </div>
 
   <div class="field">
-    <label for="f-password">Password <span class="req" aria-hidden="true">*</span></label>
+    <label for="f-password">{{AuthPassword}} <span class="req" aria-hidden="true">*</span></label>
     <input type="password" id="f-password" name="password" required autocomplete="{{if .NewPassword}}new-password{{else}}current-password{{end}}"{{if .NewPassword}} minlength="8"{{end}}{{if .PasswordError}} aria-invalid="true" aria-describedby="f-password-error"{{if not .NameError}} autofocus{{end}}{{else}} aria-invalid="false"{{end}}>
-    <p class="field-error{{if not .PasswordError}} field-error-pending{{end}}" id="f-password-error">{{or .PasswordError "Password is required."}}</p>
-    {{if .NewPassword}}<p class="field-hint" id="f-password-hint">At least 8 characters.</p>{{end}}
+    <p class="field-error{{if not .PasswordError}} field-error-pending{{end}}" id="f-password-error">{{or .PasswordError (PasswordRequired)}}</p>
+    {{if .NewPassword}}<p class="field-hint" id="f-password-hint">{{AuthPasswordHint}}</p>{{end}}
   </div>
 
   <div class="form-actions">

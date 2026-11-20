@@ -236,7 +236,7 @@ func (h *handler) createPull(w http.ResponseWriter, r *http.Request) {
 		if fe == nil {
 			fe = store.FieldErrors{}
 		}
-		fe["refs"] = "Base and head must name existing refs or commits."
+		fe["refs"] = store.FieldError{Code: "refs_invalid", Message: "Base and head must name existing refs or commits."}
 	}
 	if fe.Any() {
 		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", fields(fe))
@@ -418,8 +418,8 @@ func (h *handler) createPRComment(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	input := store.PRCommentInput{Body: strings.TrimSpace(deref(in.Body))}
-	if msg := store.ValidateCommentBody(input.Body); msg != "" {
-		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", map[string]string{"body": msg})
+	if fe := store.ValidateCommentBody(input.Body); fe.Code != "" {
+		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", map[string]string{"body": fe.Message})
 		return
 	}
 	if in.Path != nil && *in.Path != "" {
@@ -527,8 +527,8 @@ func (h *handler) updatePRComment(w http.ResponseWriter, r *http.Request) {
 	if in.Body != nil {
 		body = strings.TrimSpace(*in.Body)
 	}
-	if msg := store.ValidateCommentBody(body); msg != "" {
-		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", map[string]string{"body": msg})
+	if fe := store.ValidateCommentBody(body); fe.Code != "" {
+		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", map[string]string{"body": fe.Message})
 		return
 	}
 	if err := h.store.UpdatePRComment(r.Context(), pr.ID, c.ID, body); err != nil {

@@ -692,3 +692,13 @@ chrome-devtools の trace insight で計測した結果、CSS はボトルネッ
 - **カタログは自作の薄い層**: `internal/web/i18n.go` の `messages` struct（フィールド = メッセージ）に `messagesEN`/`messagesJA` を置く。初版は JSON+`{{t "key"}}` だったが、キーの typo が両面で検出不能とのレビュー指摘で struct + フィールド関数名化に変更（typo がコンパイル/パースエラーになる）。空フィールドは en にフォールバック（部分適用が壊れない）。go-i18n / x/text/message は ja/en のみ・複数形ほぼ不要の現要件では過剰と判断。JS 側でカタログが要るなら JSON + `{{t "key"}}` 突合 lint（minigo）が代替。
 - **テンプレートはロケール別にパース**: `parsePages(locale)` が `messageFuncs`（struct フィールド → 同名関数）と `{{lang}}` をそのロケールに束縛し、`pagesByLang[locale][page]` で保持。ビューモデル 15+ にフィールドを足さず `layout.html` の `<html lang>` まで届くのが採用理由。
 - **プロトタイプ範囲は issues 一覧 + layout のみ**。validation 文言・エラーページ・静的 JS 文字列・`fmtTime` 書式・UGC の `lang` は未対応（TODO.md の「i18n の全面適用」参照）。
+
+## i18n 全面適用（2026-11-20、TODO「i18n の全面適用」）
+
+- **カタログを全画面へ拡張**: `messages` struct を ~290 フィールド（テンプレート文言 + ハンドラ側 Title/Heading/SubmitLabel + エラーページ + validation）へ。ハンドラ内の英語リテラルは `msgFor(r)` 経由でカタログ参照に置き換え、ビューモデルの error フィールドは `string` のまま境界で訳す（`{{if .Errors.Title}}` の空判定を保つため）。
+- **store の FieldErrors をコード化**: `store.FieldError{Code, Limit, Message}` + `ErrCodeRequired/TooLong/SlugPattern/HexColor`。web 層は `fieldErrText(lang, field, fe)` で訳し、API/CLI は従来どおり英語 `Message` を返す（機械可読性を落とさず web だけ訳せる形）。
+- **スイッチャは `GET /locale?lang=`**: cookie を Set して Referer のパス+クエリへ 303（フィルタ保持）。`?lang=` 直リンクは `withLocale` の既存処理が引き続き担う（`/locale` パス自身は除外して二重処理を回避）。クロスオリジン Referer は `/` フォールバック。
+- **静的 JS の文字列は `<html data-i18n>`**: ロケール別 `jsDictFor(lang)` の JSON を属性に埋め、`static/i18n.js` の `t(key, ...args)` が読む。CSP `script-src 'self'` のまま inline `<script>` 不要。
+- **`fmtTime`/`authorName`/`hideReasonLabel`/`noun`/`repliesClause`/`labelKind`/`labelScope` はロケール別 funcs 束縛**（`parsePages(lang)` 内）。package 級の同名 funcs は削除せず funcMap の既定として残し、`parsePages` がロケール別で上書き。
+- **文中リンク・HTML を含むメッセージは分割方式**: `*Pre`/`Link`/`Tail` や `*HTML` サフィックスのフィールドを使い、HTML を返すフィールドは `template.HTML` を返し各 arg を `HTMLEscaper` 経由。
+- **UGC は未翻訳**: issue 本文・コメント等のユーザ生成コンテンツは `lang`/`dir` 属性も付けずそのまま（TODO 残課題）。

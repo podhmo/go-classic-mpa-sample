@@ -241,5 +241,7 @@ Key design choices:
   supported.
 - **Discussion extras** — reactions, polls, pinning, category admin,
   issue→discussion conversion are v3 candidates (see `docs/ja/roadmap.md`).
-- **i18n** — UI strings are English.
+- **i18n** — UI strings are English and Japanese (`?lang=` or the nav
+  switcher sets a cookie; `Accept-Language` is the fallback). User
+  content stays untranslated.
 - **Docker** — a single binary is the deploy story.

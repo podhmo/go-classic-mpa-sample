@@ -247,8 +247,8 @@ func (h *handler) createDiscussionThread(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	body := strings.TrimSpace(in.Body)
-	if msg := store.ValidateCommentBody(body); msg != "" {
-		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", map[string]string{"body": msg})
+	if fe := store.ValidateCommentBody(body); fe.Code != "" {
+		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", map[string]string{"body": fe.Message})
 		return
 	}
 	d, err := h.store.GetDiscussion(r.Context(), id)
@@ -290,8 +290,8 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 		return
 	}
 	body := strings.TrimSpace(in.Body)
-	if msg := store.ValidateCommentBody(body); msg != "" {
-		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", map[string]string{"body": msg})
+	if fe := store.ValidateCommentBody(body); fe.Code != "" {
+		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", map[string]string{"body": fe.Message})
 		return
 	}
 	d0, err := h.store.GetDiscussion(r.Context(), id)

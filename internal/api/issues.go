@@ -278,8 +278,8 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request, ws *stor
 		return
 	}
 	body := strings.TrimSpace(in.Body)
-	if msg := store.ValidateCommentBody(body); msg != "" {
-		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", map[string]string{"body": msg})
+	if fe := store.ValidateCommentBody(body); fe.Code != "" {
+		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", map[string]string{"body": fe.Message})
 		return
 	}
 	// GetIssue keeps a missing issue a 404 rather than a dangling comment

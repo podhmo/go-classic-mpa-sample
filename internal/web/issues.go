@@ -142,15 +142,16 @@ func (h *handler) newIssue(w http.ResponseWriter, r *http.Request, ws *store.Wor
 		return
 	}
 	h.r.renderIssueForm(w, http.StatusOK, issueFormPage{
-		Title:       "New issue",
-		Heading:     "New issue",
+		Title:       msgFor(r).NewIssue,
+		Heading:     msgFor(r).NewIssue,
 		Action:      "/w/" + ws.Slug + "/issues",
-		SubmitLabel: "Create issue",
+		SubmitLabel: msgFor(r).CreateIssue,
 		Labels:      labels,
 		Section:     "issues",
 		Workspace:   ws,
 		User:        userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // createIssue validates POST /issues and redirects to the new issue.
@@ -166,17 +167,18 @@ func (h *handler) createIssue(w http.ResponseWriter, r *http.Request, ws *store.
 			return
 		}
 		h.r.renderIssueForm(w, http.StatusUnprocessableEntity, issueFormPage{
-			Title:       "New issue",
-			Heading:     "New issue",
+			Title:       msgFor(r).NewIssue,
+			Heading:     msgFor(r).NewIssue,
 			Action:      "/w/" + ws.Slug + "/issues",
-			SubmitLabel: "Create issue",
+			SubmitLabel: msgFor(r).CreateIssue,
 			Input:       in,
 			Labels:      labels,
 			Errors:      errs,
 			Section:     "issues",
 			Workspace:   ws,
 			User:        userFromContext(r.Context()),
-		})
+		}, localeFromContext(r.Context()))
+
 		return
 	}
 	id, err := h.store.CreateIssue(r.Context(), ws.ID, in, authorIDFromContext(r.Context()))
@@ -214,7 +216,8 @@ func (h *handler) showIssue(w http.ResponseWriter, r *http.Request, ws *store.Wo
 		Section:   "issues",
 		Workspace: ws,
 		User:      userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // issueMarkdown serves GET /issues/{id}/markdown — the same document the
@@ -272,16 +275,17 @@ func (h *handler) editIssue(w http.ResponseWriter, r *http.Request, ws *store.Wo
 		in.LabelIDs = append(in.LabelIDs, l.ID)
 	}
 	h.r.renderIssueForm(w, http.StatusOK, issueFormPage{
-		Title:       fmt.Sprintf("Edit issue #%d", issue.ID),
-		Heading:     fmt.Sprintf("Edit issue #%d", issue.ID),
+		Title:       fmt.Sprintf(msgFor(r).EditIssue, issue.ID),
+		Heading:     fmt.Sprintf(msgFor(r).EditIssue, issue.ID),
 		Action:      issueURL(ws, id) + "/edit",
-		SubmitLabel: "Save changes",
+		SubmitLabel: msgFor(r).BtnSaveChanges,
 		Input:       in,
 		Labels:      labels,
 		Section:     "issues",
 		Workspace:   ws,
 		User:        userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // updateIssue validates POST /issues/{id}/edit and redirects to the detail.
@@ -312,17 +316,18 @@ func (h *handler) updateIssue(w http.ResponseWriter, r *http.Request, ws *store.
 			return
 		}
 		h.r.renderIssueForm(w, http.StatusUnprocessableEntity, issueFormPage{
-			Title:       fmt.Sprintf("Edit issue #%d", id),
-			Heading:     fmt.Sprintf("Edit issue #%d", id),
+			Title:       fmt.Sprintf(msgFor(r).EditIssue, id),
+			Heading:     fmt.Sprintf(msgFor(r).EditIssue, id),
 			Action:      issueURL(ws, id) + "/edit",
-			SubmitLabel: "Save changes",
+			SubmitLabel: msgFor(r).BtnSaveChanges,
 			Input:       in,
 			Labels:      labels,
 			Errors:      errs,
 			Section:     "issues",
 			Workspace:   ws,
 			User:        userFromContext(r.Context()),
-		})
+		}, localeFromContext(r.Context()))
+
 		return
 	}
 	if err := h.store.UpdateIssue(r.Context(), id, in); err != nil {
@@ -354,7 +359,7 @@ func (h *handler) setStatus(w http.ResponseWriter, r *http.Request, ws *store.Wo
 	}
 	status := r.PostFormValue("status")
 	if status != store.StatusOpen && status != store.StatusClosed {
-		h.renderError(w, r, http.StatusBadRequest, "Bad request", "Invalid status value.")
+		h.renderError(w, r, http.StatusBadRequest, msgFor(r).ErrBadRequestH, msgFor(r).ErrStatusValue)
 		return
 	}
 	if err := h.store.SetIssueStatus(r.Context(), id, status); err != nil {
@@ -376,7 +381,8 @@ func (h *handler) setStatus(w http.ResponseWriter, r *http.Request, ws *store.Wo
 			Issue:     issue,
 			Workspace: ws,
 			User:      userFromContext(r.Context()),
-		})
+		}, localeFromContext(r.Context()))
+
 		return
 	}
 	http.Redirect(w, r, issueURL(ws, id), http.StatusSeeOther)
@@ -399,12 +405,13 @@ func (h *handler) confirmDelete(w http.ResponseWriter, r *http.Request, ws *stor
 		return
 	}
 	h.r.renderIssueDelete(w, http.StatusOK, issueDeletePage{
-		Title:     fmt.Sprintf("Delete issue #%d", issue.ID),
+		Title:     fmt.Sprintf(msgFor(r).DeleteIssue, issue.ID),
 		Issue:     issue,
 		Section:   "issues",
 		Workspace: ws,
 		User:      userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // deleteIssue performs the deletion and returns to the list.
@@ -458,7 +465,7 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request, ws *stor
 		return
 	}
 
-	errMsg := store.ValidateCommentBody(body)
+	errMsg := fieldErrText(localeFromContext(r.Context()), "body", store.ValidateCommentBody(body))
 	if errMsg != "" {
 		// A partial request swaps only the form; no list reload.
 		if partial {
@@ -468,7 +475,8 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request, ws *stor
 				CommentError: errMsg,
 				Workspace:    ws,
 				User:         userFromContext(r.Context()),
-			})
+			}, localeFromContext(r.Context()))
+
 			return
 		}
 		comments, err := h.store.ListComments(r.Context(), id)
@@ -485,7 +493,8 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request, ws *stor
 			Section:      "issues",
 			Workspace:    ws,
 			User:         userFromContext(r.Context()),
-		})
+		}, localeFromContext(r.Context()))
+
 		return
 	}
 
@@ -513,7 +522,8 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request, ws *stor
 				Author:    userFromContext(r.Context()),
 				CreatedAt: time.Now(),
 			},
-		))
+		), localeFromContext(r.Context()))
+
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("%s#comment-%d", issueURL(ws, id), commentID), http.StatusSeeOther)
@@ -547,7 +557,8 @@ func validateIssueInput(r *http.Request) (store.IssueInput, issueFormErrors) {
 	}
 
 	fe := store.ValidateIssueInput(in)
-	return in, issueFormErrors{Title: fe["title"], Body: fe["body"]}
+	lang := localeFromContext(r.Context())
+	return in, issueFormErrors{Title: fieldErrText(lang, "title", fe["title"]), Body: fieldErrText(lang, "body", fe["body"])}
 }
 
 // isChecked reports whether id is among the selected label IDs.

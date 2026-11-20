@@ -1,14 +1,14 @@
 {{define "content"}}
-<nav class="breadcrumb" aria-label="Breadcrumb">
+<nav class="breadcrumb" aria-label="{{BreadcrumbAria}}">
   <ol>
-    <li><a href="/pulls">Pull requests</a></li>
+    <li><a href="/pulls">{{LayoutNavPulls}}</a></li>
     <li><a href="/pulls/{{.PR.ID}}">#{{.PR.ID}}</a></li>
-    <li><a href="#" aria-current="page">Merge</a></li>
+    <li><a href="#" aria-current="page">{{BtnMerge}}</a></li>
   </ol>
 </nav>
 
 <div class="page-head">
-  <h1>Merge pull request <span class="issue-num">#{{.PR.ID}}</span></h1>
+  <h1>{{MergePull .PR.ID}}</h1>
 </div>
 
 <div class="card issue-form">
@@ -20,42 +20,42 @@
   {{end}}
 
   {{if and .Check (eq .Check.Status 2)}}
-  <p class="merge-state merge-conflicting">This branch has conflicts in:
+  <p class="merge-state merge-conflicting">{{MergeConflicts}}
     {{range $i, $f := .Check.Files}}{{if $i}}, {{end}}<code>{{$f}}</code>{{end}}</p>
-  <p class="muted">Merging is blocked until the conflicts are resolved in the branches.</p>
+  <p class="muted">{{MergeBlocked}}</p>
   <div class="form-actions">
-    <a class="btn btn-quiet" href="/pulls/{{.PR.ID}}">Back to pull request</a>
+    <a class="btn btn-quiet" href="/pulls/{{.PR.ID}}">{{BackToPull}}</a>
   </div>
   {{else}}
   {{if .Check}}
   {{if eq .Check.Status 1}}
-  <p class="merge-state merge-clean">This branch can be merged cleanly.</p>
+  <p class="merge-state merge-clean">{{MergeClean}}</p>
   {{else}}
-  <p class="merge-state">Mergeability could not be checked (shallow clone or old git). Merging may still fail.</p>
+  <p class="merge-state">{{MergeUnchecked}}</p>
   {{end}}
   {{else}}
-  <p class="merge-state">Mergeability could not be checked — merging may fail.</p>
+  <p class="merge-state">{{MergeUncheckedNone}}</p>
   {{end}}
 
   <form method="post" action="/pulls/{{.PR.ID}}/merge">
     <fieldset class="field">
-      <legend>Merge method</legend>
+      <legend>{{MergeMethodLegend}}</legend>
       <label class="label-option" for="m-merge">
         <input type="radio" id="m-merge" name="method" value="merge" checked>
-        <span>Merge commit — create a merge commit joining the histories.</span>
+        <span>{{MergeMethodMerge}}</span>
       </label>
       <label class="label-option" for="m-squash">
         <input type="radio" id="m-squash" name="method" value="squash">
-        <span>Squash — combine every commit into one commit on base.</span>
+        <span>{{MergeMethodSquash}}</span>
       </label>
       <label class="label-option" for="m-rebase">
         <input type="radio" id="m-rebase" name="method" value="rebase">
-        <span>Rebase — replay the commits on top of base (linear history).</span>
+        <span>{{MergeMethodRebase}}</span>
       </label>
     </fieldset>
     <div class="form-actions">
-      <a class="btn btn-quiet" href="/pulls/{{.PR.ID}}">Cancel</a>
-      <button type="submit" class="btn btn-primary">Merge pull request</button>
+      <a class="btn btn-quiet" href="/pulls/{{.PR.ID}}">{{BtnCancel}}</a>
+      <button type="submit" class="btn btn-primary">{{BtnMergePull}}</button>
     </div>
   </form>
   {{end}}

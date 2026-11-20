@@ -17,27 +17,52 @@ const (
 	MaxBodyRunes = 10000
 )
 
+// FieldError is a single field's validation failure. Code is a stable
+// machine key the web layer translates to the page locale; Limit carries
+// the bound for "too_long" errors; Message is the default English text
+// the JSON API returns as is.
+type FieldError struct {
+	Code    string
+	Limit   int
+	Message string
+}
+
+// Field error codes — the presentation layer maps them to localized
+// messages (see internal/web's fieldErrText).
+const (
+	ErrCodeRequired    = "required"
+	ErrCodeTooLong     = "too_long"
+	ErrCodeSlugPattern = "pattern_slug"
+	ErrCodeHexColor    = "hex_color"
+)
+
 // FieldErrors maps an input field name ("title", "body", "category") to a
-// user-facing validation message. nil means the input is valid.
-type FieldErrors map[string]string
+// validation failure. nil means the input is valid.
+type FieldErrors map[string]FieldError
 
 // Any reports whether any field failed validation.
 func (e FieldErrors) Any() bool { return len(e) > 0 }
+
+func required(msg string) FieldError { return FieldError{Code: ErrCodeRequired, Message: msg} }
+
+func tooLong(msg string, limit int) FieldError {
+	return FieldError{Code: ErrCodeTooLong, Limit: limit, Message: msg}
+}
 
 // ValidateIssueInput validates an IssueInput value.
 func ValidateIssueInput(in IssueInput) FieldErrors {
 	var errs FieldErrors
 	switch {
 	case in.Title == "":
-		errs = FieldErrors{"title": "Title is required."}
+		errs = FieldErrors{"title": required("Title is required.")}
 	case utf8.RuneCountInString(in.Title) > MaxTitleRunes:
-		errs = FieldErrors{"title": fmt.Sprintf("Title must be %d characters or fewer.", MaxTitleRunes)}
+		errs = FieldErrors{"title": tooLong(fmt.Sprintf("Title must be %d characters or fewer.", MaxTitleRunes), MaxTitleRunes)}
 	}
 	if utf8.RuneCountInString(in.Body) > MaxBodyRunes {
 		if errs == nil {
 			errs = FieldErrors{}
 		}
-		errs["body"] = fmt.Sprintf("Body must be %d characters or fewer.", MaxBodyRunes)
+		errs["body"] = tooLong(fmt.Sprintf("Body must be %d characters or fewer.", MaxBodyRunes), MaxBodyRunes)
 	}
 	return errs
 }
@@ -51,7 +76,7 @@ func ValidateDiscussionInput(in DiscussionInput) FieldErrors {
 		if errs == nil {
 			errs = FieldErrors{}
 		}
-		errs["category"] = "Category is required."
+		errs["category"] = required("Category is required.")
 	}
 	return errs
 }
@@ -69,15 +94,15 @@ func ValidateLabelInput(in LabelInput) FieldErrors {
 	var errs FieldErrors
 	switch {
 	case in.Name == "":
-		errs = FieldErrors{"name": "Name is required."}
+		errs = FieldErrors{"name": required("Name is required.")}
 	case utf8.RuneCountInString(in.Name) > MaxLabelNameRunes:
-		errs = FieldErrors{"name": fmt.Sprintf("Name must be %d characters or fewer.", MaxLabelNameRunes)}
+		errs = FieldErrors{"name": tooLong(fmt.Sprintf("Name must be %d characters or fewer.", MaxLabelNameRunes), MaxLabelNameRunes)}
 	}
 	if !labelColorRE.MatchString(in.Color) {
 		if errs == nil {
 			errs = FieldErrors{}
 		}
-		errs["color"] = "Color must be a hex color like #d73a4a."
+		errs["color"] = FieldError{Code: ErrCodeHexColor, Message: "Color must be a hex color like #d73a4a."}
 	}
 	return errs
 }
@@ -86,6 +111,9 @@ func ValidateLabelInput(in LabelInput) FieldErrors {
 // URL path segment and API key, so it stays lowercase ASCII.
 var workspaceSlugRE = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,62}$`)
 
+// WorkspaceSlugPattern exposes the slug regex text for error messages.
+func WorkspaceSlugPattern() string { return workspaceSlugRE.String() }
+
 // ValidateWorkspaceInput validates a WorkspaceInput value. Slug is
 // required and must match the slug pattern; name defaults to the slug at
 // insert time so it is optional here; description is plain text.
@@ -93,31 +121,31 @@ func ValidateWorkspaceInput(in WorkspaceInput) FieldErrors {
 	var errs FieldErrors
 	switch {
 	case in.Slug == "":
-		errs = FieldErrors{"slug": "Slug is required."}
+		errs = FieldErrors{"slug": required("Slug is required.")}
 	case !workspaceSlugRE.MatchString(in.Slug):
-		errs = FieldErrors{"slug": "Slug must match " + workspaceSlugRE.String() + "."}
+		errs = FieldErrors{"slug": FieldError{Code: ErrCodeSlugPattern, Message: "Slug must match " + workspaceSlugRE.String() + "."}}
 	case utf8.RuneCountInString(in.Name) > MaxTitleRunes:
-		errs = FieldErrors{"name": fmt.Sprintf("Name must be %d characters or fewer.", MaxTitleRunes)}
+		errs = FieldErrors{"name": tooLong(fmt.Sprintf("Name must be %d characters or fewer.", MaxTitleRunes), MaxTitleRunes)}
 	}
 	if utf8.RuneCountInString(in.Description) > MaxBodyRunes {
 		if errs == nil {
 			errs = FieldErrors{}
 		}
-		errs["description"] = fmt.Sprintf("Description must be %d characters or fewer.", MaxBodyRunes)
+		errs["description"] = tooLong(fmt.Sprintf("Description must be %d characters or fewer.", MaxBodyRunes), MaxBodyRunes)
 	}
 	return errs
 }
 
 // ValidateCommentBody validates a comment body; issue and discussion
-// comments share the same rule. "" means valid.
-func ValidateCommentBody(body string) string {
+// comments share the same rule. A zero FieldError means valid.
+func ValidateCommentBody(body string) FieldError {
 	switch {
 	case body == "":
-		return "Body is required."
+		return required("Body is required.")
 	case utf8.RuneCountInString(body) > MaxBodyRunes:
-		return fmt.Sprintf("Comment must be %d characters or fewer.", MaxBodyRunes)
+		return tooLong(fmt.Sprintf("Comment must be %d characters or fewer.", MaxBodyRunes), MaxBodyRunes)
 	}
-	return ""
+	return FieldError{}
 }
 
 // ValidatePullRequestInput validates a PRInput value: title rules are the
@@ -129,13 +157,13 @@ func ValidatePullRequestInput(in PRInput) FieldErrors {
 		if errs == nil {
 			errs = FieldErrors{}
 		}
-		errs["base"] = "Base ref is required."
+		errs["base"] = required("Base ref is required.")
 	}
 	if in.HeadRef == "" {
 		if errs == nil {
 			errs = FieldErrors{}
 		}
-		errs["head"] = "Head ref is required."
+		errs["head"] = required("Head ref is required.")
 	}
 	return errs
 }

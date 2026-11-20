@@ -95,15 +95,16 @@ func (h *handler) registerForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.r.renderAuthForm(w, http.StatusOK, authFormPage{
-		Title:       "Register",
-		Heading:     "Create an account",
+		Title:       msgFor(r).AuthRegister,
+		Heading:     msgFor(r).AuthRegisterHeading,
 		Action:      "/register",
-		SubmitLabel: "Register",
+		SubmitLabel: msgFor(r).AuthRegister,
 		Next:        safeNext(r.URL.Query().Get("next")),
 		NewPassword: true,
-		OtherLabel:  "Already have an account? Log in",
+		OtherLabel:  msgFor(r).AuthOtherLogin,
 		OtherURL:    "/login",
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // register validates POST /register, creates the account and logs the new
@@ -117,32 +118,32 @@ func (h *handler) register(w http.ResponseWriter, r *http.Request) {
 	next := safeNext(r.PostFormValue("next"))
 
 	page := authFormPage{
-		Title:       "Register",
-		Heading:     "Create an account",
+		Title:       msgFor(r).AuthRegister,
+		Heading:     msgFor(r).AuthRegisterHeading,
 		Action:      "/register",
-		SubmitLabel: "Register",
+		SubmitLabel: msgFor(r).AuthRegister,
 		Name:        name,
 		Next:        next,
 		NewPassword: true,
-		OtherLabel:  "Already have an account? Log in",
+		OtherLabel:  msgFor(r).AuthOtherLogin,
 		OtherURL:    "/login",
 	}
 	switch {
 	case name == "":
-		page.NameError = "Name is required."
+		page.NameError = msgFor(r).NameRequired
 	case utf8.RuneCountInString(name) > maxNameRunes:
-		page.NameError = fmt.Sprintf("Name must be %d characters or fewer.", maxNameRunes)
+		page.NameError = fmt.Sprintf(msgFor(r).AuthNameTooLong, maxNameRunes)
 	}
 	switch {
 	case password == "":
-		page.PasswordError = "Password is required."
+		page.PasswordError = msgFor(r).PasswordRequired
 	case utf8.RuneCountInString(password) < minPasswordRunes:
-		page.PasswordError = fmt.Sprintf("Password must be %d characters or more.", minPasswordRunes)
+		page.PasswordError = fmt.Sprintf(msgFor(r).AuthPasswordShort, minPasswordRunes)
 	case utf8.RuneCountInString(password) > maxPasswordRunes:
-		page.PasswordError = fmt.Sprintf("Password must be %d characters or fewer.", maxPasswordRunes)
+		page.PasswordError = fmt.Sprintf(msgFor(r).AuthPasswordTooLong, maxPasswordRunes)
 	}
 	if page.anyError() {
-		h.r.renderAuthForm(w, http.StatusUnprocessableEntity, page)
+		h.r.renderAuthForm(w, http.StatusUnprocessableEntity, page, localeFromContext(r.Context()))
 		return
 	}
 
@@ -153,8 +154,8 @@ func (h *handler) register(w http.ResponseWriter, r *http.Request) {
 	}
 	userID, err := h.store.CreateUser(r.Context(), name, hash)
 	if errors.Is(err, store.ErrDuplicateName) {
-		page.NameError = "That name is already taken."
-		h.r.renderAuthForm(w, http.StatusUnprocessableEntity, page)
+		page.NameError = msgFor(r).AuthNameTaken
+		h.r.renderAuthForm(w, http.StatusUnprocessableEntity, page, localeFromContext(r.Context()))
 		return
 	}
 	if err != nil {
@@ -179,14 +180,15 @@ func (h *handler) loginForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.r.renderAuthForm(w, http.StatusOK, authFormPage{
-		Title:       "Log in",
-		Heading:     "Log in",
+		Title:       msgFor(r).AuthLogin,
+		Heading:     msgFor(r).AuthLogin,
 		Action:      "/login",
-		SubmitLabel: "Log in",
+		SubmitLabel: msgFor(r).AuthLogin,
 		Next:        safeNext(r.URL.Query().Get("next")),
-		OtherLabel:  "No account yet? Register",
+		OtherLabel:  msgFor(r).AuthOtherRegister,
 		OtherURL:    "/register",
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // login validates POST /login: on success it issues a fresh session token
@@ -201,23 +203,23 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 	next := safeNext(r.PostFormValue("next"))
 
 	page := authFormPage{
-		Title:       "Log in",
-		Heading:     "Log in",
+		Title:       msgFor(r).AuthLogin,
+		Heading:     msgFor(r).AuthLogin,
 		Action:      "/login",
-		SubmitLabel: "Log in",
+		SubmitLabel: msgFor(r).AuthLogin,
 		Name:        name,
 		Next:        next,
-		OtherLabel:  "No account yet? Register",
+		OtherLabel:  msgFor(r).AuthOtherRegister,
 		OtherURL:    "/register",
 	}
 	if name == "" {
-		page.NameError = "Name is required."
+		page.NameError = msgFor(r).NameRequired
 	}
 	if password == "" {
-		page.PasswordError = "Password is required."
+		page.PasswordError = msgFor(r).PasswordRequired
 	}
 	if page.anyError() {
-		h.r.renderAuthForm(w, http.StatusUnprocessableEntity, page)
+		h.r.renderAuthForm(w, http.StatusUnprocessableEntity, page, localeFromContext(r.Context()))
 		return
 	}
 
@@ -225,8 +227,8 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 	if errors.Is(err, store.ErrInvalidCredentials) {
 		time.Sleep(failedLoginDelay)
 		// Deliberately vague: never reveal which of name/password failed.
-		page.Error = "Name or password is incorrect."
-		h.r.renderAuthForm(w, http.StatusUnprocessableEntity, page)
+		page.Error = msgFor(r).AuthLoginFailed
+		h.r.renderAuthForm(w, http.StatusUnprocessableEntity, page, localeFromContext(r.Context()))
 		return
 	}
 	if err != nil {
@@ -305,7 +307,7 @@ func withUser(h *handler, next http.Handler) http.Handler {
 				// Unknown/expired session: continue anonymously.
 			default:
 				h.renderError(w, r, http.StatusInternalServerError,
-					"Internal server error", "The session could not be verified. Please try again.")
+					msgFor(r).ErrInternalH, msgFor(r).ErrSessionVerify)
 				return
 			}
 		}

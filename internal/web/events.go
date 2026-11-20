@@ -154,7 +154,7 @@ func (h *handler) issueCommentsFragment(w http.ResponseWriter, r *http.Request, 
 	}
 	ids, filtered, err := parseIDSet(r)
 	if err != nil {
-		h.renderError(w, r, http.StatusBadRequest, "Bad request", "Invalid ids parameter.")
+		h.renderError(w, r, http.StatusBadRequest, msgFor(r).ErrBadRequestH, msgFor(r).ErrInvalidIDs)
 		return
 	}
 	issue, err := h.store.GetIssue(r.Context(), id)
@@ -179,8 +179,8 @@ func (h *handler) issueCommentsFragment(w http.ResponseWriter, r *http.Request, 
 			}
 		}
 	}
-	h.r.renderFragment(w, "issue_detail", "issue_comments_update", http.StatusOK,
-		dict("Issue", issue, "Comments", out, "Workspace", ws))
+	h.r.renderFragment(w, "issue_detail", "issue_comments_update", http.StatusOK, dict("Issue", issue, "Comments", out, "Workspace", ws), localeFromContext(r.Context()))
+
 }
 
 // issueArticleFragment serves GET /issues/{id}/fragments/article — the
@@ -203,7 +203,8 @@ func (h *handler) issueArticleFragment(w http.ResponseWriter, r *http.Request, w
 		Issue:     issue,
 		Workspace: ws,
 		User:      userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // discussionThreadsFragment serves GET /discussions/{id}/fragments/threads
@@ -217,7 +218,7 @@ func (h *handler) discussionThreadsFragment(w http.ResponseWriter, r *http.Reque
 	}
 	ids, filtered, err := parseIDSet(r)
 	if err != nil {
-		h.renderError(w, r, http.StatusBadRequest, "Bad request", "Invalid ids parameter.")
+		h.renderError(w, r, http.StatusBadRequest, msgFor(r).ErrBadRequestH, msgFor(r).ErrInvalidIDs)
 		return
 	}
 	discussion, err := h.store.GetDiscussion(r.Context(), id)
@@ -242,8 +243,8 @@ func (h *handler) discussionThreadsFragment(w http.ResponseWriter, r *http.Reque
 			}
 		}
 	}
-	h.r.renderFragment(w, "discussion_detail", "discussion_threads_update", http.StatusOK,
-		dict("Discussion", discussion, "Threads", out, "Workspace", ws))
+	h.r.renderFragment(w, "discussion_detail", "discussion_threads_update", http.StatusOK, dict("Discussion", discussion, "Threads", out, "Workspace", ws), localeFromContext(r.Context()))
+
 }
 
 // discussionRepliesFragment serves
@@ -258,12 +259,12 @@ func (h *handler) discussionRepliesFragment(w http.ResponseWriter, r *http.Reque
 	}
 	threadID, err := strconv.ParseInt(r.URL.Query().Get("thread"), 10, 64)
 	if err != nil || threadID < 1 {
-		h.renderError(w, r, http.StatusBadRequest, "Bad request", "Invalid thread parameter.")
+		h.renderError(w, r, http.StatusBadRequest, msgFor(r).ErrBadRequestH, msgFor(r).ErrInvalidThreadID)
 		return
 	}
 	ids, filtered, err := parseIDSet(r)
 	if err != nil {
-		h.renderError(w, r, http.StatusBadRequest, "Bad request", "Invalid ids parameter.")
+		h.renderError(w, r, http.StatusBadRequest, msgFor(r).ErrBadRequestH, msgFor(r).ErrInvalidIDs)
 		return
 	}
 	discussion, err := h.store.GetDiscussion(r.Context(), id)
@@ -299,8 +300,8 @@ func (h *handler) discussionRepliesFragment(w http.ResponseWriter, r *http.Reque
 			}
 		}
 	}
-	h.r.renderFragment(w, "discussion_detail", "discussion_replies_update", http.StatusOK,
-		dict("Discussion", discussion, "Comments", out, "Workspace", ws))
+	h.r.renderFragment(w, "discussion_detail", "discussion_replies_update", http.StatusOK, dict("Discussion", discussion, "Comments", out, "Workspace", ws), localeFromContext(r.Context()))
+
 }
 
 // discussionArticleFragment serves GET /discussions/{id}/fragments/article
@@ -323,5 +324,6 @@ func (h *handler) discussionArticleFragment(w http.ResponseWriter, r *http.Reque
 		Discussion: discussion,
 		Workspace:  ws,
 		User:       userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }

@@ -1,14 +1,14 @@
 {{define "content"}}
 <div class="page-head">
-  <h1>Delete issue #{{.Issue.ID}}</h1>
+  <h1>{{DeleteIssue .Issue.ID}}</h1>
 </div>
 
 <div class="card">
-  <p>Are you sure you want to delete <strong>{{.Issue.Title}}</strong>?</p>
-  <p class="muted">This permanently removes the issue and all of its comments. This action cannot be undone.</p>
+  <p>{{DeleteConfirmHTML .Issue.Title}}</p>
+  <p class="muted">{{IssueDeleteWarn}}</p>
   <form method="post" action="/w/{{.Workspace.Slug}}/issues/{{.Issue.ID}}/delete" class="form-actions">
-    <a class="btn btn-quiet" href="/w/{{.Workspace.Slug}}/issues/{{.Issue.ID}}">Cancel</a>
-    <button type="submit" class="btn btn-danger">Delete issue</button>
+    <a class="btn btn-quiet" href="/w/{{.Workspace.Slug}}/issues/{{.Issue.ID}}">{{BtnCancel}}</a>
+    <button type="submit" class="btn btn-danger">{{BtnDeleteIssue}}</button>
   </form>
 </div>
 {{end}}

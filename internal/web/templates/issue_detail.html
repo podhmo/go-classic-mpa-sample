@@ -4,9 +4,9 @@
    submit + fragment swap, empty-submit disable, unsaved-input guard.
    All progressive enhancement — without JS the forms post normally. */}}
 <script type="module" src="/static/page-detail.js"></script>
-<nav class="breadcrumb" aria-label="Breadcrumb">
+<nav class="breadcrumb" aria-label="{{BreadcrumbAria}}">
   <ol>
-    <li><a href="/w/{{.Workspace.Slug}}/issues">Issues</a></li>
+    <li><a href="/w/{{.Workspace.Slug}}/issues">{{LayoutNavIssues}}</a></li>
     <li><a href="#" aria-current="page">#{{.Issue.ID}}</a></li>
   </ol>
 </nav>
@@ -14,7 +14,7 @@
 {{template "issue_article" .}}
 
 <section id="comments" class="comments" data-live-kind="issue" data-live-events="/w/{{.Workspace.Slug}}/issues/{{.Issue.ID}}/events" data-live-fragments="/w/{{.Workspace.Slug}}/issues/{{.Issue.ID}}/fragments" data-live-list="/w/{{.Workspace.Slug}}/issues">
-  <h2>Comments<span class="comment-count"{{if not .Comments}} hidden{{end}}> (<span data-comment-count>{{len .Comments}}</span>)</span></h2>
+  <h2>{{CommentsHeading}}<span class="comment-count"{{if not .Comments}} hidden{{end}}> (<span data-comment-count>{{len .Comments}}</span>)</span></h2>
 
   {{/* The list and the empty note render unconditionally but hidden as
      needed, so partial-submit.js can insert into an empty list by just
@@ -22,7 +22,7 @@
   <ol class="comment-list" role="list"{{if not .Comments}} hidden{{end}}>
     {{range .Comments}}{{template "issue_comment" (dict "C" . "Workspace" $.Workspace)}}{{end}}
   </ol>
-  <p class="muted" data-empty-note{{if .Comments}} hidden{{end}}>No comments yet.</p>
+  <p class="muted" data-empty-note{{if .Comments}} hidden{{end}}>{{CommentsEmpty}}</p>
 
   {{template "issue_comment_form" .}}
 </section>
@@ -30,5 +30,5 @@
 {{/* Back to top: shown only once the page is scrolled down, via a
    scroll-state container query on the root scroller — no JS needed
    (guide scroll-position-aware-elements). */}}
-<a class="back-to-top" href="#main-content" aria-label="Back to top">↑ Top</a>
+<a class="back-to-top" href="#main-content" aria-label="{{BackToTopAria}}">{{BackToTop}}</a>
 {{end}}

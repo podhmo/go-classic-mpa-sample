@@ -184,15 +184,16 @@ func (h *handler) editCommentForm(w http.ResponseWriter, r *http.Request, ws *st
 		return
 	}
 	h.r.renderCommentEdit(w, http.StatusOK, commentEditPage{
-		Title:     fmt.Sprintf("Edit comment #%d", c.ID),
-		Heading:   fmt.Sprintf("Edit comment #%d", c.ID),
+		Title:     fmt.Sprintf(msgFor(r).EditComment, c.ID),
+		Heading:   fmt.Sprintf(msgFor(r).EditComment, c.ID),
 		Action:    fmt.Sprintf("%s/comments/%d/edit", issueURL(ws, issue.ID), c.ID),
 		CancelURL: fmt.Sprintf("%s#comment-%d", issueURL(ws, issue.ID), c.ID),
 		Body:      c.Body,
 		Section:   "issues",
 		Workspace: ws,
 		User:      userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // updateComment validates and applies the edit, then redirects back to
@@ -208,18 +209,19 @@ func (h *handler) updateComment(w http.ResponseWriter, r *http.Request, ws *stor
 	}
 	body := strings.TrimSpace(r.PostFormValue("body"))
 	cancelURL := fmt.Sprintf("%s#comment-%d", issueURL(ws, issue.ID), c.ID)
-	if msg := store.ValidateCommentBody(body); msg != "" {
+	if fe := store.ValidateCommentBody(body); fe.Code != "" {
 		h.r.renderCommentEdit(w, http.StatusUnprocessableEntity, commentEditPage{
-			Title:     fmt.Sprintf("Edit comment #%d", c.ID),
-			Heading:   fmt.Sprintf("Edit comment #%d", c.ID),
+			Title:     fmt.Sprintf(msgFor(r).EditComment, c.ID),
+			Heading:   fmt.Sprintf(msgFor(r).EditComment, c.ID),
 			Action:    fmt.Sprintf("%s/comments/%d/edit", issueURL(ws, issue.ID), c.ID),
 			CancelURL: cancelURL,
 			Body:      body,
-			Error:     msg,
+			Error:     fieldErrText(localeFromContext(r.Context()), "body", fe),
 			Section:   "issues",
 			Workspace: ws,
 			User:      userFromContext(r.Context()),
-		})
+		}, localeFromContext(r.Context()))
+
 		return
 	}
 	if err := h.store.UpdateComment(r.Context(), issue.ID, c.ID, body); err != nil {
@@ -237,8 +239,8 @@ func (h *handler) confirmDeleteComment(w http.ResponseWriter, r *http.Request, w
 		return
 	}
 	h.r.renderCommentDelete(w, http.StatusOK, commentDeletePage{
-		Title:     fmt.Sprintf("Delete comment #%d", c.ID),
-		Heading:   fmt.Sprintf("Delete comment #%d", c.ID),
+		Title:     fmt.Sprintf(msgFor(r).DeleteComment, c.ID),
+		Heading:   fmt.Sprintf(msgFor(r).DeleteComment, c.ID),
 		Noun:      "comment",
 		Preview:   excerpt(c.Body),
 		Action:    fmt.Sprintf("%s/comments/%d/delete", issueURL(ws, issue.ID), c.ID),
@@ -246,7 +248,8 @@ func (h *handler) confirmDeleteComment(w http.ResponseWriter, r *http.Request, w
 		Section:   "issues",
 		Workspace: ws,
 		User:      userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // deleteComment performs the deletion and returns to the detail page —
@@ -289,7 +292,7 @@ func (h *handler) setCommentHidden(w http.ResponseWriter, r *http.Request, ws *s
 	if hide {
 		reason = r.PostFormValue("reason")
 		if !store.ValidHideReason(reason) {
-			h.renderError(w, r, http.StatusBadRequest, "Bad request", "A valid hide reason is required.")
+			h.renderError(w, r, http.StatusBadRequest, "Bad request", msgFor(r).ErrHideReason)
 			return
 		}
 	}
@@ -310,8 +313,8 @@ func (h *handler) setCommentHidden(w http.ResponseWriter, r *http.Request, ws *s
 			h.notFound(w, r)
 			return
 		}
-		h.r.renderFragment(w, "issue_detail", "issue_comment", http.StatusOK,
-			dict("C", nc, "Workspace", ws))
+		h.r.renderFragment(w, "issue_detail", "issue_comment", http.StatusOK, dict("C", nc, "Workspace", ws), localeFromContext(r.Context()))
+
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("%s#comment-%d", issueURL(ws, issue.ID), c.ID), http.StatusSeeOther)
@@ -324,15 +327,16 @@ func (h *handler) editThreadForm(w http.ResponseWriter, r *http.Request, ws *sto
 		return
 	}
 	h.r.renderCommentEdit(w, http.StatusOK, commentEditPage{
-		Title:     fmt.Sprintf("Edit thread #%d", t.ID),
-		Heading:   fmt.Sprintf("Edit thread #%d", t.ID),
+		Title:     fmt.Sprintf(msgFor(r).EditThread, t.ID),
+		Heading:   fmt.Sprintf(msgFor(r).EditThread, t.ID),
 		Action:    fmt.Sprintf("%s/threads/%d/edit", discussionURL(ws, discussion.ID), t.ID),
 		CancelURL: fmt.Sprintf("%s#thread-%d", discussionURL(ws, discussion.ID), t.ID),
 		Body:      t.Body,
 		Section:   "discussions",
 		Workspace: ws,
 		User:      userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // updateThread validates and applies the thread-body edit.
@@ -346,18 +350,19 @@ func (h *handler) updateThread(w http.ResponseWriter, r *http.Request, ws *store
 	}
 	body := strings.TrimSpace(r.PostFormValue("body"))
 	cancelURL := fmt.Sprintf("%s#thread-%d", discussionURL(ws, discussion.ID), t.ID)
-	if msg := store.ValidateCommentBody(body); msg != "" {
+	if fe := store.ValidateCommentBody(body); fe.Code != "" {
 		h.r.renderCommentEdit(w, http.StatusUnprocessableEntity, commentEditPage{
-			Title:     fmt.Sprintf("Edit thread #%d", t.ID),
-			Heading:   fmt.Sprintf("Edit thread #%d", t.ID),
+			Title:     fmt.Sprintf(msgFor(r).EditThread, t.ID),
+			Heading:   fmt.Sprintf(msgFor(r).EditThread, t.ID),
 			Action:    fmt.Sprintf("%s/threads/%d/edit", discussionURL(ws, discussion.ID), t.ID),
 			CancelURL: cancelURL,
 			Body:      body,
-			Error:     msg,
+			Error:     fieldErrText(localeFromContext(r.Context()), "body", fe),
 			Section:   "discussions",
 			Workspace: ws,
 			User:      userFromContext(r.Context()),
-		})
+		}, localeFromContext(r.Context()))
+
 		return
 	}
 	if err := h.store.UpdateDiscussionThread(r.Context(), discussion.ID, t.ID, body); err != nil {
@@ -375,8 +380,8 @@ func (h *handler) confirmDeleteThread(w http.ResponseWriter, r *http.Request, ws
 		return
 	}
 	h.r.renderCommentDelete(w, http.StatusOK, commentDeletePage{
-		Title:     fmt.Sprintf("Delete thread #%d", t.ID),
-		Heading:   fmt.Sprintf("Delete thread #%d", t.ID),
+		Title:     fmt.Sprintf(msgFor(r).DeleteThread, t.ID),
+		Heading:   fmt.Sprintf(msgFor(r).DeleteThread, t.ID),
 		Noun:      "thread",
 		Preview:   excerpt(t.Body),
 		Replies:   len(t.Comments),
@@ -385,7 +390,8 @@ func (h *handler) confirmDeleteThread(w http.ResponseWriter, r *http.Request, ws
 		Section:   "discussions",
 		Workspace: ws,
 		User:      userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // deleteThread removes the thread and its replies (CASCADE).
@@ -428,7 +434,7 @@ func (h *handler) setThreadHidden(w http.ResponseWriter, r *http.Request, ws *st
 	if hide {
 		reason = r.PostFormValue("reason")
 		if !store.ValidHideReason(reason) {
-			h.renderError(w, r, http.StatusBadRequest, "Bad request", "A valid hide reason is required.")
+			h.renderError(w, r, http.StatusBadRequest, "Bad request", msgFor(r).ErrHideReason)
 			return
 		}
 	}
@@ -447,8 +453,8 @@ func (h *handler) setThreadHidden(w http.ResponseWriter, r *http.Request, ws *st
 			h.notFound(w, r)
 			return
 		}
-		h.r.renderFragment(w, "discussion_detail", "discussion_comment", http.StatusOK,
-			dict("Discussion", discussion, "C", nt, "Workspace", ws))
+		h.r.renderFragment(w, "discussion_detail", "discussion_comment", http.StatusOK, dict("Discussion", discussion, "C", nt, "Workspace", ws), localeFromContext(r.Context()))
+
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("%s#thread-%d", discussionURL(ws, discussion.ID), t.ID), http.StatusSeeOther)
@@ -461,15 +467,16 @@ func (h *handler) editReplyForm(w http.ResponseWriter, r *http.Request, ws *stor
 		return
 	}
 	h.r.renderCommentEdit(w, http.StatusOK, commentEditPage{
-		Title:     fmt.Sprintf("Edit comment #%d", c.ID),
-		Heading:   fmt.Sprintf("Edit comment #%d", c.ID),
+		Title:     fmt.Sprintf(msgFor(r).EditComment, c.ID),
+		Heading:   fmt.Sprintf(msgFor(r).EditComment, c.ID),
 		Action:    fmt.Sprintf("%s/threads/%d/comments/%d/edit", discussionURL(ws, discussion.ID), t.ID, c.ID),
 		CancelURL: fmt.Sprintf("%s#comment-%d", discussionURL(ws, discussion.ID), c.ID),
 		Body:      c.Body,
 		Section:   "discussions",
 		Workspace: ws,
 		User:      userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // updateReply validates and applies the reply edit.
@@ -483,18 +490,19 @@ func (h *handler) updateReply(w http.ResponseWriter, r *http.Request, ws *store.
 	}
 	body := strings.TrimSpace(r.PostFormValue("body"))
 	cancelURL := fmt.Sprintf("%s#comment-%d", discussionURL(ws, discussion.ID), c.ID)
-	if msg := store.ValidateCommentBody(body); msg != "" {
+	if fe := store.ValidateCommentBody(body); fe.Code != "" {
 		h.r.renderCommentEdit(w, http.StatusUnprocessableEntity, commentEditPage{
-			Title:     fmt.Sprintf("Edit comment #%d", c.ID),
-			Heading:   fmt.Sprintf("Edit comment #%d", c.ID),
+			Title:     fmt.Sprintf(msgFor(r).EditComment, c.ID),
+			Heading:   fmt.Sprintf(msgFor(r).EditComment, c.ID),
 			Action:    fmt.Sprintf("%s/threads/%d/comments/%d/edit", discussionURL(ws, discussion.ID), t.ID, c.ID),
 			CancelURL: cancelURL,
 			Body:      body,
-			Error:     msg,
+			Error:     fieldErrText(localeFromContext(r.Context()), "body", fe),
 			Section:   "discussions",
 			Workspace: ws,
 			User:      userFromContext(r.Context()),
-		})
+		}, localeFromContext(r.Context()))
+
 		return
 	}
 	if err := h.store.UpdateDiscussionComment(r.Context(), discussion.ID, t.ID, c.ID, body); err != nil {
@@ -511,8 +519,8 @@ func (h *handler) confirmDeleteReply(w http.ResponseWriter, r *http.Request, ws 
 		return
 	}
 	h.r.renderCommentDelete(w, http.StatusOK, commentDeletePage{
-		Title:     fmt.Sprintf("Delete comment #%d", c.ID),
-		Heading:   fmt.Sprintf("Delete comment #%d", c.ID),
+		Title:     fmt.Sprintf(msgFor(r).DeleteComment, c.ID),
+		Heading:   fmt.Sprintf(msgFor(r).DeleteComment, c.ID),
 		Noun:      "comment",
 		Preview:   excerpt(c.Body),
 		Action:    fmt.Sprintf("%s/threads/%d/comments/%d/delete", discussionURL(ws, discussion.ID), t.ID, c.ID),
@@ -520,7 +528,8 @@ func (h *handler) confirmDeleteReply(w http.ResponseWriter, r *http.Request, ws 
 		Section:   "discussions",
 		Workspace: ws,
 		User:      userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // deleteReply removes the reply; the redirect keeps the thread anchor.
@@ -561,7 +570,7 @@ func (h *handler) setReplyHidden(w http.ResponseWriter, r *http.Request, ws *sto
 	if hide {
 		reason = r.PostFormValue("reason")
 		if !store.ValidHideReason(reason) {
-			h.renderError(w, r, http.StatusBadRequest, "Bad request", "A valid hide reason is required.")
+			h.renderError(w, r, http.StatusBadRequest, "Bad request", msgFor(r).ErrHideReason)
 			return
 		}
 	}
@@ -583,8 +592,8 @@ func (h *handler) setReplyHidden(w http.ResponseWriter, r *http.Request, ws *sto
 			h.notFound(w, r)
 			return
 		}
-		h.r.renderFragment(w, "discussion_detail", "discussion_reply", http.StatusOK,
-			dict("Discussion", discussion, "C", reply, "Workspace", ws))
+		h.r.renderFragment(w, "discussion_detail", "discussion_reply", http.StatusOK, dict("Discussion", discussion, "C", reply, "Workspace", ws), localeFromContext(r.Context()))
+
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("%s#comment-%d", discussionURL(ws, discussion.ID), c.ID), http.StatusSeeOther)

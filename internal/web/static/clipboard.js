@@ -2,6 +2,7 @@
 // bubble feedback and the write paths (Async Clipboard API, then the
 // deprecated execCommand fallback). An import-only module — the detail
 // page reaches it through copy-permalink.js / copy-markdown.js.
+import { t } from "./i18n.js";
 const timers = new WeakMap();
 let lastMessage = "";
 
@@ -15,7 +16,7 @@ export function reportCopy(button, ok) {
   clearTimeout(timers.get(button));
   button.removeAttribute("data-copied");
   button.removeAttribute("data-failed");
-  let message = ok ? "Copied" : "Copy failed";
+  let message = t(ok ? "copied" : "copy_failed");
   // VoiceOver skips a message identical to the previous one: append a
   // no-break space so repeat announcements differ.
   if (message === lastMessage) message += " ";

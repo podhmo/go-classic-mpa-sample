@@ -418,11 +418,11 @@ func (o Options) readCommentBody(body, bodyFile string) (string, error) {
 		return "", err
 	}
 	bodyText = strings.TrimSpace(bodyText)
-	if msg := store.ValidateCommentBody(bodyText); msg != "" {
+	if fe := store.ValidateCommentBody(bodyText); fe.Code != "" {
 		if bodyText == "" {
 			return "", usageError{msg: "--body is required (or --body-file)"}
 		}
-		return "", fmt.Errorf("invalid comment: %s", msg)
+		return "", fmt.Errorf("invalid comment: %s", fe.Message)
 	}
 	return bodyText, nil
 }
@@ -673,7 +673,7 @@ func labelCreate(ctx context.Context, o Options, args []string) error {
 		sort.Strings(keys)
 		parts := make([]string, 0, len(keys))
 		for _, k := range keys {
-			parts = append(parts, k+": "+fe[k])
+			parts = append(parts, k+": "+fe[k].Message)
 		}
 		return fmt.Errorf("invalid input: %s", strings.Join(parts, "; "))
 	}
@@ -767,7 +767,7 @@ func validateIssueInput(in store.IssueInput) error {
 	sort.Strings(keys)
 	parts := make([]string, 0, len(keys))
 	for _, k := range keys {
-		parts = append(parts, k+": "+fe[k])
+		parts = append(parts, k+": "+fe[k].Message)
 	}
 	return fmt.Errorf("invalid input: %s", strings.Join(parts, "; "))
 }

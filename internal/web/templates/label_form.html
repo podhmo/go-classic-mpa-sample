@@ -3,22 +3,22 @@
    aria-invalid sync, and the unsaved-input guard. */}}
 <script type="module" src="/static/page-form.js"></script>
 <h1>{{.Heading}}</h1>
-<p class="field-hint">{{.Label.Kind}} label · {{if .Label.WorkspaceID}}workspace{{else}}shared{{end}}{{if .Label.Archived}} · archived{{end}}</p>
+<p class="field-hint">{{labelKind .Label.Kind}} {{LabelNoun}} · {{labelScope .Label.WorkspaceID}}{{if .Label.Archived}} · {{BadgeArchived}}{{end}}</p>
 <form method="post" action="{{.Action}}" class="form" novalidate>
   <div class="field">
-    <label for="name">Name</label>
+    <label for="name">{{FieldName}}</label>
     <input type="text" id="name" name="name" value="{{.Input.Name}}" required maxlength="64" pattern=".*\S.*" autocomplete="off" data-error="f-label-name-error"{{if .Errors.Name}} aria-invalid="true" aria-describedby="f-label-name-error" autofocus{{else}} aria-invalid="false"{{end}}>
-    <p class="field-error{{if not .Errors.Name}} field-error-pending{{end}}" id="f-label-name-error">{{or .Errors.Name "Name is required."}}</p>
+    <p class="field-error{{if not .Errors.Name}} field-error-pending{{end}}" id="f-label-name-error">{{or .Errors.Name (NameRequired)}}</p>
   </div>
   <div class="field">
-    <label for="color">Color</label>
+    <label for="color">{{FieldColor}}</label>
     <input type="color" id="color" name="color" value="{{if .Input.Color}}{{.Input.Color}}{{else}}#0075ca{{end}}" required data-error="f-label-color-error"{{if .Errors.Color}} aria-invalid="true" aria-describedby="f-label-color-error"{{if not .Errors.Name}} autofocus{{end}}{{else}} aria-invalid="false"{{end}}>
-    <p class="field-error{{if not .Errors.Color}} field-error-pending{{end}}" id="f-label-color-error">{{or .Errors.Color "Color is required."}}</p>
+    <p class="field-error{{if not .Errors.Color}} field-error-pending{{end}}" id="f-label-color-error">{{or .Errors.Color (ColorRequired)}}</p>
   </div>
   {{if .Errors.Other}}<p class="field-error">{{.Errors.Other}}</p>{{end}}
   <div class="form-actions">
-    <a class="btn btn-quiet" href="/w/{{.Workspace.Slug}}/labels">Cancel</a>
-    <button type="submit" class="btn btn-primary">Save changes</button>
+    <a class="btn btn-quiet" href="/w/{{.Workspace.Slug}}/labels">{{BtnCancel}}</a>
+    <button type="submit" class="btn btn-primary">{{BtnSave}}</button>
   </div>
 </form>
 {{end}}

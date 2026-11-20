@@ -257,24 +257,26 @@ func (h *handler) listWorkspaces(w http.ResponseWriter, r *http.Request) {
 		nav = wss[0]
 	}
 	h.r.renderWorkspaceList(w, http.StatusOK, workspaceListPage{
-		Title:      "Workspaces",
+		Title:      msgFor(r).WorkspacesTitle,
 		Workspaces: wss,
 		Workspace:  nav,
 		Section:    "workspaces",
 		User:       userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // newWorkspace renders the empty create form.
 func (h *handler) newWorkspace(w http.ResponseWriter, r *http.Request) {
 	h.r.renderWorkspaceForm(w, http.StatusOK, workspaceFormPage{
-		Title:       "New workspace",
-		Heading:     "New workspace",
+		Title:       msgFor(r).NewWorkspace,
+		Heading:     msgFor(r).NewWorkspace,
 		Action:      "/workspaces",
-		SubmitLabel: "Create workspace",
+		SubmitLabel: msgFor(r).CreateWorkspace,
 		Section:     "workspaces",
 		User:        userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // createWorkspace validates POST /workspaces and redirects to the new
@@ -290,7 +292,7 @@ func (h *handler) createWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := h.store.CreateWorkspace(r.Context(), in); err != nil {
 		if errors.Is(err, store.ErrDuplicateSlug) {
-			errs.Slug = "This slug is already taken."
+			errs.Slug = msgFor(r).ErrSlugTaken
 			h.renderWorkspaceFormError(w, r, in, errs)
 			return
 		}
@@ -303,11 +305,12 @@ func (h *handler) createWorkspace(w http.ResponseWriter, r *http.Request) {
 // confirmDeleteWorkspace renders the delete confirmation page.
 func (h *handler) confirmDeleteWorkspace(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	h.r.renderWorkspaceDelete(w, http.StatusOK, workspaceDeletePage{
-		Title:     fmt.Sprintf("Delete workspace %s", ws.Slug),
+		Title:     fmt.Sprintf(msgFor(r).DeleteWorkspace, ws.Slug),
 		Workspace: ws,
 		Section:   "workspaces",
 		User:      userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // deleteWorkspace performs the deletion — contents included — and returns
@@ -319,8 +322,8 @@ func (h *handler) deleteWorkspace(w http.ResponseWriter, r *http.Request, ws *st
 	if err := h.store.DeleteWorkspace(r.Context(), ws.Slug); err != nil {
 		switch {
 		case errors.Is(err, store.ErrLastWorkspace):
-			h.renderError(w, r, http.StatusUnprocessableEntity, "Cannot delete workspace",
-				"The last remaining workspace cannot be deleted.")
+			h.renderError(w, r, http.StatusUnprocessableEntity, msgFor(r).ErrDeleteLastWsH,
+				msgFor(r).ErrDeleteLastWsM)
 		default:
 			h.workspaceError(w, r, err)
 		}
@@ -331,15 +334,16 @@ func (h *handler) deleteWorkspace(w http.ResponseWriter, r *http.Request, ws *st
 
 func (h *handler) renderWorkspaceFormError(w http.ResponseWriter, r *http.Request, in store.WorkspaceInput, errs workspaceFormErrors) {
 	h.r.renderWorkspaceForm(w, http.StatusUnprocessableEntity, workspaceFormPage{
-		Title:       "New workspace",
-		Heading:     "New workspace",
+		Title:       msgFor(r).NewWorkspace,
+		Heading:     msgFor(r).NewWorkspace,
 		Action:      "/workspaces",
-		SubmitLabel: "Create workspace",
+		SubmitLabel: msgFor(r).CreateWorkspace,
 		Input:       in,
 		Errors:      errs,
 		Section:     "workspaces",
 		User:        userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // validateWorkspaceInput extracts and validates the workspace form fields.
@@ -350,5 +354,6 @@ func validateWorkspaceInput(r *http.Request) (store.WorkspaceInput, workspaceFor
 		Description: strings.TrimSpace(r.PostFormValue("description")),
 	}
 	fe := store.ValidateWorkspaceInput(in)
-	return in, workspaceFormErrors{Slug: fe["slug"], Name: fe["name"], Description: fe["description"]}
+	lang := localeFromContext(r.Context())
+	return in, workspaceFormErrors{Slug: fieldErrText(lang, "slug", fe["slug"]), Name: fieldErrText(lang, "name", fe["name"]), Description: fieldErrText(lang, "description", fe["description"])}
 }
