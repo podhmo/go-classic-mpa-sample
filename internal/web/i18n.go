@@ -1077,7 +1077,11 @@ func messageFuncs(funcs template.FuncMap, lang string) {
 				}
 				esc := make([]any, len(args))
 				for j, a := range args {
-					esc[j] = template.HTMLEscaper(fmt.Sprint(a))
+					if s, ok := a.(string); ok {
+						esc[j] = template.HTMLEscaper(s)
+					} else {
+						esc[j] = a
+					}
 				}
 				return template.HTML(fmt.Sprintf(msg, esc...))
 			}
