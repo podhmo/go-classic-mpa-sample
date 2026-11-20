@@ -34,6 +34,24 @@ func TestLangQuerySetsCookieAndRedirects(t *testing.T) {
 	}
 }
 
+// A request path starting with "//" must not produce a scheme-relative
+// Location: "//evil.example/x" as a Location is followed cross-origin.
+func TestLangRedirectNeverLeavesOrigin(t *testing.T) {
+	srv, _ := newTestServer(t)
+	client := noRedirectClient()
+
+	resp, err := client.Get(srv.URL + "//evil.example/w/default/issues?lang=ja")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	loc := resp.Header.Get("Location")
+	if strings.HasPrefix(loc, "//") || !strings.HasPrefix(loc, "/") {
+		t.Fatalf("Location = %q, want a same-origin absolute path", loc)
+	}
+}
+
 func TestIssueListRendersJapaneseWithCookie(t *testing.T) {
 	srv, f := newTestServer(t)
 	seedIssues(t, f)
@@ -49,7 +67,7 @@ func TestIssueListRendersJapaneseWithCookie(t *testing.T) {
 	}
 	body := getBody(t, resp)
 
-	for _, want := range []string{`<html lang="ja">`, "イシュー", "オープン", "すべてのラベル", "件中"} {
+	for _, want := range []string{`<html lang="ja">`, "イシュー", "オープン", "すべてのラベル", "2 件中 1–2 件を表示"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("ja page missing %q", want)
 		}

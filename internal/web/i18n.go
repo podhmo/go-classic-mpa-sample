@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path"
 	"strings"
 )
 
@@ -90,11 +91,16 @@ func withLocale(next http.Handler) http.Handler {
 				MaxAge:   365 * 24 * 3600,
 				SameSite: http.SameSiteLaxMode,
 			})
-			u := *r.URL
-			v := u.Query()
+			v := r.URL.Query()
 			v.Del("lang")
-			u.RawQuery = v.Encode()
-			http.Redirect(w, r, u.RequestURI(), http.StatusSeeOther)
+			// Build the Location from a cleaned path: a path like
+			// "//evil.example/x" survives RequestURI as a scheme-relative
+			// Location header, which is an open redirect.
+			target := path.Clean("/" + r.URL.Path)
+			if q := v.Encode(); q != "" {
+				target += "?" + q
+			}
+			http.Redirect(w, r, target, http.StatusSeeOther)
 			return
 		}
 		lang := supportedLangs[0]

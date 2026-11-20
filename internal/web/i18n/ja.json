@@ -28,7 +28,7 @@
   "issues.sort.oldest": "古い順",
   "issues.filter.apply": "適用",
   "issues.filter.clear": "クリア",
-  "issues.count": "%d 件中 %d–%d 件を表示",
+  "issues.count": "%[3]d 件中 %[1]d–%[2]d 件を表示",
   "issues.status.open": "オープン",
   "issues.status.closed": "クローズ",
   "issues.opened": "%s にオープン",
