@@ -288,6 +288,9 @@ func (h *handler) listPulls(w http.ResponseWriter, r *http.Request) {
 		filter.Sort = "newest"
 	}
 	filter.Page, _ = strconv.Atoi(q.Get("page"))
+	if filter.Page < 1 {
+		filter.Page = 1
+	}
 	filter.PerPage = perPage
 	pulls, total, err := h.store.ListPullRequests(r.Context(), filter)
 	if err != nil {
@@ -296,22 +299,18 @@ func (h *handler) listPulls(w http.ResponseWriter, r *http.Request) {
 	}
 	totalPages := (total + perPage - 1) / perPage
 	page := pullListPage{
-		Title:   "Pull requests",
-		Section: "pulls",
-		Filter:  filter,
-		Pulls:   pulls,
-		Total:   total,
-		Page:    filter.Page,
-		// ListPullRequests clamps Page to 1 — mirror that for display.
+		Title:           "Pull requests",
+		Section:         "pulls",
+		Filter:          filter,
+		Pulls:           pulls,
+		Total:           total,
+		Page:            filter.Page,
 		TotalPages:      totalPages,
 		RangeStart:      (filter.Page-1)*perPage + 1,
 		RangeEnd:        (filter.Page-1)*perPage + len(pulls),
 		HasActiveFilter: filter.Query != "" || filter.Status != "open" || filter.Sort != "newest",
 		Workspace:       h.navWorkspace(r),
 		User:            userFromContext(r.Context()),
-	}
-	if page.Page < 1 {
-		page.Page = 1
 	}
 	h.r.renderPullList(w, http.StatusOK, page)
 }
@@ -325,6 +324,19 @@ func (h *handler) newPullForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	current, _ := h.repo.CurrentBranch(r.Context())
+	var in store.PRInput
+	// Base defaults to the conventional trunk rather than the first ref
+	// alphabetically; head already defaults to the current branch.
+	for _, want := range []string{"refs/heads/main", "refs/heads/master"} {
+		for _, ref := range refs {
+			if ref.Name == want {
+				in.BaseRef = want
+			}
+		}
+		if in.BaseRef != "" {
+			break
+		}
+	}
 	h.r.renderPullForm(w, http.StatusOK, pullFormPage{
 		Title:     "New pull request",
 		Heading:   "New pull request",
@@ -332,6 +344,7 @@ func (h *handler) newPullForm(w http.ResponseWriter, r *http.Request) {
 		Section:   "pulls",
 		Refs:      refs,
 		Current:   current,
+		Input:     in,
 		Workspace: h.navWorkspace(r),
 		User:      userFromContext(r.Context()),
 	})

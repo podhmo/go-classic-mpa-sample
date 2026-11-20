@@ -1,9 +1,9 @@
 # go-classic-mpa-sample
 
-A small issue tracker + discussions app built as a **classic multi-page
-application (MPA)** in Go — server-rendered HTML, plain HTML forms for
-every state change, and the POST → Redirect → GET (PRG) pattern
-everywhere. Two themes drive it:
+A small issue tracker + discussions app with **git-backed pull requests**,
+built as a **classic multi-page application (MPA)** in Go — server-rendered
+HTML, plain HTML forms for every state change, and the POST → Redirect →
+GET (PRG) pattern everywhere. Two themes drive it:
 
 - **Trying every modern web feature on an old design.** The
   request/response model stays untouched, but the UI is a testbed for new
@@ -38,6 +38,9 @@ On first start the app creates the schema and its master data (the default
 workspace, labels, discussion categories). Demo issues, discussions,
 comments and the `demo`/`demo` account are mock data and only land when
 `-seed` (env `ZATUDAN_SEED`) is set — without it the app starts empty.
+Pull requests have no seed flag: `tools/demo-pr-history.sh [DB] [REPO]`
+builds a small fixture repository and replays a create/comment/close/merge
+history through `zatu pr`.
 
 > The server binds to `127.0.0.1` by default. Accounts exist for author
 > attribution, but there is **no authorization** — signed in or not,
@@ -83,6 +86,10 @@ go run ./cmd/zatu issue view 3
 go run ./cmd/zatu issue view 3 --markdown               # the issue + comments as one markdown doc
 go run ./cmd/zatu comment create 3 --body "nice catch"
 go run ./cmd/zatu discussion list
+go run ./cmd/zatu pr list                          # pull requests
+go run ./cmd/zatu pr view 1 --markdown             # the PR + commits + review comments as one doc
+go run ./cmd/zatu pr create --base main --title "…" # head defaults to the current branch
+go run ./cmd/zatu pr merge 1 --method squash
 go run ./cmd/zatu auth token --user alice          # mint a per-user API token
 go run ./cmd/zatu completion zsh                   # bash|zsh|fish
 ```
@@ -90,11 +97,15 @@ go run ./cmd/zatu completion zsh                   # bash|zsh|fish
 Two backends, selected automatically:
 
 - **local** (default): opens the SQLite file directly via `-db`/`ZATUDAN_DB`
-  — no server needed. `auth token …` is local-only.
+  — no server needed. `auth token …` is local-only. The `pr` verbs
+  additionally need a git repository: pass `--repo`/`ZATUDAN_REPO` or let
+  it auto-detect the `.git` enclosing `-db` (no repo → `not a git
+  repository`, exit 1).
 - **remote**: `--server`/`--token` or `ZATUDAN_SERVER`/`ZATUDAN_TOKEN` talks
   to `/api/v1`. The raw escape hatch is remote-only —
   `zatu api /api/v1/issues -f q=bug` (gh-style `-f`/`-F`/`-X`; `-f`
-  fields become query params on GET, a JSON body otherwise).
+  fields become query params on GET, a JSON body otherwise). `--repo`
+  is meaningless here and warns it is ignored.
 
 ## Test
 
@@ -123,6 +134,7 @@ See `docs/ja/for-ui-designer.md`.
 | `-init` | —             | `false`          | Initialize the database and exit (same as the `init` subcommand)       |
 | `-seed` | `ZATUDAN_SEED` | `false`         | Insert demo issues, discussions and the demo user; master data is ensured either way |
 | `-api-token` | `ZATUDAN_API_TOKEN` | *(unset)*   | Shared Bearer token for `/api/v1`; the API also mounts when per-user `api_tokens` exist |
+| `-repo` | `ZATUDAN_REPO` | auto-detect near `-db` | Git repository enabling pull requests; `off` disables the feature |
 
 Example: `go run ./cmd/zatudan -addr :8080 -db /tmp/my-zatudan.db` or
 `ZATUDAN_ADDR=:8080 go run ./cmd/zatudan`.
@@ -132,163 +144,53 @@ Use `-db :memory:` for a throwaway database. `go run ./cmd/zatudan -db PATH init
 above; flags must precede the `init` argument.
 
 The CLI reads its own variables: `ZATUDAN_DB` for local mode,
-`ZATUDAN_SERVER` + `ZATUDAN_TOKEN` for remote mode.
+`ZATUDAN_SERVER` + `ZATUDAN_TOKEN` for remote mode, `ZATUDAN_REPO` for the
+`zatu pr` git backend.
 
 ## Routes
 
-| Method | Path                                  | Purpose                                          |
-| ------ | ------------------------------------- | ------------------------------------------------ |
-| GET    | `/`                                   | 303 redirect to `/issues`                        |
-| GET/POST | `/workspaces` + `/workspaces/new`   | Workspace list / create (routes below live under `/w/{ws}`) |
-| GET/POST | `/register`                         | Create an account (session cookie on success)    |
-| GET/POST | `/login`                            | Sign in                                          |
-| POST   | `/logout`                             | Sign out → 303                                   |
-| GET    | `/issues`                             | Issue list: open/closed/all tabs, `?q=` search, `?label=` filter, `?sort=newest\|oldest`, `?page=` |
-| GET    | `/issues/new`                         | Create form                                      |
-| POST   | `/issues`                             | Create issue → 303 to `/issues/{id}`             |
-| GET    | `/issues/{id}`                        | Detail: body, labels, comments, comment form, actions |
-| GET/POST | `/issues/{id}/edit`                 | Edit form → 303 to detail                        |
-| POST   | `/issues/{id}/status`                 | Toggle open/closed (hidden `status` field) → 303 |
-| GET/POST | `/issues/{id}/delete`               | GET confirm page (safe) / POST delete → 303 to `/issues` |
-| POST   | `/issues/{id}/comments`               | Add comment → 303 to `/issues/{id}#comment-N`    |
-| GET    | `/issues/{id}/markdown`               | The issue + comments as one `text/markdown` document |
-| GET    | `/discussions`                        | Discussion list: `?category=<slug>`, `?answered=`, `?q=`, `?sort=`, `?page=` |
-| GET/POST | `/discussions/new` + `/discussions` | Create form → create → 303 to detail             |
-| GET    | `/discussions/{id}`                   | Detail: category, threads with their replies |
-| GET/POST | `/discussions/{id}/edit`            | Edit form → 303 to detail                        |
-| GET/POST | `/discussions/{id}/delete`          | GET confirm page / POST delete → 303 to list     |
-| POST   | `/discussions/{id}/comments`          | New thread, or reply (`thread_id`) → 303 to `#thread-N`/`#comment-N` |
-| GET    | `/discussions/{id}/markdown`          | The discussion + threads + replies as `text/markdown` |
-| POST   | `/discussions/{id}/comments/{cid}/answer` | Mark/unmark a thread as the Q&A answer (qa only) → 303 |
-| GET    | `/static/*`                           | Embedded CSS/JS assets (explicitly registered)   |
-
-Notes:
-
-- Routes are workspace-scoped: the canonical form of every path in the
-  table carries a `/w/{ws}` prefix (e.g. `/w/main/issues/3`), and the
-  workspace-less forms above redirect into the right workspace
-  (302 for GET/HEAD, 307 otherwise). The `/markdown` rows are the
-  cookie-session counterpart of the API endpoints below — the detail
-  pages' "Copy as markdown" buttons fetch them.
-- Successful mutations always answer `303 See Other` (PRG). Comment,
-  answer and status forms additionally carry `data-partial`, so with JS
-  enabled `partial-submit.js` posts them via `fetch` and swaps the
-  returned HTML fragment instead of reloading (`X-Partial` request
-  header); without JS the same forms do the classic round-trip.
-- Validation failures re-render the same form with `422`, preserving input
-  and showing field errors wired via `aria-invalid`/`aria-describedby`.
-- Missing issues return a styled 404 page; method mismatches return 405
-  automatically via ServeMux patterns.
-- CSRF protection uses the stdlib `http.NewCrossOriginProtection()`
-  middleware (rejects cross-site non-GET requests via `Sec-Fetch-Site` /
-  `Origin`), and POST bodies are capped at 1 MiB with `http.MaxBytesReader`.
-- Issue/discussion bodies and comments are stored as raw text and rendered
-  as Markdown (GFM via `goldmark`, including GitHub-style
-  `> [!NOTE|TIP|IMPORTANT|WARNING|CAUTION]` alerts) at display time.
-  Raw HTML in the source is omitted and unsafe link schemes
-  (`javascript:`, `data:`, …) are neutralized by the renderer, so
-  stored-XSS is not possible.
-
+The full HTML route table (issues, discussions, `/pulls`, moderation,
+fragments) lives in [docs/ui.md](docs/ui.md#routes). All state changes
+use plain POST forms followed by a 303 (PRG).
 ## JSON API (`/api/v1`)
 
-A machine-facing JSON API (design: `docs/sketch/ja/cli-and-web-api.md`),
-mounted only when a credential exists — `-api-token`/`ZATUDAN_API_TOKEN`
-set **or** at least one per-user token minted via `zatu auth token`.
-With neither, `/api/v1` is not mounted at all (fail-closed). Every
-request then needs `Authorization: Bearer <token>`. Credential presence
-is decided once at startup — if you mint the first token while the
-server is running, `/api/v1` stays 404 until it is restarted.
-
-Two credential kinds:
-
-- the shared env token — constant-time compared; its writes stay anonymous
-- per-user `api_tokens` rows — writes carry that user's `author_id`
-
-| Method | Path                                          | Purpose                                             |
-| ------ | --------------------------------------------- | --------------------------------------------------- |
-| GET/POST | `/api/v1/workspaces`                        | List / create workspaces                            |
-| GET/DELETE | `/api/v1/workspaces/{slug}`               | Read / delete a workspace                           |
-| GET    | `/api/v1/w/{ws}/issues`                       | List: `?status=&q=&label=<name>&sort=&page=&per_page=` (cap 100) |
-| POST   | `/api/v1/w/{ws}/issues`                       | Create `{title, body, label_ids\|labels}` → 201     |
-| GET    | `/api/v1/w/{ws}/issues/{id}`                  | Issue + labels + comments in one call               |
-| PATCH  | `/api/v1/w/{ws}/issues/{id}`                  | Partial update (only provided fields change)        |
-| POST   | `/api/v1/w/{ws}/issues/{id}/status`           | `{status: "open"\|"closed"}`                      |
-| DELETE | `/api/v1/w/{ws}/issues/{id}`                  | Delete → 204                                        |
-| POST   | `/api/v1/w/{ws}/issues/{id}/comments`         | `{body}` → 201                                      |
-| GET    | `/api/v1/w/{ws}/issues/{id}/markdown`         | Issue + comments as one `text/markdown` document    |
-| GET/POST | `/api/v1/w/{ws}/labels`                     | All labels / create (`PATCH`/`DELETE` on `…/labels/{id}`) |
-| GET    | `/api/v1/w/{ws}/discussions`                  | List: `?category=&answered=&q=&sort=&page=`         |
-| POST   | `/api/v1/w/{ws}/discussions`                  | `{title, body, category_id\|category}` → 201        |
-| GET    | `/api/v1/w/{ws}/discussions/{id}`             | Discussion + threads (replies nested)               |
-| PATCH  | `/api/v1/w/{ws}/discussions/{id}`             | Partial update                                      |
-| DELETE | `/api/v1/w/{ws}/discussions/{id}`             | Delete → 204                                        |
-| GET    | `/api/v1/w/{ws}/discussions/{id}/markdown`    | Discussion + threads + replies as `text/markdown`   |
-| POST   | `/api/v1/w/{ws}/discussions/{id}/threads`     | `{body}` → 201 (new thread)                         |
-| POST   | `/api/v1/w/{ws}/discussions/{id}/threads/{tid}/comments` | `{body}` → 201 (reply to thread)          |
-| POST   | `/api/v1/w/{ws}/discussions/{id}/threads/{tid}/answer` | `{answer: bool}` mark/unmark the answer (qa) |
-| GET    | `/api/v1/discussion-categories`               | All categories                                      |
-
-Notes:
-
-- `{ws}` is the workspace slug — resources outside `/api/v1/w/{ws}` are
-  the two global top-level rows (workspaces, discussion categories).
-- Responses are `application/json`; errors use
-  `{"error":{"message": ..., "fields": {...}}}` (`fields` only for
-  per-field 422s).
-- Timestamps are RFC 3339 strings. Status changes stay a `POST` action
-  endpoint, mirroring the HTML app's action routes.
-- The `/markdown` endpoints answer `text/markdown; charset=utf-8` with
-  `Content-Disposition: inline` — the same document the web twins serve,
-  rendered by `internal/export`.
-
+A machine-facing JSON API mirrors the web app (issues, discussions,
+labels, workspaces, pull requests) plus the `zatu` CLI's remote mode.
+Mounted only when a credential exists — `-api-token`/
+`ZATUDAN_API_TOKEN` or a per-user token minted via `zatu auth token`;
+otherwise `/api/v1` is not mounted at all. The endpoint table and notes
+live in [docs/api.md](docs/api.md).
 ## Data storage
 
 All data — issues, comments, labels, discussions, users, sessions,
-`api_tokens` — lives in a single SQLite file, `zatudan.db` by default
+`api_tokens`, pull requests and review comments — lives in a single
+SQLite file, `zatudan.db` by default
 (path from `-db`/`ZATUDAN_DB`), created in the working directory. `*.db`
 files are git-ignored. Deleting the file resets the app; the next start
 re-seeds demo data.
+
+Pull requests are DB rows carrying `(base_ref, head_ref)` plus a real git
+repository (`-repo`/`ZATUDAN_REPO`, auto-detected by walking up from
+`-db`; `off` disables the feature and every `/pulls` route). While a PR
+is open its commits, diff and mergeability are computed live from git;
+closing or merging pins the head tip under `refs/zatudan/pr/<id>/head`
+so the recorded view survives branch deletion.
 
 ## Modern web features in use
 
 Declarative HTML/CSS first; JavaScript only where declarative features
 don't reach, always as external `/static/` files (inline scripts stay
-CSP-blocked), and always progressive enhancement — the same forms do a
-full PRG round-trip without it.
-
-- **Cross-document view transitions** — `@view-transition` opt-in; a fade
-  on plain navigation and directional back/forward slides keyed to the
-  document's own VT types
-- **Anchor positioning** — the moving tab underline is a named
-  view-transition element driven by `position-anchor`, no JS
-- **`::details-content`** — animated open/close for reply `<details>`
-- **Invoker Commands** — `command`/`commandfor` opens and closes the
-  `<dialog>` delete confirmation (browsers without support still get the
-  GET confirmation page); a custom `--copy-permalink` command backs each
-  comment's copy-link button and a `--copy-markdown` command backs the
-  detail pages' copy-as-markdown button
-- **Speculation Rules** — `Speculation-Rules` header + external
-  `application/speculationrules+json` ruleset prefetches likely next pages
-- **Custom Highlight API** — `?q=` hits marked in list titles
-  (`search-highlight.js`, the project's first JS)
-- **`field-sizing: content`** — textareas grow with input, capped in `lh`
-- **`content-visibility: auto`** — cheap rendering for long comment lists
-- **Dark mode** — `color-scheme` + `light-dark()` design tokens;
-  `contrast-color()`/Relative Color Syntax computes label-badge text
-- **Partial updates** — `partial-submit.js` posts eligible forms via
-  `fetch` and swaps returned fragments inside an element-scoped
-  `startViewTransition()`; success lands as a `popover` toast plus an
-  `aria-live` announcement
-- **Form UX / a11y** — `:user-invalid` styling, skip link, landmarks,
-  breadcrumbs with `aria-current`, per-link accessible names
-
+CSP-blocked), and always progressive enhancement. The catalog — view
+transitions, anchor positioning, Invoker Commands, Speculation Rules,
+SSE live updates, partial submits and more — lives in
+[docs/ui.md](docs/ui.md#modern-web-features-in-use).
 ## Architecture
 
 ```
 cmd/zatudan/       server binary: flags/env, store.Open, SeedMasterData
                    (+ SeedDemoData under -seed), http.Server with
                    timeouts, graceful shutdown
-cmd/zatu/          gh-style CLI binary (issue/comment/label/discussion/auth/api/completion)
+cmd/zatu/          gh-style CLI binary (issue/comment/label/discussion/pr/auth/api/completion)
 cmd/storybook/     UI preview server (separate module, runs on minigo)
 internal/store/    persistence: sqlite schema, queries, ErrNotFound contract.
                    Exposes *store.Store; no HTTP knowledge.
@@ -297,13 +199,16 @@ internal/web/      HTML layer: consumer-side Store interface, handlers,
 internal/api/      /api/v1 JSON surface: wire DTOs, Bearer auth, method dispatch
 internal/cli/      command grammar over a Backend interface (store or HTTP)
 internal/client/   HTTP Backend implementation for remote-mode CLI
-internal/export/   one markdown document per issue/discussion — shared by
+internal/export/   one markdown document per issue/discussion/pull request — shared by
                    the API, the web /markdown routes and `zatu view --markdown`
+internal/gitrepo/  git operations for pull requests: repo resolution, log/diff/
+                   merge-base wrappers, merge execution (worktree + plumbing paths)
 internal/auth/     argon2id password hashes + opaque session tokens
 internal/e2etests/ CLI end-to-end tests (build tag `e2e`)
 internal/web/templates/  layout.html + one file per page ({{define "content"}}) + fragments.html
 internal/web/static/     app.css + one-purpose ES modules
 tools/todo-gc/     TODO.md garbage collector
+tools/demo-history.sh / demo-pr-history.sh — replay demo content via `zatu` / `zatu pr`
 ```
 
 Key design choices:
