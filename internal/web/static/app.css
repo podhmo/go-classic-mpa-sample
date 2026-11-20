@@ -47,8 +47,6 @@
   --danger-dark: #f85149;
   --danger-emphasis-light: #cf222e;
   --danger-emphasis-dark: #b62324;
-  --danger-hover-light: #a40e26;
-  --danger-hover-dark: #8e1519;
   --danger-bg-light: #ffebe9;
   --danger-bg-dark: #2d1214;
   --warn-light: #9a6700;
@@ -76,13 +74,13 @@
   --closed-border: var(--closed-border-light);
   --danger: var(--danger-light);
   --danger-emphasis: var(--danger-emphasis-light);
-  --danger-hover: var(--danger-hover-light);
   --danger-bg: var(--danger-bg-light);
   --warn: var(--warn-light);
   --label-border: var(--label-border-light);
 
   --radius: 6px;
   --radius-lg: 8px;
+  --font-mono: ui-monospace, monospace;
 }
 
 /* Fallback for browsers without light-dark(). */
@@ -108,7 +106,6 @@
     --closed-border: var(--closed-border-dark);
     --danger: var(--danger-dark);
     --danger-emphasis: var(--danger-emphasis-dark);
-    --danger-hover: var(--danger-hover-dark);
     --danger-bg: var(--danger-bg-dark);
     --warn: var(--warn-dark);
     --label-border: var(--label-border-dark);
@@ -138,7 +135,6 @@
     --closed-border: light-dark(var(--closed-border-light), var(--closed-border-dark));
     --danger: light-dark(var(--danger-light), var(--danger-dark));
     --danger-emphasis: light-dark(var(--danger-emphasis-light), var(--danger-emphasis-dark));
-    --danger-hover: light-dark(var(--danger-hover-light), var(--danger-hover-dark));
     --danger-bg: light-dark(var(--danger-bg-light), var(--danger-bg-dark));
     --warn: light-dark(var(--warn-light), var(--warn-dark));
     --label-border: light-dark(var(--label-border-light), var(--label-border-dark));
@@ -2090,7 +2086,7 @@ html:active-view-transition-type(backward)::view-transition-new(root) {
   font-size: 0.85rem;
   font-weight: 600;
   margin: 0;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono);
 }
 
 .badge-file-M {
@@ -2121,7 +2117,7 @@ pre.diff {
   margin: 0;
   padding: 0;
   font-size: 0.8rem;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono);
   overflow-x: auto;
 }
 

@@ -294,97 +294,70 @@ func New(st Store, opts ...Option) http.Handler {
 			mux.Handle(method+" /api/v1/", apiHandler)
 		}
 	}
-	// Serve the single stylesheet explicitly: a bare "GET /static/" file
+	// Static files: explicit per-file routes — a bare "GET /static/" file
 	// server would expose a directory listing and unstyled plaintext 404s.
-	mux.HandleFunc("GET /static/app.css", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFileFS(w, r, staticFS, "static/app.css")
-	})
+	// The files are embedded in the binary and only change across deploys,
+	// so a moderate max-age is safe without content-hashed URLs; it keeps
+	// MPA navigations from refetching every stylesheet/script each time.
+	serveStatic := func(name string) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Cache-Control", "public, max-age=3600")
+			http.ServeFileFS(w, r, staticFS, "static/"+name)
+		}
+	}
+	mux.HandleFunc("GET /static/app.css", serveStatic("app.css"))
 	// External speculation rules for the issue list (Speculation-Rules
 	// response header). The spec requires this exact media type; .json's
 	// application/json default would make the browser ignore the file.
 	mux.HandleFunc("GET /static/speculation-rules.json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/speculationrules+json")
-		http.ServeFileFS(w, r, staticFS, "static/speculation-rules.json")
+		serveStatic("speculation-rules.json")(w, r)
 	})
 	// Search-term highlighting on the list page (CSS Custom Highlight API).
-	mux.HandleFunc("GET /static/search-highlight.js", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFileFS(w, r, staticFS, "static/search-highlight.js")
-	})
+	mux.HandleFunc("GET /static/search-highlight.js", serveStatic("search-highlight.js"))
 	// Comment permalink copy buttons on the detail page.
-	mux.HandleFunc("GET /static/copy-permalink.js", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFileFS(w, r, staticFS, "static/copy-permalink.js")
-	})
+	mux.HandleFunc("GET /static/copy-permalink.js", serveStatic("copy-permalink.js"))
 	// "Copy as markdown" action on the article rows (imported by
 	// page-detail.js).
-	mux.HandleFunc("GET /static/copy-markdown.js", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFileFS(w, r, staticFS, "static/copy-markdown.js")
-	})
+	mux.HandleFunc("GET /static/copy-markdown.js", serveStatic("copy-markdown.js"))
 	// Shared clipboard write + tip feedback used by the copy-* modules
 	// (imported, not loaded as a script tag).
-	mux.HandleFunc("GET /static/clipboard.js", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFileFS(w, r, staticFS, "static/clipboard.js")
-	})
+	mux.HandleFunc("GET /static/clipboard.js", serveStatic("clipboard.js"))
 	// Ctrl/Cmd+Enter form submission from textareas.
-	mux.HandleFunc("GET /static/enter-submit.js", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFileFS(w, r, staticFS, "static/enter-submit.js")
-	})
+	mux.HandleFunc("GET /static/enter-submit.js", serveStatic("enter-submit.js"))
 	// Direction-tagging for cross-document view transitions between
 	// paginated list pages.
-	mux.HandleFunc("GET /static/pagination-transition.js", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFileFS(w, r, staticFS, "static/pagination-transition.js")
-	})
+	mux.HandleFunc("GET /static/pagination-transition.js", serveStatic("pagination-transition.js"))
 	// aria-invalid ↔ :user-invalid sync + polite error announcements on
 	// pages with forms (detail comment form, issue create/edit form).
-	mux.HandleFunc("GET /static/form-errors.js", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFileFS(w, r, staticFS, "static/form-errors.js")
-	})
+	mux.HandleFunc("GET /static/form-errors.js", serveStatic("form-errors.js"))
 	// Shared polite live region used by the form-error and partial-submit
 	// modules (imported, not loaded as a script tag).
-	mux.HandleFunc("GET /static/announcer.js", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFileFS(w, r, staticFS, "static/announcer.js")
-	})
+	mux.HandleFunc("GET /static/announcer.js", serveStatic("announcer.js"))
 	// Comment forms' partial-update submission (fetch → fragment → DOM
 	// swap) on the issue/discussion detail pages.
-	mux.HandleFunc("GET /static/partial-submit.js", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFileFS(w, r, staticFS, "static/partial-submit.js")
-	})
+	mux.HandleFunc("GET /static/partial-submit.js", serveStatic("partial-submit.js"))
 	// Visual toast notifications shown on partial-post success (imported
 	// by partial-submit.js, not loaded as a script tag).
-	mux.HandleFunc("GET /static/toast.js", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFileFS(w, r, staticFS, "static/toast.js")
-	})
+	mux.HandleFunc("GET /static/toast.js", serveStatic("toast.js"))
 	// Disable comment submit buttons while the textarea is empty (module;
 	// also imported by partial-submit.js to re-sync after a partial post).
-	mux.HandleFunc("GET /static/comment-submit-disabled.js", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFileFS(w, r, staticFS, "static/comment-submit-disabled.js")
-	})
+	mux.HandleFunc("GET /static/comment-submit-disabled.js", serveStatic("comment-submit-disabled.js"))
 	// beforeunload guard against losing unsaved form input.
-	mux.HandleFunc("GET /static/leave-guard.js", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFileFS(w, r, staticFS, "static/leave-guard.js")
-	})
+	mux.HandleFunc("GET /static/leave-guard.js", serveStatic("leave-guard.js"))
 	// Shared element-lifecycle registry (attach/detach on DOM mutations) —
 	// a module, fetched only as an import dependency.
-	mux.HandleFunc("GET /static/dom-hooks.js", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFileFS(w, r, staticFS, "static/dom-hooks.js")
-	})
+	mux.HandleFunc("GET /static/dom-hooks.js", serveStatic("dom-hooks.js"))
 	// Fragment parsing + scoped-transition helpers shared by
 	// partial-submit.js and live-updates.js (imported, not a script tag).
-	mux.HandleFunc("GET /static/fragments.js", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFileFS(w, r, staticFS, "static/fragments.js")
-	})
+	mux.HandleFunc("GET /static/fragments.js", serveStatic("fragments.js"))
 	// EventSource client that refetches fragments on pushed change hints
 	// (imported by page-detail.js).
-	mux.HandleFunc("GET /static/live-updates.js", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFileFS(w, r, staticFS, "static/live-updates.js")
-	})
+	mux.HandleFunc("GET /static/live-updates.js", serveStatic("live-updates.js"))
 	// Per-page-type module entries: the single <script type="module"> tag
 	// on the detail pages and the create/edit form pages.
-	mux.HandleFunc("GET /static/page-detail.js", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFileFS(w, r, staticFS, "static/page-detail.js")
-	})
-	mux.HandleFunc("GET /static/page-form.js", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFileFS(w, r, staticFS, "static/page-form.js")
-	})
+	mux.HandleFunc("GET /static/page-detail.js", serveStatic("page-detail.js"))
+	mux.HandleFunc("GET /static/page-form.js", serveStatic("page-form.js"))
 	// Catch-alls: unknown GET/POST paths render the styled 404 page instead
 	// of the mux's plaintext default. They are method-scoped on purpose — a
 	// method-less "/" pattern would match PUT/DELETE too and swallow the

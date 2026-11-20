@@ -676,3 +676,12 @@ issue tracker に git の pull request 相当を再現する機能。実体は D
 - **form errors は構造体アダプタ**: ページモデルの `Errors` は `pullFormErrors{Title,Body,Ref}` + `any()`（store.FieldErrors ではない既存規約に準拠）。
 - **export は純粋関数**: `export.PullRequestMarkdown` は収集済みの metadata+commits+comments+snippet を受けて描画だけ行う。review comment は `path:L<n> (side)` 見出し + locator 行 + 行番号なし fence（エージェント誤カウント対策）。
 - **検証**: `go test ./...` 全パス（api: 新規 pulls_test.go、export: pulls_test.go、cli: fake 拡張）。実サーバで create→detail→files→comment→SSE→merge→close を curl 検証済み。`zatu pr` 実バイナリで list/create/view/markdown/diff/comment/merge を local mode 検証済み。
+
+## 描画計測と視覚差分検知（2026-11-20、`docs/sketch/ja/rendering-and-visual-diff.md`）
+
+chrome-devtools の trace insight で計測した結果、CSS はボトルネックではなく（style+layout ~10ms、LCP 70ms）、実害は `/static/` の無キャッシュ（全ナビゲーションで 59.4kB 再取得）だった。
+
+- **`/static/` に `Cache-Control: public, max-age=3600`**: embed.FS は modtime を持たず validator を出せないため、再検証ではなく短い max-age に倒した（hash 入り URL + immutable は TODO 送り）。ハンドラは `serveStatic` helper に集約し、全静的資産に一律適用。
+- **storybook fixture の時刻は `storyNow` に pin**: Pull 系 story が `time.Now()` を使っており、撮影ごとに 263–1687px の偽差分が出た。`storyTime*` と同列の固定時刻 `storyNow`（2026-11-19T12:00Z）に全置換 — 「現在っぽい時刻」を持つ fixture の正はこれ。
+- **視覚回帰は `tools/visual-diff.sh`（update/check）**: playwright-cli の fullPage スクリーンショット（`animations:'disabled'` + `document.fonts.ready` 待機）を ImageMagick `compare -metric AE` で閾値判定（既定 100px、AA ノイズは sub-10px）。baseline は `.visual-diff/`（gitignore）に撮り直す運用 — 固定 fixture があるから成立する。
+- **CSS coverage（CDP rule usage tracking）の解釈**: 未到達ルールは「storybook では検証不能な pseudo-state/JS 駆動」と「fixture gap」を含むため dead code 判定には使わない。storybook の検証盲点の定量化に使う。

@@ -49,3 +49,4 @@ go.work.sum
 # storybook binary
 cmd/storybook/storybook
 .demo-pr-repo/
+.visual-diff/

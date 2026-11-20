@@ -1,0 +1,91 @@
+#!/bin/sh
+# tools/visual-diff.sh — screenshot every storybook story and pixel-diff
+# it against a saved baseline, so a CSS/HTML change can be proved to have
+# moved no pixels before it is committed.
+#
+#   tools/visual-diff.sh update   # save the current rendering as the baseline
+#   tools/visual-diff.sh check    # capture and compare against the baseline
+#
+# Prereqs: `make storybook` serving on 127.0.0.1:6006 (override with
+# STORYBOOK_URL), playwright-cli on PATH (`pnpm dlx @playwright/cli`),
+# and ImageMagick's `compare`. Captures live under .visual-diff/
+# (gitignored). The pixel threshold defaults to 100 — sub-10px
+# antialiasing noise is normal between runs.
+set -eu
+
+STORYBOOK_URL="${STORYBOOK_URL:-http://127.0.0.1:6006}"
+ROOT_DIR=.visual-diff
+PIXEL_THRESHOLD="${PIXEL_THRESHOLD:-100}"
+
+usage() {
+	sed -n '2,14p' "$0"
+	exit "${1:-1}"
+}
+
+command -v playwright-cli >/dev/null || { echo "playwright-cli not on PATH (pnpm dlx @playwright/cli)" >&2; exit 1; }
+command -v compare >/dev/null || { echo "ImageMagick 'compare' not found" >&2; exit 1; }
+curl -sf "$STORYBOOK_URL/" -o /tmp/visual-diff-index.html || { echo "storybook not reachable at $STORYBOOK_URL — run \`make storybook\` first" >&2; exit 1; }
+
+STORIES=$(grep -oE '/story/[A-Za-z0-9_-]+' /tmp/visual-diff-index.html | sed 's|^/story/||' | sort -u)
+[ -n "$STORIES" ] || { echo "no /story/ links found on $STORYBOOK_URL/" >&2; exit 1; }
+
+capture() {
+	out_dir=$1
+	mkdir -p "$out_dir"
+	tmp_js=$(mktemp --suffix=.js)
+	# %STORIES% / %BASE% / %OUTDIR% are substituted below; run-code only
+	# passes `page`, so everything else is baked into the file.
+	cat > "$tmp_js" <<'EOF'
+async page => {
+  const stories = %STORIES%;
+  const base = '%BASE%';
+  const outDir = '%OUTDIR%';
+  await page.setViewportSize({width: 1280, height: 800});
+  const failed = [];
+  for (const s of stories) {
+    try {
+      await page.goto(base + '/story/' + s, {waitUntil: 'load'});
+      await page.evaluate(() => document.fonts && document.fonts.ready);
+      // animations:'disabled' — otherwise live fades (e.g. the
+      // .back-to-top scroll-state button) can land mid-flight and flake.
+      await page.screenshot({path: outDir + '/' + s + '.png', fullPage: true, animations: 'disabled'});
+    } catch (e) { failed.push(s + ': ' + e); }
+  }
+  return JSON.stringify(failed);
+}
+EOF
+	stories_json=$(printf '%s\n' "$STORIES" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read().split()))')
+	out_abs=$(cd "$out_dir" && pwd)
+	sed -i "s|%STORIES%|$stories_json|; s|%BASE%|$STORYBOOK_URL|; s|%OUTDIR%|$out_abs|" "$tmp_js"
+	playwright-cli run-code --filename "$tmp_js"
+	rm -f "$tmp_js"
+}
+
+case "${1:-}" in
+	update)
+		capture "$ROOT_DIR/baseline"
+		echo "baseline updated in $ROOT_DIR/baseline"
+		;;
+	check)
+		[ -d "$ROOT_DIR/baseline" ] || { echo "no baseline — run \`tools/visual-diff.sh update\` first" >&2; exit 1; }
+		capture "$ROOT_DIR/current"
+		mkdir -p "$ROOT_DIR/diff"
+		fail=0
+		for png in "$ROOT_DIR"/baseline/*.png; do
+			name=$(basename "$png")
+			cur="$ROOT_DIR/current/$name"
+			if [ ! -f "$cur" ]; then echo "MISSING  $name"; fail=1; continue; fi
+			n=$(compare -metric AE "$png" "$cur" "$ROOT_DIR/diff/$name" 2>&1) || true
+			case "$n" in
+				''|*[!0-9]*) echo "ERROR    $name ($n)"; fail=1 ;;
+				*)
+					if [ "$n" -gt "$PIXEL_THRESHOLD" ]; then
+						echo "DIFF $n  $name"; fail=1
+					fi ;;
+			esac
+		done
+		[ "$fail" -eq 0 ] && echo "OK: all stories within $PIXEL_THRESHOLD px"
+		exit "$fail"
+		;;
+	*) usage ;;
+esac

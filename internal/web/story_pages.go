@@ -25,6 +25,10 @@ var (
 	storyTime  = time.Date(2026, 10, 30, 14, 30, 0, 0, time.UTC)
 	storyTime2 = time.Date(2026, 11, 2, 9, 15, 0, 0, time.UTC)
 	storyTime3 = time.Date(2026, 11, 4, 18, 45, 0, 0, time.UTC)
+	// "Now" for fixtures that want timestamps near the present (pull
+	// requests, edited markers). Pinned — not storyNow — so storybook
+	// screenshots stay byte-comparable across runs for visual-diff.
+	storyNow = time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC)
 
 	storyLabels = []*store.Label{
 		{ID: 1, Name: "bug", Color: "#d73a4a", Kind: store.KindLabelIssue},
@@ -754,7 +758,7 @@ func (s storyStore) SetIssueStatus(ctx context.Context, id int64, status string)
 	// Same contract as the real store: updated_at bumps only on change.
 	if is.Status != status {
 		is.Status = status
-		is.UpdatedAt = time.Now()
+		is.UpdatedAt = storyNow
 	}
 	return nil
 }
@@ -775,7 +779,7 @@ func (s storyStore) CreateComment(ctx context.Context, issueID int64, body strin
 	// Same contract as the real store: a new comment bumps updated_at,
 	// which the append fragment's meta node reflects.
 	if is, ok := s.issues[issueID]; ok {
-		is.UpdatedAt = time.Now()
+		is.UpdatedAt = storyNow
 	}
 	return 99, nil
 }
@@ -789,7 +793,7 @@ func (s storyStore) UpdateComment(ctx context.Context, issueID, commentID int64,
 	}
 	if c.Body != body {
 		c.Body = body
-		c.EditedAt = time.Now()
+		c.EditedAt = storyNow
 	}
 	return nil
 }
@@ -818,7 +822,7 @@ func (s storyStore) UpdateDiscussionThread(ctx context.Context, discussionID, th
 	}
 	if t.Body != body {
 		t.Body = body
-		t.EditedAt = time.Now()
+		t.EditedAt = storyNow
 	}
 	return nil
 }
@@ -851,7 +855,7 @@ func (s storyStore) UpdateDiscussionComment(ctx context.Context, discussionID, t
 	}
 	if c.Body != body {
 		c.Body = body
-		c.EditedAt = time.Now()
+		c.EditedAt = storyNow
 	}
 	return nil
 }
@@ -965,14 +969,14 @@ func (s storyStore) ListDiscussionThreads(ctx context.Context, discussionID int6
 func (s storyStore) CreateDiscussionThread(ctx context.Context, discussionID int64, body string, authorID int64) (int64, error) {
 	// Same contract as the real store: a new thread bumps updated_at.
 	if d, ok := s.discussions[discussionID]; ok {
-		d.UpdatedAt = time.Now()
+		d.UpdatedAt = storyNow
 	}
 	return 99, nil
 }
 func (s storyStore) CreateDiscussionComment(ctx context.Context, discussionID, threadID int64, body string, authorID int64) (int64, error) {
 	// Same contract as the real store: a new comment bumps updated_at.
 	if d, ok := s.discussions[discussionID]; ok {
-		d.UpdatedAt = time.Now()
+		d.UpdatedAt = storyNow
 	}
 	return 99, nil
 }
@@ -1002,7 +1006,7 @@ func (s storyStore) SetThreadAnswer(ctx context.Context, discussionID, threadID 
 	target.IsAnswer = answer
 	// Same contract as the real store: an answer mark bumps the
 	// discussion's updated_at, which the swap fragment reflects.
-	d.UpdatedAt = time.Now()
+	d.UpdatedAt = storyNow
 	return nil
 }
 func (storyStore) ListDiscussionCategories(ctx context.Context) ([]*store.DiscussionCategory, error) {
@@ -1235,29 +1239,29 @@ var storyPulls = []*store.PullRequest{
 		Title: "Add the /pulls index page", Body: "Implements the list + tab filters.",
 		Status: store.PRStatusOpen, Author: storyPullAuthors[0],
 		HeadSHA: "1a2b3c4d5e6f", MergeBaseSHA: "9f8e7d6c5b4a",
-		CreatedAt: time.Now().Add(-26 * time.Hour), UpdatedAt: time.Now().Add(-3 * time.Hour)},
+		CreatedAt: storyNow.Add(-26 * time.Hour), UpdatedAt: storyNow.Add(-3 * time.Hour)},
 	{ID: 11, BaseRef: "refs/heads/main", HeadRef: "refs/heads/fix/nav-order",
 		Title: "Reorder nav links", Body: "Issues, Discussions, Pull requests.",
 		Status: store.PRStatusMerged, Author: storyPullAuthors[1],
 		HeadSHA: "aabbccddeeff", MergeBaseSHA: "112233445566", MergeSHA: "deadbeefcafe",
 		MergeMethod: "squash",
-		CreatedAt:   time.Now().Add(-96 * time.Hour), UpdatedAt: time.Now().Add(-48 * time.Hour)},
+		CreatedAt:   storyNow.Add(-96 * time.Hour), UpdatedAt: storyNow.Add(-48 * time.Hour)},
 	{ID: 10, BaseRef: "refs/heads/main", HeadRef: "refs/heads/try/sidebar",
 		Title: "Experiment: collapsible sidebar", Body: "Abandoned in favor of a top bar.",
 		Status: store.PRStatusClosed, Author: storyPullAuthors[0],
 		HeadSHA: "feedface1234", MergeBaseSHA: "112233445566",
-		CreatedAt: time.Now().Add(-200 * time.Hour), UpdatedAt: time.Now().Add(-150 * time.Hour)},
+		CreatedAt: storyNow.Add(-200 * time.Hour), UpdatedAt: storyNow.Add(-150 * time.Hour)},
 }
 
 var storyPRComments = []*store.PRComment{
 	{ID: 30, PRID: 12, Body: "First pass — the tab bar mirrors the issues one.",
-		Author: storyPullAuthors[0], CreatedAt: time.Now().Add(-20 * time.Hour)},
+		Author: storyPullAuthors[0], CreatedAt: storyNow.Add(-20 * time.Hour)},
 	{ID: 31, PRID: 12, Path: "internal/web/templates/pulls.html", Line: 14, Side: "right",
 		AnchorSHA: "1a2b3c4d5e6f", DiffSnippet: "@@ -12,6 +12,8 @@\n <nav>\n+  <a href=\"/pulls\">Pull requests</a>\n </nav>",
 		Body:   "The link should live outside the workspace gate.",
-		Author: storyPullAuthors[1], CreatedAt: time.Now().Add(-18 * time.Hour)},
+		Author: storyPullAuthors[1], CreatedAt: storyNow.Add(-18 * time.Hour)},
 	{ID: 32, PRID: 12, Body: "Done — moved next to Discussions.",
-		Author: storyPullAuthors[0], CreatedAt: time.Now().Add(-17 * time.Hour)},
+		Author: storyPullAuthors[0], CreatedAt: storyNow.Add(-17 * time.Hour)},
 }
 
 func (storyStore) ListPullRequests(ctx context.Context, f store.PRListFilter) ([]*store.PullRequest, int, error) {
@@ -1348,8 +1352,8 @@ func StoryPullDetail() {
 		Title: storyPulls[0].Title, Section: "pulls",
 		PR: storyPulls[0],
 		Commits: []gitrepo.Commit{
-			{SHA: "1a2b3c4d5e6f7a8b9c0d", ShortSHA: "1a2b3c4", Subject: "List handler + routes", Author: "demo", Date: time.Now().Add(-25 * time.Hour)},
-			{SHA: "2b3c4d5e6f7a8b9c0d1e", ShortSHA: "2b3c4d5", Subject: "Tab filter bar", Author: "demo", Date: time.Now().Add(-24 * time.Hour)},
+			{SHA: "1a2b3c4d5e6f7a8b9c0d", ShortSHA: "1a2b3c4", Subject: "List handler + routes", Author: "demo", Date: storyNow.Add(-25 * time.Hour)},
+			{SHA: "2b3c4d5e6f7a8b9c0d1e", ShortSHA: "2b3c4d5", Subject: "Tab filter bar", Author: "demo", Date: storyNow.Add(-24 * time.Hour)},
 		},
 		Merge:    &gitrepo.MergeCheck{Status: gitrepo.MergeClean},
 		Comments: storyPRComments,
