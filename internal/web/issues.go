@@ -108,7 +108,7 @@ func (h *handler) listIssues(w http.ResponseWriter, r *http.Request, ws *store.W
 	}
 
 	data := issueListPage{
-		Title:      "Issues",
+		Title:      tr(r, "issues.title"),
 		Issues:     issues,
 		Labels:     labels,
 		Filter:     f,
@@ -131,7 +131,7 @@ func (h *handler) listIssues(w http.ResponseWriter, r *http.Request, ws *store.W
 	// would block even for the inert speculationrules JSON type. The
 	// header value is an sf-string — the quotes are mandatory.
 	w.Header().Set("Speculation-Rules", `"/static/speculation-rules.json"`)
-	h.r.renderIssueList(w, http.StatusOK, data)
+	h.r.renderIssueList(w, http.StatusOK, data, localeFromContext(r.Context()))
 }
 
 // newIssue renders the empty create form.

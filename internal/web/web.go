@@ -368,8 +368,9 @@ func New(st Store, opts ...Option) http.Handler {
 	// Requests run under withUser (session-cookie → context auth resolution)
 	// and then the stdlib CrossOriginProtection middleware, which rejects
 	// cross-site state-changing browser requests (CSRF) via Sec-Fetch-Site /
-	// Origin headers.
-	return securityHeaders(http.NewCrossOriginProtection().Handler(withUser(h, mux)))
+	// Origin headers. withLocale sits outside them so the ?lang= switcher
+	// redirect needs neither a session nor CSRF checks (it's a plain GET).
+	return securityHeaders(withLocale(http.NewCrossOriginProtection().Handler(withUser(h, mux))))
 }
 
 // contentSecurityPolicy is the enforced CSP for every response. The app
@@ -444,6 +445,9 @@ func securityHeaders(next http.Handler) http.Handler {
 		h.Set("Permissions-Policy", permissionsPolicy)
 		h.Add("Vary", "Sec-Fetch-Site")
 		h.Add("Vary", "Origin")
+		// First-visit locale resolution reads Accept-Language, so shared caches
+		// must not serve a ja-negotiated page to an en client (or vice versa).
+		h.Add("Vary", "Accept-Language")
 		next.ServeHTTP(w, r)
 	})
 }
