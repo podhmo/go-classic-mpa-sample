@@ -8,16 +8,16 @@
 <article class="card issue-detail" id="pr-article">
   <header class="issue-detail-head">
     <div class="issue-title-row">
-      <span class="badge badge-{{.PR.Status}}">{{if eq .PR.Status "open"}}Open{{else if eq .PR.Status "merged"}}Merged{{else}}Closed{{end}}</span>
+      <span class="badge badge-{{.PR.Status}}">{{if eq .PR.Status "open"}}{{StatusOpen}}{{else if eq .PR.Status "merged"}}{{StatusMerged}}{{else}}{{StatusClosed}}{{end}}</span>
       <h1>{{.PR.Title}} <span class="issue-num">#{{.PR.ID}}</span></h1>
     </div>
     <p class="pr-refs"><code>{{shortRef .PR.BaseRef}}</code> ← <code>{{shortRef .PR.HeadRef}}</code></p>
     {{template "pr_meta" .PR}}
     {{if .Merge}}
     {{if eq .Merge.Status 1}}
-    <p class="merge-state merge-clean">This branch can be merged cleanly.</p>
+    <p class="merge-state merge-clean">{{MergeClean}}</p>
     {{else if eq .Merge.Status 2}}
-    <p class="merge-state merge-conflicting">This branch has conflicts in:
+    <p class="merge-state merge-conflicting">{{MergeConflicts}}
       {{range $i, $f := .Merge.Files}}{{if $i}}, {{end}}<code>{{$f}}</code>{{end}}</p>
     {{end}}
     {{end}}
@@ -26,28 +26,28 @@
   {{if .PR.Body}}
   <div class="issue-body markdown-body">{{markdown .PR.Body}}</div>
   {{else}}
-  <div class="issue-body issue-body-empty"><em>No description provided.</em></div>
+  <div class="issue-body issue-body-empty"><em>{{NoDescription}}</em></div>
   {{end}}
 
   <div class="issue-actions">
-    <a class="btn" href="/pulls/{{.PR.ID}}/edit">Edit</a>
+    <a class="btn" href="/pulls/{{.PR.ID}}/edit">{{BtnEdit}}</a>
     {{if .PR.Open}}
-    <a class="btn" href="/pulls/{{.PR.ID}}/merge">Merge</a>
+    <a class="btn" href="/pulls/{{.PR.ID}}/merge">{{BtnMerge}}</a>
     <form method="post" action="/pulls/{{.PR.ID}}/status" class="inline-form">
       <input type="hidden" name="status" value="closed">
-      <button type="submit" class="btn">Close pull request</button>
+      <button type="submit" class="btn">{{PullClose}}</button>
     </form>
     {{else if eq .PR.Status "closed"}}
     <form method="post" action="/pulls/{{.PR.ID}}/status" class="inline-form">
       <input type="hidden" name="status" value="open">
-      <button type="submit" class="btn">Reopen pull request</button>
+      <button type="submit" class="btn">{{PullReopen}}</button>
     </form>
     {{end}}
   </div>
 
   {{if .Commits}}
   <section class="commits">
-    <h3>Commits ({{len .Commits}})</h3>
+    <h3>{{PullCommits (len .Commits)}}</h3>
     <ul class="commit-list" role="list">
       {{range .Commits}}
       <li><code>{{.ShortSHA}}</code> {{.Subject}} — {{.Author}}, {{fmtTime .Date}}</li>
@@ -60,8 +60,8 @@
 
 {{define "pr_meta"}}
 <p class="issue-meta" id="pr-meta" data-swap>
-  Opened by {{authorName .Author}} <time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .CreatedAt}}</time>
-  · Last updated <time datetime="{{.UpdatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .UpdatedAt}}</time>
+  {{MetaOpenedBy (authorName .Author)}} <time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .CreatedAt}}</time>
+  · {{MetaLastUpdated}} <time datetime="{{.UpdatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .UpdatedAt}}</time>
 </p>
 {{end}}
 
@@ -84,12 +84,12 @@
    is the issue-comment shape. The li self-targets by id. */}}
 <li class="card comment{{if .C.Moderation.Hidden}} comment-hidden{{end}}" id="comment-{{.C.ID}}">
   <header class="comment-meta">
-    <span class="comment-author">{{authorName .C.Author}} commented</span>
-    {{if .C.Anchored}}<span class="review-anchor">on <code>{{.C.Path}}:L{{.C.Line}}</code>{{if eq .C.Side "left"}} (left){{end}}</span>{{end}}
-    <a class="comment-permalink" href="#comment-{{.C.ID}}"><time datetime="{{.C.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .C.CreatedAt}}</time> <span class="visually-hidden">(comment {{.C.ID}})</span></a>
-    {{if .C.Moderation.Edited}}· <span class="comment-edited">edited</span>{{end}}
+    <span class="comment-author">{{Commented (authorName .C.Author)}}</span>
+    {{if .C.Anchored}}<span class="review-anchor">{{OnAnchor (printf "%s:L%d" .C.Path .C.Line)}}{{if eq .C.Side "left"}} {{SideLeft}}{{end}}</span>{{end}}
+    <a class="comment-permalink" href="#comment-{{.C.ID}}"><time datetime="{{.C.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .C.CreatedAt}}</time> <span class="visually-hidden">{{PermalinkPost (noun "comment") .C.ID}}</span></a>
+    {{if .C.Moderation.Edited}}· <span class="comment-edited">{{Edited}}</span>{{end}}
     <span class="copy-wrap">
-      <button type="button" class="copy-btn" command="--copy-permalink" commandfor="comment-{{.C.ID}}" data-url="/pulls/{{.C.PRID}}#comment-{{.C.ID}}" aria-label="Copy link to comment {{.C.ID}}">copy link</button>
+      <button type="button" class="copy-btn" command="--copy-permalink" commandfor="comment-{{.C.ID}}" data-url="/pulls/{{.C.PRID}}#comment-{{.C.ID}}" aria-label="{{AriaCopyLink (noun "comment") .C.ID}}">{{CopyLink}}</button>
       <span class="copy-tip" role="status"></span>
     </span>
   </header>
@@ -97,9 +97,9 @@
   {{if .C.DiffSnippet}}<pre class="diff-snippet"><code>{{.C.DiffSnippet}}</code></pre>{{end}}
   {{end}}
   {{if .C.Moderation.Hidden}}
-  <p class="comment-hidden-note">This comment was marked as {{.C.Moderation.HiddenReason}}.</p>
+  <p class="comment-hidden-note">{{MarkedAs (noun "comment") (hideReasonLabel .C.Moderation.HiddenReason)}}</p>
   <details class="comment-hidden-body">
-    <summary>Show comment</summary>
+    <summary>{{ShowNoun (noun "comment")}}</summary>
     <div class="comment-body markdown-body">{{markdown .C.Body}}</div>
   </details>
   {{else}}
@@ -114,13 +114,13 @@
 {{define "pr_comment_form"}}
 <form method="post" action="/pulls/{{.PR.ID}}/comments" class="comment-form card" novalidate data-partial data-partial-target="#comments > .comment-list">
   <div class="field">
-    <label for="comment-body">Add a comment</label>
+    <label for="comment-body">{{CommentFormLabel}}</label>
     <textarea id="comment-body" name="body" rows="4" required data-error="comment-error" aria-keyshortcuts="Control+Enter Meta+Enter"{{if .CommentError}} aria-invalid="true" aria-describedby="comment-error comment-hint" autofocus{{else}} aria-invalid="false" aria-describedby="comment-hint"{{end}}>{{.CommentDraft}}</textarea>
-    <p class="field-error{{if not .CommentError}} field-error-pending{{end}}" id="comment-error">{{or .CommentError "Body is required."}}</p>
-    <p class="field-hint" id="comment-hint">Markdown (GFM) supported. Raw HTML is not rendered. Ctrl+Enter (Cmd+Enter on macOS) submits.{{if .User}} Posting as @{{.User.Name}}.{{else}} Posting as anonymous — <a href="/login?next=/pulls/{{.PR.ID}}">log in</a> to attach your name.{{end}}</p>
+    <p class="field-error{{if not .CommentError}} field-error-pending{{end}}" id="comment-error">{{or .CommentError (BodyRequired)}}</p>
+    <p class="field-hint" id="comment-hint">{{MarkdownHint}}{{if .User}} {{PostingAs .User.Name}}{{else}} {{PostingAnonPre}} <a href="/login?next=/pulls/{{.PR.ID}}">{{LoginLink}}</a> {{PostingAnonTail}}{{end}}</p>
   </div>
   <div class="form-actions">
-    <button type="submit" class="btn btn-primary">Comment</button>
+    <button type="submit" class="btn btn-primary">{{BtnComment}}</button>
   </div>
 </form>
 {{end}}

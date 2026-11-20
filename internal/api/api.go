@@ -379,5 +379,9 @@ func fields(fe store.FieldErrors) map[string]string {
 	if len(fe) == 0 {
 		return nil
 	}
-	return map[string]string(fe)
+	m := make(map[string]string, len(fe))
+	for k, v := range fe {
+		m[k] = v.Message
+	}
+	return m
 }

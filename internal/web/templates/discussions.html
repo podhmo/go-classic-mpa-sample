@@ -4,46 +4,46 @@
    which matches the shared .issue-list/.issue-title classes. */}}
 <script src="/static/search-highlight.js" defer></script>
 <div class="page-head">
-  <h1>Discussions</h1>
+  <h1>{{LayoutNavDiscussions}}</h1>
 </div>
 
-<form method="get" action="/w/{{.Workspace.Slug}}/discussions" class="filter-bar" role="search" aria-label="Filter discussions">
+<form method="get" action="/w/{{.Workspace.Slug}}/discussions" class="filter-bar" role="search" aria-label="{{DiscFilterAria}}">
   <div class="filter-field">
-    <label for="filter-q">Search</label>
-    <input type="search" id="filter-q" name="q" value="{{.Filter.Query}}" placeholder="Title or body">
+    <label for="filter-q">{{FilterSearch}}</label>
+    <input type="search" id="filter-q" name="q" value="{{.Filter.Query}}" placeholder="{{FilterSearchPh}}">
   </div>
   <div class="filter-field">
-    <label for="filter-category">Category</label>
+    <label for="filter-category">{{DiscFilterCategory}}</label>
     <select id="filter-category" name="category">
-      <option value="">All categories</option>
+      <option value="">{{DiscFilterAll}}</option>
       {{range .Categories}}
       <option value="{{.Slug}}"{{if eq .Slug $.Filter.CategorySlug}} selected{{end}}>{{.Name}}</option>
       {{end}}
     </select>
   </div>
   <div class="filter-field">
-    <label for="filter-answered">Answered</label>
+    <label for="filter-answered">{{DiscFilterAnswered}}</label>
     <select id="filter-answered" name="answered">
-      <option value=""{{if eq .Filter.Answered ""}} selected{{end}}>Any</option>
-      <option value="yes"{{if eq .Filter.Answered "yes"}} selected{{end}}>Answered</option>
-      <option value="no"{{if eq .Filter.Answered "no"}} selected{{end}}>Unanswered</option>
+      <option value=""{{if eq .Filter.Answered ""}} selected{{end}}>{{AnsweredAny}}</option>
+      <option value="yes"{{if eq .Filter.Answered "yes"}} selected{{end}}>{{AnsweredYes}}</option>
+      <option value="no"{{if eq .Filter.Answered "no"}} selected{{end}}>{{AnsweredNo}}</option>
     </select>
   </div>
   <div class="filter-field">
-    <label for="filter-sort">Sort</label>
+    <label for="filter-sort">{{FilterSort}}</label>
     <select id="filter-sort" name="sort">
-      <option value="newest"{{if ne .Filter.Sort "oldest"}} selected{{end}}>Newest first</option>
-      <option value="oldest"{{if eq .Filter.Sort "oldest"}} selected{{end}}>Oldest first</option>
+      <option value="newest"{{if ne .Filter.Sort "oldest"}} selected{{end}}>{{SortNewest}}</option>
+      <option value="oldest"{{if eq .Filter.Sort "oldest"}} selected{{end}}>{{SortOldest}}</option>
     </select>
   </div>
   <div class="filter-actions">
-    <button type="submit" class="btn">Apply</button>
-    {{if .HasActiveFilter}}<a class="btn btn-quiet" href="/w/{{.Workspace.Slug}}/discussions">Clear</a>{{end}}
+    <button type="submit" class="btn">{{FilterApply}}</button>
+    {{if .HasActiveFilter}}<a class="btn btn-quiet" href="/w/{{.Workspace.Slug}}/discussions">{{FilterClear}}</a>{{end}}
   </div>
 </form>
 
 {{if .Discussions}}
-<p class="result-count">Showing {{.RangeStart}}–{{.RangeEnd}} of {{.Total}} discussions</p>
+<p class="result-count">{{DiscussionsCount .RangeStart .RangeEnd .Total}}</p>
 <ul class="issue-list discussion-list" role="list">
   {{range .Discussions}}
   <li class="issue-row">
@@ -54,7 +54,7 @@
     <div class="issue-row-meta">
       <a class="category-badge" href="/w/{{$.Workspace.Slug}}/discussions?category={{.Category.Slug}}">{{.Category.Name}}</a>
       {{range .Labels}}<span class="label-badge" style="--label-color: {{.Color}}">{{.Name}}</span>{{end}}
-      {{if .Answered}}<span class="badge badge-answered">Answered</span>{{end}}
+      {{if .Answered}}<span class="badge badge-answered">{{BadgeAnswered}}</span>{{end}}
       <time class="issue-time" datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .CreatedAt}}</time>
     </div>
   </li>
@@ -62,17 +62,17 @@
 </ul>
 
 {{if gt .TotalPages 1}}
-<nav class="pagination" aria-label="Pagination">
+<nav class="pagination" aria-label="{{PagerAria}}">
   {{if gt .Page 1}}
-  <a class="btn" href="{{dListURL .Workspace .Filter (sub .Page 1)}}">Previous</a>
+  <a class="btn" href="{{dListURL .Workspace .Filter (sub .Page 1)}}">{{PagerPrev}}</a>
   {{else}}
-  <span class="btn btn-disabled" aria-disabled="true">Previous</span>
+  <span class="btn btn-disabled" aria-disabled="true">{{PagerPrev}}</span>
   {{end}}
-  <span class="page-info">Page {{.Page}} of {{.TotalPages}}</span>
+  <span class="page-info">{{PagerInfo .Page .TotalPages}}</span>
   {{if lt .Page .TotalPages}}
-  <a class="btn" href="{{dListURL .Workspace .Filter (add .Page 1)}}">Next</a>
+  <a class="btn" href="{{dListURL .Workspace .Filter (add .Page 1)}}">{{PagerNext}}</a>
   {{else}}
-  <span class="btn btn-disabled" aria-disabled="true">Next</span>
+  <span class="btn btn-disabled" aria-disabled="true">{{PagerNext}}</span>
   {{end}}
 </nav>
 {{end}}
@@ -80,11 +80,11 @@
 {{else}}
 <div class="empty-state">
   {{if .HasActiveFilter}}
-  <p class="empty-lead">No discussions match the current filters.</p>
-  <p>Try a different keyword or <a href="/w/{{.Workspace.Slug}}/discussions">clear the filters</a>.</p>
+  <p class="empty-lead">{{DiscEmptyFiltered}}</p>
+  <p>{{EmptyTryPre}} <a href="/w/{{.Workspace.Slug}}/discussions">{{EmptyClearLink}}</a>{{EmptyTryTail}}</p>
   {{else}}
-  <p class="empty-lead">No discussions here yet.</p>
-  <p><a class="btn btn-primary" href="/w/{{.Workspace.Slug}}/discussions/new">Start the first discussion</a></p>
+  <p class="empty-lead">{{DiscEmptyNone}}</p>
+  <p><a class="btn btn-primary" href="/w/{{.Workspace.Slug}}/discussions/new">{{DiscEmptyCreate}}</a></p>
   {{end}}
 </div>
 {{end}}

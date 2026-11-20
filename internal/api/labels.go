@@ -64,7 +64,7 @@ func (h *handler) createLabel(w http.ResponseWriter, r *http.Request, ws *store.
 		Color: strings.TrimSpace(deref(in.Color)),
 	}
 	if fe := store.ValidateLabelInput(input); len(fe) > 0 {
-		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", map[string]string(fe))
+		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", fields(fe))
 		return
 	}
 	wsID := ws.ID
@@ -103,7 +103,7 @@ func (h *handler) updateLabel(w http.ResponseWriter, r *http.Request, ws *store.
 		input.Color = strings.TrimSpace(*in.Color)
 	}
 	if fe := store.ValidateLabelInput(input); len(fe) > 0 {
-		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", map[string]string(fe))
+		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", fields(fe))
 		return
 	}
 	if err := h.store.UpdateLabel(r.Context(), l.ID, input); err != nil {

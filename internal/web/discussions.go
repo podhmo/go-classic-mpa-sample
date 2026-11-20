@@ -116,7 +116,7 @@ func (h *handler) listDiscussions(w http.ResponseWriter, r *http.Request, ws *st
 	}
 
 	data := discussionListPage{
-		Title:       "Discussions",
+		Title:       msgFor(r).DiscussionsTitle,
 		Discussions: discussions,
 		Categories:  categories,
 		Filter:      f,
@@ -136,7 +136,7 @@ func (h *handler) listDiscussions(w http.ResponseWriter, r *http.Request, ws *st
 	// Same external speculation rules as the issue list; the shared rules
 	// file also matches .discussion-list a.issue-title.
 	w.Header().Set("Speculation-Rules", `"/static/speculation-rules.json"`)
-	h.r.renderDiscussionList(w, http.StatusOK, data)
+	h.r.renderDiscussionList(w, http.StatusOK, data, localeFromContext(r.Context()))
 }
 
 // newDiscussion renders the empty create form.
@@ -147,16 +147,17 @@ func (h *handler) newDiscussion(w http.ResponseWriter, r *http.Request, ws *stor
 		return
 	}
 	h.r.renderDiscussionForm(w, http.StatusOK, discussionFormPage{
-		Title:       "New discussion",
-		Heading:     "New discussion",
+		Title:       msgFor(r).NewDiscussion,
+		Heading:     msgFor(r).NewDiscussion,
 		Action:      "/w/" + ws.Slug + "/discussions",
-		SubmitLabel: "Create discussion",
+		SubmitLabel: msgFor(r).CreateDiscussion,
 		Categories:  categories,
 		Labels:      labels,
 		Section:     "discussions",
 		Workspace:   ws,
 		User:        userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // discussionFormChoices loads the category list and the workspace's
@@ -184,7 +185,7 @@ func (h *handler) createDiscussion(w http.ResponseWriter, r *http.Request, ws *s
 		id, err := h.store.CreateDiscussion(r.Context(), ws.ID, *in, authorIDFromContext(r.Context()))
 		switch {
 		case errors.Is(err, store.ErrInvalidCategory):
-			errs = &discussionFormErrors{Category: "Category is required."}
+			errs = &discussionFormErrors{Category: msgFor(r).CategoryRequired}
 		case err != nil:
 			h.internalError(w, r, err)
 			return
@@ -193,8 +194,8 @@ func (h *handler) createDiscussion(w http.ResponseWriter, r *http.Request, ws *s
 			return
 		}
 	}
-	h.renderDiscussionFormError(w, r, ws, "New discussion", "New discussion",
-		"/w/"+ws.Slug+"/discussions", "Create discussion", *in, *errs)
+	h.renderDiscussionFormError(w, r, ws, msgFor(r).NewDiscussion, msgFor(r).NewDiscussion,
+		"/w/"+ws.Slug+"/discussions", msgFor(r).CreateDiscussion, *in, *errs)
 }
 
 // showDiscussion renders the detail page including threaded comments and
@@ -225,7 +226,8 @@ func (h *handler) showDiscussion(w http.ResponseWriter, r *http.Request, ws *sto
 		Section:    "discussions",
 		Workspace:  ws,
 		User:       userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // discussionMarkdown serves GET /discussions/{id}/markdown — the cookie-
@@ -283,17 +285,18 @@ func (h *handler) editDiscussion(w http.ResponseWriter, r *http.Request, ws *sto
 		in.LabelIDs = append(in.LabelIDs, l.ID)
 	}
 	h.r.renderDiscussionForm(w, http.StatusOK, discussionFormPage{
-		Title:       fmt.Sprintf("Edit discussion #%d", discussion.ID),
-		Heading:     fmt.Sprintf("Edit discussion #%d", discussion.ID),
+		Title:       fmt.Sprintf(msgFor(r).EditDiscussion, discussion.ID),
+		Heading:     fmt.Sprintf(msgFor(r).EditDiscussion, discussion.ID),
 		Action:      discussionURL(ws, id) + "/edit",
-		SubmitLabel: "Save changes",
+		SubmitLabel: msgFor(r).BtnSaveChanges,
 		Input:       in,
 		Categories:  categories,
 		Labels:      labels,
 		Section:     "discussions",
 		Workspace:   ws,
 		User:        userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // updateDiscussion validates POST /discussions/{id}/edit and redirects to
@@ -322,7 +325,7 @@ func (h *handler) updateDiscussion(w http.ResponseWriter, r *http.Request, ws *s
 		err := h.store.UpdateDiscussion(r.Context(), id, *in)
 		switch {
 		case errors.Is(err, store.ErrInvalidCategory):
-			errs = &discussionFormErrors{Category: "Category is required."}
+			errs = &discussionFormErrors{Category: msgFor(r).CategoryRequired}
 		case err != nil:
 			h.discussionError(w, r, err)
 			return
@@ -332,8 +335,8 @@ func (h *handler) updateDiscussion(w http.ResponseWriter, r *http.Request, ws *s
 		}
 	}
 	h.renderDiscussionFormError(w, r, ws,
-		fmt.Sprintf("Edit discussion #%d", id), fmt.Sprintf("Edit discussion #%d", id),
-		discussionURL(ws, id)+"/edit", "Save changes", *in, *errs)
+		fmt.Sprintf(msgFor(r).EditDiscussion, id), fmt.Sprintf(msgFor(r).EditDiscussion, id),
+		discussionURL(ws, id)+"/edit", msgFor(r).BtnSaveChanges, *in, *errs)
 }
 
 // confirmDeleteDiscussion renders the delete confirmation page. Being a
@@ -353,12 +356,13 @@ func (h *handler) confirmDeleteDiscussion(w http.ResponseWriter, r *http.Request
 		return
 	}
 	h.r.renderDiscussionDelete(w, http.StatusOK, discussionDeletePage{
-		Title:      fmt.Sprintf("Delete discussion #%d", discussion.ID),
+		Title:      fmt.Sprintf(msgFor(r).DeleteDiscussion, discussion.ID),
 		Discussion: discussion,
 		Section:    "discussions",
 		Workspace:  ws,
 		User:       userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // deleteDiscussion performs the deletion and returns to the list.
@@ -419,11 +423,11 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 		if tid, err := strconv.ParseInt(v, 10, 64); err == nil && tid > 0 {
 			threadID = tid
 		} else {
-			errMsg = "Invalid reply target."
+			errMsg = msgFor(r).ErrReplyTarget
 		}
 	}
 	if errMsg == "" {
-		errMsg = store.ValidateCommentBody(body)
+		errMsg = fieldErrText(localeFromContext(r.Context()), "body", store.ValidateCommentBody(body))
 	}
 
 	if errMsg == "" {
@@ -447,7 +451,7 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 			http.Redirect(w, r, fmt.Sprintf("%s#%s-%d", discussionURL(ws, id), anchor, commentID), http.StatusSeeOther)
 			return
 		case errors.Is(err, store.ErrInvalidThread):
-			errMsg = "Comments can only be added to a thread."
+			errMsg = msgFor(r).ErrThreadOnly
 		case errors.Is(err, store.ErrNotFound):
 			h.notFound(w, r)
 			return
@@ -487,19 +491,19 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 	}
 	if partial {
 		if thread != nil {
-			h.r.renderFragment(w, "discussion_detail", "discussion_reply_form", http.StatusUnprocessableEntity,
-				dict("Discussion", discussion, "C", thread, "Workspace", ws,
-					"ThreadDraftID", threadID, "CommentDraft", body, "CommentError", errMsg))
+			h.r.renderFragment(w, "discussion_detail", "discussion_reply_form", http.StatusUnprocessableEntity, dict("Discussion", discussion, "C", thread, "Workspace", ws,
+				"ThreadDraftID", threadID, "CommentDraft", body, "CommentError", errMsg), localeFromContext(r.Context()))
+
 			return
 		}
-		h.r.renderFragment(w, "discussion_detail", "discussion_comment_form", http.StatusUnprocessableEntity,
-			discussionDetailPage{
-				Discussion:   discussion,
-				CommentDraft: body,
-				CommentError: errMsg,
-				Workspace:    ws,
-				User:         userFromContext(r.Context()),
-			})
+		h.r.renderFragment(w, "discussion_detail", "discussion_comment_form", http.StatusUnprocessableEntity, discussionDetailPage{
+			Discussion:   discussion,
+			CommentDraft: body,
+			CommentError: errMsg,
+			Workspace:    ws,
+			User:         userFromContext(r.Context()),
+		}, localeFromContext(r.Context()))
+
 		return
 	}
 	h.r.renderDiscussionDetail(w, http.StatusUnprocessableEntity, discussionDetailPage{
@@ -512,7 +516,8 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 		Section:       "discussions",
 		Workspace:     ws,
 		User:          userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // renderNewDiscussionComment answers a partial POST with the new post's
@@ -535,8 +540,8 @@ func (h *handler) renderNewDiscussionComment(w http.ResponseWriter, r *http.Requ
 			Author:    userFromContext(r.Context()),
 			CreatedAt: time.Now(),
 		}
-		h.r.renderFragment(w, "discussion_detail", "discussion_reply_append", http.StatusOK,
-			dict("Discussion", discussion, "C", comment, "Workspace", ws))
+		h.r.renderFragment(w, "discussion_detail", "discussion_reply_append", http.StatusOK, dict("Discussion", discussion, "C", comment, "Workspace", ws), localeFromContext(r.Context()))
+
 		return
 	}
 	thread := &store.DiscussionThread{
@@ -546,8 +551,8 @@ func (h *handler) renderNewDiscussionComment(w http.ResponseWriter, r *http.Requ
 		Author:       userFromContext(r.Context()),
 		CreatedAt:    time.Now(),
 	}
-	h.r.renderFragment(w, "discussion_detail", "discussion_comment_append", http.StatusOK,
-		dict("Discussion", discussion, "C", thread, "Workspace", ws))
+	h.r.renderFragment(w, "discussion_detail", "discussion_comment_append", http.StatusOK, dict("Discussion", discussion, "C", thread, "Workspace", ws), localeFromContext(r.Context()))
+
 }
 
 // setCommentAnswer handles POST /discussions/{id}/comments/{cid}/answer.
@@ -583,7 +588,7 @@ func (h *handler) setCommentAnswer(w http.ResponseWriter, r *http.Request, ws *s
 		answer = true
 	case "0":
 	default:
-		h.renderError(w, r, http.StatusBadRequest, "Bad request", "Invalid answer value.")
+		h.renderError(w, r, http.StatusBadRequest, msgFor(r).ErrBadRequestH, msgFor(r).ErrAnswerValue)
 		return
 	}
 	// A partial request must know the pre-update mark holder: marking moves
@@ -615,8 +620,7 @@ func (h *handler) setCommentAnswer(w http.ResponseWriter, r *http.Request, ws *s
 	case errors.Is(err, store.ErrNotFound):
 		h.notFound(w, r)
 	case errors.Is(err, store.ErrNotAnswerable):
-		h.renderError(w, r, http.StatusUnprocessableEntity, "Cannot mark as answer",
-			"Only threads on a Q&A discussion can be marked as the answer.")
+		h.renderError(w, r, http.StatusUnprocessableEntity, msgFor(r).ErrAnswerQAH, msgFor(r).ErrAnswerQAM)
 	default:
 		h.internalError(w, r, err)
 	}
@@ -647,8 +651,8 @@ func (h *handler) renderAnswerSwap(w http.ResponseWriter, r *http.Request, ws *s
 		h.notFound(w, r)
 		return
 	}
-	h.r.renderFragment(w, "discussion_detail", "discussion_comment_swap", http.StatusOK,
-		dict("Discussion", discussion, "Comments", nodes, "Workspace", ws))
+	h.r.renderFragment(w, "discussion_detail", "discussion_comment_swap", http.StatusOK, dict("Discussion", discussion, "Comments", nodes, "Workspace", ws), localeFromContext(r.Context()))
+
 }
 
 // discussionError maps store.ErrNotFound to a 404 page and delegates
@@ -681,7 +685,8 @@ func (h *handler) renderDiscussionFormError(w http.ResponseWriter, r *http.Reque
 		Section:     "discussions",
 		Workspace:   ws,
 		User:        userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 func discussionURL(ws *store.Workspace, id int64) string {
@@ -711,7 +716,8 @@ func (h *handler) validateDiscussionInput(_ http.ResponseWriter, r *http.Request
 	// validation failure, not a default.
 	fe := store.ValidateDiscussionInput(in)
 	if fe.Any() {
-		return &in, &discussionFormErrors{Title: fe["title"], Body: fe["body"], Category: fe["category"]}
+		lang := localeFromContext(r.Context())
+		return &in, &discussionFormErrors{Title: fieldErrText(lang, "title", fe["title"]), Body: fieldErrText(lang, "body", fe["body"]), Category: fieldErrText(lang, "category", fe["category"])}
 	}
 	return &in, nil
 }

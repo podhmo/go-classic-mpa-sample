@@ -56,7 +56,7 @@ func (e labelFormErrors) any() bool { return e.Name != "" || e.Color != "" || e.
 // listLabels renders the management page: active labels grouped by kind
 // plus the archived ones.
 func (h *handler) listLabels(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
-	h.renderLabels(w, r, ws, http.StatusOK, labelsPage{Title: "Labels", Section: "labels"})
+	h.renderLabels(w, r, ws, http.StatusOK, labelsPage{Title: msgFor(r).LabelsTitle, Section: "labels"})
 }
 
 // renderLabels loads the three label groups and renders the page with
@@ -85,11 +85,13 @@ func (h *handler) renderLabels(w http.ResponseWriter, r *http.Request, ws *store
 		return
 	}
 	data.ArchivedLabels = append(archived, archivedD...)
-	data.Title = "Labels"
+	if data.Title == "" {
+		data.Title = msgFor(r).LabelsTitle
+	}
 	data.Section = "labels"
 	data.Workspace = ws
 	data.User = userFromContext(r.Context())
-	h.r.renderLabels(w, status, data)
+	h.r.renderLabels(w, status, data, localeFromContext(r.Context()))
 }
 
 // createLabel validates POST /w/{ws}/labels and redirects back to the
@@ -108,14 +110,15 @@ func (h *handler) createLabel(w http.ResponseWriter, r *http.Request, ws *store.
 
 	errs := labelFormErrors{}
 	if kind != store.KindLabelIssue && kind != store.KindLabelDiscussion {
-		errs.Other = "Kind must be issue or discussion."
+		errs.Other = msgFor(r).ErrLabelKind
 	}
 	if scope != "workspace" && scope != "shared" {
 		scope = "workspace"
 	}
 	fe := store.ValidateLabelInput(in)
-	errs.Name = fe["name"]
-	errs.Color = fe["color"]
+	lang := localeFromContext(r.Context())
+	errs.Name = fieldErrText(lang, "name", fe["name"])
+	errs.Color = fieldErrText(lang, "color", fe["color"])
 
 	if !errs.any() {
 		wsID := ws.ID
@@ -128,7 +131,7 @@ func (h *handler) createLabel(w http.ResponseWriter, r *http.Request, ws *store.
 			http.Redirect(w, r, "/w/"+ws.Slug+"/labels", http.StatusSeeOther)
 			return
 		case errors.Is(err, store.ErrDuplicateLabel):
-			errs.Other = "A label with this name already exists in that scope."
+			errs.Other = msgFor(r).ErrLabelDup
 		default:
 			h.internalError(w, r, err)
 			return
@@ -166,15 +169,16 @@ func (h *handler) editLabel(w http.ResponseWriter, r *http.Request, ws *store.Wo
 		return
 	}
 	h.r.renderLabelForm(w, http.StatusOK, labelFormPage{
-		Title:     fmt.Sprintf("Edit label %s", l.Name),
-		Heading:   fmt.Sprintf("Edit label %s", l.Name),
+		Title:     fmt.Sprintf(msgFor(r).EditLabel, l.Name),
+		Heading:   fmt.Sprintf(msgFor(r).EditLabel, l.Name),
 		Action:    fmt.Sprintf("/w/%s/labels/%d/edit", ws.Slug, id),
 		Label:     l,
 		Input:     store.LabelInput{Name: l.Name, Color: l.Color},
 		Section:   "labels",
 		Workspace: ws,
 		User:      userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // updateLabel validates POST /w/{ws}/labels/{id}/edit and redirects to the
@@ -202,7 +206,8 @@ func (h *handler) updateLabel(w http.ResponseWriter, r *http.Request, ws *store.
 		Color: strings.TrimSpace(r.PostFormValue("color")),
 	}
 	fe := store.ValidateLabelInput(in)
-	errs := labelFormErrors{Name: fe["name"], Color: fe["color"]}
+	lang := localeFromContext(r.Context())
+	errs := labelFormErrors{Name: fieldErrText(lang, "name", fe["name"]), Color: fieldErrText(lang, "color", fe["color"])}
 	if !errs.any() {
 		err := h.store.UpdateLabel(r.Context(), id, in)
 		switch {
@@ -210,15 +215,15 @@ func (h *handler) updateLabel(w http.ResponseWriter, r *http.Request, ws *store.
 			http.Redirect(w, r, "/w/"+ws.Slug+"/labels", http.StatusSeeOther)
 			return
 		case errors.Is(err, store.ErrDuplicateLabel):
-			errs.Other = "A label with this name already exists in that scope."
+			errs.Other = msgFor(r).ErrLabelDup
 		default:
 			h.issueError(w, r, err)
 			return
 		}
 	}
 	h.r.renderLabelForm(w, http.StatusUnprocessableEntity, labelFormPage{
-		Title:     fmt.Sprintf("Edit label %s", l.Name),
-		Heading:   fmt.Sprintf("Edit label %s", l.Name),
+		Title:     fmt.Sprintf(msgFor(r).EditLabel, l.Name),
+		Heading:   fmt.Sprintf(msgFor(r).EditLabel, l.Name),
 		Action:    fmt.Sprintf("/w/%s/labels/%d/edit", ws.Slug, id),
 		Label:     l,
 		Input:     in,
@@ -226,7 +231,8 @@ func (h *handler) updateLabel(w http.ResponseWriter, r *http.Request, ws *store.
 		Section:   "labels",
 		Workspace: ws,
 		User:      userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // archiveLabel handles POST /w/{ws}/labels/{id}/archive — the "delete"
@@ -256,7 +262,7 @@ func (h *handler) archiveLabel(w http.ResponseWriter, r *http.Request, ws *store
 		archived = true
 	case "0":
 	default:
-		h.renderError(w, r, http.StatusBadRequest, "Bad request", "Invalid archived value.")
+		h.renderError(w, r, http.StatusBadRequest, msgFor(r).ErrBadRequestH, msgFor(r).ErrArchivedValue)
 		return
 	}
 	if err := h.store.ArchiveLabel(r.Context(), id, archived); err != nil {

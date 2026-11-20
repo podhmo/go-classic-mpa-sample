@@ -84,7 +84,13 @@ func workspaceCreate(ctx context.Context, o Options, args []string) error {
 		Description: strings.TrimSpace(*desc),
 	}
 	if fe := store.ValidateWorkspaceInput(input); fe.Any() {
-		for f, msg := range map[string]string(fe) {
+		for f, msg := range func() map[string]string {
+			m := map[string]string{}
+			for k, v := range fe {
+				m[k] = v.Message
+			}
+			return m
+		}() {
 			fmt.Fprintf(o.Stderr, "%s: %s\n", f, msg)
 		}
 		return usageError{msg: "invalid workspace input"}

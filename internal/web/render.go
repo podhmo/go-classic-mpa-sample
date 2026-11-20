@@ -56,6 +56,7 @@ func parsePages(lang string) map[string]*template.Template {
 	funcs := maps.Clone(funcMap)
 	messageFuncs(funcs, lang)
 	funcs["lang"] = func() string { return lang }
+	funcs["jsDict"] = func() template.HTMLAttr { return jsDictFor(lang) }
 	pages := make(map[string]*template.Template, len(names))
 	for _, name := range names {
 		files := []string{"templates/layout.html", "templates/" + name + ".html"}
@@ -96,9 +97,13 @@ func (r *Renderer) executeLang(w http.ResponseWriter, page, lang string, status 
 // writes it as a standalone response — the partial-update fragment contract
 // (X-Partial request header; see docs/sketch/ja/partial-updates.md). Like
 // execute it buffers first so a template failure can't half-write a reply.
-func (r *Renderer) renderFragment(w http.ResponseWriter, page, name string, status int, data any) {
+func (r *Renderer) renderFragment(w http.ResponseWriter, page, name string, status int, data any, lang string) {
+	pages := r.pagesByLang[lang]
+	if pages == nil {
+		pages = r.pagesByLang[supportedLangs[0]]
+	}
 	var buf bytes.Buffer
-	if err := r.pagesByLang[supportedLangs[0]][page].ExecuteTemplate(&buf, name, data); err != nil {
+	if err := pages[page].ExecuteTemplate(&buf, name, data); err != nil {
 		log.Printf("web: render fragment %q in %q: %v", name, page, err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
@@ -115,104 +120,104 @@ func (r *Renderer) renderIssueList(w http.ResponseWriter, status int, data issue
 }
 
 // renderIssueDetail renders GET /issues/{id}.
-func (r *Renderer) renderIssueDetail(w http.ResponseWriter, status int, data issueDetailPage) {
-	r.execute(w, "issue_detail", status, data)
+func (r *Renderer) renderIssueDetail(w http.ResponseWriter, status int, data issueDetailPage, lang string) {
+	r.executeLang(w, "issue_detail", lang, status, data)
 }
 
 // renderIssueForm renders the new-issue and edit-issue forms.
-func (r *Renderer) renderIssueForm(w http.ResponseWriter, status int, data issueFormPage) {
-	r.execute(w, "issue_form", status, data)
+func (r *Renderer) renderIssueForm(w http.ResponseWriter, status int, data issueFormPage, lang string) {
+	r.executeLang(w, "issue_form", lang, status, data)
 }
 
 // renderIssueDelete renders the delete confirmation page.
-func (r *Renderer) renderIssueDelete(w http.ResponseWriter, status int, data issueDeletePage) {
-	r.execute(w, "issue_delete", status, data)
+func (r *Renderer) renderIssueDelete(w http.ResponseWriter, status int, data issueDeletePage, lang string) {
+	r.executeLang(w, "issue_delete", lang, status, data)
 }
 
 // renderAuthForm renders the register and login forms.
-func (r *Renderer) renderAuthForm(w http.ResponseWriter, status int, data authFormPage) {
-	r.execute(w, "auth_form", status, data)
+func (r *Renderer) renderAuthForm(w http.ResponseWriter, status int, data authFormPage, lang string) {
+	r.executeLang(w, "auth_form", lang, status, data)
 }
 
 // renderDiscussionList renders GET /discussions.
-func (r *Renderer) renderDiscussionList(w http.ResponseWriter, status int, data discussionListPage) {
-	r.execute(w, "discussions", status, data)
+func (r *Renderer) renderDiscussionList(w http.ResponseWriter, status int, data discussionListPage, lang string) {
+	r.executeLang(w, "discussions", lang, status, data)
 }
 
 // renderDiscussionDetail renders GET /discussions/{id}.
-func (r *Renderer) renderDiscussionDetail(w http.ResponseWriter, status int, data discussionDetailPage) {
-	r.execute(w, "discussion_detail", status, data)
+func (r *Renderer) renderDiscussionDetail(w http.ResponseWriter, status int, data discussionDetailPage, lang string) {
+	r.executeLang(w, "discussion_detail", lang, status, data)
 }
 
 // renderDiscussionForm renders the new-discussion and edit-discussion forms.
-func (r *Renderer) renderDiscussionForm(w http.ResponseWriter, status int, data discussionFormPage) {
-	r.execute(w, "discussion_form", status, data)
+func (r *Renderer) renderDiscussionForm(w http.ResponseWriter, status int, data discussionFormPage, lang string) {
+	r.executeLang(w, "discussion_form", lang, status, data)
 }
 
 // renderDiscussionDelete renders the delete confirmation page.
-func (r *Renderer) renderDiscussionDelete(w http.ResponseWriter, status int, data discussionDeletePage) {
-	r.execute(w, "discussion_delete", status, data)
+func (r *Renderer) renderDiscussionDelete(w http.ResponseWriter, status int, data discussionDeletePage, lang string) {
+	r.executeLang(w, "discussion_delete", lang, status, data)
 }
 
 // renderWorkspaceList renders GET /workspaces.
-func (r *Renderer) renderWorkspaceList(w http.ResponseWriter, status int, data workspaceListPage) {
-	r.execute(w, "workspaces", status, data)
+func (r *Renderer) renderWorkspaceList(w http.ResponseWriter, status int, data workspaceListPage, lang string) {
+	r.executeLang(w, "workspaces", lang, status, data)
 }
 
 // renderWorkspaceForm renders the new-workspace form.
-func (r *Renderer) renderWorkspaceForm(w http.ResponseWriter, status int, data workspaceFormPage) {
-	r.execute(w, "workspace_form", status, data)
+func (r *Renderer) renderWorkspaceForm(w http.ResponseWriter, status int, data workspaceFormPage, lang string) {
+	r.executeLang(w, "workspace_form", lang, status, data)
 }
 
 // renderLabels renders GET /w/{ws}/labels.
-func (r *Renderer) renderLabels(w http.ResponseWriter, status int, data labelsPage) {
-	r.execute(w, "labels", status, data)
+func (r *Renderer) renderLabels(w http.ResponseWriter, status int, data labelsPage, lang string) {
+	r.executeLang(w, "labels", lang, status, data)
 }
 
 // renderLabelForm renders the label edit form.
-func (r *Renderer) renderLabelForm(w http.ResponseWriter, status int, data labelFormPage) {
-	r.execute(w, "label_form", status, data)
+func (r *Renderer) renderLabelForm(w http.ResponseWriter, status int, data labelFormPage, lang string) {
+	r.executeLang(w, "label_form", lang, status, data)
 }
 
 // renderWorkspaceDelete renders the workspace delete confirmation page.
-func (r *Renderer) renderWorkspaceDelete(w http.ResponseWriter, status int, data workspaceDeletePage) {
-	r.execute(w, "workspace_delete", status, data)
+func (r *Renderer) renderWorkspaceDelete(w http.ResponseWriter, status int, data workspaceDeletePage, lang string) {
+	r.executeLang(w, "workspace_delete", lang, status, data)
 }
 
 // renderCommentEdit renders the shared comment edit page (issue
 // comments, threads and replies all use it).
-func (r *Renderer) renderCommentEdit(w http.ResponseWriter, status int, data commentEditPage) {
-	r.execute(w, "comment_edit", status, data)
+func (r *Renderer) renderCommentEdit(w http.ResponseWriter, status int, data commentEditPage, lang string) {
+	r.executeLang(w, "comment_edit", lang, status, data)
 }
 
 // renderCommentDelete renders the shared comment delete confirmation.
-func (r *Renderer) renderCommentDelete(w http.ResponseWriter, status int, data commentDeletePage) {
-	r.execute(w, "comment_delete", status, data)
+func (r *Renderer) renderCommentDelete(w http.ResponseWriter, status int, data commentDeletePage, lang string) {
+	r.executeLang(w, "comment_delete", lang, status, data)
 }
 
 // renderPullList renders GET /pulls.
-func (r *Renderer) renderPullList(w http.ResponseWriter, status int, data pullListPage) {
-	r.execute(w, "pulls", status, data)
+func (r *Renderer) renderPullList(w http.ResponseWriter, status int, data pullListPage, lang string) {
+	r.executeLang(w, "pulls", lang, status, data)
 }
 
 // renderPullDetail renders GET /pulls/{id}.
-func (r *Renderer) renderPullDetail(w http.ResponseWriter, status int, data pullDetailPage) {
-	r.execute(w, "pull_detail", status, data)
+func (r *Renderer) renderPullDetail(w http.ResponseWriter, status int, data pullDetailPage, lang string) {
+	r.executeLang(w, "pull_detail", lang, status, data)
 }
 
 // renderPullForm renders the new/edit pull request form.
-func (r *Renderer) renderPullForm(w http.ResponseWriter, status int, data pullFormPage) {
-	r.execute(w, "pull_form", status, data)
+func (r *Renderer) renderPullForm(w http.ResponseWriter, status int, data pullFormPage, lang string) {
+	r.executeLang(w, "pull_form", lang, status, data)
 }
 
 // renderPullFiles renders GET /pulls/{id}/files.
-func (r *Renderer) renderPullFiles(w http.ResponseWriter, status int, data pullFilesPage) {
-	r.execute(w, "pull_files", status, data)
+func (r *Renderer) renderPullFiles(w http.ResponseWriter, status int, data pullFilesPage, lang string) {
+	r.executeLang(w, "pull_files", lang, status, data)
 }
 
 // renderPullMerge renders GET /pulls/{id}/merge.
-func (r *Renderer) renderPullMerge(w http.ResponseWriter, status int, data pullMergePage) {
-	r.execute(w, "pull_merge", status, data)
+func (r *Renderer) renderPullMerge(w http.ResponseWriter, status int, data pullMergePage, lang string) {
+	r.executeLang(w, "pull_merge", lang, status, data)
 }
 
 type errorPageData struct {
@@ -229,11 +234,11 @@ type errorPageData struct {
 // holding the request should use renderErrorFor so a logged-in user keeps
 // their logged-in header on error pages too.
 func (r *Renderer) renderError(w http.ResponseWriter, status int, heading, message string) {
-	r.renderErrorFor(w, status, heading, message, nil)
+	r.renderErrorFor(w, status, heading, message, nil, supportedLangs[0])
 }
 
-func (r *Renderer) renderErrorFor(w http.ResponseWriter, status int, heading, message string, user *store.User) {
-	r.execute(w, "error", status, errorPageData{
+func (r *Renderer) renderErrorFor(w http.ResponseWriter, status int, heading, message string, user *store.User, lang string) {
+	r.executeLang(w, "error", lang, status, errorPageData{
 		Title:   fmt.Sprintf("%d %s", status, heading),
 		Code:    status,
 		Heading: heading,
@@ -243,6 +248,6 @@ func (r *Renderer) renderErrorFor(w http.ResponseWriter, status int, heading, me
 }
 
 func (r *Renderer) notFound(w http.ResponseWriter) {
-	r.renderError(w, http.StatusNotFound, "Not found",
-		"The page or issue you are looking for does not exist or may have been deleted.")
+	msg := messagesFor(supportedLangs[0])
+	r.renderError(w, http.StatusNotFound, msg.ErrNotFoundH, msg.ErrNotFoundM)
 }

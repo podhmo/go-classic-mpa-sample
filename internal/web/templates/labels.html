@@ -3,96 +3,96 @@
    aria-invalid sync, and the unsaved-input guard. */}}
 <script type="module" src="/static/page-form.js"></script>
 <div class="page-head">
-  <h1>Labels</h1>
+  <h1>{{LayoutNavLabels}}</h1>
 </div>
 
 <section class="label-admin-form card" aria-labelledby="new-label-heading">
-  <h2 id="new-label-heading">New label</h2>
+  <h2 id="new-label-heading">{{LabelsNew}}</h2>
   <form method="post" action="/w/{{.Workspace.Slug}}/labels" class="form form-inline" novalidate>
     <div class="field">
-      <label for="name">Name</label>
+      <label for="name">{{FieldName}}</label>
       <input type="text" id="name" name="name" value="{{.Input.Name}}" required maxlength="64" pattern=".*\S.*" autocomplete="off" data-error="f-label-name-error"{{if .Errors.Name}} aria-invalid="true" aria-describedby="f-label-name-error" autofocus{{else}} aria-invalid="false"{{end}}>
-      <p class="field-error{{if not .Errors.Name}} field-error-pending{{end}}" id="f-label-name-error">{{or .Errors.Name "Name is required."}}</p>
+      <p class="field-error{{if not .Errors.Name}} field-error-pending{{end}}" id="f-label-name-error">{{or .Errors.Name (NameRequired)}}</p>
     </div>
     <div class="field">
-      <label for="color">Color</label>
+      <label for="color">{{FieldColor}}</label>
       <input type="color" id="color" name="color" value="{{if .Input.Color}}{{.Input.Color}}{{else}}#0075ca{{end}}" required data-error="f-label-color-error"{{if .Errors.Color}} aria-invalid="true" aria-describedby="f-label-color-error"{{if not .Errors.Name}} autofocus{{end}}{{else}} aria-invalid="false"{{end}}>
-      <p class="field-error{{if not .Errors.Color}} field-error-pending{{end}}" id="f-label-color-error">{{or .Errors.Color "Color is required."}}</p>
+      <p class="field-error{{if not .Errors.Color}} field-error-pending{{end}}" id="f-label-color-error">{{or .Errors.Color (ColorRequired)}}</p>
     </div>
     <div class="field">
-      <label for="kind">Kind</label>
+      <label for="kind">{{FieldKind}}</label>
       <select id="kind" name="kind">
-        <option value="issue"{{if ne .Kind "discussion"}} selected{{end}}>Issue</option>
-        <option value="discussion"{{if eq .Kind "discussion"}} selected{{end}}>Discussion</option>
+        <option value="issue"{{if ne .Kind "discussion"}} selected{{end}}>{{KindIssue}}</option>
+        <option value="discussion"{{if eq .Kind "discussion"}} selected{{end}}>{{KindDiscussion}}</option>
       </select>
     </div>
     <div class="field">
-      <label for="scope">Scope</label>
+      <label for="scope">{{FieldScope}}</label>
       <select id="scope" name="scope">
-        <option value="workspace"{{if ne .Scope "shared"}} selected{{end}}>This workspace</option>
-        <option value="shared"{{if eq .Scope "shared"}} selected{{end}}>Shared (all workspaces)</option>
+        <option value="workspace"{{if ne .Scope "shared"}} selected{{end}}>{{ScopeWorkspace}}</option>
+        <option value="shared"{{if eq .Scope "shared"}} selected{{end}}>{{ScopeShared}}</option>
       </select>
     </div>
     {{if .Errors.Other}}<p class="field-error">{{.Errors.Other}}</p>{{end}}
-    <button type="submit" class="btn btn-primary">Create label</button>
+    <button type="submit" class="btn btn-primary">{{BtnCreateLabel}}</button>
   </form>
 </section>
 
 <section aria-labelledby="issue-labels-heading">
-  <h2 id="issue-labels-heading">Issue labels</h2>
+  <h2 id="issue-labels-heading">{{LabelsIssueHeading}}</h2>
   {{if .IssueLabels}}
   <ul class="label-list" role="list">
     {{range .IssueLabels}}
     <li class="label-row">
       <span class="label-badge" style="--label-color: {{.Color}}">{{.Name}}</span>
-      <span class="label-scope">{{if .WorkspaceID}}workspace{{else}}shared{{end}}</span>
-      <a class="btn btn-quiet" href="/w/{{$.Workspace.Slug}}/labels/{{.ID}}/edit">Edit</a>
+      <span class="label-scope">{{labelScope .WorkspaceID}}</span>
+      <a class="btn btn-quiet" href="/w/{{$.Workspace.Slug}}/labels/{{.ID}}/edit">{{BtnEdit}}</a>
       <form method="post" action="/w/{{$.Workspace.Slug}}/labels/{{.ID}}/archive" class="inline-form">
         <input type="hidden" name="archived" value="1">
-        <button type="submit" class="btn btn-quiet">Delete</button>
+        <button type="submit" class="btn btn-quiet">{{BtnDelete}}</button>
       </form>
     </li>
     {{end}}
   </ul>
   {{else}}
-  <p class="empty-state">No issue labels yet.</p>
+  <p class="empty-state">{{LabelsEmptyIssue}}</p>
   {{end}}
 </section>
 
 <section aria-labelledby="discussion-labels-heading">
-  <h2 id="discussion-labels-heading">Discussion labels</h2>
+  <h2 id="discussion-labels-heading">{{LabelsDiscHeading}}</h2>
   {{if .DiscussionLabels}}
   <ul class="label-list" role="list">
     {{range .DiscussionLabels}}
     <li class="label-row">
       <span class="label-badge" style="--label-color: {{.Color}}">{{.Name}}</span>
-      <span class="label-scope">{{if .WorkspaceID}}workspace{{else}}shared{{end}}</span>
-      <a class="btn btn-quiet" href="/w/{{$.Workspace.Slug}}/labels/{{.ID}}/edit">Edit</a>
+      <span class="label-scope">{{labelScope .WorkspaceID}}</span>
+      <a class="btn btn-quiet" href="/w/{{$.Workspace.Slug}}/labels/{{.ID}}/edit">{{BtnEdit}}</a>
       <form method="post" action="/w/{{$.Workspace.Slug}}/labels/{{.ID}}/archive" class="inline-form">
         <input type="hidden" name="archived" value="1">
-        <button type="submit" class="btn btn-quiet">Delete</button>
+        <button type="submit" class="btn btn-quiet">{{BtnDelete}}</button>
       </form>
     </li>
     {{end}}
   </ul>
   {{else}}
-  <p class="empty-state">No discussion labels yet.</p>
+  <p class="empty-state">{{LabelsEmptyDisc}}</p>
   {{end}}
 </section>
 
 {{if .ArchivedLabels}}
 <section aria-labelledby="archived-labels-heading">
-  <h2 id="archived-labels-heading">Archived</h2>
-  <p class="field-hint">Archived labels stay attached to the issues and discussions that already carry them. Restoring a label makes it selectable again.</p>
+  <h2 id="archived-labels-heading">{{LabelsArchivedHeading}}</h2>
+  <p class="field-hint">{{LabelsArchivedHint}}</p>
   <ul class="label-list" role="list">
     {{range .ArchivedLabels}}
     <li class="label-row">
       <span class="label-badge" style="--label-color: {{.Color}}">{{.Name}}</span>
-      <span class="label-scope">{{if .WorkspaceID}}workspace{{else}}shared{{end}} · {{.Kind}}</span>
-      <a class="btn btn-quiet" href="/w/{{$.Workspace.Slug}}/labels/{{.ID}}/edit">Edit</a>
+      <span class="label-scope">{{labelScope .WorkspaceID}} · {{labelKind .Kind}}</span>
+      <a class="btn btn-quiet" href="/w/{{$.Workspace.Slug}}/labels/{{.ID}}/edit">{{BtnEdit}}</a>
       <form method="post" action="/w/{{$.Workspace.Slug}}/labels/{{.ID}}/archive" class="inline-form">
         <input type="hidden" name="archived" value="0">
-        <button type="submit" class="btn btn-quiet">Restore</button>
+        <button type="submit" class="btn btn-quiet">{{BtnRestore}}</button>
       </form>
     </li>
     {{end}}

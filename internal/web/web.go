@@ -306,6 +306,7 @@ func New(st Store, opts ...Option) http.Handler {
 		}
 	}
 	mux.HandleFunc("GET /static/app.css", serveStatic("app.css"))
+	mux.HandleFunc("GET /static/i18n.js", serveStatic("i18n.js"))
 	// External speculation rules for the issue list (Speculation-Rules
 	// response header). The spec requires this exact media type; .json's
 	// application/json default would make the browser ignore the file.
@@ -362,6 +363,7 @@ func New(st Store, opts ...Option) http.Handler {
 	// of the mux's plaintext default. They are method-scoped on purpose — a
 	// method-less "/" pattern would match PUT/DELETE too and swallow the
 	// mux's automatic 405 Method Not Allowed.
+	mux.HandleFunc("GET /locale", setLocale)
 	mux.HandleFunc("GET /", h.notFound)
 	mux.HandleFunc("POST /", h.notFound)
 
@@ -516,23 +518,23 @@ func authorName(u *store.User) string {
 // renderError renders the styled error page carrying the request's user so
 // the header keeps the logged-in state.
 func (h *handler) renderError(w http.ResponseWriter, r *http.Request, status int, heading, message string) {
-	h.r.renderErrorFor(w, status, heading, message, userFromContext(r.Context()))
+	h.r.renderErrorFor(w, status, heading, message, userFromContext(r.Context()), localeFromContext(r.Context()))
 }
 
 // notFound serves the styled 404 page. It is registered as a route handler for
 // the catch-all patterns, so it keeps the http.HandlerFunc signature; the
 // request itself is only used to resolve the current user.
 func (h *handler) notFound(w http.ResponseWriter, r *http.Request) {
-	h.renderError(w, r, http.StatusNotFound, "Not found",
-		"The page or issue you are looking for does not exist or may have been deleted.")
+	msg := msgFor(r)
+	h.renderError(w, r, http.StatusNotFound, msg.ErrNotFoundH, msg.ErrNotFoundM)
 }
 
 // internalError logs the underlying error but renders a generic page so no
 // internals leak to the client.
 func (h *handler) internalError(w http.ResponseWriter, r *http.Request, err error) {
 	log.Printf("web: %s %s: %v", r.Method, r.URL.Path, err)
-	h.renderError(w, r, http.StatusInternalServerError, "Internal server error",
-		"Something went wrong on our side. Please try again.")
+	msg := msgFor(r)
+	h.renderError(w, r, http.StatusInternalServerError, msg.ErrInternalH, msg.ErrInternalM)
 }
 
 // parseForm installs a body size cap and parses the submitted form. On
@@ -551,12 +553,11 @@ func (h *handler) parseForm(w http.ResponseWriter, r *http.Request) bool {
 	}
 	if err != nil {
 		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-			h.renderError(w, r, http.StatusRequestEntityTooLarge, "Form too large",
-				"The submitted form exceeded the size limit.")
+			msg := msgFor(r)
+			h.renderError(w, r, http.StatusRequestEntityTooLarge, msg.ErrFormTooLargeH, msg.ErrFormTooLargeM)
 			return false
 		}
-		h.renderError(w, r, http.StatusBadRequest, "Bad request",
-			"The submitted form could not be read.")
+		h.renderError(w, r, http.StatusBadRequest, msgFor(r).ErrBadRequestH, msgFor(r).ErrFormReadM)
 		return false
 	}
 	return true

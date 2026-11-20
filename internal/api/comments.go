@@ -153,8 +153,8 @@ func decodeEditBody(w http.ResponseWriter, r *http.Request) (string, bool) {
 		return "", false
 	}
 	body := strings.TrimSpace(in.Body)
-	if msg := store.ValidateCommentBody(body); msg != "" {
-		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", map[string]string{"body": msg})
+	if fe := store.ValidateCommentBody(body); fe.Code != "" {
+		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", map[string]string{"body": fe.Message})
 		return "", false
 	}
 	return body, true

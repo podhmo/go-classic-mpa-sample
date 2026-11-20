@@ -1,20 +1,20 @@
 {{define "content"}}
 <script type="module" src="/static/page-detail.js"></script>
-<nav class="breadcrumb" aria-label="Breadcrumb">
+<nav class="breadcrumb" aria-label="{{BreadcrumbAria}}">
   <ol>
-    <li><a href="/pulls">Pull requests</a></li>
+    <li><a href="/pulls">{{LayoutNavPulls}}</a></li>
     <li><a href="/pulls/{{.PR.ID}}">#{{.PR.ID}}</a></li>
-    <li><a href="#" aria-current="page">Files changed</a></li>
+    <li><a href="#" aria-current="page">{{PullTabFiles}}</a></li>
   </ol>
 </nav>
 
-<nav class="tabs" aria-label="Pull request views">
-  <a class="tab" href="/pulls/{{.PR.ID}}">Conversation</a>
-  <a class="tab tab-active" href="/pulls/{{.PR.ID}}/files" aria-current="page">Files changed</a>
+<nav class="tabs" aria-label="{{PullViewsAria}}">
+  <a class="tab" href="/pulls/{{.PR.ID}}">{{PullTabConversation}}</a>
+  <a class="tab tab-active" href="/pulls/{{.PR.ID}}/files" aria-current="page">{{PullTabFiles}}</a>
 </nav>
 
 <div class="page-head">
-  <h1>Files changed <span class="issue-num">#{{.PR.ID}}</span></h1>
+  <h1>{{FilesChangedTitle (printf "#%d" .PR.ID)}}</h1>
 </div>
 <p class="pr-refs"><code>{{shortRef .PR.BaseRef}}</code> ← <code>{{shortRef .PR.HeadRef}}</code></p>
 
@@ -22,7 +22,7 @@
 <p class="card" role="alert">{{.Error}}</p>
 {{else if not .Files}}
 <div class="empty-state">
-  <p class="empty-lead">No changed files.</p>
+  <p class="empty-lead">{{FilesEmpty}}</p>
 </div>
 {{else}}
 {{range .Files}}
@@ -34,9 +34,9 @@
   </header>
 
   {{if .Binary}}
-  <p class="muted">Binary file — diff not shown.</p>
+  <p class="muted">{{BinaryNote}}</p>
   {{else}}
-  <pre class="diff">{{range .Lines}}<div class="diff-line diff-{{.Kind}}">{{if or (eq .Kind "ctx") (eq .Kind "add")}}<details class="line-comment"><summary title="Comment on this line"><span class="line-no">{{.NewNo}}</span></summary><form method="post" action="/pulls/{{$.PR.ID}}/comments" class="line-comment-form comment-form"><input type="hidden" name="path" value="{{$f.CommentPath}}"><input type="hidden" name="line" value="{{.NewNo}}"><input type="hidden" name="side" value="right"><input type="hidden" name="back" value="files"><textarea name="body" rows="3" required placeholder="Comment on line {{.NewNo}}"></textarea><button type="submit" class="btn">Comment</button></form></details>{{else if eq .Kind "del"}}<details class="line-comment"><summary title="Comment on this line"><span class="line-no">{{.OldNo}}</span></summary><form method="post" action="/pulls/{{$.PR.ID}}/comments" class="line-comment-form comment-form"><input type="hidden" name="path" value="{{if $f.Change.OldPath}}{{$f.Change.OldPath}}{{else}}{{$f.CommentPath}}{{end}}"><input type="hidden" name="line" value="{{.OldNo}}"><input type="hidden" name="side" value="left"><input type="hidden" name="back" value="files"><textarea name="body" rows="3" required placeholder="Comment on line {{.OldNo}} (left)"></textarea><button type="submit" class="btn">Comment</button></form></details>{{else}}<span class="line-no">{{if .NewNo}}{{.NewNo}}{{end}}</span>{{end}}<span class="line-text">{{.Text}}</span></div>{{end}}</pre>
+  <pre class="diff">{{range .Lines}}<div class="diff-line diff-{{.Kind}}">{{if or (eq .Kind "ctx") (eq .Kind "add")}}<details class="line-comment"><summary title="{{CommentLineTitle}}"><span class="line-no">{{.NewNo}}</span></summary><form method="post" action="/pulls/{{$.PR.ID}}/comments" class="line-comment-form comment-form"><input type="hidden" name="path" value="{{$f.CommentPath}}"><input type="hidden" name="line" value="{{.NewNo}}"><input type="hidden" name="side" value="right"><input type="hidden" name="back" value="files"><textarea name="body" rows="3" required placeholder="{{CommentLinePh .NewNo}}"></textarea><button type="submit" class="btn">{{BtnComment}}</button></form></details>{{else if eq .Kind "del"}}<details class="line-comment"><summary title="{{CommentLineTitle}}"><span class="line-no">{{.OldNo}}</span></summary><form method="post" action="/pulls/{{$.PR.ID}}/comments" class="line-comment-form comment-form"><input type="hidden" name="path" value="{{if $f.Change.OldPath}}{{$f.Change.OldPath}}{{else}}{{$f.CommentPath}}{{end}}"><input type="hidden" name="line" value="{{.OldNo}}"><input type="hidden" name="side" value="left"><input type="hidden" name="back" value="files"><textarea name="body" rows="3" required placeholder="{{CommentLinePhLeft .OldNo}}"></textarea><button type="submit" class="btn">{{BtnComment}}</button></form></details>{{else}}<span class="line-no">{{if .NewNo}}{{.NewNo}}{{end}}</span>{{end}}<span class="line-text">{{.Text}}</span></div>{{end}}</pre>
   {{end}}
 
   {{if .Comments}}
@@ -45,14 +45,14 @@
     <div class="card comment{{if .Moderation.Hidden}} comment-hidden{{end}}" id="comment-{{.ID}}">
       <header class="comment-meta">
         <span class="comment-author">{{authorName .Author}}</span>
-        <span class="review-anchor">on <code>{{.Path}}:L{{.Line}}</code>{{if eq .Side "left"}} (left){{end}}</span>
+        <span class="review-anchor"><code>{{OnAnchor (printf "%s:L%d" .Path .Line)}}</code>{{if eq .Side "left"}} {{SideLeft}}{{end}}</span>
         <a class="comment-permalink" href="/pulls/{{.PRID}}#comment-{{.ID}}"><time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .CreatedAt}}</time></a>
-        {{if .Moderation.Edited}}· <span class="comment-edited">edited</span>{{end}}
+        {{if .Moderation.Edited}}· <span class="comment-edited">{{Edited}}</span>{{end}}
       </header>
       {{if .Moderation.Hidden}}
-      <p class="comment-hidden-note">This comment was marked as {{.Moderation.HiddenReason}}.</p>
+      <p class="comment-hidden-note">{{MarkedAs (noun "comment") (hideReasonLabel .Moderation.HiddenReason)}}</p>
       <details class="comment-hidden-body">
-        <summary>Show comment</summary>
+        <summary>{{ShowNoun (noun "comment")}}</summary>
         <div class="comment-body markdown-body">{{markdown .Body}}</div>
       </details>
       {{else}}

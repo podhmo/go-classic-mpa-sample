@@ -13,6 +13,7 @@
 // The submit listener is delegated on document so it also catches forms
 // this script itself swapped in (and future injected forms).
 import { toast } from "./toast.js";
+import { t } from "./i18n.js";
 import { syncCommentSubmit } from "./comment-submit-disabled.js";
 import { parseFragment, runScopedTransition, commonScope } from "./fragments.js";
 
@@ -132,7 +133,7 @@ async function postPartial(form) {
   // Indeterminate <progress>: correct AT semantics for free (guide
   // spinner) and no value attribute needed.
   const progress = document.createElement("progress");
-  progress.setAttribute("aria-label", "Posting");
+  progress.setAttribute("aria-label", t("posting"));
   form.append(progress);
   try {
     const res = await fetch(form.action, {
@@ -182,7 +183,7 @@ async function postPartial(form) {
             document.querySelector(form.dataset.partialTarget)?.querySelector(".comment-action"));
         refocus?.focus();
       });
-      toast(form.dataset.partialAnnounce || "Updated.");
+      toast(form.dataset.partialAnnounce || t("updated"));
       return;
     }
 
@@ -239,9 +240,9 @@ async function postPartial(form) {
       added.scrollIntoView({ block: "nearest" });
       setTimeout(() => added.classList.remove("comment-new"), 4000);
     }
-    toast(form.dataset.partialAnnounce || "Comment posted.");
+    toast(form.dataset.partialAnnounce || t("comment_posted"));
   } catch {
-    showSubmitError(form, "Comment could not be posted. Please try again.");
+    showSubmitError(form, t("comment_post_failed"));
   } finally {
     progress.remove();
     delete form.dataset.busy;

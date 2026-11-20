@@ -13,6 +13,7 @@
 // attribute is inert, showPopover/hidePopover don't exist, and the toast
 // behaves as a plain fixed-position box — same visuals, no top layer.
 import { announce } from "./announcer.js";
+import { t } from "./i18n.js";
 
 const DISMISS_MS = 8000;
 const STACK_GAP_PX = 8;
@@ -29,7 +30,7 @@ function toastRegion() {
     // A named region so AT users can reliably locate the toasts even
     // though popover children render in the top layer, outside its box.
     region.setAttribute("role", "region");
-    region.setAttribute("aria-label", "Notifications");
+    region.setAttribute("aria-label", t("toast_notifications"));
     region.className = "toast-region";
     document.body.append(region);
   }
@@ -99,7 +100,7 @@ export function toast(message) {
   const close = document.createElement("button");
   close.type = "button";
   close.className = "toast-close";
-  close.textContent = "Close";
+  close.textContent = t("toast_close");
   close.addEventListener("click", () => dismiss(el));
 
   el.append(text, close);

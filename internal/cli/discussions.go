@@ -698,7 +698,7 @@ func validateDiscussionInput(in store.DiscussionInput) error {
 	sort.Strings(keys)
 	parts := make([]string, 0, len(keys))
 	for _, k := range keys {
-		parts = append(parts, k+": "+fe[k])
+		parts = append(parts, k+": "+fe[k].Message)
 	}
 	return fmt.Errorf("invalid input: %s", strings.Join(parts, "; "))
 }

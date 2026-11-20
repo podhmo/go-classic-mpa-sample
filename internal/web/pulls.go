@@ -208,14 +208,14 @@ func (h *handler) pullError(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, store.ErrNotFound):
 		h.notFound(w, r)
 	case errors.Is(err, store.ErrInvalidPRTransition):
-		h.renderError(w, r, http.StatusConflict, "Invalid status change",
-			"The pull request is already in that state.")
+		h.renderError(w, r, http.StatusConflict, msgFor(r).ErrPRTransitionH,
+			msgFor(r).ErrPRTransitionM)
 	case errors.Is(err, store.ErrDuplicatePR):
-		h.renderError(w, r, http.StatusConflict, "Duplicate pull request",
-			"An open pull request for the same base and head already exists.")
+		h.renderError(w, r, http.StatusConflict, msgFor(r).ErrDupPRH,
+			msgFor(r).ErrDupPRM)
 	case errors.Is(err, store.ErrSameRef):
-		h.renderError(w, r, http.StatusUnprocessableEntity, "Same ref",
-			"Base and head must be different refs.")
+		h.renderError(w, r, http.StatusUnprocessableEntity, msgFor(r).ErrSameRefH,
+			msgFor(r).ErrSameRefM)
 	default:
 		h.internalError(w, r, err)
 	}
@@ -299,7 +299,7 @@ func (h *handler) listPulls(w http.ResponseWriter, r *http.Request) {
 	}
 	totalPages := (total + perPage - 1) / perPage
 	page := pullListPage{
-		Title:           "Pull requests",
+		Title:           msgFor(r).PullsTitle,
 		Section:         "pulls",
 		Filter:          filter,
 		Pulls:           pulls,
@@ -312,7 +312,7 @@ func (h *handler) listPulls(w http.ResponseWriter, r *http.Request) {
 		Workspace:       h.navWorkspace(r),
 		User:            userFromContext(r.Context()),
 	}
-	h.r.renderPullList(w, http.StatusOK, page)
+	h.r.renderPullList(w, http.StatusOK, page, localeFromContext(r.Context()))
 }
 
 // newPullForm serves GET /pulls/new with the repo's branches as base/head
@@ -338,8 +338,8 @@ func (h *handler) newPullForm(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	h.r.renderPullForm(w, http.StatusOK, pullFormPage{
-		Title:     "New pull request",
-		Heading:   "New pull request",
+		Title:     msgFor(r).NewPull,
+		Heading:   msgFor(r).NewPull,
 		Action:    "/pulls",
 		Section:   "pulls",
 		Refs:      refs,
@@ -347,7 +347,8 @@ func (h *handler) newPullForm(w http.ResponseWriter, r *http.Request) {
 		Input:     in,
 		Workspace: h.navWorkspace(r),
 		User:      userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // createPull validates POST /pulls: both refs must exist in the repo, the
@@ -372,16 +373,17 @@ func (h *handler) createPull(w http.ResponseWriter, r *http.Request) {
 	}
 	var ferrs pullFormErrors
 	if fe := store.ValidatePullRequestInput(in); fe != nil {
-		ferrs.Title = fe["title"]
-		ferrs.Body = fe["body"]
-		ferrs.Refs = strings.TrimSpace(strings.Join([]string{fe["base"], fe["head"]}, " "))
+		lang := localeFromContext(r.Context())
+		ferrs.Title = fieldErrText(lang, "title", fe["title"])
+		ferrs.Body = fieldErrText(lang, "body", fe["body"])
+		ferrs.Refs = strings.TrimSpace(strings.Join([]string{fieldErrText(lang, "base", fe["base"]), fieldErrText(lang, "head", fe["head"])}, " "))
 	}
 	if normErr != nil && !errors.Is(normErr, gitrepo.ErrBadRef) {
 		h.internalError(w, r, normErr)
 		return
 	}
 	if normErr != nil {
-		ferrs.Refs = "Base and head must name existing refs or commits."
+		ferrs.Refs = msgFor(r).ErrRefsInvalid
 	}
 	if ferrs.any() {
 		h.renderPullFormErr(w, r, http.StatusUnprocessableEntity, in, ferrs)
@@ -415,8 +417,8 @@ func (h *handler) createPull(w http.ResponseWriter, r *http.Request) {
 func (h *handler) renderPullFormErr(w http.ResponseWriter, r *http.Request, status int, in store.PRInput, errs pullFormErrors) {
 	refs, _ := h.repo.Refs(r.Context())
 	h.r.renderPullForm(w, status, pullFormPage{
-		Title:     "New pull request",
-		Heading:   "New pull request",
+		Title:     msgFor(r).NewPull,
+		Heading:   msgFor(r).NewPull,
 		Action:    "/pulls",
 		Section:   "pulls",
 		Refs:      refs,
@@ -424,7 +426,8 @@ func (h *handler) renderPullFormErr(w http.ResponseWriter, r *http.Request, stat
 		Errors:    errs,
 		Workspace: h.navWorkspace(r),
 		User:      userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // loadPullView gathers the live git data the detail/files pages need:
@@ -469,7 +472,8 @@ func (h *handler) pullDetail(w http.ResponseWriter, r *http.Request) {
 		Comments:  comments,
 		Workspace: h.navWorkspace(r),
 		User:      userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // editPullForm serves GET /pulls/{id}/edit — title/body only; the base/head
@@ -480,15 +484,16 @@ func (h *handler) editPullForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.r.renderPullForm(w, http.StatusOK, pullFormPage{
-		Title:     fmt.Sprintf("Edit pull request #%d", pr.ID),
-		Heading:   fmt.Sprintf("Edit pull request #%d", pr.ID),
+		Title:     fmt.Sprintf(msgFor(r).EditPull, pr.ID),
+		Heading:   fmt.Sprintf(msgFor(r).EditPull, pr.ID),
 		Action:    fmt.Sprintf("/pulls/%d/edit", pr.ID),
 		Section:   "pulls",
 		PR:        pr,
 		Input:     store.PRInput{Title: pr.Title, Body: pr.Body},
 		Workspace: h.navWorkspace(r),
 		User:      userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // updatePull applies the edit and returns to the detail page.
@@ -507,11 +512,12 @@ func (h *handler) updatePull(w http.ResponseWriter, r *http.Request) {
 		Body:    strings.TrimSpace(r.PostFormValue("body")),
 	}
 	if fe := store.ValidatePullRequestInput(in); len(fe) > 0 {
-		ferrs := pullFormErrors{Title: fe["title"], Body: fe["body"],
-			Refs: strings.TrimSpace(strings.Join([]string{fe["base"], fe["head"]}, " "))}
+		lang := localeFromContext(r.Context())
+		ferrs := pullFormErrors{Title: fieldErrText(lang, "title", fe["title"]), Body: fieldErrText(lang, "body", fe["body"]),
+			Refs: strings.TrimSpace(strings.Join([]string{fieldErrText(lang, "base", fe["base"]), fieldErrText(lang, "head", fe["head"])}, " "))}
 		h.r.renderPullForm(w, http.StatusUnprocessableEntity, pullFormPage{
-			Title:     fmt.Sprintf("Edit pull request #%d", pr.ID),
-			Heading:   fmt.Sprintf("Edit pull request #%d", pr.ID),
+			Title:     fmt.Sprintf(msgFor(r).EditPull, pr.ID),
+			Heading:   fmt.Sprintf(msgFor(r).EditPull, pr.ID),
 			Action:    fmt.Sprintf("/pulls/%d/edit", pr.ID),
 			Section:   "pulls",
 			PR:        pr,
@@ -519,7 +525,8 @@ func (h *handler) updatePull(w http.ResponseWriter, r *http.Request) {
 			Errors:    ferrs,
 			Workspace: h.navWorkspace(r),
 			User:      userFromContext(r.Context()),
-		})
+		}, localeFromContext(r.Context()))
+
 		return
 	}
 	if err := h.store.UpdatePullRequest(r.Context(), pr.ID, in); err != nil {
@@ -548,7 +555,7 @@ func (h *handler) pullFiles(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	page := pullFilesPage{
-		Title:     fmt.Sprintf("Files changed · %s", pr.Title),
+		Title:     fmt.Sprintf(msgFor(r).FilesChangedTitle, pr.Title),
 		Section:   "pulls",
 		PR:        pr,
 		Workspace: h.navWorkspace(r),
@@ -560,8 +567,8 @@ func (h *handler) pullFiles(w http.ResponseWriter, r *http.Request) {
 		// A deleted head (or an empty recorded range) degrades the page
 		// to a notice rather than a 500 — the conversation still reads.
 		log.Printf("web: pulls: changed files #%d: %v", pr.ID, err)
-		page.Error = "The diff could not be computed — the refs may have moved or been deleted."
-		h.r.renderPullFiles(w, http.StatusOK, page)
+		page.Error = msgFor(r).ErrDiffCompute
+		h.r.renderPullFiles(w, http.StatusOK, page, localeFromContext(r.Context()))
 		return
 	}
 	for _, ch := range changed {
@@ -598,7 +605,7 @@ func (h *handler) pullFiles(w http.ResponseWriter, r *http.Request) {
 		}
 		page.Files = append(page.Files, fv)
 	}
-	h.r.renderPullFiles(w, http.StatusOK, page)
+	h.r.renderPullFiles(w, http.StatusOK, page, localeFromContext(r.Context()))
 }
 
 // createPRComment posts to /pulls/{id}/comments — a plain conversation
@@ -615,8 +622,8 @@ func (h *handler) createPRComment(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	in := store.PRCommentInput{Body: strings.TrimSpace(r.PostFormValue("body"))}
-	if msg := store.ValidateCommentBody(in.Body); msg != "" {
-		h.renderPullDetailErr(w, r, http.StatusUnprocessableEntity, pr, in.Body, msg)
+	if fe := store.ValidateCommentBody(in.Body); fe.Code != "" {
+		h.renderPullDetailErr(w, r, http.StatusUnprocessableEntity, pr, in.Body, fieldErrText(localeFromContext(r.Context()), "body", fe))
 		return
 	}
 	if path := r.PostFormValue("path"); path != "" {
@@ -624,8 +631,8 @@ func (h *handler) createPRComment(w http.ResponseWriter, r *http.Request) {
 		side := r.PostFormValue("side")
 		if err := gitrepo.ValidatePath(path); err != nil || line < 1 ||
 			(side != "" && side != "right" && side != "left") {
-			h.renderError(w, r, http.StatusBadRequest, "Bad request",
-				"Invalid review-comment anchor.")
+			h.renderError(w, r, http.StatusBadRequest, msgFor(r).ErrBadRequestH,
+				msgFor(r).ErrAnchorInvalid)
 			return
 		}
 		if side == "" {
@@ -645,8 +652,8 @@ func (h *handler) createPRComment(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if cherr != nil || !inDiff {
-			h.renderError(w, r, http.StatusUnprocessableEntity, "Unprocessable entity",
-				"The anchor path is not part of the pull request diff.")
+			h.renderError(w, r, http.StatusUnprocessableEntity, msgFor(r).ErrUnprocessableH,
+				msgFor(r).ErrAnchorPath)
 			return
 		}
 		in.Path, in.Line, in.Side = path, line, side
@@ -683,8 +690,8 @@ func (h *handler) createPRComment(w http.ResponseWriter, r *http.Request) {
 	id, err := h.store.CreatePRComment(ctx, pr.ID, in, authorID)
 	if err != nil {
 		if errors.Is(err, store.ErrInvalidAnchor) {
-			h.renderError(w, r, http.StatusBadRequest, "Bad request",
-				"Invalid review-comment anchor.")
+			h.renderError(w, r, http.StatusBadRequest, msgFor(r).ErrBadRequestH,
+				msgFor(r).ErrAnchorInvalid)
 			return
 		}
 		h.pullError(w, r, err)
@@ -721,7 +728,8 @@ func (h *handler) renderPullDetailErr(w http.ResponseWriter, r *http.Request, st
 		CommentError: msg,
 		Workspace:    h.navWorkspace(r),
 		User:         userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // renderPullCommentAppend answers a partial comment POST with the append
@@ -743,8 +751,8 @@ func (h *handler) renderPullCommentAppend(w http.ResponseWriter, r *http.Request
 		h.notFound(w, r)
 		return
 	}
-	h.r.renderFragment(w, "pull_detail", "pr_comment_append", http.StatusOK,
-		dict("PR", pr, "Comment", c, "Workspace", h.navWorkspace(r)))
+	h.r.renderFragment(w, "pull_detail", "pr_comment_append", http.StatusOK, dict("PR", pr, "Comment", c, "Workspace", h.navWorkspace(r)), localeFromContext(r.Context()))
+
 }
 
 // requirePRComment resolves /pulls/{id}/comments/{cid}.
@@ -780,15 +788,16 @@ func (h *handler) editPRCommentForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.r.renderCommentEdit(w, http.StatusOK, commentEditPage{
-		Title:     fmt.Sprintf("Edit comment #%d", c.ID),
-		Heading:   fmt.Sprintf("Edit comment #%d", c.ID),
+		Title:     fmt.Sprintf(msgFor(r).EditComment, c.ID),
+		Heading:   fmt.Sprintf(msgFor(r).EditComment, c.ID),
 		Action:    fmt.Sprintf("/pulls/%d/comments/%d/edit", pr.ID, c.ID),
 		CancelURL: fmt.Sprintf("/pulls/%d#comment-%d", pr.ID, c.ID),
 		Body:      c.Body,
 		Section:   "pulls",
 		Workspace: h.navWorkspace(r),
 		User:      userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // updatePRComment applies the edit and returns to the comment's anchor.
@@ -802,18 +811,19 @@ func (h *handler) updatePRComment(w http.ResponseWriter, r *http.Request) {
 	}
 	body := strings.TrimSpace(r.PostFormValue("body"))
 	cancelURL := fmt.Sprintf("/pulls/%d#comment-%d", pr.ID, c.ID)
-	if msg := store.ValidateCommentBody(body); msg != "" {
+	if fe := store.ValidateCommentBody(body); fe.Code != "" {
 		h.r.renderCommentEdit(w, http.StatusUnprocessableEntity, commentEditPage{
-			Title:     fmt.Sprintf("Edit comment #%d", c.ID),
-			Heading:   fmt.Sprintf("Edit comment #%d", c.ID),
+			Title:     fmt.Sprintf(msgFor(r).EditComment, c.ID),
+			Heading:   fmt.Sprintf(msgFor(r).EditComment, c.ID),
 			Action:    fmt.Sprintf("/pulls/%d/comments/%d/edit", pr.ID, c.ID),
 			CancelURL: cancelURL,
 			Body:      body,
-			Error:     msg,
+			Error:     fieldErrText(localeFromContext(r.Context()), "body", fe),
 			Section:   "pulls",
 			Workspace: h.navWorkspace(r),
 			User:      userFromContext(r.Context()),
-		})
+		}, localeFromContext(r.Context()))
+
 		return
 	}
 	if err := h.store.UpdatePRComment(r.Context(), pr.ID, c.ID, body); err != nil {
@@ -830,8 +840,8 @@ func (h *handler) confirmDeletePRComment(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	h.r.renderCommentDelete(w, http.StatusOK, commentDeletePage{
-		Title:     fmt.Sprintf("Delete comment #%d", c.ID),
-		Heading:   fmt.Sprintf("Delete comment #%d", c.ID),
+		Title:     fmt.Sprintf(msgFor(r).DeleteComment, c.ID),
+		Heading:   fmt.Sprintf(msgFor(r).DeleteComment, c.ID),
 		Noun:      "comment",
 		Preview:   excerpt(c.Body),
 		Action:    fmt.Sprintf("/pulls/%d/comments/%d/delete", pr.ID, c.ID),
@@ -839,7 +849,8 @@ func (h *handler) confirmDeletePRComment(w http.ResponseWriter, r *http.Request)
 		Section:   "pulls",
 		Workspace: h.navWorkspace(r),
 		User:      userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // deletePRComment removes the row and returns to the detail page.
@@ -880,7 +891,7 @@ func (h *handler) setPRCommentHidden(w http.ResponseWriter, r *http.Request, hid
 	if hide {
 		reason = r.PostFormValue("reason")
 		if !store.ValidHideReason(reason) {
-			h.renderError(w, r, http.StatusBadRequest, "Bad request", "A valid hide reason is required.")
+			h.renderError(w, r, http.StatusBadRequest, "Bad request", msgFor(r).ErrHideReason)
 			return
 		}
 	}
@@ -905,8 +916,8 @@ func (h *handler) setPRCommentHidden(w http.ResponseWriter, r *http.Request, hid
 			h.notFound(w, r)
 			return
 		}
-		h.r.renderFragment(w, "pull_detail", "pr_comment", http.StatusOK,
-			dict("C", nc, "PR", pr))
+		h.r.renderFragment(w, "pull_detail", "pr_comment", http.StatusOK, dict("C", nc, "PR", pr), localeFromContext(r.Context()))
+
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/pulls/%d#comment-%d", pr.ID, c.ID), http.StatusSeeOther)
@@ -930,8 +941,8 @@ func (h *handler) updatePullStatus(w http.ResponseWriter, r *http.Request) {
 			// Stale resubmission: reject before touching git so a reused
 			// head branch cannot repoint the archived pin (the store
 			// would reject the transition only afterward).
-			h.renderError(w, r, http.StatusConflict, "Invalid transition",
-				"Only an open pull request can be closed.")
+			h.renderError(w, r, http.StatusConflict, msgFor(r).ErrPRTransitionH,
+				msgFor(r).ErrCloseOnlyM)
 			return
 		}
 		headSHA, err := h.repo.RevParse(ctx, pr.HeadRef)
@@ -957,7 +968,7 @@ func (h *handler) updatePullStatus(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	default:
-		h.renderError(w, r, http.StatusBadRequest, "Bad request", "Unknown status action.")
+		h.renderError(w, r, http.StatusBadRequest, msgFor(r).ErrBadRequestH, msgFor(r).ErrUnknownStatus)
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/pulls/%d", pr.ID), http.StatusSeeOther)
@@ -971,8 +982,8 @@ func (h *handler) mergePullForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !pr.Open() {
-		h.renderError(w, r, http.StatusConflict, "Not mergeable",
-			"Only an open pull request can be merged.")
+		h.renderError(w, r, http.StatusConflict, msgFor(r).ErrNotMergeableH,
+			msgFor(r).ErrMergeOnlyM)
 		return
 	}
 	check, err := h.repo.CheckMerge(r.Context(), pr.BaseRef, pr.HeadRef)
@@ -981,13 +992,14 @@ func (h *handler) mergePullForm(w http.ResponseWriter, r *http.Request) {
 		log.Printf("web: pulls: check merge #%d: %v", pr.ID, err)
 	}
 	h.r.renderPullMerge(w, http.StatusOK, pullMergePage{
-		Title:     fmt.Sprintf("Merge pull request #%d", pr.ID),
+		Title:     fmt.Sprintf(msgFor(r).MergePull, pr.ID),
 		Section:   "pulls",
 		PR:        pr,
 		Check:     check,
 		Workspace: h.navWorkspace(r),
 		User:      userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
 
 // mergePull applies POST /pulls/{id}/merge: git-side merge first (all
@@ -1003,13 +1015,13 @@ func (h *handler) mergePull(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	if !pr.Open() {
-		h.renderError(w, r, http.StatusConflict, "Not mergeable",
-			"Only an open pull request can be merged.")
+		h.renderError(w, r, http.StatusConflict, msgFor(r).ErrNotMergeableH,
+			msgFor(r).ErrMergeOnlyM)
 		return
 	}
 	method := gitrepo.MergeMethod(r.PostFormValue("method"))
 	if !method.Valid() {
-		h.renderError(w, r, http.StatusBadRequest, "Bad request", "Unknown merge method.")
+		h.renderError(w, r, http.StatusBadRequest, msgFor(r).ErrBadRequestH, msgFor(r).ErrUnknownMethod)
 		return
 	}
 	msg := ""
@@ -1023,25 +1035,26 @@ func (h *handler) mergePull(w http.ResponseWriter, r *http.Request) {
 		errMsg := ""
 		switch {
 		case errors.As(err, &ce):
-			errMsg = "The branches conflict: " + strings.Join(ce.Files, ", ")
+			errMsg = fmt.Sprintf(msgFor(r).ErrMergeConflict, strings.Join(ce.Files, ", "))
 		case errors.As(err, &de):
-			errMsg = "The base branch's worktree is dirty — commit or stash it first."
+			errMsg = msgFor(r).ErrDirtyWorktree
 		case errors.Is(err, gitrepo.ErrConcurrentUpdate):
-			errMsg = "The base branch moved while merging — try again."
+			errMsg = msgFor(r).ErrBaseMoved
 		default:
 			h.internalError(w, r, err)
 			return
 		}
 		check, _ := h.repo.CheckMerge(ctx, pr.BaseRef, pr.HeadRef)
 		h.r.renderPullMerge(w, http.StatusConflict, pullMergePage{
-			Title:     fmt.Sprintf("Merge pull request #%d", pr.ID),
+			Title:     fmt.Sprintf(msgFor(r).MergePull, pr.ID),
 			Section:   "pulls",
 			PR:        pr,
 			Check:     check,
 			Error:     errMsg,
 			Workspace: h.navWorkspace(r),
 			User:      userFromContext(r.Context()),
-		})
+		}, localeFromContext(r.Context()))
+
 		return
 	}
 	// Pin the head tip Merge resolved — squash/rebase leave the head
@@ -1082,7 +1095,7 @@ func (h *handler) pullCommentsFragment(w http.ResponseWriter, r *http.Request) {
 	}
 	ids, filtered, err := parseIDSet(r)
 	if err != nil {
-		h.renderError(w, r, http.StatusBadRequest, "Bad request", "Invalid ids parameter.")
+		h.renderError(w, r, http.StatusBadRequest, msgFor(r).ErrBadRequestH, msgFor(r).ErrInvalidIDs)
 		return
 	}
 	comments, err := h.store.ListPRComments(r.Context(), pr.ID)
@@ -1099,8 +1112,8 @@ func (h *handler) pullCommentsFragment(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	h.r.renderFragment(w, "pull_detail", "pr_comments_update", http.StatusOK,
-		dict("PR", pr, "Comments", out))
+	h.r.renderFragment(w, "pull_detail", "pr_comments_update", http.StatusOK, dict("PR", pr, "Comments", out), localeFromContext(r.Context()))
+
 }
 
 // pullArticleFragment serves GET /pulls/{id}/fragments/article — the whole
@@ -1116,5 +1129,6 @@ func (h *handler) pullArticleFragment(w http.ResponseWriter, r *http.Request) {
 		Commits: commits,
 		Merge:   check,
 		User:    userFromContext(r.Context()),
-	})
+	}, localeFromContext(r.Context()))
+
 }
