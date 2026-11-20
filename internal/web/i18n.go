@@ -57,15 +57,14 @@ func T(lang string) func(key string, args ...any) string {
 	}
 }
 
-// localeContextKey is distinct from auth.go's userContextKey (both are
-// contextKey-typed, so it starts past the keys declared there).
-const localeContextKey contextKey = iota + 100
+// localeContextKey: one struct type per context key (see auth.go).
+type localeContextKey struct{}
 
 // localeFromContext reports the locale withLocale stored on the request.
 // Requests that never passed the middleware (tests, fragments rendered
 // without it) default to the first supported language.
 func localeFromContext(ctx context.Context) string {
-	if lang, ok := ctx.Value(localeContextKey).(string); ok {
+	if lang, ok := ctx.Value(localeContextKey{}).(string); ok {
 		return lang
 	}
 	return supportedLangs[0]
@@ -109,7 +108,7 @@ func withLocale(next http.Handler) http.Handler {
 		} else if wantsJapanese(r.Header.Get("Accept-Language")) {
 			lang = "ja"
 		}
-		r = r.WithContext(context.WithValue(r.Context(), localeContextKey, lang))
+		r = r.WithContext(context.WithValue(r.Context(), localeContextKey{}, lang))
 		next.ServeHTTP(w, r)
 	})
 }
