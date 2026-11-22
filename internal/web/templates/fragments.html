@@ -97,18 +97,18 @@
    accessibility tree and find-in-page — guide search-hidden-content),
    the note carries the reason. The li self-targets by id in the
    client's replace swap. */}}
-<li class="card comment{{if .C.Moderation.Hidden}} comment-hidden{{end}}" id="comment-{{.C.ID}}">
+<li class="card comment{{if .C.Hidden}} comment-hidden{{end}}" id="comment-{{.C.ID}}">
   <header class="comment-meta">
     <span class="comment-author">{{Commented (authorName .C.Author)}}</span>
     <a class="comment-permalink" href="#comment-{{.C.ID}}"><time datetime="{{.C.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .C.CreatedAt}}</time> <span class="visually-hidden">{{PermalinkPost (noun "comment") .C.ID}}</span></a>
-    {{if .C.Moderation.Edited}}· <span class="comment-edited">{{Edited}}</span>{{end}}
+    {{if .C.Edited}}· <span class="comment-edited">{{Edited}}</span>{{end}}
     <span class="copy-wrap">
       <button type="button" class="copy-btn" command="--copy-permalink" commandfor="comment-{{.C.ID}}" data-url="/w/{{$.Workspace.Slug}}/issues/{{.C.IssueID}}#comment-{{.C.ID}}" aria-label="{{AriaCopyLink (noun "comment") .C.ID}}">{{CopyLink}}</button>
       <span class="copy-tip" role="status"></span>
     </span>
   </header>
-  {{if .C.Moderation.Hidden}}
-  <p class="comment-hidden-note">{{MarkedAs (noun "comment") (hideReasonLabel .C.Moderation.HiddenReason)}}</p>
+  {{if .C.Hidden}}
+  <p class="comment-hidden-note">{{MarkedAs (noun "comment") (hideReasonLabel .C.HiddenReason)}}</p>
   <details class="comment-hidden-body">
     <summary>{{ShowNoun (noun "comment")}}</summary>
     <div class="comment-body markdown-body">{{markdown .C.Body}}</div>
@@ -131,7 +131,7 @@
    .Base is the post's URL prefix, .Target its li anchor for the
    fragment self-swap, .Noun its kind for accessible names. */}}
 <a class="comment-action" href="{{.Base}}/edit" aria-label="{{AriaEditNoun (noun .Noun) .C.ID}}">{{BtnEdit}}</a>
-{{if .C.Moderation.Hidden}}
+{{if .C.Hidden}}
 <form method="post" action="{{.Base}}/unhide" class="inline-form" data-partial data-partial-mode="replace" data-partial-target="{{.Target}}" data-partial-announce="{{AnnounceRestored (nounTitle .Noun)}}">
   <button type="submit" class="comment-action" aria-label="{{AriaUnhideNoun (noun .Noun) .C.ID}}">{{ActUnhide}}</button>
 </form>
@@ -217,19 +217,19 @@
    from separate tables, so sharing comment-N would collide. A hidden
    thread minimizes only its body — replies and the reply form below
    are other posts and stay visible. */}}
-<li class="card comment{{if .C.IsAnswer}} comment-answer{{end}}{{if .C.Moderation.Hidden}} comment-hidden{{end}}" id="thread-{{.C.ID}}">
+<li class="card comment{{if .C.IsAnswer}} comment-answer{{end}}{{if .C.Hidden}} comment-hidden{{end}}" id="thread-{{.C.ID}}">
   <header class="comment-meta">
     {{if .C.IsAnswer}}<span class="badge badge-answer">{{BadgeAnswer}}</span>{{end}}
     <span class="comment-author">{{authorName .C.Author}}</span>
     <a class="comment-permalink" href="#thread-{{.C.ID}}"><time datetime="{{.C.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .C.CreatedAt}}</time> <span class="visually-hidden">{{PermalinkPost (noun "thread") .C.ID}}</span></a>
-    {{if .C.Moderation.Edited}}· <span class="comment-edited">{{Edited}}</span>{{end}}
+    {{if .C.Edited}}· <span class="comment-edited">{{Edited}}</span>{{end}}
     <span class="copy-wrap">
       <button type="button" class="copy-btn" command="--copy-permalink" commandfor="thread-{{.C.ID}}" data-url="/w/{{.Workspace.Slug}}/discussions/{{.Discussion.ID}}#thread-{{.C.ID}}" aria-label="{{AriaCopyLink (noun "thread") .C.ID}}">{{CopyLink}}</button>
       <span class="copy-tip" role="status"></span>
     </span>
   </header>
-  {{if .C.Moderation.Hidden}}
-  <p class="comment-hidden-note">{{MarkedAs (noun "thread") (hideReasonLabel .C.Moderation.HiddenReason)}}</p>
+  {{if .C.Hidden}}
+  <p class="comment-hidden-note">{{MarkedAs (noun "thread") (hideReasonLabel .C.HiddenReason)}}</p>
   <details class="comment-hidden-body">
     <summary>{{ShowNoun (noun "thread")}}</summary>
     <div class="comment-body markdown-body">{{markdown .C.Body}}</div>
@@ -318,18 +318,18 @@
 {{end}}
 
 {{define "discussion_reply"}}
-<li class="card comment comment-reply{{if .C.Moderation.Hidden}} comment-hidden{{end}}" id="comment-{{.C.ID}}">
+<li class="card comment comment-reply{{if .C.Hidden}} comment-hidden{{end}}" id="comment-{{.C.ID}}">
   <header class="comment-meta">
     <span class="comment-author">{{Commented (authorName .C.Author)}}</span>
     <a class="comment-permalink" href="#comment-{{.C.ID}}"><time datetime="{{.C.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .C.CreatedAt}}</time> <span class="visually-hidden">{{PermalinkPost (noun "comment") .C.ID}}</span></a>
-    {{if .C.Moderation.Edited}}· <span class="comment-edited">{{Edited}}</span>{{end}}
+    {{if .C.Edited}}· <span class="comment-edited">{{Edited}}</span>{{end}}
     <span class="copy-wrap">
       <button type="button" class="copy-btn" command="--copy-permalink" commandfor="comment-{{.C.ID}}" data-url="/w/{{.Workspace.Slug}}/discussions/{{.Discussion.ID}}#comment-{{.C.ID}}" aria-label="{{AriaCopyLink (noun "comment") .C.ID}}">{{CopyLink}}</button>
       <span class="copy-tip" role="status"></span>
     </span>
   </header>
-  {{if .C.Moderation.Hidden}}
-  <p class="comment-hidden-note">{{MarkedAs (noun "comment") (hideReasonLabel .C.Moderation.HiddenReason)}}</p>
+  {{if .C.Hidden}}
+  <p class="comment-hidden-note">{{MarkedAs (noun "comment") (hideReasonLabel .C.HiddenReason)}}</p>
   <details class="comment-hidden-body">
     <summary>{{ShowNoun (noun "comment")}}</summary>
     <div class="comment-body markdown-body">{{markdown .C.Body}}</div>

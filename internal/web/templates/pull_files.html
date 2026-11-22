@@ -42,15 +42,15 @@
   {{if .Comments}}
   <div class="review-comments">
     {{range .Comments}}
-    <div class="card comment{{if .Moderation.Hidden}} comment-hidden{{end}}" id="comment-{{.ID}}">
+    <div class="card comment{{if .Hidden}} comment-hidden{{end}}" id="comment-{{.ID}}">
       <header class="comment-meta">
         <span class="comment-author">{{authorName .Author}}</span>
         <span class="review-anchor"><code>{{OnAnchor (printf "%s:L%d" .Path .Line)}}</code>{{if eq .Side "left"}} {{SideLeft}}{{end}}</span>
         <a class="comment-permalink" href="/pulls/{{.PRID}}#comment-{{.ID}}"><time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .CreatedAt}}</time></a>
-        {{if .Moderation.Edited}}· <span class="comment-edited">{{Edited}}</span>{{end}}
+        {{if .Edited}}· <span class="comment-edited">{{Edited}}</span>{{end}}
       </header>
-      {{if .Moderation.Hidden}}
-      <p class="comment-hidden-note">{{MarkedAs (noun "comment") (hideReasonLabel .Moderation.HiddenReason)}}</p>
+      {{if .Hidden}}
+      <p class="comment-hidden-note">{{MarkedAs (noun "comment") (hideReasonLabel .HiddenReason)}}</p>
       <details class="comment-hidden-body">
         <summary>{{ShowNoun (noun "comment")}}</summary>
         <div class="comment-body markdown-body">{{markdown .Body}}</div>
