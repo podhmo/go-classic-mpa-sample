@@ -210,19 +210,19 @@ func renderIssueList(status int, data issueListPage) {
 
 func renderIssueDetail(status int, data issueDetailPage) {
 	rec := httptest.NewRecorder()
-	NewRenderer().renderIssueDetail(rec, status, data)
+	NewRenderer().renderIssueDetail(rec, status, data, supportedLangs[0])
 	printRec(rec)
 }
 
 func renderIssueForm(status int, data issueFormPage) {
 	rec := httptest.NewRecorder()
-	NewRenderer().renderIssueForm(rec, status, data)
+	NewRenderer().renderIssueForm(rec, status, data, supportedLangs[0])
 	printRec(rec)
 }
 
 func renderIssueDelete(status int, data issueDeletePage) {
 	rec := httptest.NewRecorder()
-	NewRenderer().renderIssueDelete(rec, status, data)
+	NewRenderer().renderIssueDelete(rec, status, data, supportedLangs[0])
 	printRec(rec)
 }
 
@@ -234,49 +234,49 @@ func renderError(status int, heading, message string) {
 
 func renderDiscussionList(status int, data discussionListPage) {
 	rec := httptest.NewRecorder()
-	NewRenderer().renderDiscussionList(rec, status, data)
+	NewRenderer().renderDiscussionList(rec, status, data, supportedLangs[0])
 	printRec(rec)
 }
 
 func renderDiscussionDetail(status int, data discussionDetailPage) {
 	rec := httptest.NewRecorder()
-	NewRenderer().renderDiscussionDetail(rec, status, data)
+	NewRenderer().renderDiscussionDetail(rec, status, data, supportedLangs[0])
 	printRec(rec)
 }
 
 func renderDiscussionForm(status int, data discussionFormPage) {
 	rec := httptest.NewRecorder()
-	NewRenderer().renderDiscussionForm(rec, status, data)
+	NewRenderer().renderDiscussionForm(rec, status, data, supportedLangs[0])
 	printRec(rec)
 }
 
 func renderDiscussionDelete(status int, data discussionDeletePage) {
 	rec := httptest.NewRecorder()
-	NewRenderer().renderDiscussionDelete(rec, status, data)
+	NewRenderer().renderDiscussionDelete(rec, status, data, supportedLangs[0])
 	printRec(rec)
 }
 
 func renderLabels(status int, data labelsPage) {
 	rec := httptest.NewRecorder()
-	NewRenderer().renderLabels(rec, status, data)
+	NewRenderer().renderLabels(rec, status, data, supportedLangs[0])
 	printRec(rec)
 }
 
 func renderLabelForm(status int, data labelFormPage) {
 	rec := httptest.NewRecorder()
-	NewRenderer().renderLabelForm(rec, status, data)
+	NewRenderer().renderLabelForm(rec, status, data, supportedLangs[0])
 	printRec(rec)
 }
 
 func renderCommentEdit(status int, data commentEditPage) {
 	rec := httptest.NewRecorder()
-	NewRenderer().renderCommentEdit(rec, status, data)
+	NewRenderer().renderCommentEdit(rec, status, data, supportedLangs[0])
 	printRec(rec)
 }
 
 func renderCommentDelete(status int, data commentDeletePage) {
 	rec := httptest.NewRecorder()
-	NewRenderer().renderCommentDelete(rec, status, data)
+	NewRenderer().renderCommentDelete(rec, status, data, supportedLangs[0])
 	printRec(rec)
 }
 
@@ -685,6 +685,7 @@ func StoryLabelFormEdit() {
 // id 99); authentication always succeeds as the demo user and API
 // tokens are never valid.
 type storyStore struct {
+	Store
 	issues      map[int64]*store.Issue
 	comments    map[int64][]*store.Comment
 	discussions map[int64]*store.Discussion
@@ -1054,7 +1055,7 @@ func StoryHttpNotFound(w http.ResponseWriter, r *http.Request) {
 // POST would return it — the markup partial-submit.js swaps in.
 func renderFragment(page, name string, status int, data any) {
 	rec := httptest.NewRecorder()
-	NewRenderer().renderFragment(rec, page, name, status, data)
+	NewRenderer().renderFragment(rec, page, name, status, data, supportedLangs[0])
 	printRec(rec)
 }
 
@@ -1314,27 +1315,27 @@ func (storyStore) SetPRCommentHidden(ctx context.Context, prID, commentID int64,
 
 func renderPullList(status int, data pullListPage) {
 	rec := httptest.NewRecorder()
-	NewRenderer().renderPullList(rec, status, data)
+	NewRenderer().renderPullList(rec, status, data, supportedLangs[0])
 	printRec(rec)
 }
 func renderPullDetail(status int, data pullDetailPage) {
 	rec := httptest.NewRecorder()
-	NewRenderer().renderPullDetail(rec, status, data)
+	NewRenderer().renderPullDetail(rec, status, data, supportedLangs[0])
 	printRec(rec)
 }
 func renderPullForm(status int, data pullFormPage) {
 	rec := httptest.NewRecorder()
-	NewRenderer().renderPullForm(rec, status, data)
+	NewRenderer().renderPullForm(rec, status, data, supportedLangs[0])
 	printRec(rec)
 }
 func renderPullFiles(status int, data pullFilesPage) {
 	rec := httptest.NewRecorder()
-	NewRenderer().renderPullFiles(rec, status, data)
+	NewRenderer().renderPullFiles(rec, status, data, supportedLangs[0])
 	printRec(rec)
 }
 func renderPullMerge(status int, data pullMergePage) {
 	rec := httptest.NewRecorder()
-	NewRenderer().renderPullMerge(rec, status, data)
+	NewRenderer().renderPullMerge(rec, status, data, supportedLangs[0])
 	printRec(rec)
 }
 

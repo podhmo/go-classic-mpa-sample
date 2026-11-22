@@ -82,12 +82,12 @@
 {{/* One timeline entry. An anchored comment (review comment) leads with
    its path:line reference and the snapshotted snippet; a plain comment
    is the issue-comment shape. The li self-targets by id. */}}
-<li class="card comment{{if .C.Moderation.Hidden}} comment-hidden{{end}}" id="comment-{{.C.ID}}">
+<li class="card comment{{if .C.Hidden}} comment-hidden{{end}}" id="comment-{{.C.ID}}">
   <header class="comment-meta">
     <span class="comment-author">{{Commented (authorName .C.Author)}}</span>
     {{if .C.Anchored}}<span class="review-anchor">{{OnAnchor (printf "%s:L%d" .C.Path .C.Line)}}{{if eq .C.Side "left"}} {{SideLeft}}{{end}}</span>{{end}}
     <a class="comment-permalink" href="#comment-{{.C.ID}}"><time datetime="{{.C.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .C.CreatedAt}}</time> <span class="visually-hidden">{{PermalinkPost (noun "comment") .C.ID}}</span></a>
-    {{if .C.Moderation.Edited}}· <span class="comment-edited">{{Edited}}</span>{{end}}
+    {{if .C.Edited}}· <span class="comment-edited">{{Edited}}</span>{{end}}
     <span class="copy-wrap">
       <button type="button" class="copy-btn" command="--copy-permalink" commandfor="comment-{{.C.ID}}" data-url="/pulls/{{.C.PRID}}#comment-{{.C.ID}}" aria-label="{{AriaCopyLink (noun "comment") .C.ID}}">{{CopyLink}}</button>
       <span class="copy-tip" role="status"></span>
@@ -96,8 +96,8 @@
   {{if .C.Anchored}}
   {{if .C.DiffSnippet}}<pre class="diff-snippet"><code>{{.C.DiffSnippet}}</code></pre>{{end}}
   {{end}}
-  {{if .C.Moderation.Hidden}}
-  <p class="comment-hidden-note">{{MarkedAs (noun "comment") (hideReasonLabel .C.Moderation.HiddenReason)}}</p>
+  {{if .C.Hidden}}
+  <p class="comment-hidden-note">{{MarkedAs (noun "comment") (hideReasonLabel .C.HiddenReason)}}</p>
   <details class="comment-hidden-body">
     <summary>{{ShowNoun (noun "comment")}}</summary>
     <div class="comment-body markdown-body">{{markdown .C.Body}}</div>
