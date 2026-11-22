@@ -10,6 +10,7 @@
 |---|--------|------|------|------|
 | 25 | nit | 未修正 | 部分更新の append パスで "Last updated" メタ行が stale | PR #49 の Devin Review 指摘から発覚した同種問題: コメント/返信の部分投稿（`createComment`/`createDiscussionComment` の `X-Partial` 応答）は store の `updated_at` を進めるが、fragment は新 `<li>` のみを返すためヘッダの "Last updated" がリロードまで古いまま。answer swap 側は `discussion_meta` ノード同梱で解決済み（PR #49）。append モードは全ノードを挿入先へ追加する設計なので、自己ターゲットする swap ノードを混ぜるにはプロトコル拡張（例: `data-swap` 印付きノードは `replaceWith`）が要る → TODO.md にタスク記録済 |
 | 27 | info | 未修正 | remote CLI（`*client.Client`）が store sentinel エラーに写像しない | 同じ追検証で発見: `cli.Backend` の HTTP 実装は `*client.Error{Status,Message,Fields}` を返し `store.ErrNotFound`/`ErrNotAnswerable` に写像しないため、remote モードでは `errors.Is(err, store.ErrNotFound)` が成立しない。現状 sentinel を判定する消費者は local 限定の TokenStore のみで実害なし（潜在乖離）。根治候補: 404→ErrNotFound 写像 or API の機械可読エラーコード化 → TODO.md にタスク記録済 |
+| 32 | minor | 未修正 | minigo 更新後に `StoryHttpSetCommentAnswerPartial` のみ無限ハング | third_party/minigo を 191eb9e→65ca6f5 に更新したら、answer マークの `X-Partial` POST（`SetThreadAnswer` → `discussion_threads_update` fragment 再描画）だけが VM 内で応答しなくなった（同 POST の redirect 版・他 HTTP story・同 fixture のページ描画は全て正常）。`go test .` も同 story で 10m タイムアウト（`callWindow` 再帰が深まり続ける）。gc コンパイル版は正常。minigo 側に issue 起票済み（podhmo/minigo#1399） |
 
 ## 修正済み
 
