@@ -10,9 +10,13 @@ test-e2e:
 
 ## setup-minigo: clone minigo (unstable, not yet published) into third_party/, fast-forwarding it when it is a plain main checkout
 setup-minigo:
-	@if [ ! -d third_party/minigo ]; then \
+	@if [ ! -e third_party/minigo/.git ]; then \
+		if [ -d third_party/minigo ]; then \
+			echo "error: third_party/minigo exists but is not the minigo clone" >&2; exit 1; \
+		fi; \
 		git clone --depth 1 https://github.com/podhmo/minigo third_party/minigo; \
-	elif [ "$$(git -C third_party/minigo rev-parse --abbrev-ref HEAD)" = "main" ]; then \
+	elif [ "$$(git -C third_party/minigo rev-parse --abbrev-ref HEAD)" = "main" ] && \
+	     case "$$(git -C third_party/minigo remote get-url origin)" in *podhmo/minigo*) true;; *) false;; esac; then \
 		git -C third_party/minigo pull --ff-only || \
 		echo "warning: third_party/minigo could not be updated; using the existing checkout"; \
 	fi
