@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"html/template"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -90,4 +91,19 @@ func (b *Book) appHandler() http.Handler {
 		w.WriteHeader(res.StatusCode)
 		w.Write(body)
 	})
+}
+
+// errorPage mirrors the library's error page: an HTML page carrying the
+// reload script while watching — a page that loses the script never
+// rejoins the reload loop — and plain text otherwise.
+func (b *Book) errorPage(w http.ResponseWriter, status int, err error) {
+	if tag := b.ScriptTag(); tag != "" {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(status)
+		fmt.Fprintf(w, "<pre>%s</pre>%s", template.HTMLEscapeString(err.Error()), tag)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(status)
+	fmt.Fprint(w, err)
 }

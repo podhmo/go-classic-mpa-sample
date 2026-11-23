@@ -20,14 +20,16 @@ make storybook      # http://127.0.0.1:6006 で storybook 的 UI が立つ
 
 > 2026-11-15 更新: minigo 側に共有パッケージ `github.com/podhmo/minigo/storybook` が入った（minigo#1068 / PR #1071–#1077）ため、`cmd/storybook` は自前の探索・描画機構を捨ててそれを利用する形に整理した。変更点は「何を作ったか」「minigo へのフィードバック」節を参照。
 
+> 2026-11-23 更新: minigo 側でパッケージが **`github.com/podhmo/minigo/x/storybook`** に移動し、example 側が持っていた UI（index/grid/`Handler`/`Export`）もライブラリに取り込まれた（minigo#1418）。`cmd/storybook` の `page.go` は削除。アプリ mux のマウントは `Book.Fallback` に差し替え（`GET` の chrome ルート以外が fallback へ流れる）。残る独自分は `bindApp`・`appHandler`・flags のみ。
+
 ## 何を作ったか
 
 ```
 cmd/storybook/          # ネストした Go module（go.mod に replace でローカル参照）
-  main.go               # CLI/HTTP エントリポイント
-  book.go               # storybook.Book の薄いラッパ + /static/ 配信 + bindApp(Setup hook)
-  page.go               # index(ナビ+grid+iframe) と /story, /grid, /static のハンドラ
-  book_test.go          # 探索・描画・grid・export・ヘッダ replay の回帰テスト
+  main.go               # CLI/HTTP エントリポイント（flags + Book.Fallback 設定）
+  book.go               # storybook.Book の薄いラッパ + bindApp(Setup hook)
+  app.go                # アプリ mux を HTTP handler story 経由で返す appHandler + errorPage
+  book_test.go          # appHandler 経由の mount・watch 契約の回帰テスト
 internal/web/
   story_pages.go        # `//go:build story` 付きの story 群（fixtures + StoryXxx 関数 + renderXxx helpers）
 Makefile                # setup-minigo / storybook ターゲット
@@ -53,11 +55,10 @@ Makefile                # setup-minigo / storybook ターゲット
 
 ### storybook サーバ: 共有パッケージ `minigo/storybook` + 薄い差分
 
-当初は `examples/storybook` のハーネスを fork して自前で補っていたが、minigo#1068 のフィードバックから **story 探索（`Discover`）・2 種の story 形式・base engine + `NewSession` fork の描画ループが `github.com/podhmo/minigo/storybook` に引き上げられた**。`cmd/storybook` の `Book` は `*storybook.Book` を埋め込んだ薄いラッパになり、残っている差分は：
+当初は `examples/storybook` のハーネスを fork して自前で補っていたが、minigo#1068 のフィードバックから **story 探索（`Discover`）・2 種の story 形式・base engine + `NewSession` fork の描画ループが `github.com/podhmo/minigo/storybook`（現 `x/storybook`）に引き上げられた**。さらに minigo#1418 で UI（index/grid/`Handler`/`Export`/`Static` 配信）も同パッケージに吸収され、`page.go` の fork は不要になった。`cmd/storybook` の `Book` は `*storybook.Book` を埋め込んだ薄いラッパで、残っている差分は：
 
 - **`Setup: bindApp` hook** — goldmark 系と sqlite 空 bind（後述）を base engine に一度だけ登録する場所。
-- **`/static/` の実アセット配信**（`http.FileServer`）。layout が参照する `/static/app.css` を実ディレクトリから出すので CSS 編集も即反映。
-- **variants grid**（`/grid/<renderFunc>`）— `Story.Group`（story 本体が最後に呼ぶ無修飾関数名）で render メソッド単位にグルーピングし、同一ページの全状態を横並び iframe で表示する。example と同じ仕組み。
+- **`Fallback: appHandler`** — chrome が握らない GET 以外のパス・非 GET をアプリ mux（`web.New(storyStore)`）へ流す mount 点（minigo#1418 で追加）。
 - **per-request な session fork** = 「浅い探索の遅延実行インタプリタが都度実行される」形は変わらず。さらに minigo#1077 で fork 先 session が base engine の FileSet・parse キャッシュ（sha256 再検証で編集検知）・index キャッシュを共有するようになり、再解釈コストが下がった。
 
 ### bind の切り分け（sqlite を実行しない仕組み）
@@ -143,7 +144,7 @@ print 型と使い分け: **見た目（マークアップ）の確認は print 
 | 3. `ParseFS` 不在 + script `fs.FS` が渡せない | **bound `ParseFS` + scriptFS ブリッジ**。アプリ側は `ParseFS` に復帰（`fs.GlobFS`/`SubFS` 等は未橋渡し、必要になればその時に） |
 | 4. bind は手動列挙 | **plain Go 値をそのまま `map[string]runtime.Value` に書ける**（func は自動 WrapFunc）+ パッケージ丸ごとは `minigo gen-intrinsics` で生成可能。今回は 8 個なので手書きのまま |
 | 5. 存在しないフィールドが静かに空になる | **bound template が `can't evaluate field Nonexistent in type ...` でエラーを返す**ようになった。実測: テンプレートに `{{.Nonexistent}}` を足すと `printRec` のガード経由で story が 500 で落ち、typo が検知できる |
-| （探索機構の再実装） | **`github.com/podhmo/minigo/storybook`** として共有化。`Story.Group` で render 関数 grouping、`Setup` hook でアプリ固有 bind |
+| （探索機構の再実装） | **`github.com/podhmo/minigo/x/storybook`** として共有化。`Story.Group` で render 関数 grouping、`Setup` hook でアプリ固有 bind |
 | （per-request 再解釈コスト） | **session fork の共有キャッシュ**（FileSet・parseCache・indexCache）。ベンチでは数倍の高速化 |
 
 ### 今後試したいこと（future work）
@@ -197,7 +198,7 @@ print 型と使い分け: **見た目（マークアップ）の確認は print 
    story として `StoryHttpCreateComment`（POST → fragment or 303）・
    `StoryHttpCreateCommentError`（POST → 422 fragment）を置く。これで
    「サーバが正しい fragment を返す」は storybook で固定できる。
-2. **upstream に request パススルーを足す（真の解消）**: minigo/storybook に
+2. **upstream に request パススルーを足す（真の解消）**: minigo/x/storybook に
    「外側の `*http.Request` を story に渡す」経路（例: `RenderRequest(ctx, name, w, r)`
    や `Render` の request 注入オプション）を追加し、cmd/storybook の mux に
    catch-all を足して `web.New(storyStore)` を実パスに mount する。すると storybook が

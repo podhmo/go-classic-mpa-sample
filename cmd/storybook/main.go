@@ -7,7 +7,7 @@
 // story calls the renderer with dummy view models; storybook interprets
 // internal/web with that tag enabled and captures what the story prints
 // to stdout, or what it writes to a recorder. Story discovery and the
-// render loop live in github.com/podhmo/minigo/storybook; this command
+// render loop live in github.com/podhmo/minigo/x/storybook; this command
 // adds the binds this application needs (see bindApp) and static-asset
 // serving.
 //
@@ -31,7 +31,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/podhmo/minigo/storybook"
+	"github.com/podhmo/minigo/x/storybook"
 )
 
 func main() {
@@ -59,24 +59,36 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 	if *watch && *addr == "" {
 		return errors.New("-watch requires -http")
 	}
-	b := &Book{Book: &storybook.Book{Dir: fs.Arg(0), Tag: *tag, Setup: bindApp}, StaticDir: *staticDir}
+	b := &Book{Book: &storybook.Book{Dir: fs.Arg(0), Tag: *tag, Setup: bindApp, Static: *staticDir}}
+	b.Fallback = b.appHandler()
 	if *src != "" {
 		b.Src = strings.Split(*src, ",")
 	}
 	stories, err := b.Stories()
-	// -http alone tolerates a discovery failure: the server starts anyway
-	// and the index shows the error, so a book with no stories yet (or one
-	// being added live) still serves. Combined with -list or -o the error
-	// stays fatal — those modes would otherwise succeed on an empty book.
-	if err != nil && (*addr == "" || *list || *out != "") {
-		return err
-	}
-	switch {
-	case *list:
+	if *list {
 		for _, s := range stories {
 			fmt.Fprintf(stdout, "%s\t%s\t%s\n", s.Name, s.Pos, s.Doc)
 		}
-		return nil
+		// Story funcs outside the tag guard are invisible to discovery;
+		// name them instead of dropping them silently — even when
+		// discovery itself failed (no stories under the tag), matching
+		// what the index reports.
+		if excluded, e := b.Excluded(); e == nil {
+			for _, s := range excluded {
+				fmt.Fprintf(os.Stderr, "storybook: skipped %s (%s) — not in a //go:build %s file\n", s.Name, s.Pos, *tag)
+			}
+		}
+		return err
+	}
+	// -http alone tolerates a discovery failure: the server starts anyway
+	// and the index shows the error, so a book with no stories yet (or one
+	// being added live) still serves. Combined with -o or a bare render
+	// the error stays fatal — those modes would otherwise succeed on an
+	// empty book.
+	if err != nil && (*addr == "" || *out != "") {
+		return err
+	}
+	switch {
 	case *out != "":
 		return b.Export(ctx, *out, stories)
 	case *addr != "":
@@ -84,7 +96,7 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 			slog.WarnContext(ctx, "story discovery failed; serving anyway", "err", err)
 		}
 		if *watch {
-			if err := b.Watch(ctx, 300*time.Millisecond, b.staticRoot()); err != nil {
+			if err := b.Watch(ctx, 300*time.Millisecond, b.StaticDir()); err != nil {
 				return err
 			}
 		}

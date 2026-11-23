@@ -702,3 +702,10 @@ chrome-devtools の trace insight で計測した結果、CSS はボトルネッ
 - **`fmtTime`/`authorName`/`hideReasonLabel`/`noun`/`repliesClause`/`labelKind`/`labelScope` はロケール別 funcs 束縛**（`parsePages(lang)` 内）。package 級の同名 funcs は削除せず funcMap の既定として残し、`parsePages` がロケール別で上書き。
 - **文中リンク・HTML を含むメッセージは分割方式**: `*Pre`/`Link`/`Tail` や `*HTML` サフィックスのフィールドを使い、HTML を返すフィールドは `template.HTML` を返し各 arg を `HTMLEscaper` 経由。
 - **UGC は未翻訳**: issue 本文・コメント等のユーザ生成コンテンツは `lang`/`dir` 属性も付けずそのまま（TODO 残課題）。
+
+## storybook: UI を `minigo/x/storybook` のライブラリに移譲（2026-11-23、minigo#1418 対応）
+
+- **`page.go` 削除**: index(ナビ+grid+iframe)・`/story`・`/grid`・`/static` のハンドラと `-o` export が minigo 側に吸収され、example が持っていた UI は `Book.Handler()` / `Book.Export(ctx, dir, stories)` として `x/storybook` パッケージに入った。パッケージ自体も `minigo/storybook` → `minigo/x/storybook` へ移動（minigo から浮いた存在との判断）。
+- **アプリ mux の mount は `Book.Fallback`**: chrome が握るのは GET の `/{$}`, `/story/`, `/grid/`, `/static/` と live-reload だけ。それ以外のパスと非 GET が `Fallback http.Handler` に流れるので、`web.New(storyStore)` 相当の appHandler をそのまま差し、catch-all mux を自前で噛ませる必要がなくなった。
+- **残る差分は `bindApp` + `appHandler` + flags + `errorPage` のみ**: cmd/storybook は ~1,950 行から ~390 行へ。story 探索・描画・UI の回帰は upstream のテストに任せ、ローカルは `TestAppMount`（app mount の疎通）と `TestWatchRequiresHTTP` のみ保持。
+- **`Setup` hook は据え置き**: goldmark 系・sqlite 空 bind の注入点は変わらない。

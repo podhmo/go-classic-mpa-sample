@@ -7,7 +7,7 @@ description: Use the moment a task decides to change go-classic-mpa-sample's UI 
 
 In this repo backend and frontend work can split: a page's markup and
 CSS are fully exercised by the homemade storybook (`cmd/storybook`,
-built on `github.com/podhmo/minigo/storybook`), which renders
+built on `github.com/podhmo/minigo/x/storybook`), which renders
 `internal/web` pages against **fake data**. You never need the app
 running — no DB file, no `init`, no seeded records — to try design
 changes. That is the whole point of the tool: the design loop is
