@@ -10,7 +10,7 @@
 がある。ここで言う storybook は npm でインストールする
 [Storybook](https://storybook.js.org/) ではなく、
 `internal/web` のページを **偽のデータで直接レンダリング** して
-一覧・比較するための自前の仕組み（`github.com/podhmo/minigo/storybook`
+一覧・比較するための自前の仕組み（`github.com/podhmo/minigo/x/storybook`
 パッケージベース）を指す。
 
 ポイントは「デザインの試行錯誤にバックエンドの環境構築が要らない」

@@ -7,7 +7,7 @@
 // story calls the renderer with dummy view models; storybook interprets
 // internal/web with that tag enabled and captures what the story prints
 // to stdout, or what it writes to a recorder. Story discovery and the
-// render loop live in github.com/podhmo/minigo/storybook; this command
+// render loop live in github.com/podhmo/minigo/x/storybook; this command
 // adds the binds this application needs (see bindApp) and static-asset
 // serving.
 //
@@ -31,7 +31,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/podhmo/minigo/storybook"
+	"github.com/podhmo/minigo/x/storybook"
 )
 
 func main() {
@@ -59,7 +59,8 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 	if *watch && *addr == "" {
 		return errors.New("-watch requires -http")
 	}
-	b := &Book{Book: &storybook.Book{Dir: fs.Arg(0), Tag: *tag, Setup: bindApp}, StaticDir: *staticDir}
+	b := &Book{Book: &storybook.Book{Dir: fs.Arg(0), Tag: *tag, Setup: bindApp, Static: *staticDir}}
+	b.Fallback = b.appHandler()
 	if *src != "" {
 		b.Src = strings.Split(*src, ",")
 	}
@@ -76,6 +77,13 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 		for _, s := range stories {
 			fmt.Fprintf(stdout, "%s\t%s\t%s\n", s.Name, s.Pos, s.Doc)
 		}
+		// Story funcs outside the tag guard are invisible to discovery;
+		// name them instead of dropping them silently.
+		if excluded, e := b.Excluded(); e == nil {
+			for _, s := range excluded {
+				fmt.Fprintf(os.Stderr, "storybook: skipped %s (%s) — not in a //go:build %s file\n", s.Name, s.Pos, *tag)
+			}
+		}
 		return nil
 	case *out != "":
 		return b.Export(ctx, *out, stories)
@@ -84,7 +92,7 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 			slog.WarnContext(ctx, "story discovery failed; serving anyway", "err", err)
 		}
 		if *watch {
-			if err := b.Watch(ctx, 300*time.Millisecond, b.staticRoot()); err != nil {
+			if err := b.Watch(ctx, 300*time.Millisecond, b.StaticDir()); err != nil {
 				return err
 			}
 		}
