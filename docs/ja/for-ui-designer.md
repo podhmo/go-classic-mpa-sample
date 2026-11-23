@@ -83,9 +83,11 @@ JS を配信しない）。エラーで 500 になったページも watch 中�
 4. 新しいページ/ハンドラ → `renderXxx` helper と `StoryXxx` を追加。
    ルート自体（status・ヘッダ）が重要なら `StoryHttpXxx` も。
 5. 狭幅が気になる → ツールバーの幅切替で 360px にする（grid 内では各セルがその幅になる）。
-6. 回帰確認 → `cd cmd/storybook && go test ./...` がコーパス全体の
-   不変条件（全 story が描画できる、グループが潰れない、status/CSP が
-   リプレイされる）を検査する。story 追加時にテストを編集する必要はない。
+6. 回帰確認 → `cd cmd/storybook && go test ./...` が mount の疎通を
+   検査する。コーパス全体の不変条件（全 story が描画できる、
+   グループが潰れない、status/CSP がリプレイされる）は
+   `github.com/podhmo/minigo/x/storybook` 側のテストに移譲済み
+   （minigo#1418）。story 追加時にテストを編集する必要はない。
 
 ## JS について
 
