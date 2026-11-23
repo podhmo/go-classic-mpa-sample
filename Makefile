@@ -8,13 +8,13 @@ test:
 test-e2e:
 	go test -tags=e2e -v -run 'TestCLIE2E' ./internal/e2etests/
 
-## setup-minigo: clone minigo (unstable, not yet published) into third_party/, or update it to latest main
+## setup-minigo: clone minigo (unstable, not yet published) into third_party/, fast-forwarding it when it is a plain main checkout
 setup-minigo:
 	@if [ ! -d third_party/minigo ]; then \
 		git clone --depth 1 https://github.com/podhmo/minigo third_party/minigo; \
-	else \
-		git -C third_party/minigo fetch --depth 1 origin main && \
-		git -C third_party/minigo checkout FETCH_HEAD; \
+	elif [ "$$(git -C third_party/minigo rev-parse --abbrev-ref HEAD)" = "main" ]; then \
+		git -C third_party/minigo pull --ff-only || \
+		echo "warning: third_party/minigo could not be updated; using the existing checkout"; \
 	fi
 
 ## storybook: serve the internal/web stories on :6006 (needs `make setup-minigo` first)
