@@ -16,7 +16,7 @@ setup-minigo:
 		fi; \
 		git clone --depth 1 https://github.com/podhmo/minigo third_party/minigo; \
 	elif [ "$$(git -C third_party/minigo rev-parse --abbrev-ref HEAD)" = "main" ] && \
-	     case "$$(git -C third_party/minigo remote get-url origin)" in *podhmo/minigo*) true;; *) false;; esac; then \
+	     grep -q '^module github.com/podhmo/minigo' third_party/minigo/go.mod 2>/dev/null; then \
 		git -C third_party/minigo pull --ff-only || \
 		echo "warning: third_party/minigo could not be updated; using the existing checkout"; \
 	fi
