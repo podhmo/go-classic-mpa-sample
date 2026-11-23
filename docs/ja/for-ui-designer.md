@@ -84,10 +84,9 @@ JS を配信しない）。エラーで 500 になったページも watch 中�
    ルート自体（status・ヘッダ）が重要なら `StoryHttpXxx` も。
 5. 狭幅が気になる → ツールバーの幅切替で 360px にする（grid 内では各セルがその幅になる）。
 6. 回帰確認 → `cd cmd/storybook && go test ./...` が mount の疎通を
-   検査する。コーパス全体の不変条件（全 story が描画できる、
-   グループが潰れない、status/CSP がリプレイされる）は
-   `github.com/podhmo/minigo/x/storybook` 側のテストに移譲済み
-   （minigo#1418）。story 追加時にテストを編集する必要はない。
+   検査する（アプリ story コーパス全体の描画・グルーピングの回帰
+   テストは fork の page.go と一緒に削除。chrome 側の回帰は
+   `github.com/podhmo/minigo/x/storybook` のテストが持つ）。
 
 ## JS について
 
