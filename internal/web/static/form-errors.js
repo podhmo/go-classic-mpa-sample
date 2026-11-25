@@ -53,7 +53,11 @@ import { bind } from "./dom-hooks.js";
     // reply cancel can hide it inside closed <details>; either way the
     // stale error must not be announced after the fact.
     announceTimer = setTimeout(() => {
-      const visible = typeof field.checkVisibility !== "function" || field.checkVisibility();
+      // Older engines lack checkVisibility(); closed <details> can still
+      // report a rect there, so reject that ancestor explicitly too.
+      const visible = typeof field.checkVisibility === "function"
+        ? field.checkVisibility()
+        : !field.closest("details:not([open])") && field.getClientRects().length > 0;
       if (announcedField === field && field.isConnected && visible) {
         announcer.textContent = label + spokenText(error);
       }

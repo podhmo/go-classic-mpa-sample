@@ -44,10 +44,31 @@ document.addEventListener(
 // Blurring an invalid textarea can reveal its error and push the cancel
 // button down before mouseup, which would retarget the click away from it.
 // Capture the pointer while it is down so the activation still reaches the
-// button it started on.
+// button it started on — unless the user drags the pointer away first.
+const pressPoints = new WeakMap();
+const draggedOff = new WeakSet();
 document.addEventListener("pointerdown", (event) => {
   const btn = event.target.closest?.("[data-reply-cancel]");
-  if (btn) btn.setPointerCapture(event.pointerId);
+  if (!btn) return;
+  pressPoints.set(btn, { x: event.clientX, y: event.clientY });
+  btn.setPointerCapture(event.pointerId);
+});
+document.addEventListener("pointerup", (event) => {
+  const btn = event.target.closest?.("[data-reply-cancel]");
+  if (!btn) return;
+  const start = pressPoints.get(btn);
+  pressPoints.delete(btn);
+  if (!start) return;
+  if (btn.hasPointerCapture(event.pointerId)) btn.releasePointerCapture(event.pointerId);
+  const rect = btn.getBoundingClientRect();
+  const inside = event.clientX >= rect.left && event.clientX <= rect.right &&
+    event.clientY >= rect.top && event.clientY <= rect.bottom;
+  const moved = Math.hypot(event.clientX - start.x, event.clientY - start.y) > 4;
+  if (moved && !inside) draggedOff.add(btn);
+});
+document.addEventListener("pointercancel", (event) => {
+  const btn = event.target.closest?.("[data-reply-cancel]");
+  if (btn) pressPoints.delete(btn);
 });
 
 // Cancel collapses the open reply box back to the input bar and returns
@@ -57,6 +78,7 @@ document.addEventListener("pointerdown", (event) => {
 document.addEventListener("click", (event) => {
   const btn = event.target.closest?.("[data-reply-cancel]");
   if (!btn) return;
+  if (draggedOff.delete(btn)) return;
   const details = btn.closest("details.reply-details");
   if (!details) return;
   details.open = false;

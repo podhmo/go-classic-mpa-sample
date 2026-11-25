@@ -715,6 +715,6 @@ chrome-devtools の trace insight で計測した結果、CSS はボトルネッ
 go-spa-sample#23 で修正された SPA 側の comment mutation regression を MPA 側に対照し、部分更新固有の3件を修正した。
 
 - **送信中は入力コントロールも lock する**: 従来は submit ボタンのみ無効化していたため、fetch 中に追記できてしまい、成功時の `form.reset()` がその追記を消していた。FormData を先に捕捉し（disabled control は送信対象外）、input/select/textarea を元の disabled 状態を記録して lock。成功 reset と失敗復帰の直前に unlock する。
-- **遅延エラー読み上げはフィールドの存亡と可視性を見る**: blur/change の 500ms 後に live region へ書く間に partial swap でフィールドが消えたり、reply cancel で `<details>` が畳まれたりすると stale なエラーを読んでいた。timer 発火時に同一フィールドかつ `isConnected` / `checkVisibility()` の場合だけ読み上げる。
-- **invalid な返信 Cancel は pointer capture で押せるようにする**: blur で `:user-invalid` のエラー行が出ると Cancel が mouseup 前に押し下げられ、マウスクリックが外れていた。`pointerdown` 時に Cancel ボタンへ pointer capture を設定し、開始したボタンへ activation を届ける。
+- **遅延エラー読み上げはフィールドの存亡と可視性を見る**: blur/change の 500ms 後に live region へ書く間に partial swap でフィールドが消えたり、reply cancel で `<details>` が畳まれたりすると stale なエラーを読んでいた。timer 発火時に同一フィールドかつ `isConnected` / `checkVisibility()` の場合だけ読み上げる。`checkVisibility()` が無い環境でも closed `<details>` 内なら読まない。
+- **invalid な返信 Cancel は pointer capture で押せるようにする**: blur で `:user-invalid` のエラー行が出ると Cancel が mouseup 前に押し下げられ、マウスクリックが外れていた。`pointerdown` 時に Cancel ボタンへ pointer capture を設定し、開始したボタンへ activation を届ける。pointer を掴んだまま外へ drag して離した場合は cancel しない。
 - **検証**: 実サーバ + playwright-cli で、遅延 POST 中の textarea lock・成功後の reset/focus 復帰・network failure のドラフト保持・422 の draft/error 復元・reply POST・valid/invalid cancel・cancel 後の stale announcement 抑止を確認。
