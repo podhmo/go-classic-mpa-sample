@@ -41,6 +41,15 @@ document.addEventListener(
   true
 );
 
+// Blurring an invalid textarea can reveal its error and push the cancel
+// button down before mouseup, which would retarget the click away from it.
+// Capture the pointer while it is down so the activation still reaches the
+// button it started on.
+document.addEventListener("pointerdown", (event) => {
+  const btn = event.target.closest?.("[data-reply-cancel]");
+  if (btn) btn.setPointerCapture(event.pointerId);
+});
+
 // Cancel collapses the open reply box back to the input bar and returns
 // focus to it (the bar reappears once open is removed). Without JS the
 // button is inert and the box simply stays open — same as before it
@@ -91,6 +100,24 @@ function resetPostedForm(form) {
   }
 }
 
+// Lock every input while the request is in flight. A successful append
+// resets the form, so an edit typed behind the pending request would be
+// mistaken for part of the just-posted body and then erased.
+function lockControls(form) {
+  const controls = [...form.querySelectorAll("input, select, textarea")];
+  const states = new Map();
+  for (const control of controls) {
+    states.set(control, control.disabled);
+    control.disabled = true;
+  }
+  let locked = true;
+  return () => {
+    if (!locked) return;
+    locked = false;
+    for (const control of controls) control.disabled = states.get(control);
+  };
+}
+
 // Replace mode: each element node in the fragment self-targets —
 // id="comment-3" replaces #comment-3 — so one response can refresh
 // several spots at once (an answer mark re-renders both the newly marked
@@ -130,6 +157,11 @@ async function postPartial(form) {
     btn.disabled = true;
   }
   form.querySelector("[data-submit-error]")?.remove();
+  // FormData must be captured before locking: disabled controls are
+  // omitted from submission. Unlocking is idempotent because the append
+  // path re-enables the textarea just before resetting and refocusing it.
+  const body = new URLSearchParams(new FormData(form));
+  const unlockControls = lockControls(form);
   // Indeterminate <progress>: correct AT semantics for free (guide
   // spinner) and no value attribute needed.
   const progress = document.createElement("progress");
@@ -141,7 +173,7 @@ async function postPartial(form) {
       // URLSearchParams keeps the wire format identical to a plain form
       // submit (application/x-www-form-urlencoded) — a FormData body
       // would switch it to multipart, a second parser path to break.
-      body: new URLSearchParams(new FormData(form)),
+      body,
       headers: { "X-Partial": "1" },
     });
     const nodes = parseFragment(await res.text()).filter(
@@ -222,6 +254,7 @@ async function postPartial(form) {
     });
 
     const added = appended;
+    unlockControls();
     resetPostedForm(form);
     // A reply box collapses back to its input bar once the post lands;
     // focus moves to the bar like the Cancel button does. Top-level
@@ -245,6 +278,7 @@ async function postPartial(form) {
     showSubmitError(form, t("comment_post_failed"));
   } finally {
     progress.remove();
+    unlockControls();
     delete form.dataset.busy;
     form.removeAttribute("aria-busy");
     for (const btn of form.querySelectorAll('button[type="submit"]')) {

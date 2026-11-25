@@ -47,10 +47,16 @@ import { bind } from "./dom-hooks.js";
     clearTimeout(announceTimer);
     announcer.textContent = "";
     announcedField = el;
+    const field = el;
     // Wait until the screen reader has announced the field that receives
-    // focus next.
+    // focus next. A partial swap can remove the field meanwhile, and a
+    // reply cancel can hide it inside closed <details>; either way the
+    // stale error must not be announced after the fact.
     announceTimer = setTimeout(() => {
-      announcer.textContent = label + spokenText(error);
+      const visible = typeof field.checkVisibility !== "function" || field.checkVisibility();
+      if (announcedField === field && field.isConnected && visible) {
+        announcer.textContent = label + spokenText(error);
+      }
     }, 500);
   };
 
