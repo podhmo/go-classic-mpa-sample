@@ -49,7 +49,8 @@ const pressPoints = new WeakMap();
 const draggedOff = new WeakSet();
 document.addEventListener("pointerdown", (event) => {
   const btn = event.target.closest?.("[data-reply-cancel]");
-  if (!btn) return;
+  if (!btn || event.button !== 0) return;
+  draggedOff.delete(btn);
   pressPoints.set(btn, { x: event.clientX, y: event.clientY });
   btn.setPointerCapture(event.pointerId);
 });
