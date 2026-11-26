@@ -1435,6 +1435,7 @@ func StoryPullFiles() {
 			CommentPath:  "internal/web/pulls.go",
 			StatusLetter: "A",
 			Anchor:       "file-internal-web-pulls-go",
+			Truncated:    true,
 			Lines: []diffLine{
 				{Kind: "hunk", Text: "@@ -0,0 +1,3 @@"},
 				{Kind: "add", NewNo: 1, Text: "+package web"},
