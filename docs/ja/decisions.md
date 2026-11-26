@@ -877,5 +877,5 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 ## ログイン後の復帰先（2026-11-27、owner improvements 対応）
 
 - **layout はページ view model と request state を分ける**: `layoutData{Data, CurrentPath}` を shared layout にだけ渡し、head/content template は従来どおり page data を受ける。72 ある typed render 呼び出しを個別変更せず、ResponseWriter wrapper が現在の path+query を renderer へ届ける。dispatch 時に評価すると form size cap より先に body parse が始まるため request 参照だけを持ち、render 時に遅延評価する。SSE flush のため wrapper は `Unwrap` を実装する。
-- **anonymous nav の login/register は現在 URL を `next` に入れる**: query 込みで `url.QueryEscape` し、既存の `safeNext` による same-site path 制限を通す。auth form 自体は既存 hidden `next` を使い、validation 再描画でも落とさない。
+- **anonymous nav の login/register は現在 URL を `next` に入れる**: query 込みで `url.QueryEscape` し、既存の `safeNext` による same-site path 制限を通す。auth form は hidden `next` に加えて action query にも同じ値を置き、validation 再描画でも落とさない（`withUser` の shallow copy 経由でも render 時に body を再読みしないため）。
 - **login/register の切り替え link も `next` を引き継ぐ**: 片方の画面で間違いに気付いても元ページ情報が消えない。auth page 上の header link では現在の auth URL ではなく既存 `next` を使い、`/login?next=/login?...` の入れ子を作らない。

@@ -11,6 +11,19 @@ import (
 	"github.com/podhmo/go-classic-mpa-sample/internal/auth"
 )
 
+type panicOnRead struct{}
+
+func (panicOnRead) Read([]byte) (int, error) { panic("request body was read") }
+func (panicOnRead) Close() error             { return nil }
+
+func TestRenderCurrentPathDoesNotParsePostBody(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "http://example.test/preview", nil)
+	req.Body = panicOnRead{}
+	if got := renderCurrentPath(req); got != "/issues" {
+		t.Fatalf("renderCurrentPath = %q, want /issues", got)
+	}
+}
+
 func TestSessionLookupFailureIs500NotAnonymous(t *testing.T) {
 	srv, f := newTestServer(t)
 	u := f.addUser(t, "alice", "password123")
@@ -143,6 +156,9 @@ func TestAuthModeSwitchPreservesNext(t *testing.T) {
 	}
 	if !strings.Contains(body, `name="next" value="/w/default/issues/3"`) {
 		t.Error("login form dropped hidden next")
+	}
+	if !strings.Contains(body, `action="/login?next=%2Fw%2Fdefault%2Fissues%2F3"`) {
+		t.Error("login form action dropped next")
 	}
 	if !strings.Contains(body, `href="/register?next=%2Fw%2Fdefault%2Fissues%2F3"`) {
 		t.Error("login footer link dropped next")

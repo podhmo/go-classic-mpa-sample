@@ -395,9 +395,18 @@ func (w renderPathWriter) renderPath() string { return renderCurrentPath(w.req) 
 // renderCurrentPath avoids nesting one auth redirect inside another when
 // the header is rendered on the login/register page itself.
 func renderCurrentPath(r *http.Request) string {
+	if (r.URL.Path == "/login" || r.URL.Path == "/register") && r.URL.Query().Get("next") != "" {
+		return safeNext(r.URL.Query().Get("next"))
+	}
 	if r.Method == http.MethodPost {
-		if next := r.PostFormValue("next"); next != "" {
-			return safeNext(next)
+		// Never trigger parsing here: withUser hands handlers a shallow request
+		// copy, so this original request can still have an uncapped unread body.
+		// Auth forms put next in their action query; PostForm is only a no-read
+		// convenience when the handler already parsed the same request object.
+		if r.PostForm != nil {
+			if next := r.PostForm.Get("next"); next != "" {
+				return safeNext(next)
+			}
 		}
 		// Validation errors are rendered from POST-only mutation URLs. Use the
 		// submitting page as the return destination; without it there is no
@@ -408,9 +417,6 @@ func renderCurrentPath(r *http.Request) string {
 			}
 		}
 		return "/issues"
-	}
-	if (r.URL.Path == "/login" || r.URL.Path == "/register") && r.URL.Query().Get("next") != "" {
-		return safeNext(r.URL.Query().Get("next"))
 	}
 	return r.URL.RequestURI()
 }

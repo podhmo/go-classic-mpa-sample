@@ -104,7 +104,7 @@ func (h *handler) registerForm(w http.ResponseWriter, r *http.Request) {
 	h.r.renderAuthForm(w, http.StatusOK, authFormPage{
 		Title:       msgFor(r).AuthRegister,
 		Heading:     msgFor(r).AuthRegisterHeading,
-		Action:      "/register",
+		Action:      authURL("/register", safeNext(r.URL.Query().Get("next"))),
 		SubmitLabel: msgFor(r).AuthRegister,
 		Next:        safeNext(r.URL.Query().Get("next")),
 		NewPassword: true,
@@ -127,7 +127,7 @@ func (h *handler) register(w http.ResponseWriter, r *http.Request) {
 	page := authFormPage{
 		Title:       msgFor(r).AuthRegister,
 		Heading:     msgFor(r).AuthRegisterHeading,
-		Action:      "/register",
+		Action:      authURL("/register", next),
 		SubmitLabel: msgFor(r).AuthRegister,
 		Name:        name,
 		Next:        next,
@@ -189,7 +189,7 @@ func (h *handler) loginForm(w http.ResponseWriter, r *http.Request) {
 	h.r.renderAuthForm(w, http.StatusOK, authFormPage{
 		Title:       msgFor(r).AuthLogin,
 		Heading:     msgFor(r).AuthLogin,
-		Action:      "/login",
+		Action:      authURL("/login", safeNext(r.URL.Query().Get("next"))),
 		SubmitLabel: msgFor(r).AuthLogin,
 		Next:        safeNext(r.URL.Query().Get("next")),
 		OtherLabel:  msgFor(r).AuthOtherRegister,
@@ -212,7 +212,7 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 	page := authFormPage{
 		Title:       msgFor(r).AuthLogin,
 		Heading:     msgFor(r).AuthLogin,
-		Action:      "/login",
+		Action:      authURL("/login", next),
 		SubmitLabel: msgFor(r).AuthLogin,
 		Name:        name,
 		Next:        next,
