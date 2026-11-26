@@ -429,7 +429,7 @@ func StoryIssueDetailMarkdownRich() {
 | ---- | ----- |
 | one  | 1     |
 
-![placeholder](/static/app.css)
+![placeholder](/static/markdown-fixture.svg)
 
 ---
 `
