@@ -172,6 +172,7 @@ func TestWantsJapaneseQValues(t *testing.T) {
 		{"en-US;q=0.7, ja-JP;q=0.7", false},
 		{"ja;q=0", false},
 		{"ja;q=2, en;q=0.1", false},
+		{"ja;q=0.8, en;q=NaN", true},
 		{"fr, en;q=0.5", false},
 	} {
 		if got := wantsJapanese(tc.header); got != tc.want {

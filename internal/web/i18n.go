@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"math"
 	"net/http"
 	"net/url"
 	"path"
@@ -1381,7 +1382,7 @@ func parseAcceptLanguagePart(part string) (string, float64, bool) {
 			continue
 		}
 		parsed, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
-		if err != nil || parsed < 0 || parsed > 1 {
+		if err != nil || math.IsNaN(parsed) || parsed < 0 || parsed > 1 {
 			return "", 0, false
 		}
 		q = parsed
