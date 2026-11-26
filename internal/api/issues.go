@@ -367,13 +367,42 @@ func (h *handler) resolveLabelIDs(r *http.Request, ws *store.Workspace, kind str
 	if len(names) == 0 {
 		return ids, nil, nil
 	}
+	unique := make([]string, 0, len(names))
+	seen := map[string]bool{}
 	for _, n := range names {
-		label, err := h.store.LabelByName(r.Context(), ws.ID, kind, n)
+		if !seen[n] {
+			seen[n] = true
+			unique = append(unique, n)
+		}
+	}
+	if len(unique) == 1 {
+		label, err := h.store.LabelByName(r.Context(), ws.ID, kind, unique[0])
 		if err == store.ErrNotFound {
-			return nil, map[string]string{"labels": fmt.Sprintf("Unknown label: %s", n)}, nil
+			return nil, map[string]string{"labels": fmt.Sprintf("Unknown label: %s", unique[0])}, nil
 		}
 		if err != nil {
 			return nil, nil, err
+		}
+		for range names {
+			ids = append(ids, label.ID)
+		}
+		return ids, nil, nil
+	}
+
+	all, err := h.store.ListLabels(r.Context(), ws.ID, kind)
+	if err != nil {
+		return nil, nil, err
+	}
+	byName := map[string]*store.Label{}
+	for _, l := range all {
+		if old := byName[l.Name]; old == nil || (old.WorkspaceID == 0 && l.WorkspaceID == ws.ID) {
+			byName[l.Name] = l
+		}
+	}
+	for _, n := range names {
+		label := byName[n]
+		if label == nil {
+			return nil, map[string]string{"labels": fmt.Sprintf("Unknown label: %s", n)}, nil
 		}
 		ids = append(ids, label.ID)
 	}
