@@ -356,25 +356,44 @@ function start(section) {
       return;
     }
     flushing = true;
+    // Snapshot and clear the batch before awaiting. Hints that arrive while
+    // fragment fetches are in flight must survive for the next flush; they
+    // may describe writes that happened after those fetches read the DB.
+    const batch = {
+      ids: new Set(pending.ids),
+      replies: new Map(
+        [...pending.replies].map(([threadId, ids]) => [threadId, new Set(ids)]),
+      ),
+      answerIds: new Set(pending.answerIds),
+      removes: [...pending.removes],
+      article: pending.article,
+      deleted: pending.deleted,
+      resync: pending.resync,
+    };
+    pending.ids.clear();
+    pending.replies.clear();
+    pending.answerIds.clear();
+    pending.removes.length = 0;
+    pending.article = pending.deleted = pending.resync = false;
     try {
-      if (pending.deleted) {
+      if (batch.deleted) {
         gone = true;
         disconnect();
         showDeleted();
         return;
       }
-      if (pending.resync) {
+      if (batch.resync) {
         try {
           await resync();
         } catch {
           // A dropped network is recovered by EventSource's retry/open path.
         }
       } else {
-        if (pending.article) {
+        if (batch.article) {
           await refreshArticle(true);
         }
-        if (pending.answerIds.size) {
-          const ids = [...pending.answerIds].join(",");
+        if (batch.answerIds.size) {
+          const ids = [...batch.answerIds].join(",");
           const appended = await applyFragment(
             `${fragBase}/threads?ids=${ids}`,
             () => list,
@@ -382,8 +401,8 @@ function start(section) {
           if (appended?.length) highlight(appended);
           announce(t("answer_updated"));
         }
-        if (pending.ids.size) {
-          const ids = [...pending.ids].join(",");
+        if (batch.ids.size) {
+          const ids = [...batch.ids].join(",");
           const appended = await applyFragment(
             `${fragBase}/${fragPath}?ids=${ids}`,
             () => list,
@@ -393,7 +412,7 @@ function start(section) {
             announce(t(kind === "discussion" ? "new_thread" : "new_comment"));
           }
         }
-        for (const [threadId, ids] of pending.replies) {
+        for (const [threadId, ids] of batch.replies) {
           const ol = section.querySelector(
             `#thread-${CSS.escape(String(threadId))} .comment-replies`,
           );
@@ -408,7 +427,7 @@ function start(section) {
             announce(t("new_reply"));
           }
         }
-        for (const { target, parent } of pending.removes) {
+        for (const { target, parent } of batch.removes) {
           const node = document.getElementById(
             parent || kind !== "discussion"
               ? `comment-${target}`
@@ -422,7 +441,7 @@ function start(section) {
             ol.hidden = true;
           }
         }
-        if (pending.removes.length) {
+        if (batch.removes.length) {
           // Recount top-level items like resync does (reply removals
           // leave it untouched — replies are nested, not :scope > li).
           const n = list.querySelectorAll(":scope > li").length;
@@ -438,11 +457,6 @@ function start(section) {
       }
     } finally {
       flushing = false;
-      pending.ids.clear();
-      pending.replies.clear();
-      pending.answerIds.clear();
-      pending.removes.length = 0;
-      pending.article = pending.deleted = pending.resync = false;
       if (queued) {
         queued = false;
         poke();
