@@ -221,8 +221,11 @@ compare_mode() {
 			mode_fail=1
 		fi
 	done
-	[ "$mode_fail" -eq 0 ] && echo "OK($mode): all shots within $PIXEL_THRESHOLD px"
-	return "$mode_fail"
+	if [ "$mode_fail" -eq 0 ]; then
+		echo "OK($mode): all shots within $PIXEL_THRESHOLD px"
+	fi
+	comparison_failed=$mode_fail
+	return 0
 }
 
 case "${1:-}" in
@@ -243,7 +246,8 @@ case "${1:-}" in
 		[ "$missing" -eq 0 ] || exit 1
 		overall_fail=0
 		for mode in $modes; do
-			compare_mode "$mode" || overall_fail=1
+			compare_mode "$mode"
+			[ "$comparison_failed" -eq 0 ] || overall_fail=1
 		done
 		exit "$overall_fail"
 		;;
