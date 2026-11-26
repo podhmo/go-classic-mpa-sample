@@ -378,10 +378,15 @@ func TestUpdatePinFailureKeepsGitError(t *testing.T) {
 		t.Fatalf("pin: %v", err)
 	}
 
-	// Replacing the ref's parent directory with a regular file makes the
-	// update-ref lock unwritable even when tests run as root.
+	// Keep the pin readable through packed-refs, then replace its loose
+	// ref parent with a regular file: RevParse still sees the existing
+	// pin, but update-ref cannot create its lock even as root.
+	git(t, dir, "pack-refs", "--all")
 	lockDir := filepath.Join(dir, ".git", "refs", "zatudan", "pr", "42")
 	if err := os.RemoveAll(lockDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(lockDir), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(lockDir, []byte("not a directory"), 0o644); err != nil {
