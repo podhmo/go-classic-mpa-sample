@@ -720,3 +720,10 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 - **遅延エラー読み上げはフィールドの存亡と可視性を見る**: blur/change の 500ms 後に live region へ書く間に partial swap でフィールドが消えたり、reply cancel で `<details>` が畳まれたりすると stale なエラーを読んでいた。timer 発火時に同一フィールドかつ `isConnected` / `checkVisibility()` の場合だけ読み上げる。`checkVisibility()` が無い環境でも closed `<details>` 内なら読まない。
 - **invalid な返信 Cancel は pointer capture で押せるようにする**: blur で `:user-invalid` のエラー行が出ると Cancel が mouseup 前に押し下げられ、マウスクリックが外れていた。`pointerdown` 時に Cancel ボタンへ pointer capture を設定し、開始したボタンへ activation を届ける。pointer を掴んだまま外へ drag して離した場合は cancel しない。
 - **検証**: 実サーバ + playwright-cli で、遅延 POST 中の textarea lock・成功後の reset/focus 復帰・network failure のドラフト保持・422 の draft/error 復元・reply POST・valid/invalid cancel・cancel 後の stale announcement 抑止を確認。
+
+## open questions の回答（2026-11-26、podhmo）
+
+- **一覧のライブ化は行わない**: SSE による passive banner や行の自動差し替えは一覧へ入れない。
+- **空状態導線と一括操作は今は入れない**: 「作成する」「フィルタを解除」リンク追加も、close/label 一括操作も行わない。
+- **writing experience は3機能を1PRにまとめる**: Markdown Preview、localStorage 下書き、`#12` リンク化を同じ PR で扱う。下書きは投稿成功時だけ自動削除し、保持期限は設けない。
+- **モバイル nav は `<details>` メニューに畳む**: キーボード shortcuts は今は入れない。最後に見た workspace の cookie 復帰は後回し。
