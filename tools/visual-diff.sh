@@ -32,6 +32,7 @@ STORIES=$(grep -oE '/story/[A-Za-z0-9_-]+' /tmp/visual-diff-index.html | sed 's|
 capture() {
 	out_dir=$1
 	mkdir -p "$out_dir"
+	rm -f "$out_dir"/*.png
 	tmp_js=$(mktemp --suffix=.js)
 	# %STORIES% / %BASE% / %OUTDIR% are substituted below; run-code only
 	# passes `page`, so everything else is baked into the file.
