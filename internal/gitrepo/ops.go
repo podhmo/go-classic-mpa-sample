@@ -350,7 +350,10 @@ func (r *Repo) CheckMerge(ctx context.Context, base, head string) (*MergeCheck, 
 }
 
 // CheckMergeResolved is CheckMerge for a pair already resolved to full commit
-// SHAs. Its result is immutable and therefore cached by (baseSHA, headSHA).
+// SHAs. Clean results are cached by (baseSHA, headSHA); conflicts and unknown
+// results are recomputed because merge-related config or shallow history can
+// change while the server is running, and a stale conflict would hide the
+// merge form even though the merge itself pre-flights again before mutating.
 func (r *Repo) CheckMergeResolved(ctx context.Context, baseSHA, headSHA string) (*MergeCheck, error) {
 	if !isCommitSHA(baseSHA) || !isCommitSHA(headSHA) {
 		return nil, ErrBadRef
@@ -365,7 +368,6 @@ func (r *Repo) CheckMergeResolved(ctx context.Context, baseSHA, headSHA string) 
 		return nil, err
 	}
 	if !r.HasMergeTree() || r.Shallow {
-		r.pairCache.putMergeCheck(key, c)
 		return c, nil
 	}
 	res, err := r.run(ctx, nil, "merge-tree", "--write-tree", "--name-only", "--no-messages", "-z", c.BaseSHA, c.HeadSHA)
@@ -386,7 +388,6 @@ func (r *Repo) CheckMergeResolved(ctx context.Context, baseSHA, headSHA string) 
 	}
 	c.Status = MergeConflicting
 	c.Files = files
-	r.pairCache.putMergeCheck(key, c)
 	return c, nil
 }
 

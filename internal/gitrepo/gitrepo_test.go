@@ -396,6 +396,42 @@ func TestLogDoesNotCacheShallowHistory(t *testing.T) {
 	}
 }
 
+func TestConflictingMergeCheckIsNotCached(t *testing.T) {
+	ctx := context.Background()
+	dir := initRepo(t)
+	git(t, dir, "checkout", "-qb", "feat")
+	write(t, dir, "a.txt", "feat-side\n")
+	git(t, dir, "checkout", "-q", "main")
+	write(t, dir, "a.txt", "main-side\n")
+	r := openRepo(t, dir)
+	logPath := installGitLogger(t)
+
+	baseSHA, headSHA, err := r.RevParsePair(ctx, "main", "feat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	check, err := r.CheckMergeResolved(ctx, baseSHA, headSHA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if check.Status != MergeConflicting {
+		t.Fatalf("first check = %+v, want conflicting", check)
+	}
+	if err := os.WriteFile(logPath, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	check, err = r.CheckMergeResolved(ctx, baseSHA, headSHA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if check.Status != MergeConflicting {
+		t.Fatalf("second check = %+v, want conflicting", check)
+	}
+	if got := countLoggedGitCommand(loggedGitCommands(t, logPath), "merge-tree"); got != 1 {
+		t.Fatalf("conflict merge-tree invocations = %d, want 1", got)
+	}
+}
+
 func TestMergePlumbing(t *testing.T) {
 	ctx := context.Background()
 	dir := initRepo(t)
