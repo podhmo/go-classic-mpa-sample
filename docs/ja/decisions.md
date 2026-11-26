@@ -19,7 +19,7 @@
 ## store API の意味論（契約として固定）
 
 - Issue番号 = `issues.id`。`INTEGER PRIMARY KEY AUTOINCREMENT` で採番し、削除後も再利用しない。
-- `ListFilter` デフォルト: `Status:""` → `"open"`（`"all"` で無フィルタ）、`Sort` → `"newest"`（`created_at DESC, id DESC`）、`Page` 1-based（<1 は1にクランプ）、`PerPage<=0` → 20。
+- `ListFilter` デフォルト: `Status:""` → `"open"`（`"all"` で無フィルタ）、`Sort` → `"newest"`（`created_at DESC, id DESC`）、`Page` 1-based（<1 または `MaxListPage` 超過は1へフォールバック）、`PerPage<=0` → 20、`PerPage>MaxListPerPage` → `MaxListPerPage` にクランプ。
 - `ListIssues` は `[]*Issue`（各 Labels 設定済み）とページング前の total count を返す。
 - 存在しない行へのアクセスは `ErrNotFound` を返し、ハンドラ側で `errors.Is` → 404。
 - `SeedDemoData` は issues テーブルが空のときだけ投入（冪等）。初回起動時のみデモデータ。

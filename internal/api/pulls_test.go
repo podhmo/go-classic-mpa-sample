@@ -113,6 +113,10 @@ func TestPullsAPI_CreateListGet(t *testing.T) {
 	if got := len(list["pulls"].([]any)); got != 1 {
 		t.Fatalf("list: got %d pulls", got)
 	}
+	status, list = do(t, srv, "GET", "/api/v1/pulls?page=4611686018427387904", "")
+	if status != http.StatusOK || list["page"].(float64) != 1 || len(list["pulls"].([]any)) != 1 {
+		t.Fatalf("huge page list: status=%d body=%v, want page 1 with the pull", status, list)
+	}
 
 	status, got := do(t, srv, "GET", fmt.Sprintf("/api/v1/pulls/%d", id), "")
 	if status != http.StatusOK {

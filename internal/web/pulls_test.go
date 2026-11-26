@@ -86,6 +86,15 @@ func TestListPullsOutOfRangePageShowsLastPage(t *testing.T) {
 	if strings.Contains(body, "empty-state") {
 		t.Error("out-of-range pulls page must not render the empty state")
 	}
+
+	resp, err = srv.Client().Get(srv.URL + "/pulls?status=all&page=1000001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body = getBody(t, resp)
+	if !strings.Contains(body, "Showing 1–20 of 25 pull requests") || !strings.Contains(body, "Page 1 of 2") {
+		t.Error("page above MaxListPage must fall back to page 1")
+	}
 }
 
 func TestCreatePullInvalidRefRendersUnprocessable(t *testing.T) {
