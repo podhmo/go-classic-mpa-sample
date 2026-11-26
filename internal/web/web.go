@@ -383,11 +383,14 @@ func shortRef(ref string) string {
 // http.ResponseController (used by SSE flush) working through the wrapper.
 type renderPathWriter struct {
 	http.ResponseWriter
-	path string
+	req *http.Request
 }
 
 func (w renderPathWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
-func (w renderPathWriter) renderPath() string          { return w.path }
+
+// renderPath is lazy: computing it while dispatching would parse the POST
+// body before parseForm installs its size cap.
+func (w renderPathWriter) renderPath() string { return renderCurrentPath(w.req) }
 
 // renderCurrentPath avoids nesting one auth redirect inside another when
 // the header is rendered on the login/register page itself.
@@ -682,7 +685,7 @@ func New(st Store, opts ...Option) http.Handler {
 			staticMux.ServeHTTP(w, r)
 			return
 		}
-		authedMux.ServeHTTP(renderPathWriter{ResponseWriter: w, path: renderCurrentPath(r)}, r)
+		authedMux.ServeHTTP(renderPathWriter{ResponseWriter: w, req: r}, r)
 	})
 	return securityHeaders(withLocale(http.NewCrossOriginProtection().Handler(root)))
 }

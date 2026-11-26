@@ -171,6 +171,20 @@ func TestMarkdownPreviewEndpoint(t *testing.T) {
 	}
 }
 
+func TestMarkdownPreviewRejectsOversizedForm(t *testing.T) {
+	srv, _ := newTestServer(t)
+	body := "body=" + strings.Repeat("x", maxFormBytes)
+	resp, err := srv.Client().Post(srv.URL+"/w/default/preview", "application/x-www-form-urlencoded", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusRequestEntityTooLarge {
+		got, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 413; body prefix %q", resp.StatusCode, got[:min(len(got), 80)])
+	}
+}
+
 func TestDraftPostedCookieOnlyAfterSuccessfulClassicPost(t *testing.T) {
 	srv, _ := newTestServer(t)
 	key := "draft:anonymous:/w/default/issues/new:f-body"
