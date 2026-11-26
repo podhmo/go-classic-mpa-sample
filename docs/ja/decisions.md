@@ -852,5 +852,5 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 
 - **diff 本文は `<pre>` ではなく `<table>`**: 行を `<tr>`、行番号と本文を `<td>` に分け、行コメント form も `<td>` の中へ置く。`<pre>` の中に `<div>` / `<form>` を入れる不正マークアップはやめる。行番号 link の accessible name は path・行番号・左右を含め、textarea には visually hidden な `<label>` を付ける。
 - **行コメント form は server-rendered な1件だけ**: 各行の行番号は `?path=&line=&side=` 付き GET link で、選ばれた行の直後にだけ form を描画する。全行に hidden input 付き form を出さず、JS も増やさない。cancel は query 無しの files page へ戻る link。
-- **diff の git 起動は1回**: ファイルごとに `git diff` せず whole patch を1回取得し、`ChangedFiles` と同じ順序・既知 path に照らして `diff --git` 単位で分割する。path に空白を含む場合は既知 path との完全一致で曖昧さを避け、quote が必要な path は順序で fallback する。
+- **diff の git 起動は1回**: ファイルごとに `git diff` せず whole patch を1回取得し、`ChangedFiles` と同じ順序・既知 path に照らして `diff --git` 単位で分割する。path に空白を含む場合は既知 path との完全一致で曖昧さを避け、quote が必要な path は順序で fallback する。 combined patch が output cap に達した場合だけ per-file diff へ fallback し、単一 file が cap に達した場合は警告を表示して partial diff であることを隠さない。
 - **大規模再設計は入れない**: テーブル化は invalid markup を直すための最小変更で、word-diff・ファイル折り畳み・インラインコメント再設計は今回の範囲外。
