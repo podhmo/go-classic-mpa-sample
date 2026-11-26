@@ -1493,7 +1493,7 @@ func StoryPullEdit() {
 func StoryPullFiles() {
 	files := []pullFileView{
 		{
-			Change:       gitrepo.FileChange{Status: "M", NewPath: "internal/web/templates/pulls.html"},
+			Change:       gitrepo.FileChange{Status: "M", OldPath: "internal/web/templates/pulls.html", NewPath: "internal/web/templates/pulls.html"},
 			CommentPath:  "internal/web/templates/pulls.html",
 			StatusLetter: "M",
 			Anchor:       "file-internal-web-templates-pulls-html",
@@ -1508,7 +1508,7 @@ func StoryPullFiles() {
 			Comments: []*store.PRComment{storyPRComments[1]},
 		},
 		{
-			Change:       gitrepo.FileChange{Status: "A", NewPath: "internal/web/pulls.go"},
+			Change:       gitrepo.FileChange{Status: "A", OldPath: "internal/web/pulls.go", NewPath: "internal/web/pulls.go"},
 			CommentPath:  "internal/web/pulls.go",
 			StatusLetter: "A",
 			Anchor:       "file-internal-web-pulls-go",
@@ -1521,7 +1521,7 @@ func StoryPullFiles() {
 			},
 		},
 		{
-			Change:       gitrepo.FileChange{Status: "D", NewPath: "internal/web/old_pulls.go"},
+			Change:       gitrepo.FileChange{Status: "D", OldPath: "internal/web/old_pulls.go", NewPath: "internal/web/old_pulls.go"},
 			CommentPath:  "internal/web/old_pulls.go",
 			StatusLetter: "D",
 			Anchor:       "file-internal-web-old-pulls-go",
