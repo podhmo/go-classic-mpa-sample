@@ -32,7 +32,7 @@ STORIES=$(grep -oE '/story/[A-Za-z0-9_-]+' /tmp/visual-diff-index.html | sed 's|
 capture() {
 	out_dir=$1
 	mkdir -p "$out_dir"
-	rm -f "$out_dir"/*.png
+	stage_dir=$(mktemp -d)
 	tmp_js=$(mktemp --suffix=.js)
 	# %STORIES% / %BASE% / %OUTDIR% are substituted below; run-code only
 	# passes `page`, so everything else is baked into the file.
@@ -56,10 +56,26 @@ async page => {
 }
 EOF
 	stories_json=$(printf '%s\n' "$STORIES" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read().split()))')
-	out_abs=$(cd "$out_dir" && pwd)
-	sed -i "s|%STORIES%|$stories_json|; s|%BASE%|$STORYBOOK_URL|; s|%OUTDIR%|$out_abs|" "$tmp_js"
-	playwright-cli run-code --filename "$tmp_js"
+	sed -i "s|%STORIES%|$stories_json|; s|%BASE%|$STORYBOOK_URL|; s|%OUTDIR%|$stage_dir|" "$tmp_js"
+	if ! playwright-cli run-code --filename "$tmp_js"; then
+		rm -f "$tmp_js"
+		rm -rf "$stage_dir"
+		echo "capture failed; keeping existing $out_dir" >&2
+		exit 1
+	fi
 	rm -f "$tmp_js"
+	missing=""
+	for story in $STORIES; do
+		[ -f "$stage_dir/$story.png" ] || missing="$missing $story"
+	done
+	if [ -n "$missing" ]; then
+		rm -rf "$stage_dir"
+		echo "capture incomplete:$missing; keeping existing $out_dir" >&2
+		exit 1
+	fi
+	rm -f "$out_dir"/*.png
+	mv "$stage_dir"/*.png "$out_dir"/
+	rmdir "$stage_dir"
 }
 
 case "${1:-}" in
