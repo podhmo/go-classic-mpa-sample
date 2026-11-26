@@ -61,7 +61,7 @@ tools/visual-diff.sh check    # 再撮影して ImageMagick compare -metric AE �
 - **決定性のための4条件**:
   1. `page.screenshot({animations: 'disabled'})` — 無いと `.back-to-top` の scroll-state fade が中間状態で写って 23860px の偽差分になった
   2. `document.fonts.ready` 待機 — フォント非同期描画対策
-  3. **fixture の時刻 pin** — Pull 系 story が `time.Now()` を使っており実行ごとに時刻差分（263–1687px）が出たため、`story_pages.go` に `storyNow`（固定時刻）を導入して全 `time.Now()` を置換。これが無いと baseline 比較が成立しない
+  3. **fixture/handler の時刻 pin** — Pull 系 story が `time.Now()` を使っており実行ごとに時刻差分（263–1687px）が出たため、`story_pages.go` に `storyNow`（固定時刻）を導入して全 `time.Now()` を置換。POST replay で handler が作る new comment も実時刻だったため、`WithClock` を足して storybook から pin する。これが無いと baseline 比較が成立しない
   4. **scroll position の reset** — server error story の `autofocus` は load 時に下へ scroll し、sticky header / fixed back-to-top が fullPage screenshot 内で別位置に写る（108300px の偽差分）。撮影前に `scrollTo(0, 0)` へ戻す
 - 閾値は `PIXEL_THRESHOLD`（既定 100px）— sub-10px の AA ノイズ（StoryLabelFormEdit で 7px 観測）は許容し、レイアウト崩れは確実に拾う
 - `.visual-diff/` は gitignore。baseline は「今の正」を撮り直す運用
