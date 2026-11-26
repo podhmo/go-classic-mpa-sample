@@ -27,38 +27,20 @@ const sseHeartbeat = 25 * time.Second
 
 // issueEvents streams changes for one issue as text/event-stream.
 func (h *handler) issueEvents(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
-	id, ok := parseID(r)
+	i, ok := h.requireIssue(w, r, ws)
 	if !ok {
-		h.notFound(w, r)
 		return
 	}
-	i, err := h.store.GetIssue(r.Context(), id)
-	if err != nil {
-		h.issueError(w, r, err)
-		return
-	}
-	if !h.requireScope(w, r, ws, i.WorkspaceID) {
-		return
-	}
-	h.streamEvents(w, r, events.IssueTopic(id))
+	h.streamEvents(w, r, events.IssueTopic(i.ID))
 }
 
 // discussionEvents streams changes for one discussion.
 func (h *handler) discussionEvents(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
-	id, ok := parseID(r)
+	d, ok := h.requireDiscussion(w, r, ws)
 	if !ok {
-		h.notFound(w, r)
 		return
 	}
-	d, err := h.store.GetDiscussion(r.Context(), id)
-	if err != nil {
-		h.discussionError(w, r, err)
-		return
-	}
-	if !h.requireScope(w, r, ws, d.WorkspaceID) {
-		return
-	}
-	h.streamEvents(w, r, events.DiscussionTopic(id))
+	h.streamEvents(w, r, events.DiscussionTopic(d.ID))
 }
 
 // streamEvents writes the SSE stream for topic until the client
@@ -147,25 +129,16 @@ func parseIDSet(r *http.Request) (map[int64]bool, bool, error) {
 // The fragment leads with the issue meta as a data-swap node — a new
 // comment bumps updated_at.
 func (h *handler) issueCommentsFragment(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
-	id, ok := parseID(r)
-	if !ok {
-		h.notFound(w, r)
-		return
-	}
 	ids, filtered, err := parseIDSet(r)
 	if err != nil {
 		h.renderError(w, r, http.StatusBadRequest, msgFor(r).ErrBadRequestH, msgFor(r).ErrInvalidIDs)
 		return
 	}
-	issue, err := h.store.GetIssue(r.Context(), id)
-	if err != nil {
-		h.issueError(w, r, err)
+	issue, ok := h.requireIssue(w, r, ws)
+	if !ok {
 		return
 	}
-	if !h.requireScope(w, r, ws, issue.WorkspaceID) {
-		return
-	}
-	comments, err := h.store.ListComments(r.Context(), id)
+	comments, err := h.store.ListComments(r.Context(), issue.ID)
 	if err != nil {
 		h.internalError(w, r, err)
 		return
@@ -186,17 +159,8 @@ func (h *handler) issueCommentsFragment(w http.ResponseWriter, r *http.Request, 
 // issueArticleFragment serves GET /issues/{id}/fragments/article — the
 // whole issue card for status/edit live swaps.
 func (h *handler) issueArticleFragment(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
-	id, ok := parseID(r)
+	issue, ok := h.requireIssue(w, r, ws)
 	if !ok {
-		h.notFound(w, r)
-		return
-	}
-	issue, err := h.store.GetIssue(r.Context(), id)
-	if err != nil {
-		h.issueError(w, r, err)
-		return
-	}
-	if !h.requireScope(w, r, ws, issue.WorkspaceID) {
 		return
 	}
 	h.r.renderFragment(w, "issue_detail", "issue_article", http.StatusOK, issueDetailPage{
@@ -211,25 +175,16 @@ func (h *handler) issueArticleFragment(w http.ResponseWriter, r *http.Request, w
 // — ?ids= picks specific threads (also how answer-move swaps fetch the two
 // changed <li>s), no ids returns the whole list.
 func (h *handler) discussionThreadsFragment(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
-	id, ok := parseID(r)
-	if !ok {
-		h.notFound(w, r)
-		return
-	}
 	ids, filtered, err := parseIDSet(r)
 	if err != nil {
 		h.renderError(w, r, http.StatusBadRequest, msgFor(r).ErrBadRequestH, msgFor(r).ErrInvalidIDs)
 		return
 	}
-	discussion, err := h.store.GetDiscussion(r.Context(), id)
-	if err != nil {
-		h.discussionError(w, r, err)
+	discussion, ok := h.requireDiscussion(w, r, ws)
+	if !ok {
 		return
 	}
-	if !h.requireScope(w, r, ws, discussion.WorkspaceID) {
-		return
-	}
-	threads, err := h.store.ListDiscussionThreads(r.Context(), id)
+	threads, err := h.store.ListDiscussionThreads(r.Context(), discussion.ID)
 	if err != nil {
 		h.internalError(w, r, err)
 		return
@@ -252,11 +207,6 @@ func (h *handler) discussionThreadsFragment(w http.ResponseWriter, r *http.Reque
 // <li>s of one thread, for appending pushed replies without touching the
 // thread's open reply form.
 func (h *handler) discussionRepliesFragment(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
-	id, ok := parseID(r)
-	if !ok {
-		h.notFound(w, r)
-		return
-	}
 	threadID, err := strconv.ParseInt(r.URL.Query().Get("thread"), 10, 64)
 	if err != nil || threadID < 1 {
 		h.renderError(w, r, http.StatusBadRequest, msgFor(r).ErrBadRequestH, msgFor(r).ErrInvalidThreadID)
@@ -267,15 +217,11 @@ func (h *handler) discussionRepliesFragment(w http.ResponseWriter, r *http.Reque
 		h.renderError(w, r, http.StatusBadRequest, msgFor(r).ErrBadRequestH, msgFor(r).ErrInvalidIDs)
 		return
 	}
-	discussion, err := h.store.GetDiscussion(r.Context(), id)
-	if err != nil {
-		h.discussionError(w, r, err)
+	discussion, ok := h.requireDiscussion(w, r, ws)
+	if !ok {
 		return
 	}
-	if !h.requireScope(w, r, ws, discussion.WorkspaceID) {
-		return
-	}
-	threads, err := h.store.ListDiscussionThreads(r.Context(), id)
+	threads, err := h.store.ListDiscussionThreads(r.Context(), discussion.ID)
 	if err != nil {
 		h.internalError(w, r, err)
 		return
@@ -307,17 +253,8 @@ func (h *handler) discussionRepliesFragment(w http.ResponseWriter, r *http.Reque
 // discussionArticleFragment serves GET /discussions/{id}/fragments/article
 // — the whole discussion card for edit live swaps.
 func (h *handler) discussionArticleFragment(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
-	id, ok := parseID(r)
+	discussion, ok := h.requireDiscussion(w, r, ws)
 	if !ok {
-		h.notFound(w, r)
-		return
-	}
-	discussion, err := h.store.GetDiscussion(r.Context(), id)
-	if err != nil {
-		h.discussionError(w, r, err)
-		return
-	}
-	if !h.requireScope(w, r, ws, discussion.WorkspaceID) {
 		return
 	}
 	h.r.renderFragment(w, "discussion_detail", "discussion_article", http.StatusOK, discussionDetailPage{
