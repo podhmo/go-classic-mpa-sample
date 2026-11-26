@@ -137,7 +137,8 @@ async page => {
   return JSON.stringify(failed);
 }
 EOF
-	STORIES_DATA=$STORIES python3 - "$tmp_js" "$STORYBOOK_URL" "$stage_dir" "$color_scheme" <<'PY'
+	python_failed=0
+	STORIES_DATA=$STORIES python3 - "$tmp_js" "$STORYBOOK_URL" "$stage_dir" "$color_scheme" <<'PY' || python_failed=1
 import json
 import os
 import sys
@@ -156,6 +157,12 @@ for placeholder, value in replacements.items():
 with open(path, "w") as f:
     f.write(source)
 PY
+	if [ "$python_failed" -ne 0 ]; then
+		rm -f "$tmp_js"
+		rm -rf "$stage_dir"
+		echo "could not prepare capture; keeping existing $out_dir" >&2
+		exit 1
+	fi
 	# run-code expects an already-open browser. Start a fresh one per capture
 	# so no state or tabs leak between modes.
 	close_browser
