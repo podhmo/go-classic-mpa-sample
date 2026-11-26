@@ -19,7 +19,7 @@ func (h *handler) listIssues(w http.ResponseWriter, r *http.Request, ws *store.W
 		Status:  q.Get("status"),
 		Query:   strings.TrimSpace(q.Get("q")),
 		Sort:    q.Get("sort"),
-		Page:    queryInt(r, "page", 1),
+		Page:    queryPage(r),
 		PerPage: min(queryInt(r, "per_page", defaultPerPage), maxPerPage),
 	}
 	if lid := q.Get("label_id"); lid != "" {

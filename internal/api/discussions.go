@@ -20,7 +20,7 @@ func (h *handler) listDiscussions(w http.ResponseWriter, r *http.Request, ws *st
 		Answered:     q.Get("answered"),
 		Query:        strings.TrimSpace(q.Get("q")),
 		Sort:         q.Get("sort"),
-		Page:         queryInt(r, "page", 1),
+		Page:         queryPage(r),
 		PerPage:      min(queryInt(r, "per_page", defaultPerPage), maxPerPage),
 	}
 	discussions, total, err := h.store.ListDiscussions(r.Context(), ws.ID, f)

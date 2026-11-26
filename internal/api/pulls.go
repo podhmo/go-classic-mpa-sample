@@ -184,7 +184,7 @@ func (h *handler) listPulls(w http.ResponseWriter, r *http.Request) {
 		Status:  q.Get("status"),
 		Query:   strings.TrimSpace(q.Get("q")),
 		Sort:    q.Get("sort"),
-		Page:    queryInt(r, "page", 1),
+		Page:    queryPage(r),
 		PerPage: min(queryInt(r, "per_page", defaultPerPage), maxPerPage),
 	}
 	pulls, total, err := h.store.ListPullRequests(r.Context(), f)
