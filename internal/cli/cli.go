@@ -261,7 +261,7 @@ func (o Options) printUsage(w io.Writer) {
 
 Commands:
   issue list|view|create|edit|close|reopen|delete
-  pr list|view|diff|create|edit|close|reopen|merge|delete
+  pr list|view|diff|create|edit|close|reopen|merge|repair-pin|delete
   pr comment create|edit|delete|hide|unhide
   comment create|edit|delete|hide|unhide
   label list [--kind issue|discussion]
