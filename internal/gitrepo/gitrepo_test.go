@@ -674,6 +674,31 @@ func TestPinNeedsRepair(t *testing.T) {
 	}
 }
 
+func TestRepairPinComparesObservedValue(t *testing.T) {
+	ctx := context.Background()
+	dir := initRepo(t)
+	r := openRepo(t, dir)
+	head := strings.TrimSpace(git(t, dir, "rev-parse", "main"))
+	if err := r.PinHead(ctx, 42, head); err != nil {
+		t.Fatal(err)
+	}
+	needs, observed, err := r.PinRepairState(ctx, 42, "")
+	if err != nil || needs || observed != head {
+		t.Fatalf("state needs=%v observed=%q err=%v", needs, observed, err)
+	}
+
+	git(t, dir, "checkout", "-qb", "repair-race")
+	write(t, dir, "repair-race.txt", "newer\n")
+	newer := strings.TrimSpace(git(t, dir, "rev-parse", "repair-race"))
+	git(t, dir, "update-ref", PinRef(42), newer, head)
+	if err := r.RepairPin(ctx, 42, head, observed); !errors.Is(err, ErrConcurrentUpdate) {
+		t.Fatalf("stale repair error = %v, want ErrConcurrentUpdate", err)
+	}
+	if got, err := r.RevParse(ctx, PinRef(42)); err != nil || got != newer {
+		t.Fatalf("pin after stale repair = %q err=%v, want %q", got, err, newer)
+	}
+}
+
 func TestUpdatePinFailureKeepsGitError(t *testing.T) {
 	ctx := context.Background()
 	dir := initRepo(t)

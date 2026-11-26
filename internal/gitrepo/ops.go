@@ -477,19 +477,48 @@ func (r *Repo) UpdatePin(ctx context.Context, id int64, sha string) error {
 	return nil
 }
 
-// PinNeedsRepair reports whether the protective pin is missing or, when
-// expectedSHA is nonempty, points somewhere else. Open PRs pass an empty
-// expectedSHA because their pin intentionally remains at the create-time
-// head while the feature branch advances; existence is enough there.
-func (r *Repo) PinNeedsRepair(ctx context.Context, id int64, expectedSHA string) (bool, error) {
+// PinRepairState reports whether the protective pin is missing or, when
+// expectedSHA is nonempty, points somewhere else, together with the pin
+// value observed during the check. Open PRs pass an empty expectedSHA
+// because their pin intentionally remains at the create-time head while
+// the feature branch advances; existence is enough there.
+func (r *Repo) PinRepairState(ctx context.Context, id int64, expectedSHA string) (needs bool, current string, err error) {
 	got, err := r.RevParse(ctx, PinRef(id))
 	if errors.Is(err, ErrBadRef) {
-		return true, nil
+		return true, "", nil
 	}
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
-	return expectedSHA != "" && got != expectedSHA, nil
+	return expectedSHA != "" && got != expectedSHA, got, nil
+}
+
+// PinNeedsRepair is PinRepairState without the observed-pin value.
+func (r *Repo) PinNeedsRepair(ctx context.Context, id int64, expectedSHA string) (bool, error) {
+	needs, _, err := r.PinRepairState(ctx, id, expectedSHA)
+	return needs, err
+}
+
+// RepairPin recreates a missing pin or corrects a stale one. oldSHA must
+// be the value observed by PinRepairState, with empty meaning "missing";
+// this makes the write compare-and-swap against a close/merge pin that
+// may have been written after the repair target was resolved.
+func (r *Repo) RepairPin(ctx context.Context, id int64, sha, oldSHA string) error {
+	if err := checkRevArg(sha); err != nil {
+		return err
+	}
+	if oldSHA == "" {
+		return r.PinHead(ctx, id, sha)
+	}
+	_, err := r.run(ctx, nil, "update-ref", PinRef(id), sha, oldSHA)
+	if err != nil {
+		now, revErr := r.RevParse(ctx, PinRef(id))
+		if revErr != nil || now != oldSHA {
+			return ErrConcurrentUpdate
+		}
+		return err
+	}
+	return nil
 }
 
 // Unpin drops the pin ref; used if a pin must follow a comment/PR delete.

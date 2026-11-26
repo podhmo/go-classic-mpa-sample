@@ -680,7 +680,7 @@ func (h *handler) repairPullPin(w http.ResponseWriter, r *http.Request) {
 	if !pr.Open() {
 		expected = pr.HeadSHA
 	}
-	needs, err := h.repo.PinNeedsRepair(ctx, pr.ID, expected)
+	needs, current, err := h.repo.PinRepairState(ctx, pr.ID, expected)
 	if err != nil {
 		if !h.gitError(w, err) {
 			writeError(w, http.StatusInternalServerError, "Internal server error.", nil)
@@ -703,7 +703,7 @@ func (h *handler) repairPullPin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "No head commit is recorded for pinning.", nil)
 		return
 	}
-	if err := h.repo.UpdatePin(ctx, pr.ID, target); err != nil {
+	if err := h.repo.RepairPin(ctx, pr.ID, target, current); err != nil {
 		if !h.gitError(w, err) {
 			writeError(w, http.StatusInternalServerError, "Internal server error.", nil)
 		}

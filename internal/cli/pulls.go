@@ -716,7 +716,7 @@ func prRepairPin(ctx context.Context, o Options, args []string) error {
 	if !pr.Open() {
 		expected = pr.HeadSHA
 	}
-	needs, err := repo.PinNeedsRepair(ctx, id, expected)
+	needs, current, err := repo.PinRepairState(ctx, id, expected)
 	if err != nil {
 		return err
 	}
@@ -734,7 +734,7 @@ func prRepairPin(ctx context.Context, o Options, args []string) error {
 	if target == "" {
 		return errors.New("cli: no head commit is recorded for pinning")
 	}
-	if err := repo.UpdatePin(ctx, id, target); err != nil {
+	if err := repo.RepairPin(ctx, id, target, current); err != nil {
 		return err
 	}
 	fmt.Fprintf(o.Stdout, "pull request #%d pin repaired\n", id)

@@ -389,20 +389,20 @@ func (h *handler) requirePull(w http.ResponseWriter, r *http.Request) (*store.Pu
 // pinRepairState detects a missing/stale pin without letting git probe
 // failures take down the detail page. repairable is false when there is no
 // commit left that a repair could point at.
-func (h *handler) pinRepairState(ctx context.Context, pr *store.PullRequest) (needs, repairable bool) {
+func (h *handler) pinRepairState(ctx context.Context, pr *store.PullRequest) (needs, repairable bool, current string) {
 	expected := ""
 	if !pr.Open() {
 		expected = pr.HeadSHA
 	}
-	needs, err := h.repo.PinNeedsRepair(ctx, pr.ID, expected)
+	needs, current, err := h.repo.PinRepairState(ctx, pr.ID, expected)
 	if err != nil || !needs {
-		return needs, false
+		return needs, false, current
 	}
 	if pr.Open() {
 		_, err = h.repo.RevParse(ctx, pr.HeadRef)
-		return true, err == nil
+		return true, err == nil, current
 	}
-	return true, expected != ""
+	return true, expected != "", current
 }
 
 // pinRepairTarget resolves the commit a repair should protect.
@@ -677,7 +677,7 @@ func (h *handler) pullDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	commits, check := h.loadPullView(r, pr)
-	pinNeeds, pinRepairable := h.pinRepairState(r.Context(), pr)
+	pinNeeds, pinRepairable, _ := h.pinRepairState(r.Context(), pr)
 	h.r.renderPullDetail(w, http.StatusOK, pullDetailPage{
 		Title:          pr.Title,
 		Section:        "pulls",
@@ -958,7 +958,7 @@ func (h *handler) renderPullDetailErr(w http.ResponseWriter, r *http.Request, st
 		return
 	}
 	commits, check := h.loadPullView(r, pr)
-	pinNeeds, pinRepairable := h.pinRepairState(r.Context(), pr)
+	pinNeeds, pinRepairable, _ := h.pinRepairState(r.Context(), pr)
 	h.r.renderPullDetail(w, status, pullDetailPage{
 		Title:          pr.Title,
 		Section:        "pulls",
@@ -1231,7 +1231,7 @@ func (h *handler) repairPullPin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	needs, _ := h.pinRepairState(ctx, pr)
+	needs, _, current := h.pinRepairState(ctx, pr)
 	if !needs {
 		redirectSeeOther(w, r, fmt.Sprintf("/pulls/%d", pr.ID))
 		return
@@ -1241,7 +1241,7 @@ func (h *handler) repairPullPin(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, http.StatusConflict, msgFor(r).ErrNotMergeableH, msgFor(r).ErrPinUnrepairable)
 		return
 	}
-	if err := h.repo.UpdatePin(ctx, pr.ID, target); err != nil {
+	if err := h.repo.RepairPin(ctx, pr.ID, target, current); err != nil {
 		h.pullError(w, r, err)
 		return
 	}
@@ -1404,7 +1404,7 @@ func (h *handler) pullArticleFragment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	commits, check := h.loadPullView(r, pr)
-	pinNeeds, pinRepairable := h.pinRepairState(r.Context(), pr)
+	pinNeeds, pinRepairable, _ := h.pinRepairState(r.Context(), pr)
 	h.r.renderFragment(w, "pull_detail", "pr_article", http.StatusOK, pullDetailPage{
 		PR:             pr,
 		Commits:        commits,
