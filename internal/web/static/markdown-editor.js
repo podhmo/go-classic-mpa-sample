@@ -14,8 +14,18 @@ function previewURL() {
 }
 
 function draftKey(textarea) {
-  const id = textarea.id || textarea.closest("form")?.action || "body";
-  return `draft:${location.pathname}:${id}`;
+  const form = textarea.closest("form");
+  let identity = textarea.id;
+  if (!identity && form) {
+    const action = form.getAttribute("action") || "body";
+    const anchor = [...form.querySelectorAll('input[type="hidden"]')]
+      .filter((input) => ["path", "line", "side", "thread_id"].includes(input.name))
+      .map((input) => `${input.name}=${input.value}`);
+    const index = [...form.querySelectorAll('textarea[name="body"]')].indexOf(textarea);
+    identity = [action, ...anchor, `textarea${Math.max(index, 0)}`].join(":");
+  }
+  const account = document.documentElement.dataset.userId || "anonymous";
+  return `draft:${account}:${location.pathname}:${identity || "body"}`;
 }
 
 function readDraft(key) {
