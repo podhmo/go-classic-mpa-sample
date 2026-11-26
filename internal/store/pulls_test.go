@@ -273,3 +273,67 @@ func TestListPullRequestsStatusFilter(t *testing.T) {
 		t.Fatalf("open list = %+v", prs[0])
 	}
 }
+
+func TestMergeReservationSerializesLifecycle(t *testing.T) {
+	ctx := context.Background()
+	s := mustOpen(t, ":memory:")
+	id, err := s.CreatePullRequest(ctx, prInput(), 0, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := s.ReserveMerge(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ReserveMerge(ctx, id); !errors.Is(err, ErrMergeInProgress) {
+		t.Fatalf("second reserve err = %v", err)
+	}
+	if err := s.ClosePullRequest(ctx, id, "head", "base"); !errors.Is(err, ErrMergeInProgress) {
+		t.Fatalf("close during merge err = %v", err)
+	}
+	if err := s.DeletePullRequest(ctx, id); !errors.Is(err, ErrMergeInProgress) {
+		t.Fatalf("delete during merge err = %v", err)
+	}
+	info := PRMergeInfo{MergeSHA: "merge", MergeMethod: "merge", HeadSHA: "head", MergeBaseSHA: "base"}
+	if err := s.MarkMergedWithReservation(ctx, id, info, token+1); !errors.Is(err, ErrMergeInProgress) {
+		t.Fatalf("wrong token mark err = %v", err)
+	}
+	if err := s.MarkMergedWithReservation(ctx, id, info, token); err != nil {
+		t.Fatal(err)
+	}
+	pr, err := s.GetPullRequest(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pr.Status != PRStatusMerged {
+		t.Fatalf("status = %q", pr.Status)
+	}
+	if _, err := s.ReserveMerge(ctx, id); !errors.Is(err, ErrInvalidPRTransition) {
+		t.Fatalf("reserve merged err = %v", err)
+	}
+}
+
+func TestReleaseMergeReservation(t *testing.T) {
+	ctx := context.Background()
+	s := mustOpen(t, ":memory:")
+	id, err := s.CreatePullRequest(ctx, prInput(), 0, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := s.ReserveMerge(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ReleaseMerge(ctx, id, token+1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ReserveMerge(ctx, id); !errors.Is(err, ErrMergeInProgress) {
+		t.Fatalf("wrong-token release should keep reservation, got %v", err)
+	}
+	if err := s.ReleaseMerge(ctx, id, token); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ClosePullRequest(ctx, id, "head", "base"); err != nil {
+		t.Fatalf("close after release: %v", err)
+	}
+}

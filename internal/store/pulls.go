@@ -31,6 +31,9 @@ var (
 	// forbids: merged is terminal (GitHub-like), closed only reopens,
 	// and only an open PR can close or merge.
 	ErrInvalidPRTransition = errors.New("store: invalid pull request status transition")
+	// ErrMergeInProgress reports a merge attempt while another process owns
+	// the pull request's unexpired merge reservation.
+	ErrMergeInProgress = errors.New("store: pull request merge already in progress")
 	// ErrSameRef reports a create whose base and head normalized to the
 	// same ref — a PR with an empty range is meaningless.
 	ErrSameRef = errors.New("store: base and head are the same ref")
@@ -276,12 +279,30 @@ func (s *Store) DeletePullRequest(ctx context.Context, id int64) error {
 		return err
 	}
 	defer tx.Rollback()
-	res, err := tx.ExecContext(ctx, "DELETE FROM pull_requests WHERE id = ?", id)
+	expiredBefore := time.Now().UTC().Add(-mergeLease).UnixNano()
+	res, err := tx.ExecContext(ctx,
+		"DELETE FROM pull_requests WHERE id = ? AND (merging_at IS NULL OR merging_at <= ?)", id, expiredBefore)
 	if err != nil {
 		return err
 	}
-	if err := checkAffected(res); err != nil {
+	n, err := res.RowsAffected()
+	if err != nil {
 		return err
+	}
+	if n == 0 {
+		var merging sql.NullInt64
+		err := tx.QueryRowContext(ctx,
+			"SELECT merging_at FROM pull_requests WHERE id = ?", id).Scan(&merging)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if merging.Valid && merging.Int64 > expiredBefore {
+			return ErrMergeInProgress
+		}
+		return ErrInvalidPRTransition
 	}
 	return s.commitTx(ctx, tx,
 		events.Change{Topic: events.PullRequestTopic(id), Kind: events.KindDelete, Target: id},
@@ -298,10 +319,12 @@ func (s *Store) ClosePullRequest(ctx context.Context, id int64, headSHA, mergeBa
 		return err
 	}
 	defer tx.Rollback()
+	expiredBefore := time.Now().UTC().Add(-mergeLease).UnixNano()
 	res, err := tx.ExecContext(ctx,
 		`UPDATE pull_requests SET status = 'closed', head_sha = ?, merge_base_sha = ?,
-			updated_at = ?, closed_at = ? WHERE id = ? AND status = 'open'`,
-		headSHA, mergeBaseSHA, time.Now().UTC().Unix(), time.Now().UTC().Unix(), id)
+			updated_at = ?, closed_at = ? WHERE id = ? AND status = 'open'
+			AND (merging_at IS NULL OR merging_at <= ?)`,
+		headSHA, mergeBaseSHA, time.Now().UTC().Unix(), time.Now().UTC().Unix(), id, expiredBefore)
 	if err != nil {
 		return err
 	}
@@ -312,14 +335,18 @@ func (s *Store) ClosePullRequest(ctx context.Context, id int64, headSHA, mergeBa
 	if n == 0 {
 		// Existence must be probed through the tx: :memory: pins a
 		// single connection, so s.db queries would deadlock here.
-		var one int
+		var status string
+		var merging sql.NullInt64
 		err := tx.QueryRowContext(ctx,
-			"SELECT 1 FROM pull_requests WHERE id = ?", id).Scan(&one)
+			"SELECT status, merging_at FROM pull_requests WHERE id = ?", id).Scan(&status, &merging)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
 		if err != nil {
 			return err
+		}
+		if status == PRStatusOpen && merging.Valid && merging.Int64 > expiredBefore {
+			return ErrMergeInProgress
 		}
 		return ErrInvalidPRTransition
 	}
@@ -369,6 +396,63 @@ func (s *Store) ReopenPullRequest(ctx context.Context, id int64) error {
 		events.Change{Topic: events.PullsTopic, Kind: events.KindStatus, Target: id})
 }
 
+// mergeLease bounds a merge reservation. Callers give the git operation a
+// shorter deadline, so an unexpired reservation normally means its owner is
+// still running; expiry is the minimal crash-recovery mechanism.
+const (
+	mergeLease = 5 * time.Minute
+	// MergeGitTimeout bounds the git-side merge operation. It stays well
+	// below mergeLease so a live merge does not lose its reservation.
+	MergeGitTimeout = 2 * time.Minute
+)
+
+// ReserveMerge takes the cross-process merge reservation for an open pull
+// request and returns its ownership token. The token is the reservation's
+// Unix-nano start time; collision with a prior reservation is practically
+// impossible and harmless because ownership is exercised serially.
+func (s *Store) ReserveMerge(ctx context.Context, id int64) (int64, error) {
+	now := time.Now().UTC()
+	token := now.UnixNano()
+	expiredBefore := now.Add(-mergeLease).UnixNano()
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE pull_requests SET merging_at = ?
+			WHERE id = ? AND status = 'open' AND (merging_at IS NULL OR merging_at <= ?)`,
+		token, id, expiredBefore)
+	if err != nil {
+		return 0, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	if n > 0 {
+		return token, nil
+	}
+	var status string
+	var merging sql.NullInt64
+	err = s.db.QueryRowContext(ctx,
+		"SELECT status, merging_at FROM pull_requests WHERE id = ?", id).Scan(&status, &merging)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	if err != nil {
+		return 0, err
+	}
+	if status != PRStatusOpen {
+		return 0, ErrInvalidPRTransition
+	}
+	return 0, ErrMergeInProgress
+}
+
+// ReleaseMerge releases token's reservation. It is a no-op when the token
+// no longer owns the row, so a stale owner cannot clear a newer lease.
+func (s *Store) ReleaseMerge(ctx context.Context, id int64, token int64) error {
+	_, err := s.db.ExecContext(ctx,
+		"UPDATE pull_requests SET merging_at = NULL WHERE id = ? AND merging_at = ?",
+		id, token)
+	return err
+}
+
 // PRMergeInfo records the git-side merge result the caller already
 // performed (gitrepo.Merge ran before this write).
 type PRMergeInfo struct {
@@ -381,17 +465,28 @@ type PRMergeInfo struct {
 // MarkMerged moves open → merged with the merge's resulting SHAs.
 // ErrInvalidPRTransition when the PR is not open.
 func (s *Store) MarkMerged(ctx context.Context, id int64, info PRMergeInfo) error {
+	return s.MarkMergedWithReservation(ctx, id, info, 0)
+}
+
+// MarkMergedWithReservation is MarkMerged restricted to the process holding
+// token's merge reservation when token is positive; it also clears that
+// reservation in the same write as the status transition.
+func (s *Store) MarkMergedWithReservation(ctx context.Context, id int64, info PRMergeInfo, token int64) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 	now := time.Now().UTC().Unix()
-	res, err := tx.ExecContext(ctx,
-		`UPDATE pull_requests SET status = 'merged', merge_sha = ?, merge_method = ?,
-			head_sha = ?, merge_base_sha = ?, updated_at = ?, closed_at = ?
-			WHERE id = ? AND status = 'open'`,
-		info.MergeSHA, info.MergeMethod, info.HeadSHA, info.MergeBaseSHA, now, now, id)
+	query := `UPDATE pull_requests SET status = 'merged', merge_sha = ?, merge_method = ?,
+		head_sha = ?, merge_base_sha = ?, merging_at = NULL, updated_at = ?, closed_at = ?
+		WHERE id = ? AND status = 'open'`
+	args := []any{info.MergeSHA, info.MergeMethod, info.HeadSHA, info.MergeBaseSHA, now, now, id}
+	if token > 0 {
+		query += " AND merging_at = ?"
+		args = append(args, token)
+	}
+	res, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}
@@ -402,14 +497,21 @@ func (s *Store) MarkMerged(ctx context.Context, id int64, info PRMergeInfo) erro
 	if n == 0 {
 		// Existence must be probed through the tx: :memory: pins a
 		// single connection, so s.db queries would deadlock here.
-		var one int
+		var status string
+		var merging sql.NullInt64
 		err := tx.QueryRowContext(ctx,
-			"SELECT 1 FROM pull_requests WHERE id = ?", id).Scan(&one)
+			"SELECT status, merging_at FROM pull_requests WHERE id = ?", id).Scan(&status, &merging)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
 		if err != nil {
 			return err
+		}
+		if status != PRStatusOpen {
+			return ErrInvalidPRTransition
+		}
+		if token > 0 && (!merging.Valid || merging.Int64 != token) {
+			return ErrMergeInProgress
 		}
 		return ErrInvalidPRTransition
 	}
