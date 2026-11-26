@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/podhmo/go-classic-mpa-sample/internal/api"
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
@@ -223,6 +224,12 @@ func TestListWindowBeyondAPIMaxPageErrors(t *testing.T) {
 		})
 	if err == nil || !strings.Contains(err.Error(), "maximum page") {
 		t.Fatalf("err = %v, want maximum-page error", err)
+	}
+}
+
+func TestHTTPClientHasTimeout(t *testing.T) {
+	if HTTPClient.Timeout != 30*time.Second {
+		t.Fatalf("HTTPClient.Timeout = %v, want 30s", HTTPClient.Timeout)
 	}
 }
 

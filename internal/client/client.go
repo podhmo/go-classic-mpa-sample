@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
@@ -80,6 +81,7 @@ type Client struct {
 // Authorization on same-host redirects even when the scheme downgrades,
 // which would send the token unencrypted.
 var HTTPClient = &http.Client{
+	Timeout: 30 * time.Second,
 	CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 10 {
 			return fmt.Errorf("stopped after 10 redirects")
