@@ -34,6 +34,7 @@ go run ./cmd/zatu --help                # issue/discussion を操作する gh �
 tools/demo-history.sh [DB]              # zatu のみでデモ履歴をリプレイ（CLI の実行リファレンスでもある）
 tools/demo-pr-history.sh [DB] [REPO]    # 実 git repo + `zatu pr` で PR 履歴をリプレイ
 go test ./...               # 全テスト（unit + store + E2E）
+make test-storybook         # storybook の回帰テスト（-count=1 固定）
 go vet ./... && gofmt -l .  # 静的解析・フォーマット確認（コミット前に）
 go fix ./...                # モダナイズ（必要に応じて）
 make todo-gc                # TODO.md の [x] 項目を TODO-archive.md へ移す

@@ -221,4 +221,4 @@ print 型と使い分け: **見た目（マークアップ）の確認は print 
 - 詳細ページでは goldmark の GFM task list・goldmark-alert callout も実物変換で描画されている。
 - story 描画は warm で ~70-110ms/req（従来 ~100-200ms/req より低下。共有キャッシュの効果）。`/static/` は FileServer なので ~1ms。
 - variants grid: `/grid/renderIssueList` 等、render メソッド単位で全状態を横並び表示。`?w=` の幅固定も効く。
-- `go test ./...` `go vet ./...` `gofmt -l .` はルート module で全グリーン。`cmd/storybook` 側は `cd cmd/storybook && go test ./...` で探索・描画・grid・export・ヘッダ replay の回帰テストが通る（~2s）。
+- `go test ./...` `go vet ./...` `gofmt -l .` はルート module で全グリーン。`cmd/storybook` 側は `make test-storybook`（内部で `go test -count=1 ./...`）で探索・描画・grid・export・ヘッダ replay の回帰テストが通る（~2s）。story は実行時解釈なので cache を効かせない。

@@ -83,9 +83,10 @@ JS を配信しない）。エラーで 500 になったページも watch 中�
 4. 新しいページ/ハンドラ → `renderXxx` helper と `StoryXxx` を追加。
    ルート自体（status・ヘッダ）が重要なら `StoryHttpXxx` も。
 5. 狭幅が気になる → ツールバーの幅切替で 360px にする（grid 内では各セルがその幅になる）。
-6. 回帰確認 → `cd cmd/storybook && go test ./...` が mount の疎通を
-   検査する（アプリ story コーパス全体の描画・グルーピングの回帰
-   テストは fork の page.go と一緒に削除。chrome 側の回帰は
+6. 回帰確認 → `make test-storybook` が mount の疎通を
+   検査する（story は実行時に解釈されるので `-count=1` 固定。
+   アプリ story コーパス全体の描画・グルーピングの回帰テストは
+   fork の page.go と一緒に削除。chrome 側の回帰は
    `github.com/podhmo/minigo/x/storybook` のテストが持つ）。
 
 ## JS について

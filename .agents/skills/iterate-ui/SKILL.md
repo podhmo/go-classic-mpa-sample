@@ -76,10 +76,12 @@ rendering **500**, not silently — treat that as the failure signal.
    (each grid cell renders at that width).
 5. For headers/status replay, open the `StoryHttp*` link (new tab) —
    `curl -I` shows the real status + CSP.
-6. Regression safety net: `cd cmd/storybook && go test ./...` asserts
-   corpus-wide invariants (every discovered story renders, groups don't
-   collapse, statuses/CSP replay). No test edits needed when adding
-   stories — the discovered corpus is the spec.
+6. Regression safety net: `make test-storybook` asserts corpus-wide
+   invariants (every discovered story renders, groups don't collapse,
+   statuses/CSP replay). It pins `-count=1` because stories are
+   interpreted at runtime and Go's test cache cannot see those edits.
+   No test edits needed when adding stories — the discovered corpus is
+   the spec.
 
 ## Export (static snapshot)
 
