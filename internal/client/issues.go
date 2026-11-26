@@ -17,11 +17,9 @@ import (
 // ListLabels.
 func (c *Client) ListIssues(ctx context.Context, f store.ListFilter) ([]*store.Issue, int, error) {
 	q := url.Values{}
-	status := f.Status
-	if status == "" {
-		status = store.StatusOpen
+	if f.Status != "" {
+		q.Set("status", f.Status)
 	}
-	q.Set("status", status)
 	if f.Query != "" {
 		q.Set("q", f.Query)
 	}

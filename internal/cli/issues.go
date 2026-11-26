@@ -58,7 +58,7 @@ func issueList(ctx context.Context, o Options, args []string) error {
 	bf := o.addBackendFlags(fs)
 	state := fs.String("state", "open", "filter by state: open|closed|all")
 	label := fs.String("label", "", "filter by label name")
-	query := fs.String("search", "", "search title and body")
+	query := fs.String("search", "", "search title/body; supports is:open, label:NAME, author:NAME")
 	sort := fs.String("sort", "newest", "sort order: newest|oldest")
 	limit := fs.Int("limit", 30, "maximum issues to list")
 	page := fs.Int("page", 1, "page number")
@@ -78,6 +78,12 @@ func issueList(ctx context.Context, o Options, args []string) error {
 	if *sort != "newest" && *sort != "oldest" {
 		return usageError{msg: fmt.Sprintf("--sort must be newest|oldest, got %q", *sort)}
 	}
+	stateSet := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "state" {
+			stateSet = true
+		}
+	})
 
 	b, closer, err := o.backend(ctx, bf)
 	if err != nil {
@@ -85,8 +91,12 @@ func issueList(ctx context.Context, o Options, args []string) error {
 	}
 	defer closeQuietly(closer)
 
+	status := ""
+	if stateSet {
+		status = *state
+	}
 	f := store.ListFilter{
-		Status: *state, Query: strings.TrimSpace(*query),
+		Status: status, Query: strings.TrimSpace(*query),
 		Sort: *sort, Page: *page, PerPage: *limit,
 	}
 	if *label != "" {

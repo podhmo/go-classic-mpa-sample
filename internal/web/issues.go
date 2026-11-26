@@ -571,10 +571,12 @@ func parseListFilter(r *http.Request) store.ListFilter {
 		Page:    1,
 		PerPage: perPage,
 	}
-	switch f.Status {
-	case store.StatusOpen, store.StatusClosed, "all":
-	default:
-		f.Status = store.StatusOpen
+	if rawStatus := q.Get("status"); rawStatus != "" {
+		switch f.Status {
+		case store.StatusOpen, store.StatusClosed, "all":
+		default:
+			f.Status = store.StatusOpen
+		}
 	}
 	if f.Sort != "oldest" {
 		f.Sort = ""

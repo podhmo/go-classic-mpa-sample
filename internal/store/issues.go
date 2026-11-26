@@ -69,17 +69,40 @@ func (s *Store) ListIssues(ctx context.Context, wsID int64, f ListFilter) ([]*Is
 	conds = append(conds, "i.workspace_id = ?")
 	args = append(args, wsID)
 
+	search := ParseIssueSearchQuery(f.Query)
 	status := f.Status
 	if status == "" {
 		status = StatusOpen
+		if len(search.Statuses) > 0 {
+			status = "all"
+		}
 	}
 	if status != "all" {
 		conds = append(conds, "i.status = ?")
 		args = append(args, status)
 	}
-	if f.Query != "" {
+	if len(search.Statuses) > 1 {
+		// One issue cannot carry two statuses; repeated conflicting is:
+		// qualifiers are ANDed and therefore match nothing.
+		conds = append(conds, "1 = 0")
+	} else if len(search.Statuses) == 1 {
+		conds = append(conds, "i.status = ?")
+		args = append(args, search.Statuses[0])
+	}
+	for _, term := range search.Terms {
 		conds = append(conds, "(instr(lower(i.title), lower(?)) > 0 OR instr(lower(i.body), lower(?)) > 0)")
-		args = append(args, f.Query, f.Query)
+		args = append(args, term, term)
+	}
+	for _, name := range search.Labels {
+		conds = append(conds, `EXISTS (
+			SELECT 1 FROM issue_labels il JOIN labels l ON l.id = il.label_id
+			WHERE il.issue_id = i.id AND l.kind = ? AND l.name = ?
+			AND (l.workspace_id IS NULL OR l.workspace_id = ?))`)
+		args = append(args, KindLabelIssue, name, wsID)
+	}
+	for _, name := range search.Authors {
+		conds = append(conds, "EXISTS (SELECT 1 FROM users ua WHERE ua.id = i.author_id AND ua.name = ?)")
+		args = append(args, name)
 	}
 	if f.LabelID > 0 {
 		conds = append(conds, "EXISTS (SELECT 1 FROM issue_labels il WHERE il.issue_id = i.id AND il.label_id = ?)")

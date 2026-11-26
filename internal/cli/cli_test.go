@@ -91,6 +91,29 @@ func TestIssueListAndViewLocal(t *testing.T) {
 	}
 }
 
+func TestIssueListSearchStatusQualifierLocal(t *testing.T) {
+	db := t.TempDir() + "/test.db"
+	id := seedIssue(t, db, "qualified issue")
+	st, err := store.Open(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetIssueStatus(context.Background(), id, store.StatusClosed); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+	o := localOptions(t, db)
+
+	code, out, _ := run(t, o, "issue", "list", "--search", "is:closed")
+	if code != ExitOK || !strings.Contains(out, "qualified issue") {
+		t.Fatalf("issue list --search is:closed: exit %d\n%s", code, out)
+	}
+	code, out, _ = run(t, o, "issue", "list")
+	if code != ExitOK || strings.Contains(out, "qualified issue") {
+		t.Fatalf("default issue list should still hide closed issues: exit %d\n%s", code, out)
+	}
+}
+
 // --markdown prints the same document the /markdown endpoints serve —
 // the export package shared by all three surfaces.
 func TestIssueViewMarkdown(t *testing.T) {
