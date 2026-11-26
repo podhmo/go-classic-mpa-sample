@@ -11,7 +11,6 @@
 | 25 | nit | 未修正 | 部分更新の append パスで "Last updated" メタ行が stale | PR #49 の Devin Review 指摘から発覚した同種問題: コメント/返信の部分投稿（`createComment`/`createDiscussionComment` の `X-Partial` 応答）は store の `updated_at` を進めるが、fragment は新 `<li>` のみを返すためヘッダの "Last updated" がリロードまで古いまま。answer swap 側は `discussion_meta` ノード同梱で解決済み（PR #49）。append モードは全ノードを挿入先へ追加する設計なので、自己ターゲットする swap ノードを混ぜるにはプロトコル拡張（例: `data-swap` 印付きノードは `replaceWith`）が要る → TODO.md にタスク記録済 |
 | 27 | info | 未修正 | remote CLI（`*client.Client`）が store sentinel エラーに写像しない | 同じ追検証で発見: `cli.Backend` の HTTP 実装は `*client.Error{Status,Message,Fields}` を返し `store.ErrNotFound`/`ErrNotAnswerable` に写像しないため、remote モードでは `errors.Is(err, store.ErrNotFound)` が成立しない。現状 sentinel を判定する消費者は local 限定の TokenStore のみで実害なし（潜在乖離）。根治候補: 404→ErrNotFound 写像 or API の機械可読エラーコード化 → TODO.md にタスク記録済 |
 | 36 | major | 未修正 | 並行 merge で git 側だけ二重適用されうる | 2026-11-26 コードレビューで発見（`docs/sketch/ja/owner-improvements.md` §1.1）: `mergePull`（api/web/cli 共通の流れ）は `pr.Open()` 確認 → `repo.Merge` → `MarkMerged(WHERE status='open')` の順で、git 副作用が DB の状態遷移より先。squash は常に2回目を作りえ、rebase も base 更新後に読んだ2本目が空差分をコミットしうる。対応案: git 前に DB で CAS による merging 確保 + 中断予約の復旧 |
-| 37 | minor | 未修正 | `createPull` で base の ref エラーが head の結果で上書きされる | `internal/web/pulls.go:367-373` が `normErr` を共用。base 不正・head 正常だと不正 base が `RevParse` に渡り 422 ではなく 500。対応案: `baseErr`/`headErr` に分離 |
 | 38 | minor | 未修正 | API と web の PR 一覧で `page` に上限がなく OFFSET がオーバーフローしうる | #2 の修正は web の issue/discussion 一覧のみ。`internal/api/api.go` の `queryInt` と `internal/web/pulls.go` の `listPulls` は上限なし。対応案: store 層で共通クランプ |
 | 39 | nit | 未修正 | `CheckMerge` が解決済み SHA ではなく ref 名で merge-tree を実行 | `internal/gitrepo/ops.go:284-299`。報告 SHA と判定対象が競合時にずれうる |
 | 40 | nit | 未修正 | エラー見出し `"Bad request"` が英語直書き（i18n 漏れ） | `internal/web/comments.go:295,437,573`、`internal/web/pulls.go:894`。`msgFor(r).ErrBadRequestH` を使う |
@@ -21,6 +20,7 @@
 
 | # | 重要度 | 状態 | 概要 | 詳細 |
 |---|--------|------|------|------|
+| 37 | minor | 修正済 | `createPull` で base の ref エラーが head の結果で上書きされる | `internal/web/pulls.go` が `normErr` を共用し、base 不正・head 正常だと不正 base が `RevParse` に渡り 422 ではなく 500 になっていた。対応: `baseErr`/`headErr` に分離し、どちらかの不正でも 422 のフォームエラーにする。回帰テスト追加済 |
 | 1 | major | 修正済 | 未知/重複 `label_id` で 500 | `POST /issues -d 'title=x&label_id=999'` → FK違反500。`label_id=1&label_id=1` → UNIQUE違反500。edit も同様。`label_id=abc/-3/0` は silently drop されるのと非一貫。原因: store の `setIssueLabels` が素の `INSERT`。対応: `INSERT OR IGNORE INTO issue_labels SELECT ?,id FROM labels WHERE id=?` で未知・重複を無視（既存の drop 方針と一貫）。回帰テスト追加済 |
 | 2 | minor | 修正済 | 範囲外 `page` で誤解を招く空表示 + int64 オーバーフロー | `?page=99999` → 「No issues here yet」（実際は42件）+ ページネーションが消え復帰不能。`page=4611686018427387904` → `(page-1)*perPage` が int64 オーバーフロー → 負の OFFSET → "Showing -19–0"。対応: パース時に `n <= 1_000_000` 制限 + total 判明後に `f.Page` を `TotalPages` にクランプして再クエリ。回帰テスト追加済 |
 | 3 | minor | 修正済 | mux レベルの 404 が素の text/plain | `GET /nonexistent`, `/issues/` → `404 page not found`（styled error page を通らない）。対応: `GET /` + `POST /` のメソッド限定キャッチオールで styled 404。**後日談**: 当初はメソッド無指定 `"/"` にしたら PUT/DELETE の自動405まで404に飲まれた → メソッド限定に分割して405復帰（pitfalls.md 参照） |

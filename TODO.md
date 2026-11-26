@@ -19,7 +19,7 @@ Guides referenced below are in the `modern-web-guidance` catalog (`.agents/skill
 - [ ] **Long story を content-visibility 閾値超にする**: StoryIssueDetailLong/StoryDiscussionDetailLong が 24 件で `.comment-list:has(> .comment:nth-child(50))` を発火しない → 50+ 件にして CV パスを視覚検証可能にする
 - [ ] **/static/ の versioned URL 化**: `max-age=3600` は妥協案。hash 入り URL + `immutable` にすると長期キャッシュが効く（modern-web-guidance performance の CacheFirst 方針、[`docs/sketch/ja/rendering-and-visual-diff.md`](docs/sketch/ja/rendering-and-visual-diff.md)）
 - [ ] **visual-diff の拡張**: (a) dark モードの baseline を別途撮る、(b) JS 駆動状態（dialog open / toast / copied）の story 化または実 app 撮影で `.toast` 等の視覚カバレッジを取る
-- [ ] **`createPull` の base/head 正規化エラーを分離する**: 片方の `NormalizeRef` エラーがもう片方で上書きされないようにし、不正 ref を 422 として返す（[bugs.md #37](docs/ja/bugs.md)、[owner-improvements §1.2](docs/sketch/ja/owner-improvements.md)）
+- [x] **`createPull` の base/head 正規化エラーを分離する**: 片方の `NormalizeRef` エラーがもう片方で上書きされないようにし、不正 ref を 422 として返す（[bugs.md #37](docs/ja/bugs.md)、[owner-improvements §1.2](docs/sketch/ja/owner-improvements.md)）
 - [ ] **API と web の PR 一覧で page をクランプする**: 巨大な `page` で `(page-1)*perPage` がオーバーフローしないよう、store 層の共通クランプに寄せる。API・web の回帰テストを足す（[bugs.md #38](docs/ja/bugs.md)、[owner-improvements §1.4](docs/sketch/ja/owner-improvements.md)）
 - [ ] **PR diff の切り詰めをクライアントへ通知する**: API は `X-Truncated: true` を返し、remote CLI は不完全な diff であることを警告する（[bugs.md #41](docs/ja/bugs.md)、[owner-improvements §1.6](docs/sketch/ja/owner-improvements.md)）
 - [ ] **remote CLI の HTTP client に timeout を付ける**: 共有 `client.HTTPClient` に 30s 程度の timeout を設定し、無応答サーバーで CLI が永遠に待たないようにする（[owner-improvements §1.6](docs/sketch/ja/owner-improvements.md)）

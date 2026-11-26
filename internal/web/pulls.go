@@ -364,13 +364,14 @@ func (h *handler) createPull(w http.ResponseWriter, r *http.Request) {
 		Body:  strings.TrimSpace(r.PostFormValue("body")),
 	}
 	base, head := r.PostFormValue("base"), r.PostFormValue("head")
-	var normErr error
-	if in.BaseRef, normErr = h.repo.NormalizeRef(ctx, base); normErr != nil {
+	var baseErr, headErr error
+	if in.BaseRef, baseErr = h.repo.NormalizeRef(ctx, base); baseErr != nil {
 		in.BaseRef = base
 	}
-	if in.HeadRef, normErr = h.repo.NormalizeRef(ctx, head); normErr != nil {
+	if in.HeadRef, headErr = h.repo.NormalizeRef(ctx, head); headErr != nil {
 		in.HeadRef = head
 	}
+	normErr := errors.Join(baseErr, headErr)
 	var ferrs pullFormErrors
 	if fe := store.ValidatePullRequestInput(in); fe != nil {
 		lang := localeFromContext(r.Context())
@@ -378,9 +379,11 @@ func (h *handler) createPull(w http.ResponseWriter, r *http.Request) {
 		ferrs.Body = fieldErrText(lang, "body", fe["body"])
 		ferrs.Refs = strings.TrimSpace(strings.Join([]string{fieldErrText(lang, "base", fe["base"]), fieldErrText(lang, "head", fe["head"])}, " "))
 	}
-	if normErr != nil && !errors.Is(normErr, gitrepo.ErrBadRef) {
-		h.internalError(w, r, normErr)
-		return
+	for _, err := range []error{baseErr, headErr} {
+		if err != nil && !errors.Is(err, gitrepo.ErrBadRef) {
+			h.internalError(w, r, err)
+			return
+		}
 	}
 	if normErr != nil {
 		ferrs.Refs = msgFor(r).ErrRefsInvalid
