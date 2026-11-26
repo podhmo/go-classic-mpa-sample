@@ -323,7 +323,7 @@ func (h *handler) pathID(w http.ResponseWriter, r *http.Request, name string) (i
 
 // queryInt reads a positive int query parameter with a default.
 func queryInt(r *http.Request, name string, def int) int {
-	if v, err := strconv.Atoi(r.URL.Query().Get(name)); err == nil && v > 0 {
+	if v, err := strconv.Atoi(r.URL.Query().Get(name)); err == nil && v > 0 && v <= store.MaxListPage {
 		return v
 	}
 	return def

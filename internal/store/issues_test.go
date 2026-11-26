@@ -483,6 +483,13 @@ func TestListIssues(t *testing.T) {
 	if !equalIDs(issueIDs(issues), i3, i2) {
 		t.Fatalf("page0: ids=%v", issueIDs(issues))
 	}
+	issues, _, err = s.ListIssues(ctx, 1, ListFilter{Status: "all", PerPage: 2, Page: int(^uint(0) >> 1)})
+	if err != nil {
+		t.Fatalf("huge page: %v", err)
+	}
+	if !equalIDs(issueIDs(issues), i3, i2) {
+		t.Fatalf("huge page: ids=%v", issueIDs(issues))
+	}
 
 	issues, _, err = s.ListIssues(ctx, 1, ListFilter{LabelID: bug})
 	if err != nil {

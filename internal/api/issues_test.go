@@ -103,6 +103,19 @@ func TestIssueLifecycle(t *testing.T) {
 	}
 }
 
+func TestListIssuesHugePageFallsBackToFirst(t *testing.T) {
+	srv, _ := newServer(t)
+	createIssue(t, srv, `{"title":"first","body":"hello"}`)
+
+	code, out := do(t, srv, "GET", "/api/v1/w/default/issues?page=4611686018427387904", "")
+	if code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", code)
+	}
+	if out["page"].(float64) != 1 || out["total"].(float64) != 1 {
+		t.Fatalf("huge page response = %v, want page 1 with the issue", out)
+	}
+}
+
 // The markdown endpoint answers text/markdown: the issue plus every
 // comment as one document. Errors stay JSON.
 func TestIssueMarkdown(t *testing.T) {

@@ -49,6 +49,8 @@ type fakeStore struct {
 	sessions    map[string]int64 // hashed token → user ID
 	workspaces  map[string]*store.Workspace
 	nextWS      int64
+	pulls       []*store.PullRequest
+	nextPull    int64
 	// sessionUserErr, when set, makes SessionUser fail — simulates a
 	// transient session-store error.
 	sessionUserErr error
@@ -68,6 +70,7 @@ func newFakeStore() *fakeStore {
 		nextWS:      2,
 		nextD:       1,
 		nextDC:      1,
+		nextPull:    1,
 	}
 	f.labels = []*store.Label{
 		{ID: 1, Name: "Bug", Color: "#d73a4a", Kind: store.KindLabelIssue},
@@ -1432,11 +1435,58 @@ func TestSpeculationRules(t *testing.T) {
 	}
 }
 
-// Pull requests — the fake holds no PR state: /pulls routes mount only
-// when New got a repo, which the web tests never supply, so these are
-// plain stubs keeping fakeStore a Store.
-func (f *fakeStore) ListPullRequests(_ context.Context, _ store.PRListFilter) ([]*store.PullRequest, int, error) {
-	return nil, 0, nil
+// Pull requests — list state lives in memory so pagination can be tested;
+// the remaining PR methods are plain stubs because most web tests mount no repo.
+func (f *fakeStore) ListPullRequests(_ context.Context, fl store.PRListFilter) ([]*store.PullRequest, int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	status := fl.Status
+	if status == "" {
+		status = store.PRStatusOpen
+	}
+	var matched []*store.PullRequest
+	for _, pr := range f.pulls {
+		if status != "all" && pr.Status != status {
+			continue
+		}
+		if fl.Query != "" {
+			q := strings.ToLower(fl.Query)
+			if !strings.Contains(strings.ToLower(pr.Title), q) && !strings.Contains(strings.ToLower(pr.Body), q) {
+				continue
+			}
+		}
+		matched = append(matched, pr)
+	}
+	sort.Slice(matched, func(i, j int) bool {
+		a, b := matched[i], matched[j]
+		if fl.Sort == "oldest" {
+			if a.CreatedAt.Equal(b.CreatedAt) {
+				return a.ID < b.ID
+			}
+			return a.CreatedAt.Before(b.CreatedAt)
+		}
+		if a.CreatedAt.Equal(b.CreatedAt) {
+			return a.ID > b.ID
+		}
+		return a.CreatedAt.After(b.CreatedAt)
+	})
+
+	total := len(matched)
+	page := fl.Page
+	if page < 1 || page > store.MaxListPage {
+		page = 1
+	}
+	perPage := fl.PerPage
+	if perPage <= 0 {
+		perPage = 20
+	}
+	start := (page - 1) * perPage
+	if start >= total {
+		return nil, total, nil
+	}
+	end := min(start+perPage, total)
+	return append([]*store.PullRequest(nil), matched[start:end]...), total, nil
 }
 
 func (f *fakeStore) GetPullRequest(context.Context, int64) (*store.PullRequest, error) {

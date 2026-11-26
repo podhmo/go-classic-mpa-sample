@@ -740,9 +740,7 @@ func parseDiscussionFilter(r *http.Request) store.DiscussionListFilter {
 	if f.Sort != "oldest" {
 		f.Sort = ""
 	}
-	if n, err := strconv.Atoi(q.Get("page")); err == nil && n > 0 && n <= 1_000_000 {
-		f.Page = n
-	}
+	f.Page = parsePageQuery(q.Get("page"))
 	return f
 }
 
