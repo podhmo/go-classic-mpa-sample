@@ -292,7 +292,7 @@ func (h *handler) setCommentHidden(w http.ResponseWriter, r *http.Request, ws *s
 	if hide {
 		reason = r.PostFormValue("reason")
 		if !store.ValidHideReason(reason) {
-			h.renderError(w, r, http.StatusBadRequest, "Bad request", msgFor(r).ErrHideReason)
+			h.renderError(w, r, http.StatusBadRequest, msgFor(r).ErrBadRequestH, msgFor(r).ErrHideReason)
 			return
 		}
 	}
@@ -434,7 +434,7 @@ func (h *handler) setThreadHidden(w http.ResponseWriter, r *http.Request, ws *st
 	if hide {
 		reason = r.PostFormValue("reason")
 		if !store.ValidHideReason(reason) {
-			h.renderError(w, r, http.StatusBadRequest, "Bad request", msgFor(r).ErrHideReason)
+			h.renderError(w, r, http.StatusBadRequest, msgFor(r).ErrBadRequestH, msgFor(r).ErrHideReason)
 			return
 		}
 	}
@@ -570,7 +570,7 @@ func (h *handler) setReplyHidden(w http.ResponseWriter, r *http.Request, ws *sto
 	if hide {
 		reason = r.PostFormValue("reason")
 		if !store.ValidHideReason(reason) {
-			h.renderError(w, r, http.StatusBadRequest, "Bad request", msgFor(r).ErrHideReason)
+			h.renderError(w, r, http.StatusBadRequest, msgFor(r).ErrBadRequestH, msgFor(r).ErrHideReason)
 			return
 		}
 	}
