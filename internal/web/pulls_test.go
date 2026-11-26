@@ -86,6 +86,22 @@ func TestListPullsOutOfRangePageShowsLastPage(t *testing.T) {
 	if strings.Contains(body, "empty-state") {
 		t.Error("out-of-range pulls page must not render the empty state")
 	}
+	prevURL := "/pulls?sort=newest&status=all"
+	if !strings.Contains(body, `href="`+strings.ReplaceAll(prevURL, "&", "&amp;")+`"`) {
+		t.Error("clamped pulls page should link its rendered Previous button to page 1")
+	}
+	if strings.Contains(body, "q=&amp;") || strings.Contains(body, "q=&") {
+		t.Error("rendered pulls pagination should omit an empty q parameter")
+	}
+
+	resp, err = srv.Client().Get(srv.URL + prevURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body = getBody(t, resp)
+	if !strings.Contains(body, "Showing 1–20 of 25 pull requests") || !strings.Contains(body, "Page 1 of 2") {
+		t.Error("following the rendered Previous link should show the first pulls page")
+	}
 
 	resp, err = srv.Client().Get(srv.URL + "/pulls?status=all&page=1000001")
 	if err != nil {
