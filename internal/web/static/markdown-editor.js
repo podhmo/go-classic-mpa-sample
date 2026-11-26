@@ -42,19 +42,18 @@ function writeDraft(key, value) {
   }
 }
 
-function clearPendingDrafts() {
-  let raw = null;
-  try { raw = sessionStorage.getItem("draft:pending"); } catch { return; }
-  if (!raw) return;
+function clearPostedDraft() {
+  const prefix = "zatudan_draft_posted=";
+  const entry = document.cookie.split("; ").find((part) => part.startsWith(prefix));
+  if (!entry) return;
+  let key = entry.slice(prefix.length);
   try {
-    const pending = JSON.parse(raw);
-    if (location.pathname !== pending.from) {
-      try { localStorage.removeItem(pending.key); } catch {}
-      sessionStorage.removeItem("draft:pending");
-    }
+    key = decodeURIComponent(key.replace(/\+/g, "%20"));
+    localStorage.removeItem(key);
   } catch {
-    sessionStorage.removeItem("draft:pending");
+    // A malformed or unavailable store must not block the page.
   }
+  document.cookie = "zatudan_draft_posted=; Path=/; Max-Age=0";
 }
 
 function saveState(textarea, state) {
@@ -156,11 +155,14 @@ function trackSubmit(form) {
     if (form.hasAttribute("data-partial")) return;
     const textarea = form.querySelector('textarea[name="body"]');
     if (!textarea) return;
-    try {
-      sessionStorage.setItem("draft:pending", JSON.stringify({
-        key: draftKey(textarea), from: location.pathname,
-      }));
-    } catch {}
+    let marker = form.querySelector('input[name="draft_key"]');
+    if (!marker) {
+      marker = document.createElement("input");
+      marker.type = "hidden";
+      marker.name = "draft_key";
+      form.append(marker);
+    }
+    marker.value = draftKey(textarea);
   });
   form.addEventListener("reset", () => {
     // partial-submit.js fires reset only after a successful partial post.
@@ -173,6 +175,6 @@ function trackSubmit(form) {
   });
 }
 
-clearPendingDrafts();
+clearPostedDraft();
 bind('textarea[name="body"]', { init: enhance });
 bind("form", { init: trackSubmit });

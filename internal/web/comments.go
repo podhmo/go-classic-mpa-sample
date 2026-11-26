@@ -228,7 +228,7 @@ func (h *handler) updateComment(w http.ResponseWriter, r *http.Request, ws *stor
 		h.issueError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, cancelURL, http.StatusSeeOther)
+	redirectSeeOther(w, r, cancelURL)
 }
 
 // confirmDeleteComment renders the delete confirmation page. Being a
@@ -266,7 +266,7 @@ func (h *handler) deleteComment(w http.ResponseWriter, r *http.Request, ws *stor
 		h.issueError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, issueURL(ws, issue.ID), http.StatusSeeOther)
+	redirectSeeOther(w, r, issueURL(ws, issue.ID))
 }
 
 func (h *handler) hideComment(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
@@ -317,7 +317,7 @@ func (h *handler) setCommentHidden(w http.ResponseWriter, r *http.Request, ws *s
 
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("%s#comment-%d", issueURL(ws, issue.ID), c.ID), http.StatusSeeOther)
+	redirectSeeOther(w, r, fmt.Sprintf("%s#comment-%d", issueURL(ws, issue.ID), c.ID))
 }
 
 // editThreadForm renders the thread's (the opening post's) edit page.
@@ -369,7 +369,7 @@ func (h *handler) updateThread(w http.ResponseWriter, r *http.Request, ws *store
 		h.discussionError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, cancelURL, http.StatusSeeOther)
+	redirectSeeOther(w, r, cancelURL)
 }
 
 // confirmDeleteThread renders the thread delete confirmation page;
@@ -407,7 +407,7 @@ func (h *handler) deleteThread(w http.ResponseWriter, r *http.Request, ws *store
 		h.discussionError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, discussionURL(ws, discussion.ID), http.StatusSeeOther)
+	redirectSeeOther(w, r, discussionURL(ws, discussion.ID))
 }
 
 func (h *handler) hideThread(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
@@ -457,7 +457,7 @@ func (h *handler) setThreadHidden(w http.ResponseWriter, r *http.Request, ws *st
 
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("%s#thread-%d", discussionURL(ws, discussion.ID), t.ID), http.StatusSeeOther)
+	redirectSeeOther(w, r, fmt.Sprintf("%s#thread-%d", discussionURL(ws, discussion.ID), t.ID))
 }
 
 // editReplyForm renders the reply's edit page.
@@ -509,7 +509,7 @@ func (h *handler) updateReply(w http.ResponseWriter, r *http.Request, ws *store.
 		h.discussionError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, cancelURL, http.StatusSeeOther)
+	redirectSeeOther(w, r, cancelURL)
 }
 
 // confirmDeleteReply renders the reply delete confirmation page.
@@ -545,7 +545,7 @@ func (h *handler) deleteReply(w http.ResponseWriter, r *http.Request, ws *store.
 		h.discussionError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("%s#thread-%d", discussionURL(ws, discussion.ID), t.ID), http.StatusSeeOther)
+	redirectSeeOther(w, r, fmt.Sprintf("%s#thread-%d", discussionURL(ws, discussion.ID), t.ID))
 }
 
 func (h *handler) hideReply(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
@@ -596,5 +596,5 @@ func (h *handler) setReplyHidden(w http.ResponseWriter, r *http.Request, ws *sto
 
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("%s#comment-%d", discussionURL(ws, discussion.ID), c.ID), http.StatusSeeOther)
+	redirectSeeOther(w, r, fmt.Sprintf("%s#comment-%d", discussionURL(ws, discussion.ID), c.ID))
 }

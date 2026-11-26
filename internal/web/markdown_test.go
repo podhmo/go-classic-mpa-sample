@@ -3,6 +3,8 @@ package web
 import (
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 	"io"
+	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -166,5 +168,39 @@ func TestMarkdownPreviewEndpoint(t *testing.T) {
 	}
 	if !strings.Contains(string(body), `href="/w/default/issues/12"`) {
 		t.Fatalf("preview missing workspace issue link: %s", body)
+	}
+}
+
+func TestDraftPostedCookieOnlyAfterSuccessfulClassicPost(t *testing.T) {
+	srv, _ := newTestServer(t)
+	key := "draft:anonymous:/w/default/issues/new:f-body"
+	resp := postForm(t, noRedirectClient(), srv.URL+"/w/default/issues", url.Values{
+		"title": {"draft probe"}, "body": {"body"}, "draft_key": {key},
+	})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("success status = %d", resp.StatusCode)
+	}
+	var cookie *http.Cookie
+	for _, c := range resp.Cookies() {
+		if c.Name == "zatudan_draft_posted" {
+			cookie = c
+		}
+	}
+	if cookie == nil || cookie.Value != url.QueryEscape(key) {
+		t.Fatalf("draft cookie = %#v, want escaped %q", cookie, key)
+	}
+
+	resp = postForm(t, noRedirectClient(), srv.URL+"/w/default/issues", url.Values{
+		"body": {"missing title"}, "draft_key": {key},
+	})
+	resp.Body.Close()
+	if resp.StatusCode == http.StatusSeeOther {
+		t.Fatal("invalid create unexpectedly redirected")
+	}
+	for _, c := range resp.Cookies() {
+		if c.Name == "zatudan_draft_posted" {
+			t.Fatalf("invalid create set draft cookie: %#v", c)
+		}
 	}
 }

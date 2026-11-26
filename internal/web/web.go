@@ -18,6 +18,7 @@ import (
 	"log"
 	"mime"
 	"net/http"
+	"net/url"
 	"path"
 	"sort"
 	"strconv"
@@ -831,6 +832,23 @@ func (h *handler) parseForm(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	return true
+}
+
+// redirectSeeOther completes a successful classic form POST. When the form
+// carried the client-generated draft key, echo it in a short-lived cookie so
+// markdown-editor.js can delete exactly that local draft after the PRG
+// redirect; validation failures render in place and therefore never set it.
+func redirectSeeOther(w http.ResponseWriter, r *http.Request, target string) {
+	if key := r.PostFormValue("draft_key"); key != "" {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "zatudan_draft_posted",
+			Value:    url.QueryEscape(key),
+			Path:     "/",
+			MaxAge:   30,
+			SameSite: http.SameSiteLaxMode,
+		})
+	}
+	http.Redirect(w, r, target, http.StatusSeeOther)
 }
 
 // writeMarkdown serves an exported markdown document. The copy-as-markdown
