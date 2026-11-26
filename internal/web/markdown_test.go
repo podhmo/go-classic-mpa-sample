@@ -107,4 +107,14 @@ func TestRenderMarkdownUsesCacheWithoutChangingOutput(t *testing.T) {
 	if !strings.Contains(string(second), "<strong>bold</strong>") {
 		t.Errorf("cached output lost markdown rendering: %s", second)
 	}
+
+	// Prove the second call really reads the cache rather than merely
+	// rendering the same output twice: replacing the entry changes what the
+	// next call returns. The sentinel input is test-only, so poisoning it
+	// cannot affect real pages.
+	key := markdownCacheKey([]byte(input))
+	renderedMarkdown.add(key, "<p>cache sentinel</p>")
+	if got := renderMarkdown(input); got != "<p>cache sentinel</p>" {
+		t.Fatalf("renderMarkdown after cache replacement = %q, want sentinel", got)
+	}
 }
