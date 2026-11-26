@@ -397,11 +397,12 @@ func New(st Store, opts ...Option) http.Handler {
 			h.Set("Cache-Control", "public, max-age=3600")
 			h.Set("ETag", etag)
 			h.Add("Vary", "Accept-Encoding")
-			if contentType == "" {
-				contentType = asset.contentType
+			ct := contentType
+			if ct == "" {
+				ct = asset.contentType
 			}
-			if contentType != "" {
-				h.Set("Content-Type", contentType)
+			if ct != "" {
+				h.Set("Content-Type", ct)
 			}
 			if ifNoneMatch(r.Header.Get("If-None-Match"), etag) {
 				w.WriteHeader(http.StatusNotModified)
