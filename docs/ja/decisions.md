@@ -770,6 +770,6 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 
 ## テンプレート parse の clone 化（2026-11-26、owner improvements 対応）
 
-- **layout + fragments + pull_fragments はロケールごとに 1 回だけ parse する**: 各 page はその template set を `Clone()` してから自分の `content` / `head` override を足す。page ごとに共有 template を再 parse しないため起動時の CPU と allocation を減らす。
-- **fragment は常に両方を shared set に入れる**: issue/discussion/pull の define 名は衝突しない。必要な page だけ fragment file を選ぶ従来の分岐を捨て、clone 元を単純化する。
+- **layout はロケールごとに 1 回だけ parse する**: 各 page はその template set を `Clone()` してから自分の `content` / `head` override を足す。page ごとに layout を再 parse しないため起動時の CPU を減らす。
+- **fragment は必要な detail page だけで parse する**: `html/template.Clone` は parse tree をコピーするため、全 fragment を shared set に入れると使わない page にも複製が残る。issue/discussion/pull detail にだけ従来どおり必要な fragment file を足す。
 - **`jsDictFor` の JSON は locale ごとに cache する**: catalog は起動後に変わらないため、描画や Renderer 構築のたびに marshal しない。
