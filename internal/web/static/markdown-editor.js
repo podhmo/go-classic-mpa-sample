@@ -26,7 +26,11 @@ function draftKey(textarea) {
     identity = [action, ...anchor, `textarea${Math.max(index, 0)}`].join(":");
   }
   const account = document.documentElement.dataset.userId || "anonymous";
-  return `draft:${account}:${location.pathname}:${identity || "body"}`;
+  // Use the form action rather than location.pathname: a rejected create
+  // POST is re-rendered on the collection URL, and the draft must keep the
+  // same key across that validation round-trip.
+  const path = form ? new URL(form.action, location.origin).pathname : location.pathname;
+  return `draft:${account}:${path}:${identity || "body"}`;
 }
 
 function readDraft(key) {
