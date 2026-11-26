@@ -219,7 +219,8 @@ func TestIssueLabelsMultiNamePrefersWorkspaceLabel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.CreateLabel(ctx, 1, store.KindLabelIssue, store.LabelInput{Name: "other", Color: "#333333"}); err != nil {
+	otherID, err := st.CreateLabel(ctx, 1, store.KindLabelIssue, store.LabelInput{Name: "other", Color: "#333333"})
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -228,14 +229,15 @@ func TestIssueLabelsMultiNamePrefersWorkspaceLabel(t *testing.T) {
 		t.Fatalf("create = %d %v", code, out)
 	}
 	labels := out["issue"].(map[string]any)["labels"].([]any)
-	var bugID int64
+	if len(labels) != 2 {
+		t.Fatalf("labels = %v, want exactly bug and other", labels)
+	}
+	gotIDs := map[int64]bool{}
 	for _, raw := range labels {
 		label := raw.(map[string]any)
-		if label["name"] == "bug" {
-			bugID = int64(label["id"].(float64))
-		}
+		gotIDs[int64(label["id"].(float64))] = true
 	}
-	if bugID != ownID || bugID == sharedID {
-		t.Fatalf("bug label id = %d, want workspace label %d (shared %d)", bugID, ownID, sharedID)
+	if !gotIDs[ownID] || !gotIDs[otherID] || gotIDs[sharedID] {
+		t.Fatalf("label ids = %v, want workspace bug %d and other %d, not shared %d", gotIDs, ownID, otherID, sharedID)
 	}
 }
