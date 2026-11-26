@@ -1241,6 +1241,68 @@ func TestStaticAssetsUseGzipAndETag(t *testing.T) {
 	if body, err := io.ReadAll(resp.Body); err != nil || len(body) != 0 {
 		t.Errorf("304 body length/error = %d/%v, want empty", len(body), err)
 	}
+
+	req, err = http.NewRequest(http.MethodGet, srv.URL+"/static/app.css", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Accept-Encoding", "identity")
+	resp, err = srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identityETag := resp.Header.Get("ETag")
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("identity status = %d, want 200", resp.StatusCode)
+	}
+	if identityETag == "" || identityETag == etag {
+		t.Fatalf("identity ETag = %q, want a tag distinct from gzip %q", identityETag, etag)
+	}
+
+	req, err = http.NewRequest(http.MethodGet, srv.URL+"/static/app.css", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Accept-Encoding", "identity")
+	req.Header.Set("If-None-Match", etag)
+	resp, err = srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("cross-encoding conditional status = %d, want 200", resp.StatusCode)
+	}
+}
+
+func TestStaticAssetsSupportByteRanges(t *testing.T) {
+	srv, _ := newTestServer(t)
+	req, err := http.NewRequest(http.MethodGet, srv.URL+"/static/app.css", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Accept-Encoding", "identity")
+	req.Header.Set("Range", "bytes=0-9")
+	resp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusPartialContent {
+		t.Fatalf("status = %d, want 206", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(body) != 10 {
+		t.Fatalf("range body length = %d, want 10", len(body))
+	}
+	if got := resp.Header.Get("Content-Range"); !strings.HasPrefix(got, "bytes 0-9/") {
+		t.Fatalf("Content-Range = %q", got)
+	}
+
 }
 
 // toast.js is imported by partial-submit.js (a module import, not a

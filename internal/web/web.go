@@ -411,10 +411,7 @@ func New(st Store, opts ...Option) http.Handler {
 			if useGzip {
 				h.Set("Content-Encoding", "gzip")
 			}
-			h.Set("Content-Length", strconv.Itoa(len(body)))
-			if r.Method != http.MethodHead {
-				w.Write(body)
-			}
+			http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(body))
 		}
 	}
 	registerStatic := func(route, name string, contentTypes ...string) {
