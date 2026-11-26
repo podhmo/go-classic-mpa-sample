@@ -499,18 +499,16 @@ func (h *handler) createPRComment(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) findPRComment(w http.ResponseWriter, r *http.Request, prID, commentID int64) (*store.PRComment, bool) {
-	comments, err := h.store.ListPRComments(r.Context(), prID)
+	c, err := h.store.GetPRComment(r.Context(), prID, commentID)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "Not found.", nil)
+		return nil, false
+	}
 	if err != nil {
 		h.prStoreError(w, err)
 		return nil, false
 	}
-	for _, c := range comments {
-		if c.ID == commentID {
-			return c, true
-		}
-	}
-	writeError(w, http.StatusNotFound, "Not found.", nil)
-	return nil, false
+	return c, true
 }
 
 // PATCH /api/v1/pulls/{id}/comments/{cid} {"body"} → 200

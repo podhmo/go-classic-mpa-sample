@@ -42,16 +42,11 @@ func moderationDTO(m store.Moderation) Moderation {
 // findIssueComment re-reads one comment after a mutation (the DTO the
 // response carries); nil when the list cannot be read or the id is gone.
 func (h *handler) findIssueComment(r *http.Request, issueID, commentID int64) *store.Comment {
-	comments, err := h.store.ListComments(r.Context(), issueID)
+	c, err := h.store.GetComment(r.Context(), issueID, commentID)
 	if err != nil {
 		return nil
 	}
-	for _, c := range comments {
-		if c.ID == commentID {
-			return c
-		}
-	}
-	return nil
+	return c
 }
 
 // requireIssueComment resolves /issues/{id}/comments/{cid}: parent

@@ -67,6 +67,13 @@ func (sc *ScopedStore) GetIssue(ctx context.Context, id int64) (*Issue, error) {
 	return i, nil
 }
 
+func (sc *ScopedStore) GetIssueInWorkspace(ctx context.Context, wsID, id int64) (*Issue, error) {
+	if wsID != sc.wsID {
+		return nil, ErrNotFound
+	}
+	return sc.GetIssue(ctx, id)
+}
+
 func (sc *ScopedStore) CreateIssue(ctx context.Context, in IssueInput, authorID int64) (int64, error) {
 	return sc.s.CreateIssue(ctx, sc.wsID, in, authorID)
 }
@@ -76,6 +83,13 @@ func (sc *ScopedStore) UpdateIssue(ctx context.Context, id int64, in IssueInput)
 		return err
 	}
 	return sc.s.UpdateIssue(ctx, id, in)
+}
+
+func (sc *ScopedStore) PatchIssueInWorkspace(ctx context.Context, wsID, id int64, patch IssuePatch) error {
+	if wsID != sc.wsID {
+		return ErrNotFound
+	}
+	return sc.s.PatchIssueInWorkspace(ctx, sc.wsID, id, patch)
 }
 
 func (sc *ScopedStore) SetIssueStatus(ctx context.Context, id int64, status string) error {
@@ -97,6 +111,13 @@ func (sc *ScopedStore) ListComments(ctx context.Context, issueID int64) ([]*Comm
 		return nil, err
 	}
 	return sc.s.ListComments(ctx, issueID)
+}
+
+func (sc *ScopedStore) GetComment(ctx context.Context, issueID, commentID int64) (*Comment, error) {
+	if err := sc.inScope(ctx, issueID); err != nil {
+		return nil, err
+	}
+	return sc.s.GetComment(ctx, issueID, commentID)
 }
 
 func (sc *ScopedStore) CreateComment(ctx context.Context, issueID int64, body string, authorID int64) (int64, error) {
@@ -164,6 +185,13 @@ func (sc *ScopedStore) GetLabel(ctx context.Context, id int64) (*Label, error) {
 		return nil, ErrNotFound
 	}
 	return l, nil
+}
+
+func (sc *ScopedStore) LabelByName(ctx context.Context, wsID int64, kind, name string) (*Label, error) {
+	if wsID != sc.wsID {
+		return nil, ErrNotFound
+	}
+	return sc.s.LabelByName(ctx, sc.wsID, kind, name)
 }
 
 // CreateLabel adds a label to this workspace, or to the shared master
@@ -347,6 +375,9 @@ func (sc *ScopedStore) MarkMerged(ctx context.Context, id int64, mi PRMergeInfo)
 }
 func (sc *ScopedStore) ListPRComments(ctx context.Context, prID int64) ([]*PRComment, error) {
 	return sc.s.ListPRComments(ctx, prID)
+}
+func (sc *ScopedStore) GetPRComment(ctx context.Context, prID, commentID int64) (*PRComment, error) {
+	return sc.s.GetPRComment(ctx, prID, commentID)
 }
 func (sc *ScopedStore) CreatePRComment(ctx context.Context, prID int64, in PRCommentInput, authorID int64) (int64, error) {
 	return sc.s.CreatePRComment(ctx, prID, in, authorID)

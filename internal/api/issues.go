@@ -25,21 +25,16 @@ func (h *handler) listIssues(w http.ResponseWriter, r *http.Request, ws *store.W
 	if lid := q.Get("label_id"); lid != "" {
 		f.LabelID = int64(queryInt(r, "label_id", 0))
 	} else if name := q.Get("label"); name != "" {
-		all, err := h.store.ListLabels(r.Context(), ws.ID, store.KindLabelIssue)
+		label, err := h.store.LabelByName(r.Context(), ws.ID, store.KindLabelIssue, name)
+		if err == store.ErrNotFound {
+			writeError(w, http.StatusUnprocessableEntity, "Validation failed.", map[string]string{"label": "Unknown label: " + name})
+			return
+		}
 		if err != nil {
 			h.storeError(w, err)
 			return
 		}
-		for _, l := range all {
-			if l.Name == name {
-				f.LabelID = l.ID
-				break
-			}
-		}
-		if f.LabelID == 0 {
-			writeError(w, http.StatusUnprocessableEntity, "Validation failed.", map[string]string{"label": "Unknown label: " + name})
-			return
-		}
+		f.LabelID = label.ID
 	}
 	issues, total, err := h.store.ListIssues(r.Context(), ws.ID, f)
 	if err != nil {
@@ -111,7 +106,7 @@ type issueBody struct {
 	Title    *string  `json:"title"`
 	Body     *string  `json:"body"`
 	LabelIDs []int64  `json:"label_ids"`
-	Labels   []string `json:"labels"` // label names, resolved via ListLabels
+	Labels   []string `json:"labels"` // label names, resolved one at a time
 }
 
 // POST /api/v1/issues {"title", "body", "label_ids"|"labels"} → 201
@@ -150,7 +145,8 @@ func (h *handler) createIssue(w http.ResponseWriter, r *http.Request, ws *store.
 }
 
 // PATCH /api/v1/issues/{id} — only fields present in the body are updated;
-// absent fields keep their current values.
+// absent fields keep their current values. Validation happens before the
+// scoped update, so an invalid body can be a 422 even when the id is missing.
 func (h *handler) updateIssue(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	id, ok := h.pathID(w, r, "id")
 	if !ok {
@@ -160,23 +156,17 @@ func (h *handler) updateIssue(w http.ResponseWriter, r *http.Request, ws *store.
 	if !decodeBody(w, r, &in) {
 		return
 	}
-	issue, err := h.store.GetIssue(r.Context(), id)
-	if err != nil {
-		h.storeError(w, err)
-		return
-	}
-	if !h.requireScope(w, ws, issue.WorkspaceID) {
-		return
-	}
-	input := store.IssueInput{Title: issue.Title, Body: issue.Body}
-	for _, l := range issue.Labels {
-		input.LabelIDs = append(input.LabelIDs, l.ID)
-	}
+	patch := store.IssuePatch{}
+	validation := store.IssueInput{Title: "x"}
 	if in.Title != nil {
-		input.Title = strings.TrimSpace(*in.Title)
+		title := strings.TrimSpace(*in.Title)
+		patch.Title = &title
+		validation.Title = title
 	}
 	if in.Body != nil {
-		input.Body = strings.TrimSpace(*in.Body)
+		body := strings.TrimSpace(*in.Body)
+		patch.Body = &body
+		validation.Body = body
 	}
 	if in.LabelIDs != nil || len(in.Labels) > 0 {
 		labelIDs, ferr, err := h.resolveLabelIDs(r, ws, store.KindLabelIssue, in.LabelIDs, in.Labels)
@@ -188,17 +178,18 @@ func (h *handler) updateIssue(w http.ResponseWriter, r *http.Request, ws *store.
 			writeError(w, http.StatusUnprocessableEntity, "Validation failed.", ferr)
 			return
 		}
-		input.LabelIDs = labelIDs
+		patch.LabelIDs = labelIDs
+		patch.SetLabels = true
 	}
-	if fe := store.ValidateIssueInput(input); fe.Any() {
+	if fe := store.ValidateIssueInput(validation); fe.Any() {
 		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", fields(fe))
 		return
 	}
-	if err := h.store.UpdateIssue(r.Context(), id, input); err != nil {
+	if err := h.store.PatchIssueInWorkspace(r.Context(), ws.ID, id, patch); err != nil {
 		h.storeError(w, err)
 		return
 	}
-	issue, err = h.store.GetIssue(r.Context(), id)
+	issue, err := h.store.GetIssueInWorkspace(r.Context(), ws.ID, id)
 	if err != nil {
 		h.storeError(w, err)
 		return
@@ -382,20 +373,15 @@ func (h *handler) resolveLabelIDs(r *http.Request, ws *store.Workspace, kind str
 	if len(names) == 0 {
 		return ids, nil, nil
 	}
-	all, err := h.store.ListLabels(r.Context(), ws.ID, kind)
-	if err != nil {
-		return nil, nil, err
-	}
-	byName := map[string]int64{}
-	for _, l := range all {
-		byName[l.Name] = l.ID
-	}
 	for _, n := range names {
-		id, ok := byName[n]
-		if !ok {
+		label, err := h.store.LabelByName(r.Context(), ws.ID, kind, n)
+		if err == store.ErrNotFound {
 			return nil, map[string]string{"labels": fmt.Sprintf("Unknown label: %s", n)}, nil
 		}
-		ids = append(ids, id)
+		if err != nil {
+			return nil, nil, err
+		}
+		ids = append(ids, label.ID)
 	}
 	return ids, nil, nil
 }

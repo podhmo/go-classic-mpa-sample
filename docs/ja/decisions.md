@@ -779,3 +779,9 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 - **base/head の commit SHA は `rev-parse` 1 回で解決する**: `RevParsePair` / `RevParseMany` は複数の `<ref>^{commit}` を同じ process に渡す。`--verify` を複数回指定すると git が単一 revision として扱えないため使わず、exit status・行数・hex 形式で batch 全体を検証する。1 件でも不正なら従来どおり `ErrBadRef`。
 - **open PR detail は先に SHA 解決し、その同じ commit pair で log と merge check を実行する**: ref 名を個別コマンドへ渡さないため、表示する commit 列と merge 判定が途中で動いた ref をまたがない。web/API/local CLI の detail 経路で共有する。
 - **`(baseSHA, headSHA)` を key にした process-local LRU は 32 件**: object id は immutable なので、complete clone の同じ pair の `git log` と clean な `merge-tree` 結果を SSE fragment や再描画で再実行しない。ref 名そのものは movable なので cache key にしない。shallow clone は deepening で同じ tip pair の log が増えうるため cache しない。conflict/unknown な merge 結果も cache せず、merge 系 config 変更後に stale conflict が form を隠すことを避ける（実際の merge は常に実行前に conflict を pre-flight する）。cache は git 失敗を保存せず、読み出し・格納時に slice を copy して caller mutation を遮断する。
+
+## API/store の roundtrip 削減（2026-11-26、owner improvements 対応）
+
+- **issue PATCH は事前読み出ししない**: `PatchIssueInWorkspace` が `WHERE id=? AND workspace_id=?` の scoped update で title/body を `COALESCE(?, column)` し、label 更新も同じ transaction に入れる。既存 issue を読まずに部分更新できる代わりに、missing id と validation error が同時にある request は validation を先に返す（従来の 404 優先ではなく 422 優先）。response 用の再読み出しも `GetIssueInWorkspace` で workspace scope 済みにする。
+- **comment の再取得は単行 lookup**: `GetComment` / `GetPRComment` を `(parent id, comment id)` で scope し、mutation response の DTO 組み立てで全件 `List*Comments` + 線形探索しない。API endpoint は増やさず store API の追加に留める。
+- **label 名解決は `LabelByName`**: 全 label を読まず、kind/name/workspace visibility で 1 行だけ引く。shared master と workspace label が同名なら workspace 側を優先し、picker で workspace-specific に見える方と一致させる。一覧 query parameter と create/update の `labels` 配列で共用する。

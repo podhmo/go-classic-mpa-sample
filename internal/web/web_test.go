@@ -1870,3 +1870,73 @@ func (f *fakeStore) DeletePRComment(context.Context, int64, int64) error {
 func (f *fakeStore) SetPRCommentHidden(context.Context, int64, int64, string) error {
 	return store.ErrNotFound
 }
+
+func (f *fakeStore) GetIssueInWorkspace(_ context.Context, wsID, id int64) (*store.Issue, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	is, ok := f.issues[id]
+	if !ok || is.WorkspaceID != wsID {
+		return nil, store.ErrNotFound
+	}
+	c := *is
+	return &c, nil
+}
+
+func (f *fakeStore) PatchIssueInWorkspace(_ context.Context, wsID, id int64, patch store.IssuePatch) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	is, ok := f.issues[id]
+	if !ok || is.WorkspaceID != wsID {
+		return store.ErrNotFound
+	}
+	if patch.Title != nil {
+		is.Title = *patch.Title
+	}
+	if patch.Body != nil {
+		is.Body = *patch.Body
+	}
+	if patch.SetLabels {
+		is.Labels = f.resolveLabels(patch.LabelIDs)
+	}
+	is.UpdatedAt = time.Now()
+	return nil
+}
+
+func (f *fakeStore) GetComment(_ context.Context, issueID, commentID int64) (*store.Comment, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, c := range f.comments[issueID] {
+		if c.ID == commentID {
+			cc := *c
+			return &cc, nil
+		}
+	}
+	return nil, store.ErrNotFound
+}
+
+func (f *fakeStore) LabelByName(_ context.Context, wsID int64, kind, name string) (*store.Label, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var shared *store.Label
+	for _, l := range f.labels {
+		if l.Kind != kind || l.Name != name || l.Archived {
+			continue
+		}
+		if l.WorkspaceID == wsID {
+			c := *l
+			return &c, nil
+		}
+		if l.WorkspaceID == 0 && shared == nil {
+			shared = l
+		}
+	}
+	if shared != nil {
+		c := *shared
+		return &c, nil
+	}
+	return nil, store.ErrNotFound
+}
+
+func (f *fakeStore) GetPRComment(context.Context, int64, int64) (*store.PRComment, error) {
+	return nil, store.ErrNotFound
+}

@@ -109,6 +109,20 @@ func (s *Store) GetLabel(ctx context.Context, id int64) (*Label, error) {
 	return l, err
 }
 
+// LabelByName returns the active label of kind and name visible in wsID.
+// A workspace label wins over a same-named shared master label, matching
+// the picker's workspace-specific interpretation; no match is ErrNotFound.
+func (s *Store) LabelByName(ctx context.Context, wsID int64, kind, name string) (*Label, error) {
+	l, err := scanLabel(s.db.QueryRowContext(ctx,
+		`SELECT `+labelColumns+` FROM labels
+		WHERE archived = 0 AND kind = ? AND name = ? AND (workspace_id IS NULL OR workspace_id = ?)
+		ORDER BY (workspace_id IS NULL), id LIMIT 1`, kind, name, wsID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return l, err
+}
+
 // CreateLabel inserts a label of kind into workspace wsID (0 = master
 // data shared by all workspaces) and returns its id. Creating a label
 // whose name matches an archived row in the same scope restores that row
