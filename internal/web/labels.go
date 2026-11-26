@@ -102,9 +102,8 @@ func (h *handler) createLabel(w http.ResponseWriter, r *http.Request, ws *store.
 		return
 	}
 	in := store.LabelInput{
-		Name:            strings.TrimSpace(r.PostFormValue("name")),
-		Color:           strings.TrimSpace(r.PostFormValue("color")),
-		ExpectedVersion: formVersion(r),
+		Name:  strings.TrimSpace(r.PostFormValue("name")),
+		Color: strings.TrimSpace(r.PostFormValue("color")),
 	}
 	kind := r.PostFormValue("kind")
 	scope := r.PostFormValue("scope")
@@ -203,8 +202,9 @@ func (h *handler) updateLabel(w http.ResponseWriter, r *http.Request, ws *store.
 		return
 	}
 	in := store.LabelInput{
-		Name:  strings.TrimSpace(r.PostFormValue("name")),
-		Color: strings.TrimSpace(r.PostFormValue("color")),
+		Name:            strings.TrimSpace(r.PostFormValue("name")),
+		Color:           strings.TrimSpace(r.PostFormValue("color")),
+		ExpectedVersion: formVersion(r),
 	}
 	fe := store.ValidateLabelInput(in)
 	lang := localeFromContext(r.Context())
