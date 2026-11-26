@@ -110,7 +110,8 @@ func getWithCookie(t *testing.T, srv *httptest.Server, path string, c *http.Cook
 }
 
 func TestAuthLinksReturnToCurrentPathAndQuery(t *testing.T) {
-	srv, _ := newTestServer(t)
+	srv, f := newTestServer(t)
+	f.addUser(t, "alice", "password123")
 
 	code, body := getWithCookie(t, srv, "/w/default/issues?q=bug+fix&status=open", nil)
 	if code != http.StatusOK {
@@ -121,6 +122,15 @@ func TestAuthLinksReturnToCurrentPathAndQuery(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("anonymous nav missing %s", want)
 		}
+	}
+
+	returnTo := "/w/default/issues?q=bug+fix&status=open"
+	resp := postForm(t, noRedirectClient(), srv.URL+"/login", url.Values{
+		"name": {"alice"}, "password": {"password123"}, "next": {returnTo},
+	})
+	defer resp.Body.Close()
+	if loc := resp.Header.Get("Location"); loc != returnTo {
+		t.Fatalf("login redirect = %q, want %q", loc, returnTo)
 	}
 }
 
