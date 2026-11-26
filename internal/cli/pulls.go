@@ -585,7 +585,11 @@ func prStateChange(ctx context.Context, o Options, action string, args []string)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(o.Stdout, "pull request #%d %sd\n", id, action)
+	verb := action + "d"
+	if action == "reopen" {
+		verb = "reopened"
+	}
+	fmt.Fprintf(o.Stdout, "pull request #%d %s\n", id, verb)
 	return nil
 }
 

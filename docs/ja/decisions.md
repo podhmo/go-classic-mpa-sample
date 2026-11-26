@@ -811,3 +811,8 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 
 - **catalog struct・en・ja・locale runtime を分ける**: `messages.go` / `messages_en.go` / `messages_ja.go` / `locale.go` に分割し、テンプレートへ bind する関数名や fallback 規則は変えない。
 - **ja の空フィールドはテストで落とす**: `messageFuncs` は空文字列を en fallback として扱うため、未翻訳が黙って混入しないよう `messagesJA` を reflection で全件検査する。
+
+## pull CLI/client の単体テスト（2026-11-26、owner improvements 対応）
+
+- **remote PR の状態遷移・markdown/diff・エラー写像を httptest で固定する**: CLI は wire path と出力文言、client は DTO→store 変換と text endpoint の `*Error` 写像を見る。git 実体が必要な merge 自体はここでは扱わない。
+- **`reopen` の成功出力 typo は修正する**: 従来の `action+"d"` は `reopend` になるため、reopen だけ `reopened` を明示する。
