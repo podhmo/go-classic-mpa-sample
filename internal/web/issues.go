@@ -511,10 +511,15 @@ func isChecked(id int64, ids []int64) bool {
 // filter state, so pagination, tabs and label links preserve active
 // filters.
 func issuesURL(ws *store.Workspace, f store.ListFilter) string {
+	return issuesURLWithStatus(ws, f, false)
+}
+
+func issuesURLWithStatus(ws *store.Workspace, f store.ListFilter, explicitOpen bool) string {
 	v := url.Values{}
-	// "open" is the default filter, so keep URLs clean by omitting it —
-	// except when a query qualifier would otherwise retake that default.
-	if f.Status != "" && (f.Status != store.StatusOpen || f.Query != "") {
+	// "open" is the default filter, so keep ordinary URLs clean by omitting
+	// it; status-tab links ask for explicitOpen so the next search preserves
+	// the user's explicit choice.
+	if f.Status != "" && (f.Status != store.StatusOpen || explicitOpen) {
 		v.Set("status", f.Status)
 	}
 	if f.Query != "" {
@@ -545,7 +550,7 @@ func listURL(ws *store.Workspace, f store.ListFilter, page int) string {
 func statusURL(ws *store.Workspace, f store.ListFilter, status string) string {
 	f.Status = status
 	f.Page = 1
-	return issuesURL(ws, f)
+	return issuesURLWithStatus(ws, f, true)
 }
 
 // labelURL keeps the filter but selects a label and resets paging.
