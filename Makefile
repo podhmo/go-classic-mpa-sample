@@ -1,25 +1,29 @@
-.PHONY: test test-storybook todo-gc setup-minigo storybook storybook-watch
+.PHONY: test test-storybook todo-gc ensure-minigo setup-minigo storybook storybook-watch
 
 ## test: run all tests
 test:
 	go test ./...
 
 ## test-storybook: run storybook tests without Go's test cache (stories are interpreted at runtime)
-test-storybook: setup-minigo
+test-storybook: ensure-minigo
 	cd cmd/storybook && go test -count=1 ./...
 
 # CLI の E2E: init → register → auth token → serve → zatu/リモート動作確認
 test-e2e:
 	go test -tags=e2e -v -run 'TestCLIE2E' ./internal/e2etests/
 
-## setup-minigo: clone minigo (unstable, not yet published) into third_party/, fast-forwarding it when it is a plain main checkout
-setup-minigo:
+## ensure-minigo: clone minigo (unstable, not yet published) into third_party/ when missing
+ensure-minigo:
 	@if [ ! -e third_party/minigo/.git ]; then \
 		if [ -d third_party/minigo ]; then \
 			echo "error: third_party/minigo exists but is not the minigo clone" >&2; exit 1; \
 		fi; \
 		git clone --depth 1 https://github.com/podhmo/minigo third_party/minigo; \
-	elif [ "$$(git -C third_party/minigo rev-parse --abbrev-ref HEAD)" = "main" ] && \
+	fi
+
+## setup-minigo: ensure minigo exists, fast-forwarding it when it is a plain main checkout
+setup-minigo: ensure-minigo
+	@if [ "$$(git -C third_party/minigo rev-parse --abbrev-ref HEAD)" = "main" ] && \
 	     grep -q '^module github.com/podhmo/minigo' third_party/minigo/go.mod 2>/dev/null; then \
 		git -C third_party/minigo pull --ff-only || \
 		echo "warning: third_party/minigo could not be updated; using the existing checkout"; \
