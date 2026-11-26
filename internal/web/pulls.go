@@ -123,6 +123,7 @@ type pullFileView struct {
 	StatusLetter string // first letter of the name-status ("M","A","D","R")
 	Anchor       string
 	Binary       bool
+	Truncated    bool // the captured patch prefix ended at gitrepo's output cap
 	Lines        []diffLine
 	Comments     []*store.PRComment
 }
@@ -753,6 +754,7 @@ func (h *handler) pullFiles(w http.ResponseWriter, r *http.Request) {
 		log.Printf("web: pulls: diff #%d: %v", pr.ID, diffErr)
 	}
 	diffs := splitUnifiedDiffs(patch, changed)
+	truncatedFiles := map[string]bool{}
 	if truncated {
 		// The combined patch shares gitrepo's 8 MiB output cap across all
 		// files. Falling back to per-file patches preserves the old behavior
@@ -765,12 +767,13 @@ func (h *handler) pullFiles(w http.ResponseWriter, r *http.Request) {
 			if ch.OldPath != "" && ch.OldPath != path {
 				paths = append(paths, ch.OldPath)
 			}
-			diff, _, err := h.repo.Diff(r.Context(), from, to, paths...)
+			diff, fileTruncated, err := h.repo.Diff(r.Context(), from, to, paths...)
 			if err != nil {
 				log.Printf("web: pulls: diff #%d %s: %v", pr.ID, path, err)
 				continue
 			}
 			diffs[path] = diff
+			truncatedFiles[path] = fileTruncated
 		}
 	}
 	m := msgFor(r)
@@ -781,6 +784,7 @@ func (h *handler) pullFiles(w http.ResponseWriter, r *http.Request) {
 			CommentPath:  path,
 			StatusLetter: strings.ToUpper(string(ch.Status[0])),
 			Anchor:       fileAnchor(path),
+			Truncated:    truncatedFiles[path],
 			Comments:     byPath[path],
 		}
 		// Left-side comments on a renamed file carry its old path;

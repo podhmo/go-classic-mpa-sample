@@ -262,6 +262,7 @@ var messagesEN = messages{
 	FilesChangedTitle:   "Files changed · %s",
 	FilesEmpty:          "No changed files.",
 	BinaryNote:          "Binary file — diff not shown.",
+	DiffTruncated:       "Diff truncated — later changes are not shown.",
 	CommentLineTitle:    "Comment on this line",
 	CommentLinePh:       "Comment on %s line %d",
 	CommentLinePhLeft:   "Comment on %s line %d (left)",

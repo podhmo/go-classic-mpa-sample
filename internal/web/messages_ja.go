@@ -262,6 +262,7 @@ var messagesJA = messages{
 	FilesChangedTitle:   "変更ファイル · %s",
 	FilesEmpty:          "変更ファイルはありません。",
 	BinaryNote:          "バイナリファイル — diff は表示されません。",
+	DiffTruncated:       "diff は途中で打ち切られました — 後続の変更は表示されません。",
 	CommentLineTitle:    "この行にコメント",
 	CommentLinePh:       "%s の行 %d へのコメント",
 	CommentLinePhLeft:   "%s の行 %d へのコメント（左）",

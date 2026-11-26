@@ -41,6 +41,7 @@
   {{if .Binary}}
   <p class="muted">{{BinaryNote}}</p>
   {{else}}
+  {{if .Truncated}}<p class="muted diff-truncated" role="status">{{DiffTruncated}}</p>{{end}}
   <div class="diff-scroll">
   <table class="diff">
     <caption class="visually-hidden">{{if .Change.OldPath}}{{.Change.OldPath}} → {{end}}{{.Change.NewPath}}</caption>

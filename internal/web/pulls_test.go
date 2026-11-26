@@ -276,3 +276,25 @@ func TestPullFilesRendersOneServerSideCommentForm(t *testing.T) {
 		}
 	}
 }
+
+func TestPullFilesTruncatedNotice(t *testing.T) {
+	rec := httptest.NewRecorder()
+	NewRendererWithPulls(true).renderPullFiles(rec, http.StatusOK, pullFilesPage{
+		Title: "files", Section: "pulls",
+		PR: &store.PullRequest{ID: 1, Title: "t"},
+		Files: []pullFileView{{
+			Change:       gitrepo.FileChange{Status: "M", NewPath: "large.txt"},
+			CommentPath:  "large.txt",
+			StatusLetter: "M",
+			Anchor:       "f-large-txt",
+			Truncated:    true,
+		}},
+	}, "en")
+	body := rec.Body.String()
+	if !strings.Contains(body, "Diff truncated — later changes are not shown.") {
+		t.Fatal("truncated diff warning missing")
+	}
+	if !strings.Contains(body, `class="muted diff-truncated" role="status"`) {
+		t.Fatal("truncated warning should be a status for assistive technology")
+	}
+}
