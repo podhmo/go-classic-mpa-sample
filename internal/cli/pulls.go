@@ -692,6 +692,9 @@ func prRepairPin(ctx context.Context, o Options, args []string) error {
 	if err != nil {
 		return err
 	}
+	if len(rest) == 0 {
+		return usageError{msg: "N is required"}
+	}
 	id, err := strconv.ParseInt(rest[0], 10, 64)
 	if err != nil || id < 1 {
 		return usageError{msg: fmt.Sprintf("invalid pull request id %q", rest[0])}

@@ -10,6 +10,16 @@ import (
 	"testing"
 )
 
+func TestPRRepairPinRequiresNumber(t *testing.T) {
+	code, _, errOut := run(t, Options{}, "pr", "repair-pin")
+	if code != ExitUsage {
+		t.Fatalf("code = %d stderr=%q, want usage %d", code, errOut, ExitUsage)
+	}
+	if !strings.Contains(errOut, "N is required") {
+		t.Fatalf("stderr = %q", errOut)
+	}
+}
+
 func TestPRDiffRemoteTruncationWarning(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/pulls/1/diff" {
