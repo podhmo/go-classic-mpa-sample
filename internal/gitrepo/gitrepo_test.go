@@ -621,6 +621,26 @@ func TestPinSurvivesGC(t *testing.T) {
 	}
 }
 
+func TestPinHeadDoesNotOverwriteExistingPin(t *testing.T) {
+	ctx := context.Background()
+	dir := initRepo(t)
+	r := openRepo(t, dir)
+	head := strings.TrimSpace(git(t, dir, "rev-parse", "main"))
+	if err := r.PinHead(ctx, 42, head); err != nil {
+		t.Fatal(err)
+	}
+
+	git(t, dir, "checkout", "-qb", "newer-pin")
+	write(t, dir, "newer-pin.txt", "newer\n")
+	newer := strings.TrimSpace(git(t, dir, "rev-parse", "newer-pin"))
+	if err := r.PinHead(ctx, 42, newer); !errors.Is(err, ErrConcurrentUpdate) {
+		t.Fatalf("second create error = %v, want ErrConcurrentUpdate", err)
+	}
+	if got, err := r.RevParse(ctx, PinRef(42)); err != nil || got != head {
+		t.Fatalf("pin after rejected create = %q err=%v, want %q", got, err, head)
+	}
+}
+
 func TestPinNeedsRepair(t *testing.T) {
 	ctx := context.Background()
 	dir := initRepo(t)

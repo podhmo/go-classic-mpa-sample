@@ -431,14 +431,24 @@ func PinRef(id int64) string {
 	return "refs/zatudan/pr/" + strconv.FormatInt(id, 10) + "/head"
 }
 
-// PinHead points the PR's pin ref at sha unconditionally (used at create
-// time, when nothing should exist yet).
+// PinHead creates the PR's pin ref at sha (used at create time, when
+// nothing should exist yet). Creation is conditional so a close/merge pin
+// that won the race is never overwritten by the older create-time head.
 func (r *Repo) PinHead(ctx context.Context, id int64, sha string) error {
 	if err := checkRevArg(sha); err != nil {
 		return err
 	}
-	_, err := r.run(ctx, nil, "update-ref", PinRef(id), sha)
-	return err
+	// A zero old value asks update-ref to create the ref only when it is
+	// still absent. That closes the create/close race without a read first.
+	zero := strings.Repeat("0", 40)
+	_, err := r.run(ctx, nil, "update-ref", PinRef(id), sha, zero)
+	if err != nil {
+		if _, revErr := r.RevParse(ctx, PinRef(id)); revErr == nil {
+			return ErrConcurrentUpdate
+		}
+		return err
+	}
+	return nil
 }
 
 // UpdatePin moves the pin ref compare-and-swap style when it already
