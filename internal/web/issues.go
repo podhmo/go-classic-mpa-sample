@@ -514,7 +514,7 @@ func issuesURL(ws *store.Workspace, f store.ListFilter) string {
 	v := url.Values{}
 	// "open" is the default filter, so keep URLs clean by omitting it —
 	// except when a query qualifier would otherwise retake that default.
-	if f.Status != "" && (f.Status != store.StatusOpen || len(store.ParseIssueSearchQuery(f.Query).Statuses) > 0) {
+	if f.Status != "" && (f.Status != store.StatusOpen || f.Query != "") {
 		v.Set("status", f.Status)
 	}
 	if f.Query != "" {
