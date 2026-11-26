@@ -46,7 +46,7 @@
     <caption class="visually-hidden">{{if .Change.OldPath}}{{.Change.OldPath}} → {{end}}{{.Change.NewPath}}</caption>
     <tbody>
       {{range .Lines}}
-      <tr class="diff-line diff-{{.Kind}}">
+      <tr class="diff-line diff-{{.Kind}}"{{if .RowID}} id="{{.RowID}}"{{end}}>
         <td class="line-no">{{if .CommentURL}}<a href="{{.CommentURL}}" aria-label="{{.CommentLabel}}" title="{{CommentLineTitle}}">{{if eq .Kind "del"}}{{.OldNo}}{{else}}{{.NewNo}}{{end}}</a>{{else}}{{if .NewNo}}{{.NewNo}}{{end}}{{end}}</td>
         <td class="line-text"><code>{{.Text}}</code></td>
       </tr>
@@ -54,15 +54,17 @@
       <tr class="line-comment-row">
         <td class="line-no"></td>
         <td>
-          <form method="post" action="/pulls/{{$.PR.ID}}/comments" class="line-comment-form comment-form" novalidate>
+          <form method="post" action="/pulls/{{$.PR.ID}}/comments" class="line-comment-form comment-form">
             <input type="hidden" name="path" value="{{.CommentPath}}">
             <input type="hidden" name="line" value="{{.CommentLine}}">
             <input type="hidden" name="side" value="{{.CommentSide}}">
             <input type="hidden" name="back" value="files">
             <label class="visually-hidden" for="line-comment-body">{{.CommentLabel}}</label>
             <textarea id="line-comment-body" name="body" rows="3" required placeholder="{{.CommentLabel}}"></textarea>
-            <button type="submit" class="btn">{{BtnComment}}</button>
-            <a class="btn btn-quiet" href="/pulls/{{$.PR.ID}}/files#{{$f.Anchor}}">{{BtnCancel}}</a>
+            <div class="form-actions">
+              <a class="btn btn-quiet" href="/pulls/{{$.PR.ID}}/files#{{$f.Anchor}}">{{BtnCancel}}</a>
+              <button type="submit" class="btn btn-primary">{{BtnComment}}</button>
+            </div>
           </form>
         </td>
       </tr>

@@ -241,9 +241,10 @@
 - [正] **files タブのファイル集合は merge-base→head（three-dot）相当**。
   open PR は都度 `git merge-base` で解決し、closed/merged 後は記録済みの
   merge_base/head（pin ref `refs/zatudan/pr/<id>/head`）で固定する。
-- [正] **行アンカーコメントは `<details>` 折りたたみフォーム**（summary
-  にアンカー位置）。anchor path は files 表示の Old/New パス集合に属する
-  もののみ受け付け、範囲外は 422 のエラーページで拒否する。
+- [正] **行アンカーコメントは `?path=&line=&side=` 付き GET で選ばれた
+  1行だけ server-rendered form**。全行に form を出さず JS も増やさない。
+  anchor path は files 表示の Old/New パス集合に属するもののみ受け付け、
+  範囲外は 422 のエラーページで拒否する。
 - [正] **hidden コメントは `<details class="comment-hidden-body">
   <summary>Show comment</summary>`** で展開可能なまま最小化表示（セクション
   5-6 のコメント規約と同型）。

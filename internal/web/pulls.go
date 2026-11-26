@@ -139,6 +139,7 @@ type diffLine struct {
 	CommentLine  int
 	CommentSide  string
 	CommentLabel string
+	RowID        string
 	OpenComment  bool
 }
 
@@ -306,11 +307,12 @@ func annotateDiffLines(lines []diffLine, prID int64, ch gitrepo.FileChange, comm
 		q.Set("path", path)
 		q.Set("line", strconv.Itoa(lineNo))
 		q.Set("side", side)
-		line.CommentURL = fmt.Sprintf("/pulls/%d/files?%s#%s", prID, q.Encode(), anchor)
+		line.CommentURL = fmt.Sprintf("/pulls/%d/files?%s#%s", prID, q.Encode(), line.RowID)
 		line.CommentPath = path
 		line.CommentLine = lineNo
 		line.CommentSide = side
 		line.CommentLabel = fmt.Sprintf(labelFmt, path, lineNo)
+		line.RowID = fmt.Sprintf("%s-L%d-%s", anchor, lineNo, side)
 		line.OpenComment = open != nil && open.Path == path && open.Line == lineNo && open.Side == side
 	}
 }
@@ -746,9 +748,15 @@ func (h *handler) pullFiles(w http.ResponseWriter, r *http.Request) {
 	}
 	open := parseOpenLineComment(r.URL.Query())
 	page.Open = open
-	patch, _, diffErr := h.repo.Diff(r.Context(), from, to)
+	patch, truncated, diffErr := h.repo.Diff(r.Context(), from, to)
 	if diffErr != nil {
 		log.Printf("web: pulls: diff #%d: %v", pr.ID, diffErr)
+	}
+	if truncated {
+		log.Printf("web: pulls: diff #%d: output truncated", pr.ID)
+		page.Error = msgFor(r).ErrDiffCompute
+		h.r.renderPullFiles(w, http.StatusOK, page, localeFromContext(r.Context()))
+		return
 	}
 	diffs := splitUnifiedDiffs(patch, changed)
 	m := msgFor(r)

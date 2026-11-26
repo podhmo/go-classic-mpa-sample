@@ -2139,7 +2139,13 @@ table.diff {
   text-decoration: none;
 }
 
-.diff .line-no a:hover,
+@media (hover: hover) {
+  .diff .line-no a:hover {
+    color: var(--accent);
+    text-decoration: underline;
+  }
+}
+
 .diff .line-no a:focus-visible {
   color: var(--accent);
   text-decoration: underline;
