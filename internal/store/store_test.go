@@ -31,6 +31,7 @@ func TestSQLiteMemoryDSNRepeatedModeUsesLastValue(t *testing.T) {
 		{"file:test.db?mode=memory", true},
 		{"file:test.db?mode=rwc&mode=memory", true},
 		{"file:test.db?mode=memory&mode=rwc", false},
+		{"file:test.db?mode=memory&mode=memory#notes", true},
 		{"file:archive-mode=memory.db", false},
 	} {
 		if got := sqliteMemoryDSN(tc.dsn); got != tc.want {

@@ -464,6 +464,9 @@ func sqliteMemoryDSN(dsn string) bool {
 	if !ok {
 		return false
 	}
+	// SQLite ignores a URI fragment; do not let it become part of the final
+	// query parameter when mirroring that parsing here.
+	query, _, _ = strings.Cut(query, "#")
 	values, err := url.ParseQuery(query)
 	if err != nil {
 		return false
