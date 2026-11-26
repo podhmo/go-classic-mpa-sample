@@ -290,13 +290,13 @@ func (r *Repo) CheckMerge(ctx context.Context, base, head string) (*MergeCheck, 
 	if c.HeadSHA, err = r.RevParse(ctx, head); err != nil {
 		return nil, err
 	}
-	if c.MergeBaseSHA, err = r.MergeBase(ctx, base, head); err != nil {
+	if c.MergeBaseSHA, err = r.MergeBase(ctx, c.BaseSHA, c.HeadSHA); err != nil {
 		return nil, err
 	}
 	if !r.HasMergeTree() || r.Shallow {
 		return c, nil
 	}
-	res, err := r.run(ctx, nil, "merge-tree", "--write-tree", "--name-only", "--no-messages", "-z", base, head)
+	res, err := r.run(ctx, nil, "merge-tree", "--write-tree", "--name-only", "--no-messages", "-z", c.BaseSHA, c.HeadSHA)
 	if err == nil {
 		c.Status = MergeClean
 		return c, nil

@@ -197,6 +197,46 @@ func TestCheckMergeCleanAndConflict(t *testing.T) {
 	}
 }
 
+func TestCheckMergePassesResolvedSHAs(t *testing.T) {
+	ctx := context.Background()
+	dir := initRepo(t)
+	git(t, dir, "checkout", "-qb", "feat")
+	write(t, dir, "b.txt", "two\n")
+	git(t, dir, "checkout", "-q", "main")
+	r := openRepo(t, dir)
+
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := t.TempDir()
+	logPath := filepath.Join(t.TempDir(), "git-args.log")
+	wrapper := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> " + logPath + "\nexec " + realGit + " \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(wrapper), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	mc, err := r.CheckMerge(ctx, "main", "feat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var mergeTreeLine string
+	for line := range strings.Lines(string(raw)) {
+		if strings.Contains(line, " merge-tree ") {
+			mergeTreeLine = strings.TrimSpace(line)
+		}
+	}
+	wantTail := " " + mc.BaseSHA + " " + mc.HeadSHA
+	if !strings.HasSuffix(mergeTreeLine, wantTail) {
+		t.Fatalf("merge-tree args = %q, want resolved SHA tail %q", mergeTreeLine, wantTail)
+	}
+}
+
 func TestMergePlumbing(t *testing.T) {
 	ctx := context.Background()
 	dir := initRepo(t)
