@@ -886,3 +886,8 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 - **stub の差分は capability として宣言する**: storyStore の filter 無視・update no-op・missing parent でも create success はスイート内で黙って skip せず、`FiltersIgnored` / `UpdatesPersist` / `MissingCommentNotFound` で明示する。storyStore だけの契約テストは build tag 上だけ存在するため `go test -tags story ./internal/web -run 'Test(Issue|Discussion)ContractStoryStore' -count=1` で実行する（tag 付き全テストには既存の markdown/minigo 失敗がある）。
 - **pointer 共有は fake/stub の仕様として固定する**: `ListDiscussionThreads` が返す thread object を answer mutation 後に読み直さず参照できることを fake/story では期待し、SQLite store では以前に返した row が変わらないことを期待する。shared pointer がある実装でも時間比較が壊れないよう、スイート自体は object 全体ではなく timestamp 等の scalar を先に snapshot する。
 - **fakeStore の issue query は store parser に揃える**: `is:` / `label:` / `author:` と残り terms の AND 解釈を `store.ParseIssueSearchQuery` から適用する。これにより web handler test 用 fake が PR #143 の検索文法だけ実 store から drift しない。
+
+## partial POST response の clock 注入（2026-11-27、CSS coverage 対応）
+
+- **`WithClock` は response-only entity の描画時刻だけを差し替える**: issue/discussion comment の partial POST response は store row を読み直さず、handler が組み立てた新規 object を返す。visual-diff の storybook replay ではこの `CreatedAt` を `storyNow` に pin し、fixture 側の timestamp と同じく実行間で byte-stable にする。永続化層の `created_at` / `updated_at` は従来どおり実時刻で、production の default も `time.Now` のまま。
+- **clock は global mutable state にせず `New` の option にする**: storybook と実 app が同じ process に同居しても handler instance ごとに決まる。clock を必要としない通常の render path には広げず、現状は POST 成功 fragment の新規 comment/thread にだけ使う。
