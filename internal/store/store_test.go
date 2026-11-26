@@ -92,29 +92,28 @@ func TestTransactionsBeginImmediate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first BeginTx: %v", err)
 	}
-	began := make(chan struct{})
-	done := make(chan error, 1)
-	go func() {
-		tx2, err := s2.db.BeginTx(ctx, nil)
-		if err == nil {
-			close(began)
-			err = tx2.Rollback()
-		}
-		done <- err
-	}()
 
-	select {
-	case <-began:
+	// Attempt the overlapping begin on this goroutine, not a helper whose
+	// scheduling may lag behind the commit. With BEGIN IMMEDIATE the first
+	// transaction already holds the write lock, so the second begin must
+	// wait and its short context must expire.
+	lockCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	tx2, err := s2.db.BeginTx(lockCtx, nil)
+	cancel()
+	if err == nil {
+		tx2.Rollback()
 		tx1.Rollback()
-		<-done
-		t.Fatal("second transaction began before the first commit; txlock is not immediate")
-	case <-time.After(50 * time.Millisecond):
+		t.Fatal("second transaction began while the first was open; txlock is not immediate")
 	}
 	if err := tx1.Commit(); err != nil {
 		t.Fatalf("first Commit: %v", err)
 	}
-	if err := <-done; err != nil {
+	tx2, err = s2.db.BeginTx(ctx, nil)
+	if err != nil {
 		t.Fatalf("second BeginTx after first Commit: %v", err)
+	}
+	if err := tx2.Rollback(); err != nil {
+		t.Fatalf("second Rollback: %v", err)
 	}
 }
 
