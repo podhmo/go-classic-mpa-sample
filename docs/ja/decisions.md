@@ -840,3 +840,10 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 - **parser と解釈は store 側に置く**: web/API/local CLI/remote CLI が同じ `q` 文字列を store 層へ渡すので、3画面で文法実装が分岐しない。`label:` は workspace/shared label 名を SQL で直接照合し、未知 label は0件になる（既存の `label=` パラメータの422とは別仕様）。
 - **`is:` は暗黙 open default を上書きするが明示フィルタとは AND になる**: `status` 未指定なら `is:closed` で closed を出す。web/CLI は「status 未指定」を store へ残し、明示 `--state open` や `?status=open` と `is:closed` が衝突した場合は0件にする。
 - **検索語ハイライトも qualifier を外す**: client側 JS は Go parser と同じ quoted token 解釈で `is:/label:/author:` を除き、残り語を個別にハイライトする。
+
+## remote client の 404 sentinel 写像（2026-11-27、owner improvements 対応）
+
+- **404 の写像は client method ごとの endpoint 文脈にする**: `*client.Error` は一律に `store.ErrNotFound` を名乗らず、issues/discussions/labels/workspaces のように API route が恒常存在し、404 が missing workspace・対象 record・scope 外 record のどれかを意味する endpoint だけ `errors.Is(err, store.ErrNotFound)` を満たす。scope 外を ErrNotFound に潰す意味論は local `ScopedStore` と同じ。
+- **`/pulls*` は写像しない**: repo 未検出 server では `/api/v1/pulls*` 自体が未 mount で、同じ JSON 404 が missing route と missing PR のどちらにも見える。API 変更なしには区別できないため、誤分類しないことを優先して PR 側の 404 は sentinel にしない。
+- **JSON error body を持たない 404 は写像しない**: proxy・HTML fallback・API ではないサーバー由来の 404 を record missing に見立てない。写像は API が返した JSON error envelope を decode できた場合にだけ付ける。
+- **`ErrNotAnswerable` は対象外**: answer endpoint の 422 は validation failure と区別する machine-readable code が無く、今回の「API 変更なしの 404 写像」では扱えない。

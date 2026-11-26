@@ -27,7 +27,7 @@ func (c *Client) WorkspaceBySlug(ctx context.Context, slug string) (*store.Works
 	var res struct {
 		Workspace api.Workspace `json:"workspace"`
 	}
-	if err := c.do(ctx, "GET", "/workspaces/"+slug, nil, &res); err != nil {
+	if err := c.doRecordEndpoint(ctx, "GET", "/workspaces/"+slug, nil, &res); err != nil {
 		return nil, err
 	}
 	return workspaceFromDTO(res.Workspace), nil
@@ -49,7 +49,7 @@ func (c *Client) CreateWorkspace(ctx context.Context, in store.WorkspaceInput) (
 }
 
 func (c *Client) DeleteWorkspace(ctx context.Context, slug string) error {
-	return c.do(ctx, "DELETE", "/workspaces/"+slug, nil, nil)
+	return c.doRecordEndpoint(ctx, "DELETE", "/workspaces/"+slug, nil, nil)
 }
 
 func workspaceFromDTO(w api.Workspace) *store.Workspace {

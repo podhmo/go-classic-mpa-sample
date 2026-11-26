@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -137,6 +138,50 @@ func TestClientErrors(t *testing.T) {
 	ae, ok = err.(*Error)
 	if !ok || ae.Status != 404 {
 		t.Fatalf("want *Error 404, got %v", err)
+	}
+}
+
+func TestClientNotFoundMapsOnlyRecordEndpoints(t *testing.T) {
+	c, _ := newFixture(t, "env-tok")
+	ctx := context.Background()
+
+	_, err := c.GetIssue(ctx, 999)
+	if !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("GetIssue missing: errors.Is(..., ErrNotFound) = false, err=%v", err)
+	}
+	var ae *Error
+	if !errors.As(err, &ae) || ae.Status != 404 {
+		t.Fatalf("GetIssue missing: want *Error 404, got %T %v", err, err)
+	}
+
+	_, _, err = c.In("missing").ListIssues(ctx, store.ListFilter{})
+	if !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("ListIssues in missing workspace: errors.Is(..., ErrNotFound) = false, err=%v", err)
+	}
+
+	_, err = c.GetPullRequest(ctx, 999)
+	if !errors.As(err, &ae) || ae.Status != 404 {
+		t.Fatalf("GetPullRequest on repo-less server: want *Error 404, got %T %v", err, err)
+	}
+	if errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("repo-less /pulls route was misclassified as a missing record: %v", err)
+	}
+}
+
+func TestClientNotFoundRequiresAPIErrorBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	c := New(srv.URL, "token").In("default")
+
+	_, err := c.GetIssue(context.Background(), 999)
+	var ae *Error
+	if !errors.As(err, &ae) || ae.Status != 404 {
+		t.Fatalf("want *Error 404, got %T %v", err, err)
+	}
+	if errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("non-API 404 was misclassified as a missing record: %v", err)
 	}
 }
 
