@@ -61,16 +61,24 @@ func parsePages(lang string, pullsOn bool) map[string]*template.Template {
 	funcs["jsDict"] = func() template.HTMLAttr { return jsDict }
 	funcs["pullsOn"] = func() bool { return pullsOn }
 
-	// Parse the shared layout and fragment defines once per locale, then
-	// clone that set for each page. Cloned templates share their parsed
-	// shared definitions while still letting one page override the empty
-	// "head" block without affecting its siblings.
-	shared := template.Must(template.New("shared").Funcs(funcs).ParseFS(templateFS,
-		"templates/layout.html", "templates/fragments.html", "templates/pull_fragments.html"))
+	// Parse the shared layout once per locale, then clone it for each page.
+	// Keep fragment files selective: html/template.Clone copies parse trees
+	// (unlike text/template's shallow copy), so putting every fragment in
+	// the shared set would duplicate unused trees into every page.
+	fragments := map[string][]string{
+		"issue_detail":      {"templates/fragments.html"},
+		"discussion_detail": {"templates/fragments.html"},
+		// pull_detail needs both: its own defines plus the shared
+		// comment_actions it borrows for moderation controls.
+		"pull_detail": {"templates/pull_fragments.html", "templates/fragments.html"},
+	}
+	shared := template.Must(template.New("shared").Funcs(funcs).ParseFS(templateFS, "templates/layout.html"))
 	pages := make(map[string]*template.Template, len(names))
 	for _, name := range names {
 		page := template.Must(shared.Clone())
-		pages[name] = template.Must(page.ParseFS(templateFS, "templates/"+name+".html"))
+		files := []string{"templates/" + name + ".html"}
+		files = append(files, fragments[name]...)
+		pages[name] = template.Must(page.ParseFS(templateFS, files...))
 	}
 	return pages
 }
