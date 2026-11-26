@@ -368,6 +368,34 @@ func TestPullPairCacheAvoidsRepeatedGitCalls(t *testing.T) {
 	}
 }
 
+func TestLogDoesNotCacheShallowHistory(t *testing.T) {
+	ctx := context.Background()
+	dir := initRepo(t)
+	git(t, dir, "checkout", "-qb", "feat")
+	write(t, dir, "b.txt", "two\n")
+	git(t, dir, "checkout", "-q", "main")
+	r := openRepo(t, dir)
+	r.Shallow = true
+	logPath := installGitLogger(t)
+
+	baseSHA, headSHA, err := r.RevParsePair(ctx, "main", "feat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Log(ctx, baseSHA, headSHA); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(logPath, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Log(ctx, baseSHA, headSHA); err != nil {
+		t.Fatal(err)
+	}
+	if got := countLoggedGitCommand(loggedGitCommands(t, logPath), "log"); got != 1 {
+		t.Fatalf("shallow log invocations = %d, want 1", got)
+	}
+}
+
 func TestMergePlumbing(t *testing.T) {
 	ctx := context.Background()
 	dir := initRepo(t)

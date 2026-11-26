@@ -219,9 +219,10 @@ func (r *Repo) IsAncestor(ctx context.Context, anc, desc string) (bool, error) {
 	return true, nil
 }
 
-// Log lists commits in base..head (newest first). Full-SHA pairs are
-// cached because their result cannot change; ref spellings are deliberately
-// not used as cache keys because refs can move.
+// Log lists commits in base..head (newest first). Full-SHA pairs in a
+// complete clone are cached because their result cannot change; shallow
+// history can later be deepened, and ref spellings are deliberately not used
+// as cache keys because refs can move.
 func (r *Repo) Log(ctx context.Context, base, head string) ([]Commit, error) {
 	if err := checkRevArg(base); err != nil {
 		return nil, err
@@ -230,7 +231,7 @@ func (r *Repo) Log(ctx context.Context, base, head string) ([]Commit, error) {
 		return nil, err
 	}
 	key, cacheable := pullPairCacheKey{}, false
-	if isCommitSHA(base) && isCommitSHA(head) {
+	if !r.Shallow && isCommitSHA(base) && isCommitSHA(head) {
 		key = pullPairCacheKey{baseSHA: base, headSHA: head}
 		cacheable = true
 		if commits, ok := r.pairCache.cachedCommits(key); ok {
