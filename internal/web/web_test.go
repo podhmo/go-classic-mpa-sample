@@ -1480,13 +1480,15 @@ func (f *fakeStore) ListPullRequests(_ context.Context, fl store.PRListFilter) (
 	perPage := fl.PerPage
 	if perPage <= 0 {
 		perPage = 20
+	} else if perPage > store.MaxListPerPage {
+		perPage = store.MaxListPerPage
 	}
-	start := (page - 1) * perPage
-	if start >= total {
+	start := int64(page-1) * int64(perPage)
+	if start >= int64(total) {
 		return nil, total, nil
 	}
-	end := min(start+perPage, total)
-	return append([]*store.PullRequest(nil), matched[start:end]...), total, nil
+	end := min(start+int64(perPage), int64(total))
+	return append([]*store.PullRequest(nil), matched[int(start):int(end)]...), total, nil
 }
 
 func (f *fakeStore) GetPullRequest(context.Context, int64) (*store.PullRequest, error) {

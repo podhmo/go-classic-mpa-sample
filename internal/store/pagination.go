@@ -1,8 +1,12 @@
 package store
 
-// MaxListPage bounds accepted page numbers so (page-1)*perPage cannot
-// overflow int when a caller passes a huge query value.
-const MaxListPage = 1_000_000
+const (
+	// MaxListPage bounds accepted page numbers so huge query values cannot
+	// overflow pagination arithmetic.
+	MaxListPage = 1_000_000
+	// MaxListPerPage bounds accepted page sizes for the same reason.
+	MaxListPerPage = 1_000_000
+)
 
 // normalizePage applies the list endpoint defaults and rejects absurd page
 // numbers back to page 1. Store methods normalize even when callers forgot
@@ -13,6 +17,8 @@ func normalizePage(page, perPage int) (int, int) {
 	}
 	if perPage <= 0 {
 		perPage = 20
+	} else if perPage > MaxListPerPage {
+		perPage = MaxListPerPage
 	}
 	return page, perPage
 }

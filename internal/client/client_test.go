@@ -215,6 +215,17 @@ func TestClientPaginationAboveCap(t *testing.T) {
 	}
 }
 
+func TestListWindowBeyondAPIMaxPageErrors(t *testing.T) {
+	_, _, err := listWindow[store.Issue](context.Background(), store.MaxListPage, store.MaxListPerPage,
+		func(_, _ int) ([]*store.Issue, int, error) {
+			t.Fatal("fetch should not run for an unrepresentable API page")
+			return nil, 0, nil
+		})
+	if err == nil || !strings.Contains(err.Error(), "maximum page") {
+		t.Fatalf("err = %v, want maximum-page error", err)
+	}
+}
+
 // Regression: https→http redirects must be refused — Go would forward
 // the Authorization header on a same-host redirect across the downgrade.
 func TestHTTPClientRefusesDowngrade(t *testing.T) {

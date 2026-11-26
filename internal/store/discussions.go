@@ -174,7 +174,7 @@ func (s *Store) ListDiscussions(ctx context.Context, wsID int64, f DiscussionLis
 		JOIN discussion_categories c ON c.id = d.category_id
 		LEFT JOIN users u ON u.id = d.author_id` + where +
 		" ORDER BY d.created_at " + dir + ", d.id " + dir + " LIMIT ? OFFSET ?"
-	rows, err := s.db.QueryContext(ctx, q, append(args, perPage, (page-1)*perPage)...)
+	rows, err := s.db.QueryContext(ctx, q, append(args, perPage, int64(page-1)*int64(perPage))...)
 	if err != nil {
 		return nil, 0, err
 	}
