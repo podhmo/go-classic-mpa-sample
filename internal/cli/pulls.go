@@ -360,9 +360,12 @@ func prDiff(ctx context.Context, o Options, args []string) error {
 	}
 	defer closeQuietly(closer)
 	if rc != nil {
-		diff, err := rc.PullDiff(ctx, id)
+		diff, truncated, err := rc.PullDiffWithTruncation(ctx, id)
 		if err != nil {
 			return err
+		}
+		if truncated {
+			fmt.Fprintln(o.Stderr, "warning: diff was truncated by the server; output is incomplete")
 		}
 		fmt.Fprint(o.Stdout, diff)
 		return nil

@@ -202,7 +202,14 @@ func (c *Client) SetPRCommentHidden(ctx context.Context, prID, commentID int64, 
 
 // PullDiff returns GET /pulls/{id}/diff — a unified diff as plain text.
 func (c *Client) PullDiff(ctx context.Context, id int64) (string, error) {
-	return c.getText(ctx, fmt.Sprintf("/pulls/%d/diff", id))
+	diff, _, err := c.PullDiffWithTruncation(ctx, id)
+	return diff, err
+}
+
+// PullDiffWithTruncation also reports whether the server truncated the diff.
+func (c *Client) PullDiffWithTruncation(ctx context.Context, id int64) (string, bool, error) {
+	diff, hdr, err := c.getTextWithHeaders(ctx, fmt.Sprintf("/pulls/%d/diff", id))
+	return diff, hdr.Get("X-Truncated") == "true", err
 }
 
 // PullMarkdown returns GET /pulls/{id}/markdown — the export rendered
@@ -213,16 +220,21 @@ func (c *Client) PullMarkdown(ctx context.Context, id int64) (string, error) {
 
 // getText reads a non-JSON endpoint; non-2xx becomes *Error like do().
 func (c *Client) getText(ctx context.Context, path string) (string, error) {
+	body, _, err := c.getTextWithHeaders(ctx, path)
+	return body, err
+}
+
+func (c *Client) getTextWithHeaders(ctx context.Context, path string) (string, http.Header, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", c.base+path, nil)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
 	resp, err := c.hc.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("GET %s: %w", req.URL, err)
+		return "", nil, fmt.Errorf("GET %s: %w", req.URL, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
@@ -235,10 +247,10 @@ func (c *Client) getText(ctx context.Context, path string) (string, error) {
 		if json.NewDecoder(resp.Body).Decode(&e) == nil && e.Err.Message != "" {
 			ae.Message = e.Err.Message
 		}
-		return "", ae
+		return "", nil, ae
 	}
 	raw, err := io.ReadAll(resp.Body)
-	return string(raw), err
+	return string(raw), resp.Header, err
 }
 
 func pullRequestFromDTO(p api.PullRequest) *store.PullRequest {
