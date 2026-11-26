@@ -53,7 +53,9 @@ func TestFileDBPragmas(t *testing.T) {
 	// first connection for the second assertion.
 	conns := make([]*sql.Conn, 0, 2)
 	for range 2 {
-		conn, err := s.db.Conn(ctx)
+		connCtx, cancel := context.WithTimeout(ctx, time.Second)
+		conn, err := s.db.Conn(connCtx)
+		cancel()
 		if err != nil {
 			t.Fatalf("Conn: %v", err)
 		}
