@@ -43,8 +43,8 @@ capture() {
 	cat > "$tmp_js" <<'EOF'
 async page => {
   const stories = %STORIES%;
-  const base = '%BASE%';
-  const outDir = '%OUTDIR%';
+  const base = %BASE%;
+  const outDir = %OUTDIR%;
   await page.setViewportSize({width: 1280, height: 800});
   const failed = [];
   for (const s of stories) {
@@ -59,8 +59,24 @@ async page => {
   return JSON.stringify(failed);
 }
 EOF
-	stories_json=$(printf '%s\n' "$STORIES" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read().split()))')
-	sed -i "s|%STORIES%|$stories_json|; s|%BASE%|$STORYBOOK_URL|; s|%OUTDIR%|$stage_dir|" "$tmp_js"
+	STORIES_DATA=$STORIES python3 - "$tmp_js" "$STORYBOOK_URL" "$stage_dir" <<'PY'
+import json
+import os
+import sys
+
+path, base, outdir = sys.argv[1:]
+with open(path) as f:
+    source = f.read()
+replacements = {
+    "%STORIES%": json.dumps(os.environ["STORIES_DATA"].split()),
+    "%BASE%": json.dumps(base),
+    "%OUTDIR%": json.dumps(outdir),
+}
+for placeholder, value in replacements.items():
+    source = source.replace(placeholder, value)
+with open(path, "w") as f:
+    f.write(source)
+PY
 	if ! playwright-cli run-code --filename "$tmp_js"; then
 		rm -f "$tmp_js"
 		rm -rf "$stage_dir"
