@@ -181,7 +181,8 @@ func TestAuthModeSwitchPreservesNext(t *testing.T) {
 }
 
 func TestAuthValidationKeepsNextInModeSwitch(t *testing.T) {
-	srv, _ := newTestServer(t)
+	srv, f := newTestServer(t)
+	f.addUser(t, "alice", "password123")
 
 	resp := postForm(t, srv.Client(), srv.URL+"/login?next=/w/default/issues/3", url.Values{
 		"name": {"alice"}, "password": {"wrong-pass"}, "next": {"/w/default/issues/3"},
@@ -195,6 +196,17 @@ func TestAuthValidationKeepsNextInModeSwitch(t *testing.T) {
 	}
 	if strings.Count(body, `href="/register?next=%2Fw%2Fdefault%2Fissues%2F3"`) != 2 {
 		t.Error("failed login header or footer link dropped next")
+	}
+	if !strings.Contains(body, `action="/login?next=%2Fw%2Fdefault%2Fissues%2F3"`) {
+		t.Error("failed login retry action dropped next")
+	}
+
+	resp = postForm(t, noRedirectClient(), srv.URL+"/login?next=/w/default/issues/3", url.Values{
+		"name": {"alice"}, "password": {"password123"}, "next": {"/w/default/issues/3"},
+	})
+	defer resp.Body.Close()
+	if loc := resp.Header.Get("Location"); loc != "/w/default/issues/3" {
+		t.Fatalf("retry redirect = %q, want original page", loc)
 	}
 }
 
