@@ -198,17 +198,17 @@ compare_mode() {
 	diff_dir="$ROOT_DIR/diff/$mode"
 	capture "$current_dir" "$mode"
 	mkdir -p "$diff_dir"
-	fail=0
+	mode_fail=0
 	for png in "$base_dir"/*.png; do
 		name=$(basename "$png")
 		cur="$current_dir/$name"
-		if [ ! -f "$cur" ]; then echo "MISSING  $mode/$name"; fail=1; continue; fi
+		if [ ! -f "$cur" ]; then echo "MISSING  $mode/$name"; mode_fail=1; continue; fi
 		n=$(compare -metric AE "$png" "$cur" "$diff_dir/$name" 2>&1) || true
 		case "$n" in
-			''|*[!0-9]*) echo "ERROR    $mode/$name ($n)"; fail=1 ;;
+			''|*[!0-9]*) echo "ERROR    $mode/$name ($n)"; mode_fail=1 ;;
 			*)
 				if [ "$n" -gt "$PIXEL_THRESHOLD" ]; then
-					echo "DIFF $n  $mode/$name"; fail=1
+					echo "DIFF $n  $mode/$name"; mode_fail=1
 				fi ;;
 		esac
 	done
@@ -216,11 +216,11 @@ compare_mode() {
 		name=$(basename "$png")
 		if [ ! -f "$base_dir/$name" ]; then
 			echo "NEW      $mode/$name (not in baseline)"
-			fail=1
+			mode_fail=1
 		fi
 	done
-	[ "$fail" -eq 0 ] && echo "OK($mode): all shots within $PIXEL_THRESHOLD px"
-	return "$fail"
+	[ "$mode_fail" -eq 0 ] && echo "OK($mode): all shots within $PIXEL_THRESHOLD px"
+	return "$mode_fail"
 }
 
 case "${1:-}" in
@@ -239,11 +239,11 @@ case "${1:-}" in
 			fi
 		done
 		[ "$missing" -eq 0 ] || exit 1
-		fail=0
+		overall_fail=0
 		for mode in $modes; do
-			compare_mode "$mode" || fail=1
+			compare_mode "$mode" || overall_fail=1
 		done
-		exit "$fail"
+		exit "$overall_fail"
 		;;
 	*) usage ;;
 esac
