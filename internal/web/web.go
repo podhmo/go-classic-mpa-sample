@@ -587,6 +587,7 @@ func New(st Store, opts ...Option) http.Handler {
 	// Direction-tagging for cross-document view transitions between
 	// paginated list pages.
 	registerStatic("/static/pagination-transition.js", "pagination-transition.js")
+	registerStatic("/static/nav-menu.js", "nav-menu.js")
 	// aria-invalid ↔ :user-invalid sync + polite error announcements on
 	// pages with forms (detail comment form, issue create/edit form).
 	registerStatic("/static/form-errors.js", "form-errors.js")

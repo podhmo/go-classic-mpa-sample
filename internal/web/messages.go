@@ -5,6 +5,7 @@ type messages struct {
 
 	LayoutSkip             string
 	LayoutNavMain          string
+	LayoutNavMenu          string
 	LayoutNavIssues        string
 	LayoutNavDiscussions   string
 	LayoutNavLabels        string

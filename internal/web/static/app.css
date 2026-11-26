@@ -154,14 +154,6 @@ html {
   scroll-padding-top: 5rem;
 }
 
-@media (max-width: 40em) {
-  html {
-    /* The header wraps to two rows on narrow screens — keep the offset
-       ahead of the taller header. */
-    scroll-padding-top: 8rem;
-  }
-}
-
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans",
@@ -2258,4 +2250,77 @@ pre.diff-snippet {
 
 textarea[hidden] {
   display: none;
+}
+
+/* Header navigation is one semantic tree at every width. Markup starts
+   open for the no-JS fallback; nav-menu.js closes the details only after
+   the narrow media query is known. */
+.nav-menu {
+  display: flex;
+}
+
+.nav-menu-summary {
+  display: none;
+}
+
+@media (max-width: 40em) {
+  .nav-menu {
+    position: relative;
+    margin-left: auto;
+  }
+
+  .nav-menu-summary {
+    display: inline-block;
+    list-style: none;
+  }
+
+  .nav-menu-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .nav-menu-summary::marker {
+    content: "";
+  }
+
+  .nav-menu-summary::after {
+    content: "▾";
+    margin-left: 0.375rem;
+  }
+
+  .nav-menu[open] .nav-menu-summary::after {
+    content: "▴";
+  }
+
+  .nav-menu:not([open]) .site-nav {
+    display: none;
+  }
+
+  .nav-menu .site-nav {
+    position: absolute;
+    inset-inline-end: 0;
+    inset-block-start: calc(100% + 0.5rem);
+    z-index: 30;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.625rem;
+    inline-size: max-content;
+    min-inline-size: 12rem;
+    max-inline-size: calc(100vw - 2rem);
+    max-block-size: calc(100dvh - 6rem);
+    overflow: auto;
+    padding: 0.75rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+  }
+
+  .nav-menu .site-nav .inline-form {
+    margin: 0;
+  }
+
+  .nav-menu .site-nav .inline-form .btn,
+  .nav-menu .site-nav > .btn {
+    width: 100%;
+  }
 }
