@@ -23,7 +23,7 @@ func newTestStore(t *testing.T) *Store {
 // TestFileDBPragmas verifies pragmas reach every pooled connection on a real
 // file database (foreign_keys is per-connection in SQLite).
 func TestFileDBPragmas(t *testing.T) {
-	s, err := Open(filepath.Join(t.TempDir(), "test.db"))
+	s, err := Open(filepath.Join(t.TempDir(), "archive-mode=memory.db"))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -452,6 +453,21 @@ func migrateWithFKOff(ctx context.Context, db *sql.DB, version int) error {
 	return nil
 }
 
+// sqliteMemoryDSN reports whether the SQLite URI selects an in-memory
+// database. Checking the parsed query avoids mistaking a filename such as
+// archive-mode=memory.db for the mode=memory parameter.
+func sqliteMemoryDSN(dsn string) bool {
+	if strings.HasPrefix(dsn, "file::memory:") {
+		return true
+	}
+	_, query, ok := strings.Cut(dsn, "?")
+	if !ok {
+		return false
+	}
+	values, err := url.ParseQuery(query)
+	return err == nil && values.Get("mode") == "memory"
+}
+
 // Open opens (or creates) the SQLite database at path, enables foreign keys,
 // and migrates the schema to the latest version. It does NOT insert demo
 // data; callers invoke SeedDemoData for that. Use ":memory:" (or a
@@ -468,7 +484,7 @@ func Open(path string) (*Store, error) {
 	if strings.Contains(dsn, "?") {
 		sep = "&"
 	}
-	memory := strings.HasPrefix(dsn, "file::memory:") || strings.Contains(dsn, "mode=memory")
+	memory := sqliteMemoryDSN(dsn)
 	dsn += sep + "_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)&_txlock=immediate"
 	if !memory {
 		dsn += "&_pragma=journal_mode(WAL)"
