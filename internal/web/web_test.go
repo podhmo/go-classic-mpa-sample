@@ -55,6 +55,9 @@ type fakeStore struct {
 	// sessionUserErr, when set, makes SessionUser fail — simulates a
 	// transient session-store error.
 	sessionUserErr error
+
+	workspaceRefBySlugCalls int
+	workspaceBySlugCalls    int
 }
 
 func newFakeStore() *fakeStore {
@@ -919,9 +922,21 @@ func (f *fakeStore) ListWorkspaces(_ context.Context) ([]*store.Workspace, error
 	return out, nil
 }
 
+func (f *fakeStore) WorkspaceRefBySlug(_ context.Context, slug string) (*store.Workspace, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.workspaceRefBySlugCalls++
+	ws, ok := f.workspaces[slug]
+	if !ok {
+		return nil, store.ErrNotFound
+	}
+	return ws, nil
+}
+
 func (f *fakeStore) WorkspaceBySlug(_ context.Context, slug string) (*store.Workspace, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.workspaceBySlugCalls++
 	ws, ok := f.workspaces[slug]
 	if !ok {
 		return nil, store.ErrNotFound
@@ -1134,6 +1149,37 @@ func TestUnsupportedMethodRenders405(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want 405", resp.StatusCode)
+	}
+}
+
+func TestScopedRoutesUseCountFreeWorkspaceLookup(t *testing.T) {
+	srv, f := newTestServer(t)
+	seedIssues(t, f)
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if f.workspaceRefBySlugCalls != 1 || f.workspaceBySlugCalls != 0 {
+		t.Fatalf("workspace lookup calls = ref %d full %d, want 1/0", f.workspaceRefBySlugCalls, f.workspaceBySlugCalls)
+	}
+}
+
+func TestWorkspaceDeleteUsesCountedWorkspaceLookup(t *testing.T) {
+	srv, f := newTestServer(t)
+	resp, err := srv.Client().Get(srv.URL + "/w/default/delete")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if f.workspaceRefBySlugCalls != 0 || f.workspaceBySlugCalls != 1 {
+		t.Fatalf("workspace lookup calls = ref %d full %d, want 0/1", f.workspaceRefBySlugCalls, f.workspaceBySlugCalls)
 	}
 }
 

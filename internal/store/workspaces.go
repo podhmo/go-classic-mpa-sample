@@ -27,7 +27,7 @@ const DefaultWorkspaceSlug = "default"
 
 // Workspace is a container of issues and discussions. IssueCount and
 // DiscussionCount are populated only by ListWorkspaces and the BySlug/ByID
-// lookups — 0 on a freshly created workspace.
+// lookups — 0 on a freshly created workspace or a WorkspaceRefBySlug lookup.
 type Workspace struct {
 	ID              int64
 	Slug            string
@@ -61,13 +61,29 @@ func (s *Store) ListWorkspaces(ctx context.Context) ([]*Workspace, error) {
 
 	var out []*Workspace
 	for rows.Next() {
-		ws, err := scanWorkspace(rows, true)
+		ws, err := scanWorkspace(rows)
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, ws)
 	}
 	return out, rows.Err()
+}
+
+// WorkspaceRefBySlug returns one workspace by slug without counting its
+// contents. Hot scoped routes use this lookup; screens that display counts
+// should use WorkspaceBySlug or ListWorkspaces instead.
+func (s *Store) WorkspaceRefBySlug(ctx context.Context, slug string) (*Workspace, error) {
+	ws, err := scanWorkspaceRef(s.db.QueryRowContext(ctx,
+		`SELECT w.id, w.slug, w.name, w.description, w.created_at
+		FROM workspaces w WHERE w.slug = ?`, slug))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return ws, nil
 }
 
 // WorkspaceBySlug returns one workspace by slug, or ErrNotFound.
@@ -85,7 +101,7 @@ func (s *Store) findWorkspace(ctx context.Context, col string, key any) (*Worksp
 		`SELECT w.id, w.slug, w.name, w.description, w.created_at,
 			(SELECT COUNT(*) FROM issues i WHERE i.workspace_id = w.id),
 			(SELECT COUNT(*) FROM discussions d WHERE d.workspace_id = w.id)
-		FROM workspaces w WHERE w.`+col+` = ?`, key), true)
+		FROM workspaces w WHERE w.`+col+` = ?`, key))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -159,7 +175,17 @@ INSERT INTO workspaces(slug, name, description, created_at)
 	return err
 }
 
-func scanWorkspace(s scanner, withCounts bool) (*Workspace, error) {
+func scanWorkspaceRef(s scanner) (*Workspace, error) {
+	var w Workspace
+	var ts int64
+	if err := s.Scan(&w.ID, &w.Slug, &w.Name, &w.Description, &ts); err != nil {
+		return nil, err
+	}
+	w.CreatedAt = time.Unix(ts, 0).UTC()
+	return &w, nil
+}
+
+func scanWorkspace(s scanner) (*Workspace, error) {
 	var w Workspace
 	var ts int64
 	if err := s.Scan(&w.ID, &w.Slug, &w.Name, &w.Description, &ts,

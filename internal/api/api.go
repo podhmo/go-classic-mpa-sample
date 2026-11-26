@@ -60,6 +60,7 @@ type Store interface {
 	SetDiscussionCommentHidden(ctx context.Context, discussionID, threadID, commentID int64, reason string) error
 	ListDiscussionCategories(ctx context.Context) ([]*store.DiscussionCategory, error)
 	ListWorkspaces(ctx context.Context) ([]*store.Workspace, error)
+	WorkspaceRefBySlug(ctx context.Context, slug string) (*store.Workspace, error)
 	WorkspaceBySlug(ctx context.Context, slug string) (*store.Workspace, error)
 	CreateWorkspace(ctx context.Context, in store.WorkspaceInput) (int64, error)
 	DeleteWorkspace(ctx context.Context, slug string) error
@@ -341,7 +342,7 @@ func queryPage(r *http.Request) int {
 // a miss) and calls fn with it.
 func (h *handler) scoped(fn func(http.ResponseWriter, *http.Request, *store.Workspace)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ws, err := h.store.WorkspaceBySlug(r.Context(), r.PathValue("ws"))
+		ws, err := h.store.WorkspaceRefBySlug(r.Context(), r.PathValue("ws"))
 		if err != nil {
 			h.storeError(w, err)
 			return

@@ -1213,6 +1213,12 @@ var storyWorkspace = &store.Workspace{ID: 1, Slug: "default", Name: "default", D
 func (storyStore) ListWorkspaces(ctx context.Context) ([]*store.Workspace, error) {
 	return []*store.Workspace{storyWorkspace}, nil
 }
+func (storyStore) WorkspaceRefBySlug(ctx context.Context, slug string) (*store.Workspace, error) {
+	if slug == storyWorkspace.Slug {
+		return storyWorkspace, nil
+	}
+	return nil, store.ErrNotFound
+}
 func (storyStore) WorkspaceBySlug(ctx context.Context, slug string) (*store.Workspace, error) {
 	if slug == storyWorkspace.Slug {
 		return storyWorkspace, nil
