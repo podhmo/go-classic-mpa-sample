@@ -63,6 +63,26 @@ func TestClientPullViewAndStatus(t *testing.T) {
 	}
 }
 
+func TestClientRepairPullRequestPin(t *testing.T) {
+	var gotMethod, gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"pull_request":{"id":7,"title":"x","status":"open","base":"refs/heads/main","head":"refs/heads/topic","created_at":"2026-01-02T03:04:05Z","updated_at":"2026-01-02T03:04:05Z"}}`)
+	}))
+	defer srv.Close()
+	pr, err := New(srv.URL, "tok").RepairPullRequestPin(context.Background(), 7)
+	if err != nil {
+		t.Fatalf("RepairPullRequestPin: %v", err)
+	}
+	if gotMethod != "POST" || gotPath != "/api/v1/pulls/7/repair-pin" {
+		t.Fatalf("request = %s %s", gotMethod, gotPath)
+	}
+	if pr == nil || pr.ID != 7 {
+		t.Fatalf("pr = %+v", pr)
+	}
+}
+
 func TestClientPullTextEndpointsAndErrorMapping(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

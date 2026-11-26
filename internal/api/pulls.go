@@ -666,6 +666,50 @@ type prMergeBody struct {
 	Message *string `json:"message"`
 }
 
+// POST /api/v1/pulls/{id}/repair-pin recreates or corrects the protective
+// head pin. Open PRs repair to the live head tip; closed/merged PRs repair
+// to the head SHA recorded at their final transition. A healthy pin is a
+// successful no-op so callers can use the endpoint idempotently.
+func (h *handler) repairPullPin(w http.ResponseWriter, r *http.Request) {
+	pr, ok := h.requirePull(w, r)
+	if !ok {
+		return
+	}
+	ctx := r.Context()
+	expected := ""
+	if !pr.Open() {
+		expected = pr.HeadSHA
+	}
+	needs, err := h.repo.PinNeedsRepair(ctx, pr.ID, expected)
+	if err != nil {
+		if !h.gitError(w, err) {
+			writeError(w, http.StatusInternalServerError, "Internal server error.", nil)
+		}
+		return
+	}
+	target := expected
+	if pr.Open() {
+		target, err = h.repo.RevParse(ctx, pr.HeadRef)
+		if err != nil {
+			writeError(w, http.StatusUnprocessableEntity, "The head commit cannot be resolved for pinning.", nil)
+			return
+		}
+	}
+	if target == "" {
+		writeError(w, http.StatusUnprocessableEntity, "No head commit is recorded for pinning.", nil)
+		return
+	}
+	if needs {
+		if err := h.repo.UpdatePin(ctx, pr.ID, target); err != nil {
+			if !h.gitError(w, err) {
+				writeError(w, http.StatusInternalServerError, "Internal server error.", nil)
+			}
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"pull_request": pullRequestDTO(pr)})
+}
+
 // POST /api/v1/pulls/{id}/merge {"method":"merge|squash|rebase",
 // "message"?} — git-side merge first (pre-flight checks live in
 // gitrepo.Merge), then the DB records the result.

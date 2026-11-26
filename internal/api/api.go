@@ -171,6 +171,7 @@ func New(st Store, envToken string, repo *gitrepo.Repo) http.Handler {
 			"/api/v1/pulls/{id}/comments/{cid}/hide":   {"POST": h.hidePRComment},
 			"/api/v1/pulls/{id}/comments/{cid}/unhide": {"POST": h.unhidePRComment},
 			"/api/v1/pulls/{id}/status":                {"POST": h.setPullStatus},
+			"/api/v1/pulls/{id}/repair-pin":            {"POST": h.repairPullPin},
 			"/api/v1/pulls/{id}/merge":                 {"POST": h.mergePull},
 			"/api/v1/pulls/{id}/diff":                  {"GET": h.pullDiff},
 			"/api/v1/pulls/{id}/markdown":              {"GET": h.pullMarkdown},

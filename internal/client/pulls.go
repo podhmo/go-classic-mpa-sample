@@ -125,6 +125,17 @@ func (c *Client) DeletePullRequest(ctx context.Context, id int64) error {
 	return c.do(ctx, "DELETE", "/pulls/"+fmt.Sprint(id), nil, nil)
 }
 
+// RepairPullRequestPin asks the server to recreate or correct the pin.
+func (c *Client) RepairPullRequestPin(ctx context.Context, id int64) (*store.PullRequest, error) {
+	var res struct {
+		PR api.PullRequest `json:"pull_request"`
+	}
+	if err := c.do(ctx, "POST", fmt.Sprintf("/pulls/%d/repair-pin", id), nil, &res); err != nil {
+		return nil, err
+	}
+	return pullRequestFromDTO(res.PR), nil
+}
+
 // SetPullStatus posts {"status":"closed"|"open"} — close/reopen verbs
 // map to this in the CLI.
 func (c *Client) SetPullStatus(ctx context.Context, id int64, status string) error {

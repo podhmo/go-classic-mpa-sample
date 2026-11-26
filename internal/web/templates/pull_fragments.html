@@ -21,6 +21,9 @@
       {{range $i, $f := .Merge.Files}}{{if $i}}, {{end}}<code>{{$f}}</code>{{end}}</p>
     {{end}}
     {{end}}
+    {{if .PinNeedsRepair}}
+    <p class="merge-state merge-conflicting">{{PinRepairNeeded}}</p>
+    {{end}}
   </header>
 
   {{if .PR.Body}}
@@ -41,6 +44,11 @@
     <form method="post" action="/pulls/{{.PR.ID}}/status" class="inline-form">
       <input type="hidden" name="status" value="open">
       <button type="submit" class="btn">{{PullReopen}}</button>
+    </form>
+    {{end}}
+    {{if .PinRepairable}}
+    <form method="post" action="/pulls/{{.PR.ID}}/repair-pin" class="inline-form">
+      <button type="submit" class="btn">{{BtnRepairPin}}</button>
     </form>
     {{end}}
   </div>

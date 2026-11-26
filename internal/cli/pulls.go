@@ -34,6 +34,7 @@ const prUsage = `zatu pr — pull requests (git-backed)
   edit     N [--title T] [--body B|--body-file F]
   close    N / reopen N / delete N
   merge    N --method merge|squash|rebase [-m MSG]
+  repair-pin N                 recreate a missing/stale protective pin
   comment create|edit|delete|hide|unhide N ...
 
 Local mode needs a git repository: --repo PATH, ZATUDAN_REPO, or
@@ -43,7 +44,7 @@ ignores --repo.
 
 func prCmd(ctx context.Context, o Options, args []string) error {
 	if len(args) == 0 {
-		return usageError{msg: "usage: zatu pr list|view|diff|create|edit|close|reopen|merge|delete|comment"}
+		return usageError{msg: "usage: zatu pr list|view|diff|create|edit|close|reopen|merge|repair-pin|delete|comment"}
 	}
 	if isHelpArg(args[0]) {
 		fmt.Fprint(o.Stdout, prUsage)
@@ -64,6 +65,8 @@ func prCmd(ctx context.Context, o Options, args []string) error {
 		return prStateChange(ctx, o, args[0], args[1:])
 	case "merge":
 		return prMerge(ctx, o, args[1:])
+	case "repair-pin":
+		return prRepairPin(ctx, o, args[1:])
 	case "comment":
 		return prCommentCmd(ctx, o, args[1:])
 	default:
@@ -678,6 +681,63 @@ func prMerge(ctx context.Context, o Options, args []string) error {
 		return err
 	}
 	fmt.Fprintf(o.Stdout, "pull request #%d merged as %s (%s)\n", id, res.MergeSHA, res.Method)
+	return nil
+}
+
+// zatu pr repair-pin N
+func prRepairPin(ctx context.Context, o Options, args []string) error {
+	fs := flag.NewFlagSet("pr repair-pin", flag.ContinueOnError)
+	bf, repoF := o.addPRFlags(fs)
+	rest, err := o.parseLeaf(fs, "N", args, 1)
+	if err != nil {
+		return err
+	}
+	id, err := strconv.ParseInt(rest[0], 10, 64)
+	if err != nil || id < 1 {
+		return usageError{msg: fmt.Sprintf("invalid pull request id %q", rest[0])}
+	}
+	b, closer, repo, rc, err := o.prEnv(ctx, bf, *repoF)
+	if err != nil {
+		return err
+	}
+	defer closeQuietly(closer)
+	if rc != nil {
+		if _, err := rc.RepairPullRequestPin(ctx, id); err != nil {
+			return err
+		}
+		fmt.Fprintf(o.Stdout, "pull request #%d pin repaired\n", id)
+		return nil
+	}
+	pr, err := b.GetPullRequest(ctx, id)
+	if err != nil {
+		return err
+	}
+	expected := ""
+	if !pr.Open() {
+		expected = pr.HeadSHA
+	}
+	needs, err := repo.PinNeedsRepair(ctx, id, expected)
+	if err != nil {
+		return err
+	}
+	target := expected
+	if pr.Open() {
+		target, err = repo.RevParse(ctx, pr.HeadRef)
+		if err != nil {
+			return fmt.Errorf("cli: head commit cannot be resolved for pinning: %w", err)
+		}
+	}
+	if target == "" {
+		return errors.New("cli: no head commit is recorded for pinning")
+	}
+	if !needs {
+		fmt.Fprintf(o.Stdout, "pull request #%d pin is already healthy\n", id)
+		return nil
+	}
+	if err := repo.UpdatePin(ctx, id, target); err != nil {
+		return err
+	}
+	fmt.Fprintf(o.Stdout, "pull request #%d pin repaired\n", id)
 	return nil
 }
 

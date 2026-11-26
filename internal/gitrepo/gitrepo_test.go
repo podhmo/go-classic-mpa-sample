@@ -621,6 +621,39 @@ func TestPinSurvivesGC(t *testing.T) {
 	}
 }
 
+func TestPinNeedsRepair(t *testing.T) {
+	ctx := context.Background()
+	dir := initRepo(t)
+	r := openRepo(t, dir)
+	head := strings.TrimSpace(git(t, dir, "rev-parse", "main"))
+
+	needs, err := r.PinNeedsRepair(ctx, 42, head)
+	if err != nil || !needs {
+		t.Fatalf("missing pin: needs=%v err=%v", needs, err)
+	}
+	if err := r.PinHead(ctx, 42, head); err != nil {
+		t.Fatal(err)
+	}
+	needs, err = r.PinNeedsRepair(ctx, 42, head)
+	if err != nil || needs {
+		t.Fatalf("correct pin: needs=%v err=%v", needs, err)
+	}
+
+	git(t, dir, "checkout", "-qb", "newer")
+	write(t, dir, "newer.txt", "newer\n")
+	other := strings.TrimSpace(git(t, dir, "rev-parse", "newer"))
+	needs, err = r.PinNeedsRepair(ctx, 42, other)
+	if err != nil || !needs {
+		t.Fatalf("stale pin: needs=%v err=%v", needs, err)
+	}
+	// An open PR only requires existence: its pin intentionally remains at
+	// the create-time head while the feature branch advances.
+	needs, err = r.PinNeedsRepair(ctx, 42, "")
+	if err != nil || needs {
+		t.Fatalf("existing open pin: needs=%v err=%v", needs, err)
+	}
+}
+
 func TestUpdatePinFailureKeepsGitError(t *testing.T) {
 	ctx := context.Background()
 	dir := initRepo(t)
