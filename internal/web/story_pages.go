@@ -1532,10 +1532,10 @@ func StoryPullFiles() {
 			},
 		},
 		{
-			Change:       gitrepo.FileChange{Status: "R100", OldPath: "internal/web/prs.go", NewPath: "internal/web/pulls.go"},
-			CommentPath:  "internal/web/pulls.go",
+			Change:       gitrepo.FileChange{Status: "R100", OldPath: "internal/web/prs.go", NewPath: "internal/web/pull_files_view.go"},
+			CommentPath:  "internal/web/pull_files_view.go",
 			StatusLetter: "R",
-			Anchor:       "file-internal-web-pulls-go-renamed",
+			Anchor:       "file-internal-web-pull-files-view-go",
 			Lines: []diffLine{
 				{Kind: "hunk", Text: "@@ -1,2 +1,2 @@"},
 				{Kind: "ctx", OldNo: 1, NewNo: 1, Text: " package web"},
