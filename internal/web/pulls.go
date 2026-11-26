@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -30,6 +31,7 @@ type pullListPage struct {
 	Total           int
 	Page            int
 	TotalPages      int
+	Pager           pagerData
 	RangeStart      int
 	RangeEnd        int
 	HasActiveFilter bool
@@ -311,6 +313,7 @@ func (h *handler) listPulls(w http.ResponseWriter, r *http.Request) {
 		Total:           total,
 		Page:            filter.Page,
 		TotalPages:      totalPages,
+		Pager:           newPager(filter.Page, totalPages, func(page int) string { return pullsURL(filter, page) }),
 		RangeStart:      (filter.Page-1)*perPage + 1,
 		RangeEnd:        (filter.Page-1)*perPage + len(pulls),
 		HasActiveFilter: filter.Query != "" || filter.Status != "open" || filter.Sort != "newest",
@@ -318,6 +321,22 @@ func (h *handler) listPulls(w http.ResponseWriter, r *http.Request) {
 		User:            userFromContext(r.Context()),
 	}
 	h.r.renderPullList(w, http.StatusOK, page, localeFromContext(r.Context()))
+}
+
+// pullsURL keeps the pull-list filter but moves to another page. Empty
+// optional parameters stay out of the URL instead of leaking `q=`.
+func pullsURL(f store.PRListFilter, page int) string {
+	f.Page = page
+	v := url.Values{}
+	v.Set("status", f.Status)
+	if f.Query != "" {
+		v.Set("q", f.Query)
+	}
+	v.Set("sort", f.Sort)
+	if f.Page > 1 {
+		v.Set("page", strconv.Itoa(f.Page))
+	}
+	return "/pulls?" + v.Encode()
 }
 
 // newPullForm serves GET /pulls/new with the repo's branches as base/head

@@ -23,6 +23,7 @@ type issueListPage struct {
 	Total           int
 	Page            int
 	TotalPages      int
+	Pager           pagerData
 	RangeStart      int
 	RangeEnd        int
 	HasActiveFilter bool
@@ -131,6 +132,7 @@ func (h *handler) listIssues(w http.ResponseWriter, r *http.Request, ws *store.W
 		Total:      total,
 		Page:       f.Page,
 		TotalPages: totalPages,
+		Pager:      newPager(f.Page, totalPages, func(page int) string { return listURL(ws, f, page) }),
 		HasActiveFilter: f.Query != "" || f.LabelID != 0 ||
 			f.Status != store.StatusOpen || f.Sort != "",
 		Section:   "issues",

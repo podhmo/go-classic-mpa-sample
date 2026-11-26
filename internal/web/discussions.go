@@ -27,6 +27,7 @@ type discussionListPage struct {
 	Total           int
 	Page            int
 	TotalPages      int
+	Pager           pagerData
 	RangeStart      int
 	RangeEnd        int
 	HasActiveFilter bool
@@ -140,6 +141,7 @@ func (h *handler) listDiscussions(w http.ResponseWriter, r *http.Request, ws *st
 		Total:       total,
 		Page:        f.Page,
 		TotalPages:  totalPages,
+		Pager:       newPager(f.Page, totalPages, func(page int) string { return dListURL(ws, f, page) }),
 		HasActiveFilter: f.Query != "" || f.CategorySlug != "" ||
 			f.Answered != "" || f.Sort != "",
 		Section:   "discussions",

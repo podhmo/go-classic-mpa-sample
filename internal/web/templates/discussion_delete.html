@@ -1,14 +1,9 @@
 {{define "content"}}
-<div class="page-head">
-  <h1>{{DeleteDiscussion .Discussion.ID}}</h1>
-</div>
-
-<div class="card">
-  <p>{{DeleteConfirmHTML .Discussion.Title}}</p>
-  <p class="muted">{{DiscussionDeleteWarn}}</p>
-  <form method="post" action="/w/{{.Workspace.Slug}}/discussions/{{.Discussion.ID}}/delete" class="form-actions">
-    <a class="btn btn-quiet" href="/w/{{.Workspace.Slug}}/discussions/{{.Discussion.ID}}">{{BtnCancel}}</a>
-    <button type="submit" class="btn btn-danger">{{BtnDeleteDiscussion}}</button>
-  </form>
-</div>
+{{template "delete_confirm" dict
+  "Heading" (DeleteDiscussion .Discussion.ID)
+  "ConfirmHTML" (DeleteConfirmHTML .Discussion.Title)
+  "Warning" DiscussionDeleteWarn
+  "Action" (printf "/w/%s/discussions/%d/delete" .Workspace.Slug .Discussion.ID)
+  "CancelURL" (printf "/w/%s/discussions/%d" .Workspace.Slug .Discussion.ID)
+  "SubmitLabel" BtnDeleteDiscussion}}
 {{end}}

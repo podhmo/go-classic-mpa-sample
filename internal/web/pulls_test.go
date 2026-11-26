@@ -97,6 +97,16 @@ func TestListPullsOutOfRangePageShowsLastPage(t *testing.T) {
 	}
 }
 
+func TestPullsURLOmitsEmptyQuery(t *testing.T) {
+	got := pullsURL(store.PRListFilter{Status: "all", Sort: "newest"}, 2)
+	if strings.Contains(got, "q=") {
+		t.Fatalf("empty q leaked into %q", got)
+	}
+	if !strings.Contains(got, "page=2") || !strings.Contains(got, "status=all") {
+		t.Fatalf("filter or page missing from %q", got)
+	}
+}
+
 func TestPullsNavStateIsPerHandler(t *testing.T) {
 	repo := initTestGitRepo(t)
 	f := newFakeStore()
