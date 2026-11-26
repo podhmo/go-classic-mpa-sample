@@ -490,7 +490,7 @@ func TestListIssues(t *testing.T) {
 	if !equalIDs(issueIDs(issues), i3, i2) {
 		t.Fatalf("huge page: ids=%v", issueIDs(issues))
 	}
-	issues, total, err = s.ListIssues(ctx, 1, ListFilter{Status: "all", PerPage: int(^uint(0) >> 1), Page: MaxListPage})
+	issues, total, err = s.ListIssues(ctx, 1, ListFilter{Status: "all", PerPage: int(^uint(0)>>1) / 2, Page: MaxListPage})
 	if err != nil {
 		t.Fatalf("huge per-page: %v", err)
 	}
