@@ -468,13 +468,17 @@ func Open(path string) (*Store, error) {
 	if strings.Contains(dsn, "?") {
 		sep = "&"
 	}
-	dsn += sep + "_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)"
+	memory := strings.HasPrefix(dsn, "file::memory:") || strings.Contains(dsn, "mode=memory")
+	dsn += sep + "_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)&_txlock=immediate"
+	if !memory {
+		dsn += "&_pragma=journal_mode(WAL)"
+	}
 
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
 	}
-	if strings.HasPrefix(dsn, "file::memory:") || strings.Contains(dsn, "mode=memory") {
+	if memory {
 		// database/sql opens a fresh in-memory DB per pooled connection, so
 		// pin a single connection to keep one shared database alive.
 		db.SetMaxOpenConns(1)

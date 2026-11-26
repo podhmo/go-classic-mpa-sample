@@ -28,7 +28,7 @@ Guides referenced below are in the `modern-web-guidance` catalog (`.agents/skill
 - [x] **`pullsEnabled` を Renderer ごとの状態にする**: global variable をやめ、同一プロセス内の複数 handler/storybook が競合しないようにする（[owner-improvements §1.6](docs/sketch/ja/owner-improvements.md)）
 - [x] **hide reason の Bad request 見出しを翻訳する**: `comments.go` / `pulls.go` の直書き `"Bad request"` を `msgFor(r).ErrBadRequestH` に置き換える（[bugs.md #40](docs/ja/bugs.md)、[owner-improvements §1.6](docs/sketch/ja/owner-improvements.md)）
 - [x] **`Accept-Language` の q 値を解釈する**: `en, ja;q=0.1` で英語を選ぶよう簡易 q パースを実装し、`wantsJapanese` の回帰テストを足す（[owner-improvements §1.6](docs/sketch/ja/owner-improvements.md)）
-- [ ] **SQLite を WAL + immediate transaction にする**: `_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_txlock=immediate` を検証し、並行 writer で `SQLITE_BUSY` が出ないテストを足す（[owner-improvements §1.3](docs/sketch/ja/owner-improvements.md)）
+- [x] **SQLite を WAL + immediate transaction にする**: `_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_txlock=immediate` を検証し、並行 writer で `SQLITE_BUSY` が出ないテストを足す（[owner-improvements §1.3](docs/sketch/ja/owner-improvements.md)）
 - [ ] **`/static/` を `withUser` の外に出し gzip + ETag を付ける**: 静的ファイルごとのセッション照会をなくし、事前圧縮と 304 を入れる。versioned URL 化は既存タスクで後段とする（[owner-improvements §2.3](docs/sketch/ja/owner-improvements.md)）
 - [ ] **workspace 解決から COUNT(*) を外す**: slug→ID の軽量クエリを用意し、件数が必要な画面だけで数える。`/w/{ws}/...` 全リクエストの定常クエリを減らす（[owner-improvements §2.1](docs/sketch/ja/owner-improvements.md)）
 - [ ] **markdown レンダリング結果を LRU キャッシュする**: `sha256(body)` をキーに表示時変換の結果だけキャッシュし、DB に生 markdown を置く方針は維持する（[owner-improvements §2.4](docs/sketch/ja/owner-improvements.md)）
