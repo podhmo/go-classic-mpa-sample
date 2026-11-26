@@ -821,3 +821,9 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 
 - **ラベル管理未実装の記述を除去**: decisions の「実装しないもの」と workspaces sketch の seed 固定 taxonomy 記述を、2026-11-17 の DB 管理化（master/shared + workspace-specific label）へ揃えた。
 - **view-transition inline `<style>` は hash 化しない**: Chrome が遷移 capture 用の `<style>` を実行時に挿入するため、静的な opt-in style だけを hash 固定しても遷移が CSP で abort される。既存の実ブラウザ計測（「inline `<style>` 解禁のため CSP に `style-src-elem` を追加」）を正として、layout コメントを実装中の `style-src-elem 'self' 'unsafe-inline'` に合わせた。
+
+## Write/Preview・下書き保存・#参照リンク化（2026-11-26、owner improvements 対応）
+
+- markdown 入力欄は JS で Write/Preview タブへ拡張し、Preview は `POST /preview` / `POST /w/{ws}/preview` が返すサーバー描画 fragment を使う。CSP を緩めず、no-JS では従来の textarea のままにする。
+- 下書きは `draft:<path>:<form>` 系キーの localStorage に保存する。partial post は成功後の reset で削除し、classic post は成功後の redirect でパスが変わったときだけ削除する。期限・手動クリア UI は設けない。
+- `#12` は markdown AST の Text node だけを `/w/{workspace}/issues/12` へリンク化する。code span/block と既存 link の中は書き換えず、cache key に workspace slug を含める。

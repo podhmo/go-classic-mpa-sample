@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"container/list"
 	"crypto/sha256"
+	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 	"html/template"
 	"log"
+	"regexp"
 	"sync"
 
 	"github.com/yuin/goldmark-alert"
@@ -95,24 +97,42 @@ var (
 
 // renderMarkdown renders s as markdown and returns safe HTML for direct
 // insertion into templates.
+func markdownCacheKeyForWorkspace(workspace string, src []byte) string {
+	return markdownCacheKey(append(append([]byte(workspace), 0), src...))
+}
+
 func markdownCacheKey(src []byte) string {
 	h := sha256.New()
 	h.Write(src)
 	return string(h.Sum(nil))
 }
 
+var issueRefPattern = regexp.MustCompile(`(^|[^\w#])#([0-9]+)`)
+
 func renderMarkdown(s string) template.HTML {
-	cacheable := len(s) <= markdownCacheMaxSource
+	return renderMarkdownForWorkspace(nil, s)
+}
+
+func renderMarkdownForWorkspace(ws *store.Workspace, s string) template.HTML {
+	workspace := ""
+	if ws != nil {
+		workspace = ws.Slug
+	}
+	cacheable := len(s)+len(workspace) <= markdownCacheMaxSource
 	src := []byte(s)
 	var key string
 	if cacheable {
-		key = markdownCacheKey(src)
+		key = markdownCacheKeyForWorkspace(workspace, src)
 		if cached, ok := renderedMarkdown.get(key); ok {
 			return cached
 		}
 	}
 	var buf bytes.Buffer
-	if err := mdRenderer.Render(&buf, src, mdParser.Parse(src)); err != nil {
+	doc := mdParser.Parse(src)
+	if workspace != "" {
+		linkifyIssueRefs(doc, src, workspace)
+	}
+	if err := mdRenderer.Render(&buf, src, doc); err != nil {
 		log.Printf("web: markdown render: %v", err)
 		return template.HTML(template.HTMLEscapeString(s))
 	}

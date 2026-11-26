@@ -24,7 +24,7 @@
   </header>
 
   {{if .PR.Body}}
-  <div class="issue-body markdown-body">{{markdown .PR.Body}}</div>
+  <div class="issue-body markdown-body">{{markdownWS .Workspace .PR.Body}}</div>
   {{else}}
   <div class="issue-body issue-body-empty"><em>{{NoDescription}}</em></div>
   {{end}}
@@ -68,14 +68,14 @@
 {{define "pr_comment_append"}}
 {{/* Append-mode fragment for a comment POST: meta swap node + new <li>. */}}
 {{template "pr_meta" .PR}}
-{{template "pr_comment" (dict "C" .Comment "PR" .PR)}}
+{{template "pr_comment" (dict "C" .Comment "PR" .PR "Workspace" .Workspace)}}
 {{end}}
 
 {{define "pr_comments_update"}}
 {{/* Live-update fragments/comments response: meta swap node plus every
    comment <li> to upsert (?ids= subset, none = whole list resync). */}}
 {{template "pr_meta" .PR}}
-{{range .Comments}}{{template "pr_comment" (dict "C" . "PR" $.PR)}}{{end}}
+{{range .Comments}}{{template "pr_comment" (dict "C" . "PR" $.PR "Workspace" $.Workspace)}}{{end}}
 {{end}}
 
 {{define "pr_comment"}}
@@ -100,10 +100,10 @@
   <p class="comment-hidden-note">{{MarkedAs (noun "comment") (hideReasonLabel .C.HiddenReason)}}</p>
   <details class="comment-hidden-body">
     <summary>{{ShowNoun (noun "comment")}}</summary>
-    <div class="comment-body markdown-body">{{markdown .C.Body}}</div>
+    <div class="comment-body markdown-body">{{markdownWS .Workspace .C.Body}}</div>
   </details>
   {{else}}
-  <div class="comment-body markdown-body">{{markdown .C.Body}}</div>
+  <div class="comment-body markdown-body">{{markdownWS .Workspace .C.Body}}</div>
   {{end}}
   <div class="comment-actions">
     {{template "comment_actions" (dict "C" .C "Noun" "comment" "Base" (printf "/pulls/%d/comments/%d" .C.PRID .C.ID) "Target" (printf "#comment-%d" .C.ID))}}

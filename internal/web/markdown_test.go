@@ -1,6 +1,8 @@
 package web
 
 import (
+	"github.com/podhmo/go-classic-mpa-sample/internal/store"
+	"io"
 	"strings"
 	"testing"
 )
@@ -112,10 +114,50 @@ func TestRenderMarkdownUsesCacheWithoutChangingOutput(t *testing.T) {
 	// rendering the same output twice: replacing the entry changes what the
 	// next call returns. The sentinel input is test-only, so poisoning it
 	// cannot affect real pages.
-	key := markdownCacheKey([]byte(input))
+	key := markdownCacheKeyForWorkspace("", []byte(input))
 	t.Cleanup(func() { renderedMarkdown.add(key, first) })
 	renderedMarkdown.add(key, "<p>cache sentinel</p>")
 	if got := renderMarkdown(input); got != "<p>cache sentinel</p>" {
 		t.Fatalf("renderMarkdown after cache replacement = %q, want sentinel", got)
+	}
+}
+
+func TestRenderMarkdownIssueRefs(t *testing.T) {
+	ws := &store.Workspace{Slug: "default"}
+	got := string(renderMarkdownForWorkspace(ws, "see #12 and #3"))
+	if !strings.Contains(got, `href="/w/default/issues/12"`) || !strings.Contains(got, `>#12</a>`) {
+		t.Fatalf("issue refs not linked: %s", got)
+	}
+}
+
+func TestRenderMarkdownIssueRefsSkipCodeAndLinks(t *testing.T) {
+	ws := &store.Workspace{Slug: "default"}
+	got := string(renderMarkdownForWorkspace(ws, "`#12`\n\n```\n#12\n```\n\n[#12](/already)"))
+	if strings.Count(got, `href="/w/default/issues/12"`) != 0 {
+		t.Fatalf("code or existing link was rewritten: %s", got)
+	}
+}
+
+func TestRenderMarkdownIssueRefCacheSeparatesWorkspaces(t *testing.T) {
+	a := string(renderMarkdownForWorkspace(&store.Workspace{Slug: "alpha"}, "see #12"))
+	b := string(renderMarkdownForWorkspace(&store.Workspace{Slug: "beta"}, "see #12"))
+	if !strings.Contains(a, `/w/alpha/issues/12`) || !strings.Contains(b, `/w/beta/issues/12`) {
+		t.Fatalf("workspace-specific cache entries collided:\na=%s\nb=%s", a, b)
+	}
+}
+
+func TestMarkdownPreviewEndpoint(t *testing.T) {
+	srv, _ := newTestServer(t)
+	resp, err := srv.Client().Post(srv.URL+"/w/default/preview", "application/x-www-form-urlencoded", strings.NewReader("body=see+%2312"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		t.Fatalf("status = %d, body %s", resp.StatusCode, body)
+	}
+	if !strings.Contains(string(body), `href="/w/default/issues/12"`) {
+		t.Fatalf("preview missing workspace issue link: %s", body)
 	}
 }

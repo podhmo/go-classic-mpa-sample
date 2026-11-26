@@ -134,6 +134,10 @@ var messagesEN = messages{
 	JSListIssues:         "issues",
 	JSListDiscussions:    "discussions",
 	JSListPRs:            "pull requests",
+	JSWrite:              "Write",
+	JSPreview:            "Preview",
+	JSPreviewEmpty:       "Nothing to preview.",
+	JSPreviewFailed:      "Preview could not be loaded.",
 
 	IssuesTitle:            "Issues",
 	IssuesFilterAria:       "Filter issues",

@@ -4,4 +4,5 @@
 // enhancements over a plain POST.
 import "./enter-submit.js";
 import "./form-errors.js";
+import "./markdown-editor.js";
 import "./leave-guard.js";

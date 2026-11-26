@@ -8,5 +8,6 @@ import "./enter-submit.js";
 import "./form-errors.js";
 import "./partial-submit.js";
 import "./comment-submit-disabled.js";
+import "./markdown-editor.js";
 import "./leave-guard.js";
 import "./live-updates.js";
