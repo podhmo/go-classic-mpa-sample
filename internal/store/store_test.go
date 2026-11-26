@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -133,6 +134,10 @@ func TestTransactionsBeginImmediate(t *testing.T) {
 		tx2.Rollback()
 		tx1.Rollback()
 		t.Fatal("second transaction began while the first was open; txlock is not immediate")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		tx1.Rollback()
+		t.Fatalf("overlapping BeginTx error = %v, want context deadline", err)
 	}
 	if err := tx1.Commit(); err != nil {
 		t.Fatalf("first Commit: %v", err)
