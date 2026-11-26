@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -51,6 +52,12 @@ type authFormPage struct {
 
 func (p authFormPage) anyError() bool {
 	return p.Error != "" || p.NameError != "" || p.PasswordError != ""
+}
+
+// authURL carries the sanitized return target across the login/register
+// footer link so switching account modes does not lose it.
+func authURL(path, next string) string {
+	return path + "?next=" + url.QueryEscape(next)
 }
 
 // safeNext limits the post-login redirect to same-site paths; anything
@@ -102,7 +109,7 @@ func (h *handler) registerForm(w http.ResponseWriter, r *http.Request) {
 		Next:        safeNext(r.URL.Query().Get("next")),
 		NewPassword: true,
 		OtherLabel:  msgFor(r).AuthOtherLogin,
-		OtherURL:    "/login",
+		OtherURL:    authURL("/login", safeNext(r.URL.Query().Get("next"))),
 	}, localeFromContext(r.Context()))
 
 }
@@ -126,7 +133,7 @@ func (h *handler) register(w http.ResponseWriter, r *http.Request) {
 		Next:        next,
 		NewPassword: true,
 		OtherLabel:  msgFor(r).AuthOtherLogin,
-		OtherURL:    "/login",
+		OtherURL:    authURL("/login", next),
 	}
 	switch {
 	case name == "":
@@ -186,7 +193,7 @@ func (h *handler) loginForm(w http.ResponseWriter, r *http.Request) {
 		SubmitLabel: msgFor(r).AuthLogin,
 		Next:        safeNext(r.URL.Query().Get("next")),
 		OtherLabel:  msgFor(r).AuthOtherRegister,
-		OtherURL:    "/register",
+		OtherURL:    authURL("/register", safeNext(r.URL.Query().Get("next"))),
 	}, localeFromContext(r.Context()))
 
 }
@@ -210,7 +217,7 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 		Name:        name,
 		Next:        next,
 		OtherLabel:  msgFor(r).AuthOtherRegister,
-		OtherURL:    "/register",
+		OtherURL:    authURL("/register", next),
 	}
 	if name == "" {
 		page.NameError = msgFor(r).NameRequired

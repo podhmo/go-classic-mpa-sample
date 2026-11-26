@@ -1,11 +1,11 @@
 {{define "layout"}}<!DOCTYPE html>
-<html lang="{{lang}}" data-i18n='{{jsDict}}' data-user-id="{{if .User}}{{.User.ID}}{{else}}anonymous{{end}}">
+<html lang="{{lang}}" data-i18n='{{jsDict}}' data-user-id="{{if .Data.User}}{{.Data.User.ID}}{{else}}anonymous{{end}}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
   <meta name="text-scale" content="scale">
-  <title>{{.Title}} · {{AppName}}</title>
+  <title>{{.Data.Title}} · {{AppName}}</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cstyle%3E@media%20(prefers-color-scheme:dark)%7Brect%7Bfill:%2358a6ff%7Dcircle%7Bstroke:%230d1117%7D%7D%3C/style%3E%3Crect width='16' height='16' rx='3' fill='%232563eb'/%3E%3Ccircle cx='8' cy='8' r='3.5' fill='none' stroke='white' stroke-width='1.5'/%3E%3C/svg%3E">
   {{/* Cross-document view-transition opt-in as an inline style: Chrome
      checks @view-transition at pagereveal without reliably waiting for the
@@ -19,41 +19,41 @@
      page's first render — defer at the end of <body> can miss pagereveal. */}}
   <script src="{{staticURL "pagination-transition.js"}}"></script>
   <script src="{{staticURL "nav-menu.js"}}" defer></script>
-  {{template "head" .}}
+  {{template "head" .Data}}
 </head>
 <body>
   <a class="skip-link" href="#main-content">{{LayoutSkip}}</a>
   <header class="site-header">
     <div class="header-bar">
       <div class="container header-inner">
-        <a class="site-title" href="{{if .Workspace}}/w/{{.Workspace.Slug}}/issues{{else}}/{{end}}">{{AppName}}</a>
+        <a class="site-title" href="{{if .Data.Workspace}}/w/{{.Data.Workspace.Slug}}/issues{{else}}/{{end}}">{{AppName}}</a>
         <details class="nav-menu" open>
         <summary class="nav-menu-summary btn">{{LayoutNavMenu}}</summary>
         <nav class="site-nav" aria-label="{{LayoutNavMain}}">
-          {{if .Workspace}}
-          <a href="/w/{{.Workspace.Slug}}/issues"{{if eq .Section "issues"}} aria-current="page"{{end}}>{{LayoutNavIssues}}</a>
-          <a href="/w/{{.Workspace.Slug}}/discussions"{{if eq .Section "discussions"}} aria-current="page"{{end}}>{{LayoutNavDiscussions}}</a>
-          <a href="/w/{{.Workspace.Slug}}/labels"{{if eq .Section "labels"}} aria-current="page"{{end}}>{{LayoutNavLabels}}</a>
+          {{if .Data.Workspace}}
+          <a href="/w/{{.Data.Workspace.Slug}}/issues"{{if eq .Data.Section "issues"}} aria-current="page"{{end}}>{{LayoutNavIssues}}</a>
+          <a href="/w/{{.Data.Workspace.Slug}}/discussions"{{if eq .Data.Section "discussions"}} aria-current="page"{{end}}>{{LayoutNavDiscussions}}</a>
+          <a href="/w/{{.Data.Workspace.Slug}}/labels"{{if eq .Data.Section "labels"}} aria-current="page"{{end}}>{{LayoutNavLabels}}</a>
           {{end}}
           {{if pullsOn}}
-          <a href="/pulls"{{if eq .Section "pulls"}} aria-current="page"{{end}}>{{LayoutNavPulls}}</a>
+          <a href="/pulls"{{if eq .Data.Section "pulls"}} aria-current="page"{{end}}>{{LayoutNavPulls}}</a>
           {{end}}
-          <a href="/workspaces"{{if eq .Section "workspaces"}} aria-current="page"{{end}}>{{LayoutNavWorkspaces}}</a>
-          {{if .Workspace}}
-          {{if eq .Section "discussions"}}
-          <a class="btn" href="/w/{{.Workspace.Slug}}/discussions/new">{{LayoutNavNewDiscussion}}</a>
+          <a href="/workspaces"{{if eq .Data.Section "workspaces"}} aria-current="page"{{end}}>{{LayoutNavWorkspaces}}</a>
+          {{if .Data.Workspace}}
+          {{if eq .Data.Section "discussions"}}
+          <a class="btn" href="/w/{{.Data.Workspace.Slug}}/discussions/new">{{LayoutNavNewDiscussion}}</a>
           {{else}}
-          <a class="btn" href="/w/{{.Workspace.Slug}}/issues/new">{{LayoutNavNewIssue}}</a>
+          <a class="btn" href="/w/{{.Data.Workspace.Slug}}/issues/new">{{LayoutNavNewIssue}}</a>
           {{end}}
           {{end}}
-          {{if .User}}
-          <span class="user-handle">@{{.User.Name}}</span>
+          {{if .Data.User}}
+          <span class="user-handle">@{{.Data.User.Name}}</span>
           <form method="post" action="/logout" class="inline-form">
             <button type="submit" class="btn btn-quiet">{{LayoutNavLogout}}</button>
           </form>
           {{else}}
-          <a href="/login">{{LayoutNavLogin}}</a>
-          <a href="/register">{{LayoutNavRegister}}</a>
+          <a href="/login?next={{urlquery .CurrentPath}}">{{LayoutNavLogin}}</a>
+          <a href="/register?next={{urlquery .CurrentPath}}">{{LayoutNavRegister}}</a>
           {{end}}
           {{/* Language switcher: GET /locale?lang= sets the cookie and
              redirects back to the Referer, so filters (?q=, ?status=)
@@ -65,7 +65,7 @@
     </div>
   </header>
   <main class="container main-content" id="main-content" tabindex="-1">
-    {{template "content" .}}
+    {{template "content" .Data}}
   </main>
   <footer class="site-footer">
     <div class="container">

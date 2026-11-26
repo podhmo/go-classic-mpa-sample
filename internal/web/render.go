@@ -91,11 +91,28 @@ func parsePages(lang string, pullsOn bool) map[string]*template.Template {
 	return pages
 }
 
+// layoutData separates layout-only request state from the page view model.
+// The content/head templates still receive Data unchanged, while the shared
+// layout can build auth links that return to the current path+query.
+type layoutData struct {
+	Data        any
+	CurrentPath string
+}
+
+type renderPathProvider interface {
+	renderPath() string
+}
+
 // executeLang renders the named page template through the shared layout.
 // Unknown locales fall back to the default set so a half-localized page stays
 // renderable. The body is rendered into a buffer first so template failures
 // cannot produce a half-written response.
 func (r *Renderer) executeLang(w http.ResponseWriter, page, lang string, status int, data any) {
+	currentPath := "/issues"
+	if provider, ok := w.(renderPathProvider); ok {
+		currentPath = safeNext(provider.renderPath())
+	}
+	data = layoutData{Data: data, CurrentPath: currentPath}
 	pages := r.pagesByLang[lang]
 	if pages == nil {
 		pages = r.pagesByLang[supportedLangs[0]]

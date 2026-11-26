@@ -109,6 +109,68 @@ func getWithCookie(t *testing.T, srv *httptest.Server, path string, c *http.Cook
 	return resp.StatusCode, getBody(t, resp)
 }
 
+func TestAuthLinksReturnToCurrentPathAndQuery(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	code, body := getWithCookie(t, srv, "/w/default/issues?q=bug+fix&status=open", nil)
+	if code != http.StatusOK {
+		t.Fatalf("GET issues = %d", code)
+	}
+	next := url.QueryEscape("/w/default/issues?q=bug+fix&status=open")
+	for _, want := range []string{`/login?next=` + next, `/register?next=` + next} {
+		if !strings.Contains(body, want) {
+			t.Errorf("anonymous nav missing %s", want)
+		}
+	}
+}
+
+func TestAuthModeSwitchPreservesNext(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	code, body := getWithCookie(t, srv, "/login?next=/w/default/issues/3", nil)
+	if code != http.StatusOK {
+		t.Fatalf("GET login = %d", code)
+	}
+	if !strings.Contains(body, `name="next" value="/w/default/issues/3"`) {
+		t.Error("login form dropped hidden next")
+	}
+	if !strings.Contains(body, `href="/register?next=%2Fw%2Fdefault%2Fissues%2F3"`) {
+		t.Error("login footer link dropped next")
+	}
+	if strings.Contains(body, `/login?next=%2Flogin`) {
+		t.Error("login header nested the auth URL in next")
+	}
+
+	code, body = getWithCookie(t, srv, "/register?next=/w/default/issues/3", nil)
+	if code != http.StatusOK {
+		t.Fatalf("GET register = %d", code)
+	}
+	if !strings.Contains(body, `name="next" value="/w/default/issues/3"`) {
+		t.Error("register form dropped hidden next")
+	}
+	if !strings.Contains(body, `href="/login?next=%2Fw%2Fdefault%2Fissues%2F3"`) {
+		t.Error("register footer link dropped next")
+	}
+}
+
+func TestAuthValidationKeepsNextInModeSwitch(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	resp := postForm(t, srv.Client(), srv.URL+"/login", url.Values{
+		"name": {"alice"}, "password": {"wrong-pass"}, "next": {"/w/default/issues/3"},
+	})
+	body := getBody(t, resp)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422", resp.StatusCode)
+	}
+	if !strings.Contains(body, `name="next" value="/w/default/issues/3"`) {
+		t.Error("failed login dropped hidden next")
+	}
+	if !strings.Contains(body, `href="/register?next=%2Fw%2Fdefault%2Fissues%2F3"`) {
+		t.Error("failed login footer link dropped next")
+	}
+}
+
 func TestRegisterFlowSetsSessionCookie(t *testing.T) {
 	srv, _ := newTestServer(t)
 
