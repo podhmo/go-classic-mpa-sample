@@ -7,9 +7,9 @@ import (
 )
 
 func TestParseIssueSearchQuery(t *testing.T) {
-	got := ParseIssueSearchQuery(`is:open label:Bug author:demo label:"Bug Fix" crash unknown:term`)
+	got := ParseIssueSearchQuery(`is:open label:Bug author:demo label:"Bug Fix" crash can't unknown:term`)
 	want := IssueSearchQuery{
-		Terms:    []string{"crash", "unknown:term"},
+		Terms:    []string{"crash", "can't", "unknown:term"},
 		Statuses: []string{StatusOpen},
 		Labels:   []string{"Bug", "Bug Fix"},
 		Authors:  []string{"demo"},
@@ -54,11 +54,12 @@ func TestListIssuesSearchQuerySyntax(t *testing.T) {
 		}
 	}
 
-	check("is:open label:QueryBug author:demo keyboard", openID)
+	check("is:open label:querybug author:demo keyboard", openID)
 	check("is:closed label:QueryBug", closedID)
 	check("is:open label:QueryBug label:QueryFeature", openID)
 	check("keyboard layout", anonID, openID)
 	check("keyboard missing")
 	check("is:open is:closed")
 	check("author:missing")
+	check("is:closed\u3000label:QueryBug", closedID)
 }

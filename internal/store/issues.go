@@ -96,7 +96,7 @@ func (s *Store) ListIssues(ctx context.Context, wsID int64, f ListFilter) ([]*Is
 	for _, name := range search.Labels {
 		conds = append(conds, `EXISTS (
 			SELECT 1 FROM issue_labels il JOIN labels l ON l.id = il.label_id
-			WHERE il.issue_id = i.id AND l.kind = ? AND l.name = ?
+			WHERE il.issue_id = i.id AND l.kind = ? AND lower(l.name) = lower(?)
 			AND (l.workspace_id IS NULL OR l.workspace_id = ?))`)
 		args = append(args, KindLabelIssue, name, wsID)
 	}

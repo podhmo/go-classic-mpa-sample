@@ -1,6 +1,9 @@
 package store
 
-import "strings"
+import (
+	"strings"
+	"unicode"
+)
 
 // IssueSearchQuery is the parsed form of the issue list's shared search
 // syntax. Recognized qualifiers are ANDed with the remaining text terms.
@@ -69,12 +72,12 @@ func searchTokens(s string) []string {
 			} else {
 				b.WriteRune(r)
 			}
-		case r == '\'' || r == '"':
+		case (r == '\'' || r == '"') && (b.Len() == 0 || strings.HasSuffix(b.String(), ":")):
 			quote = r
 			if b.Len() == 0 {
 				emptyQuoted = true
 			}
-		case r == ' ' || r == '\t' || r == '\n' || r == '\r':
+		case unicode.IsSpace(r):
 			flush()
 		default:
 			b.WriteRune(r)

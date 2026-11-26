@@ -37,7 +37,7 @@ var messagesJA = messages{
 	StatusClosed:       "クローズ",
 	StatusMerged:       "マージ済み",
 	FilterSearch:       "検索",
-	FilterSearchPh:     "タイトル/本文、is:open、label:bug",
+	FilterSearchPh:     "タイトルまたは本文",
 	FilterSort:         "並び替え",
 	SortNewest:         "新しい順",
 	SortOldest:         "古い順",

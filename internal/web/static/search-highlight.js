@@ -23,7 +23,7 @@
     if (quote) {
       if (ch === quote) quote = "";
       else current += ch;
-    } else if (ch === '"' || ch === "'") {
+    } else if ((ch === '"' || ch === "'") && (!current || current.endsWith(":"))) {
       quote = ch;
       quotedEmpty ||= !current;
     } else if (/\s/.test(ch)) {
@@ -34,8 +34,9 @@
   }
   flush();
 
-  const terms = [];
-  for (const token of tokens) {
+  const issueList = document.querySelector(".issue-list");
+  const terms = issueList ? [] : [query];
+  for (const token of issueList ? tokens : []) {
     const match = token.match(/^([^:]+):(.+)$/);
     if (match && ["is", "label", "author"].includes(match[1].toLowerCase())) {
       if (match[1].toLowerCase() === "is" && !["open", "closed"].includes(match[2])) {

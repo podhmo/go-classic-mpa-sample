@@ -37,7 +37,7 @@ var messagesEN = messages{
 	StatusClosed:       "Closed",
 	StatusMerged:       "Merged",
 	FilterSearch:       "Search",
-	FilterSearchPh:     "Title/body, is:open, label:bug",
+	FilterSearchPh:     "Title or body",
 	FilterSort:         "Sort",
 	SortNewest:         "Newest first",
 	SortOldest:         "Oldest first",

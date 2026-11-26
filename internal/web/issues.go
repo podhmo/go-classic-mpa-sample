@@ -510,8 +510,9 @@ func isChecked(id int64, ids []int64) bool {
 // filters.
 func issuesURL(ws *store.Workspace, f store.ListFilter) string {
 	v := url.Values{}
-	// "open" is the default filter, so keep URLs clean by omitting it.
-	if f.Status != "" && f.Status != store.StatusOpen {
+	// "open" is the default filter, so keep URLs clean by omitting it —
+	// except when a query qualifier would otherwise retake that default.
+	if f.Status != "" && (f.Status != store.StatusOpen || len(store.ParseIssueSearchQuery(f.Query).Statuses) > 0) {
 		v.Set("status", f.Status)
 	}
 	if f.Query != "" {
@@ -577,6 +578,8 @@ func parseListFilter(r *http.Request) store.ListFilter {
 		default:
 			f.Status = store.StatusOpen
 		}
+	} else if len(store.ParseIssueSearchQuery(f.Query).Statuses) == 0 {
+		f.Status = store.StatusOpen
 	}
 	if f.Sort != "oldest" {
 		f.Sort = ""
