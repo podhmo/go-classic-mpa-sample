@@ -89,7 +89,7 @@
 
 ## 書く体験（Preview・下書き・参照リンク）の範囲
 
-状態: 回答済み（2026-11-26、podhmo）— D: 3つを1つの writing experience PR にまとめる。下書きは投稿成功時だけ自動削除し、保持期限は設けない。TODO.md へ移した。
+状態: 回答済み（2026-11-26、podhmo）— D: 3つを1つの writing experience PR にまとめる。下書きは投稿成功時だけ自動削除し、保持期限も手動クリア導線も設けない。TODO.md へ移した。
 
 止まっている作業: `owner-improvements.md` §5.1。
 

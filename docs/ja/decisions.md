@@ -725,5 +725,5 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 
 - **一覧のライブ化は行わない**: SSE による passive banner や行の自動差し替えは一覧へ入れない。
 - **空状態導線と一括操作は今は入れない**: 「作成する」「フィルタを解除」リンク追加も、close/label 一括操作も行わない。
-- **writing experience は3機能を1PRにまとめる**: Markdown Preview、localStorage 下書き、`#12` リンク化を同じ PR で扱う。下書きは投稿成功時だけ自動削除し、保持期限は設けない。
+- **writing experience は3機能を1PRにまとめる**: Markdown Preview、localStorage 下書き、`#12` リンク化を同じ PR で扱う。下書きは投稿成功時だけ自動削除し、保持期限も手動クリア導線も設けない。
 - **モバイル nav は `<details>` メニューに畳む**: キーボード shortcuts は今は入れない。最後に見た workspace の cookie 復帰は後回し。
