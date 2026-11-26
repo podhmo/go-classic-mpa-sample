@@ -582,3 +582,20 @@ func TestVersionedIssueAndCommentUpdates(t *testing.T) {
 		t.Fatalf("comment = version %d body %q, want version 2 edited", comment.Version, comment.Body)
 	}
 }
+
+func TestAttachedLabelsCarryVersions(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	lid := mustLabel(t, s, "versioned", "#123456")
+	id, err := s.CreateIssue(ctx, 1, IssueInput{Title: "labels", LabelIDs: []int64{lid}}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issue, err := s.GetIssue(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(issue.Labels) != 1 || issue.Labels[0].Version != 1 {
+		t.Fatalf("attached labels = %+v, want one version-1 label", issue.Labels)
+	}
+}

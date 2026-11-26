@@ -474,7 +474,7 @@ func (s *Store) attachLabels(ctx context.Context, issues []*Issue) error {
 		ph[i] = "?"
 		args[i] = is.ID
 	}
-	q := `SELECT il.issue_id, l.id, l.name, l.color, l.kind, COALESCE(l.workspace_id, 0), l.archived
+	q := `SELECT il.issue_id, l.id, l.name, l.color, l.kind, COALESCE(l.workspace_id, 0), l.version, l.archived
 		FROM issue_labels il JOIN labels l ON l.id = il.label_id
 		WHERE il.issue_id IN (` + strings.Join(ph, ",") + `) ORDER BY l.name`
 	rows, err := s.db.QueryContext(ctx, q, args...)
@@ -485,7 +485,7 @@ func (s *Store) attachLabels(ctx context.Context, issues []*Issue) error {
 	for rows.Next() {
 		var issueID int64
 		var l Label
-		if err := rows.Scan(&issueID, &l.ID, &l.Name, &l.Color, &l.Kind, &l.WorkspaceID, &l.Archived); err != nil {
+		if err := rows.Scan(&issueID, &l.ID, &l.Name, &l.Color, &l.Kind, &l.WorkspaceID, &l.Version, &l.Archived); err != nil {
 			return err
 		}
 		if is := byID[issueID]; is != nil {

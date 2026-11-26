@@ -358,7 +358,7 @@ func (s *Store) attachDiscussionLabels(ctx context.Context, discussions []*Discu
 		ph[i] = "?"
 		args[i] = d.ID
 	}
-	q := `SELECT dl.discussion_id, l.id, l.name, l.color, l.kind, COALESCE(l.workspace_id, 0), l.archived
+	q := `SELECT dl.discussion_id, l.id, l.name, l.color, l.kind, COALESCE(l.workspace_id, 0), l.version, l.archived
 		FROM discussion_labels dl JOIN labels l ON l.id = dl.label_id
 		WHERE dl.discussion_id IN (` + strings.Join(ph, ",") + `) ORDER BY l.name`
 	rows, err := s.db.QueryContext(ctx, q, args...)
@@ -369,7 +369,7 @@ func (s *Store) attachDiscussionLabels(ctx context.Context, discussions []*Discu
 	for rows.Next() {
 		var discussionID int64
 		var l Label
-		if err := rows.Scan(&discussionID, &l.ID, &l.Name, &l.Color, &l.Kind, &l.WorkspaceID, &l.Archived); err != nil {
+		if err := rows.Scan(&discussionID, &l.ID, &l.Name, &l.Color, &l.Kind, &l.WorkspaceID, &l.Version, &l.Archived); err != nil {
 			return err
 		}
 		if d := byID[discussionID]; d != nil {
