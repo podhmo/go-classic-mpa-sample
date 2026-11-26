@@ -5,6 +5,8 @@
 
 ## PR pin の git subprocess を書き込み transaction の外へ出せるか
 
+状態: 回答済み（2026-11-26、podhmo）— pin 失敗は許容し、後で修復できる運用にする。厳密な transaction 結合より、pin 欠損を検出・再作成できる方向で進める。
+
 止まっている作業: `owner-improvements.md` §1.6。`CreatePullRequest` は現在 transaction 内で `git update-ref` を実行し、その間 DB の write lock を保持する。
 
 選択肢:
@@ -16,6 +18,8 @@
 判断: podhmo。A を選ぶ場合でも、補償削除では取り消せない読み取りを許容するか決めたい。
 
 ## remote CLI の 404 を store sentinel にどう写像するか
+
+状態: 回答済み（2026-11-26、podhmo）— C: 各 client method が endpoint 文脈付きで record missing だけ `store.ErrNotFound` に写像する。API 変更はしない。
 
 止まっている作業: bugs.md #27、`owner-improvements.md` §1.6。`errors.Is(err, store.ErrNotFound)` の local/remote 差を埋めたいが、repo 未検出で未 mount になった `/api/v1/pulls...` の 404 まで record missing として扱うと誤分類になる。
 
@@ -29,6 +33,8 @@
 
 ## PR merge の直列化と `prservice` をどこまで先に入れるか
 
+状態: 回答済み（2026-11-26、podhmo）— B: まず api/cli/web の3箇所に最小の CAS を入れ、service 抽出は後で行う。lease/復旧は実装しやすい最小範囲に任せる。
+
 止まっている作業: bugs.md #36（並行 merge）、`owner-improvements.md` §1.1・§1.5・§3.1。
 
 選択肢:
@@ -40,6 +46,8 @@
 判断: podhmo。予約の lease/復旧（プロセス死亡時に git 側の適用有無をどう照合するか）もあわせて決めたい。
 
 ## PR files 画面の再設計の範囲をどこまでにするか
+
+状態: 回答済み（2026-11-26、podhmo）— A+B: 不正マークアップと N+1 git 起動を直し、行コメント form は JS を増やさず `?line=` 付き GET でサーバー側に描画する。大規模な再設計はしない。
 
 止まっている作業: `owner-improvements.md` §2.5・§4.4・§5.3。
 
@@ -53,6 +61,8 @@
 
 ## FTS5 と検索クエリ構文の仕様
 
+状態: 回答済み（2026-11-26、podhmo）— C: FTS より先に `is:open label:bug author:demo` のパーサだけ入れる。条件はすべて AND、web/CLI/API で同じ文法にする。
+
 止まっている作業: `owner-improvements.md` §2.2・§4.2。
 
 選択肢:
@@ -65,6 +75,8 @@
 
 ## 楽観的排他の API 互換性と衝突 UX
 
+状態: 回答済み（2026-11-26、podhmo）— B: `If-Match` は任意。指定時だけ `version` を照合し、web フォームは常に hidden version を送る。不一致時の差分表示は実装しやすい最小範囲に任せる。
+
 止まっている作業: `owner-improvements.md` §4.1。
 
 選択肢:
@@ -76,6 +88,8 @@
 判断: podhmo。不一致時に差分をどこまで表示するか（本文だけか、title/labels/status も含めるか）も決める。
 
 ## API 拡張の優先順位と互換性ポリシー
+
+状態: 回答済み（2026-11-26、podhmo）— 今は API 拡張しない。ページング拡張、コメント取得 endpoint、token scope/expiration はいずれも先送り。
 
 止まっている作業: `owner-improvements.md` §4.3。
 

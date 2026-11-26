@@ -727,3 +727,10 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 - **空状態導線と一括操作は今は入れない**: 「作成する」「フィルタを解除」リンク追加も、close/label 一括操作も行わない。
 - **writing experience は3機能を1PRにまとめる**: Markdown Preview、localStorage 下書き、`#12` リンク化を同じ PR で扱う。下書きは投稿成功時だけ自動削除し、保持期限も手動クリア導線も設けない。
 - **モバイル nav は `<details>` メニューに畳む**: キーボード shortcuts は今は入れない。最後に見た workspace の cookie 復帰は後回し。
+- **検索は FTS5 より先にクエリパーサだけ入れる**: `is:open label:bug author:demo` 形式を web/CLI/API 共通の文法にし、条件はすべて AND とする。
+- **楽観的排他の `If-Match` は任意**: 指定された更新だけ `version` を照合し、web フォームは常に hidden version を送る。不一致時の差分表示は実装しやすい最小範囲に留める。
+- **API 拡張は今は行わない**: ページング拡張、コメント取得 endpoint、token scope/expiration はいずれも先送り。
+- **PR files は局所修正に留める**: 不正マークアップと N+1 git 起動を直し、行コメント form は `?line=` 付き GET でサーバー描画する。大規模再設計はしない。
+- **remote CLI の 404 写像は endpoint 文脈付き**: API 変更なしで、record missing と分かる endpoint だけ `store.ErrNotFound` に写像する。
+- **PR merge は最小 CAS を先に入れる**: service 抽出は後で行い、lease/復旧も実装しやすい最小範囲に留める。
+- **PR の pin 失敗は許容して修復可能にする**: pin 欠損を検出・再作成できる運用を優先し、厳密な transaction 結合は求めない。
