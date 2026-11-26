@@ -80,3 +80,5 @@
 - **テンプレートの関数値は引数位置では呼ばれない**: `{{if eq lang "en"}}` は func 値と文字列の比較になり常に不等。`{{if eq (lang) "en"}}` と括弧で 1 度評価する（同上）。
 - **`playwright-cli run-code` は browser を自動起動しない**: 事前に `playwright-cli open` されていない環境では `The browser 'default' is not open` で失敗する。再利用 browser に依存する script は close/open を自分で行う。
 - **storybook 長時間稼働後の renderer crash は先に空きメモリを疑う**: `cmd/storybook` は visual-diff を繰り返すと RSS の high-water が大きくなり、32GB VM で available memory がほぼ無くなって Playwright 側 page crash に見えることがある。browser 自体を疑う前に storybook を再起動してメモリを戻す。
+- **POSIX sh の function 内変数は既定で global**: 呼び出し側と同じ `fail` のような名前を使うと、function が呼び出し側の集計値を上書きする。`local` は POSIX ではないので、集計用と function 内用で名前を分ける。
+- **`||` や `if` 経由で呼んだ function 内では `set -e` が効かない**: 失敗集計のために `compare_mode || failed=1` とすると、その内部の `false` 相当のコマンドでも shell が止まらず後続へ進む。expected failure は戻り値ではなく変数へ記録し、function は通常コマンドとして呼ぶ。
