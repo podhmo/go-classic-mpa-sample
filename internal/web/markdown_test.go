@@ -74,3 +74,37 @@ func TestRenderMarkdownGFM(t *testing.T) {
 		}
 	}
 }
+
+func TestMarkdownLRUEvictsLeastRecentlyUsed(t *testing.T) {
+	cache := newMarkdownLRU(2)
+	key1 := markdownCacheKey([]byte("one"))
+	key2 := markdownCacheKey([]byte("two"))
+	key3 := markdownCacheKey([]byte("three"))
+	cache.add(key1, "<p>one</p>")
+	cache.add(key2, "<p>two</p>")
+	if got, ok := cache.get(key1); !ok || got != "<p>one</p>" {
+		t.Fatalf("get key1 = %q/%v", got, ok)
+	}
+	cache.add(key3, "<p>three</p>")
+	if _, ok := cache.get(key2); ok {
+		t.Error("key2 should be evicted after key1 was refreshed")
+	}
+	if _, ok := cache.get(key1); !ok {
+		t.Error("key1 should remain as a recently used entry")
+	}
+	if _, ok := cache.get(key3); !ok {
+		t.Error("key3 should be cached")
+	}
+}
+
+func TestRenderMarkdownUsesCacheWithoutChangingOutput(t *testing.T) {
+	input := "# cached\n\nsome **bold** text"
+	first := renderMarkdown(input)
+	second := renderMarkdown(input)
+	if first != second {
+		t.Fatalf("cached output changed: %q then %q", first, second)
+	}
+	if !strings.Contains(string(second), "<strong>bold</strong>") {
+		t.Errorf("cached output lost markdown rendering: %s", second)
+	}
+}

@@ -750,3 +750,8 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 
 - **scoped route は `WorkspaceRefBySlug` を使う**: `/w/{slug}/...` の定常解決では id/slug/name/description/created_at だけを読み、issues/discussions の `COUNT(*)` を実行しない。返り値の count field は zero value のまま。
 - **件数を表示する画面だけ従来の counted lookup を使う**: workspace delete 確認と API workspace detail/create response は `WorkspaceBySlug`、workspace 一覧は `ListWorkspaces` の counted query を使う。redirect 用の `WorkspaceByID` は稀な経路なので現状維持。
+
+## markdown 表示変換の LRU cache（2026-11-26、owner improvements 対応）
+
+- **cache key は `sha256(body)`**: DB には生 markdown を残し、goldmark の表示 HTML だけを process-local にキャッシュする。LRU は128件まで、64KiBを超える source は cache しない（出力まで含めたメモリ上限を緩やかに抑える）。
+- **storybook 互換のため key は binary digest の string**: `sha256.Sum256` の `[32]byte` 返り値は minigo 経路で扱いにくいため、`sha256.New().Sum(nil)` の bytes を string key にする。衝突耐性の意味論は同じ。
