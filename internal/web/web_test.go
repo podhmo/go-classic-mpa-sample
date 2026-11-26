@@ -142,21 +142,64 @@ func (f *fakeStore) ListIssues(_ context.Context, wsID int64, fl store.ListFilte
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	search := store.ParseIssueSearchQuery(fl.Query)
 	status := fl.Status
 	if status == "" {
 		status = store.StatusOpen
+		if len(search.Statuses) > 0 {
+			status = "all"
+		}
 	}
 	var matched []*store.Issue
 	for _, is := range f.issues {
+		if is.WorkspaceID != wsID {
+			continue
+		}
 		if status != "all" && is.Status != status {
 			continue
 		}
-		if fl.Query != "" {
-			q := strings.ToLower(fl.Query)
+		if len(search.Statuses) > 1 {
+			continue
+		}
+		if len(search.Statuses) == 1 && is.Status != search.Statuses[0] {
+			continue
+		}
+		termsMatch := true
+		for _, term := range search.Terms {
+			q := strings.ToLower(term)
 			if !strings.Contains(strings.ToLower(is.Title), q) &&
 				!strings.Contains(strings.ToLower(is.Body), q) {
-				continue
+				termsMatch = false
+				break
 			}
+		}
+		if !termsMatch {
+			continue
+		}
+		for _, name := range search.Labels {
+			found := false
+			for _, l := range is.Labels {
+				if l.Kind == store.KindLabelIssue && strings.EqualFold(l.Name, name) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				termsMatch = false
+				break
+			}
+		}
+		if !termsMatch {
+			continue
+		}
+		for _, name := range search.Authors {
+			if is.Author == nil || is.Author.Name != name {
+				termsMatch = false
+				break
+			}
+		}
+		if !termsMatch {
+			continue
 		}
 		if fl.LabelID > 0 {
 			found := false
