@@ -34,8 +34,9 @@ function readDraft(key) {
 
 function writeDraft(key, value) {
   try {
-    if (value === "") localStorage.removeItem(key);
-    else localStorage.setItem(key, value);
+    // Empty is a meaningful draft on edit forms: clearing the published
+    // body must survive a reload just like any other unsent edit.
+    localStorage.setItem(key, value);
   } catch {
     // Private-mode quota failures must not break typing.
   }
