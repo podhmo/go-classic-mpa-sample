@@ -104,7 +104,6 @@ function activate(textarea, panel, tabs, which, state) {
 function targetName(textarea) {
   const explicit = textarea.getAttribute("aria-label");
   if (explicit) return explicit.trim();
-  if (!textarea.id) return "";
   if (textarea.id) {
     const label = document.querySelector(`label[for="${CSS.escape(textarea.id)}"]`);
     const text = (label?.textContent || "").replace(/\s+/g, " ").replace(/\s*\*\s*$/, "").trim();
