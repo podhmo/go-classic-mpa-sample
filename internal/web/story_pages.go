@@ -1124,14 +1124,14 @@ func (storyStore) APITokenUser(ctx context.Context, token string) (*store.User, 
 // StoryHttpIssueList drives the real mux for GET /issues, so the
 // preview replays the handler's status and security headers too.
 func StoryHttpIssueList(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/issues", nil))
+	newStoryHandler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/issues", nil))
 }
 
 // StoryHttpNotFound drives the real mux for an unknown path; the
 // recorded 404 status is replayed by the preview, unlike print
 // stories which always answer 200.
 func StoryHttpNotFound(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/no-such-page", nil))
+	newStoryHandler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/no-such-page", nil))
 }
 
 // renderFragment prints one named template fragment the way a partial
@@ -1206,54 +1206,60 @@ func storyPost(target string, form url.Values, partial bool) *http.Request {
 	return req
 }
 
+// newStoryHandler pins the handler clock so fragments rendered for a
+// successful POST stay byte-stable in visual-diff.
+func newStoryHandler() http.Handler {
+	return New(newStoryStore(), WithClock(storyNow))
+}
+
 // StoryHttpCreateCommentPartial replays a comment POST with X-Partial:
 // the mux answers the new comment's fragment instead of a 303 redirect.
 func StoryHttpCreateCommentPartial(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/issues/2/comments", url.Values{"body": {"posted via fetch"}}, true))
+	newStoryHandler().ServeHTTP(w, storyPost("/w/default/issues/2/comments", url.Values{"body": {"posted via fetch"}}, true))
 }
 
 // StoryHttpCreateCommentRedirect replays the same POST without the
 // header — the unchanged full-reload path answering 303 #comment-N.
 func StoryHttpCreateCommentRedirect(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/issues/2/comments", url.Values{"body": {"classic post"}}, false))
+	newStoryHandler().ServeHTTP(w, storyPost("/w/default/issues/2/comments", url.Values{"body": {"classic post"}}, false))
 }
 
 // StoryHttpCreateCommentPartialError replays a partial post with an
 // empty body: the 422 response is the error-marked form fragment.
 func StoryHttpCreateCommentPartialError(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/issues/2/comments", url.Values{"body": {""}}, true))
+	newStoryHandler().ServeHTTP(w, storyPost("/w/default/issues/2/comments", url.Values{"body": {""}}, true))
 }
 
 // StoryHttpCreateDiscussionReplyPartial replays a partial reply POST:
 // the fragment carries comment-reply markup for .comment-replies.
 func StoryHttpCreateDiscussionReplyPartial(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/discussions/2/comments", url.Values{"body": {"a reply"}, "thread_id": {"1"}}, true))
+	newStoryHandler().ServeHTTP(w, storyPost("/w/default/discussions/2/comments", url.Values{"body": {"a reply"}, "thread_id": {"1"}}, true))
 }
 
 // StoryHttpSetStatusPartial replays a partial status toggle: the mux
 // answers the re-rendered issue article — badge, meta and flipped button
 // — that replace mode swaps over .issue-detail.
 func StoryHttpSetStatusPartial(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/issues/2/status", url.Values{"status": {"closed"}}, true))
+	newStoryHandler().ServeHTTP(w, storyPost("/w/default/issues/2/status", url.Values{"status": {"closed"}}, true))
 }
 
 // StoryHttpSetStatusRedirect replays the same POST without X-Partial —
 // the unchanged 303 PRG path.
 func StoryHttpSetStatusRedirect(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/issues/2/status", url.Values{"status": {"closed"}}, false))
+	newStoryHandler().ServeHTTP(w, storyPost("/w/default/issues/2/status", url.Values{"status": {"closed"}}, false))
 }
 
 // StoryHttpHideCommentPartial replays a partial hide POST: the mux
 // answers the hidden-state <li> (reason note + collapsed body) that
 // replace mode swaps over the visible comment.
 func StoryHttpHideCommentPartial(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/issues/2/comments/2/hide", url.Values{"reason": {"spam"}}, true))
+	newStoryHandler().ServeHTTP(w, storyPost("/w/default/issues/2/comments/2/hide", url.Values{"reason": {"spam"}}, true))
 }
 
 // StoryHttpHideCommentRedirect replays the same POST without X-Partial
 // — the unchanged 303 #comment-N path.
 func StoryHttpHideCommentRedirect(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/issues/2/comments/2/hide", url.Values{"reason": {"spam"}}, false))
+	newStoryHandler().ServeHTTP(w, storyPost("/w/default/issues/2/comments/2/hide", url.Values{"reason": {"spam"}}, false))
 }
 
 // StoryHttpUnhideCommentPartial replays a partial unhide POST — the
@@ -1270,13 +1276,13 @@ func StoryHttpUnhideCommentPartial(w http.ResponseWriter, r *http.Request) {
 // two <li>s — the newly marked comment 2 and comment 1 losing the mark —
 // each self-targeting by id.
 func StoryHttpSetCommentAnswerPartial(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/discussions/2/comments/2/answer", url.Values{"answer": {"1"}}, true))
+	newStoryHandler().ServeHTTP(w, storyPost("/w/default/discussions/2/comments/2/answer", url.Values{"answer": {"1"}}, true))
 }
 
 // StoryHttpSetCommentAnswerRedirect replays the same POST without
 // X-Partial — the unchanged 303 #comment-N path.
 func StoryHttpSetCommentAnswerRedirect(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/discussions/2/comments/2/answer", url.Values{"answer": {"1"}}, false))
+	newStoryHandler().ServeHTTP(w, storyPost("/w/default/discussions/2/comments/2/answer", url.Values{"answer": {"1"}}, false))
 }
 
 // StoryHttpApp routes the real incoming request through the app's mux.
@@ -1285,7 +1291,7 @@ func StoryHttpSetCommentAnswerRedirect(w http.ResponseWriter, r *http.Request) {
 // partial-submit.js (fetch → fragment → DOM swap) to run end to end
 // without a database.
 func StoryHttpApp(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, r)
+	newStoryHandler().ServeHTTP(w, r)
 }
 
 // The storybook runs in the single "default" workspace; management

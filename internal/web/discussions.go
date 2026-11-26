@@ -12,7 +12,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/podhmo/go-classic-mpa-sample/internal/export"
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
@@ -502,7 +501,7 @@ func (h *handler) renderNewDiscussionComment(w http.ResponseWriter, r *http.Requ
 			ThreadID:  threadID,
 			Body:      body,
 			Author:    userFromContext(r.Context()),
-			CreatedAt: time.Now(),
+			CreatedAt: h.clock(),
 		}
 		h.r.renderFragment(w, "discussion_detail", "discussion_reply_append", http.StatusOK, dict("Discussion", discussion, "C", comment, "Workspace", ws), localeFromContext(r.Context()))
 
@@ -513,7 +512,7 @@ func (h *handler) renderNewDiscussionComment(w http.ResponseWriter, r *http.Requ
 		DiscussionID: id,
 		Body:         body,
 		Author:       userFromContext(r.Context()),
-		CreatedAt:    time.Now(),
+		CreatedAt:    h.clock(),
 	}
 	h.r.renderFragment(w, "discussion_detail", "discussion_comment_append", http.StatusOK, dict("Discussion", discussion, "C", thread, "Workspace", ws), localeFromContext(r.Context()))
 

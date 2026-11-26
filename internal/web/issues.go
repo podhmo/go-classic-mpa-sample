@@ -8,7 +8,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/podhmo/go-classic-mpa-sample/internal/export"
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
@@ -335,7 +334,7 @@ func (h *handler) setStatus(w http.ResponseWriter, r *http.Request, ws *store.Wo
 		// the flipped toggle button all change at once. GetIssue returns
 		// the true post-state: the store bumps updated_at only when the
 		// status actually changes, so a no-op toggle must echo the stored
-		// timestamp, not time.Now().
+		// timestamp, not the time of the request.
 		issue, err := h.store.GetIssue(r.Context(), issue.ID)
 		if err != nil {
 			h.issueError(w, r, err)
@@ -462,7 +461,7 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request, ws *stor
 				IssueID:   id,
 				Body:      body,
 				Author:    userFromContext(r.Context()),
-				CreatedAt: time.Now(),
+				CreatedAt: h.clock(),
 			},
 		), localeFromContext(r.Context()))
 
