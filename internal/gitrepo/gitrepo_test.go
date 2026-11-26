@@ -641,6 +641,25 @@ func TestPinHeadDoesNotOverwriteExistingPin(t *testing.T) {
 	}
 }
 
+func TestPinHeadSHA256Repository(t *testing.T) {
+	if err := exec.Command("git", "init", "--object-format=sha256", "--bare", filepath.Join(t.TempDir(), "probe.git")).Run(); err != nil {
+		t.Skipf("git without sha256 object-format support: %v", err)
+	}
+	ctx := context.Background()
+	dir := t.TempDir()
+	git(t, dir, "init", "--object-format=sha256", "-b", "main")
+	write(t, dir, "a.txt", "one\n")
+	r := openRepo(t, dir)
+	head := strings.TrimSpace(git(t, dir, "rev-parse", "main"))
+
+	if err := r.PinHead(ctx, 42, head); err != nil {
+		t.Fatalf("sha256 pin create: %v", err)
+	}
+	if got, err := r.RevParse(ctx, PinRef(42)); err != nil || got != head {
+		t.Fatalf("sha256 pin = %q err=%v, want %q", got, err, head)
+	}
+}
+
 func TestPinNeedsRepair(t *testing.T) {
 	ctx := context.Background()
 	dir := initRepo(t)

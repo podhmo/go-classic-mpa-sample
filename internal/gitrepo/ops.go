@@ -438,10 +438,10 @@ func (r *Repo) PinHead(ctx context.Context, id int64, sha string) error {
 	if err := checkRevArg(sha); err != nil {
 		return err
 	}
-	// A zero old value asks update-ref to create the ref only when it is
-	// still absent. That closes the create/close race without a read first.
-	zero := strings.Repeat("0", 40)
-	_, err := r.run(ctx, nil, "update-ref", PinRef(id), sha, zero)
+	// An empty old value asks update-ref to create the ref only when it is
+	// still absent. Unlike a hard-coded zero object id, this is independent
+	// of the repository's hash algorithm (SHA-1 or SHA-256).
+	_, err := r.run(ctx, nil, "update-ref", PinRef(id), sha, "")
 	if err != nil {
 		if _, revErr := r.RevParse(ctx, PinRef(id)); revErr == nil {
 			return ErrConcurrentUpdate
