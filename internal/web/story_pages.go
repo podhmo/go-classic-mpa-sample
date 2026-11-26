@@ -188,7 +188,7 @@ func storyNow() time.Time {
 }
 
 func printRec(rec *httptest.ResponseRecorder) {
-	// Renderer.execute answers a template failure with http.Error (5xx);
+	// Renderer execution answers a template failure with http.Error (5xx);
 	// surface that instead of printing the error body as a "successful" story.
 	if rec.Code >= http.StatusInternalServerError {
 		panic(fmt.Sprintf("render failed: %d %s", rec.Code, rec.Body.String()))

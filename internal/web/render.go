@@ -13,7 +13,7 @@ import (
 
 // Renderer renders each page template through the shared layout. Handlers call
 // the typed renderXxx methods so page templates and their view models stay in
-// sync at compile time; the any parameter exists only in execute.
+// sync at compile time.
 type Renderer struct {
 	// pagesByLang holds one parsed set per supported locale: each parse
 	// binds the message functions and {{lang}} to that locale so templates
@@ -83,15 +83,10 @@ func parsePages(lang string, pullsOn bool) map[string]*template.Template {
 	return pages
 }
 
-// execute renders the named page template through the shared layout. The body
-// is rendered into a buffer first so template failures cannot produce a
-// half-written response.
-func (r *Renderer) execute(w http.ResponseWriter, page string, status int, data any) {
-	r.executeLang(w, page, supportedLangs[0], status, data)
-}
-
-// executeLang is execute for a non-default locale. Unknown locales fall back
-// to the default set so a half-localized page stays renderable.
+// executeLang renders the named page template through the shared layout.
+// Unknown locales fall back to the default set so a half-localized page stays
+// renderable. The body is rendered into a buffer first so template failures
+// cannot produce a half-written response.
 func (r *Renderer) executeLang(w http.ResponseWriter, page, lang string, status int, data any) {
 	pages := r.pagesByLang[lang]
 	if pages == nil {
@@ -260,9 +255,4 @@ func (r *Renderer) renderErrorFor(w http.ResponseWriter, status int, heading, me
 		Message: message,
 		User:    user,
 	})
-}
-
-func (r *Renderer) notFound(w http.ResponseWriter) {
-	msg := messagesFor(supportedLangs[0])
-	r.renderError(w, http.StatusNotFound, msg.ErrNotFoundH, msg.ErrNotFoundM)
 }

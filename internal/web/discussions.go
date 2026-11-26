@@ -77,6 +77,23 @@ type discussionFormErrors struct {
 
 func (e discussionFormErrors) any() bool { return e.Title != "" || e.Body != "" || e.Category != "" }
 
+// newDiscussionFormPage fills the fields every discussion form render shares.
+func newDiscussionFormPage(r *http.Request, ws *store.Workspace, title, action, submitLabel string, input store.DiscussionInput, categories []*store.DiscussionCategory, labels []*store.Label, errs discussionFormErrors) discussionFormPage {
+	return discussionFormPage{
+		Title:       title,
+		Heading:     title,
+		Action:      action,
+		SubmitLabel: submitLabel,
+		Input:       input,
+		Categories:  categories,
+		Labels:      labels,
+		Errors:      errs,
+		Section:     "discussions",
+		Workspace:   ws,
+		User:        userFromContext(r.Context()),
+	}
+}
+
 // discussionDeletePage is the view model for the delete confirmation page.
 type discussionDeletePage struct {
 	Title      string
@@ -146,17 +163,9 @@ func (h *handler) newDiscussion(w http.ResponseWriter, r *http.Request, ws *stor
 		h.internalError(w, r, err)
 		return
 	}
-	h.r.renderDiscussionForm(w, http.StatusOK, discussionFormPage{
-		Title:       msgFor(r).NewDiscussion,
-		Heading:     msgFor(r).NewDiscussion,
-		Action:      "/w/" + ws.Slug + "/discussions",
-		SubmitLabel: msgFor(r).CreateDiscussion,
-		Categories:  categories,
-		Labels:      labels,
-		Section:     "discussions",
-		Workspace:   ws,
-		User:        userFromContext(r.Context()),
-	}, localeFromContext(r.Context()))
+	h.r.renderDiscussionForm(w, http.StatusOK, newDiscussionFormPage(r, ws,
+		msgFor(r).NewDiscussion, "/w/"+ws.Slug+"/discussions", msgFor(r).CreateDiscussion,
+		store.DiscussionInput{}, categories, labels, discussionFormErrors{}), localeFromContext(r.Context()))
 
 }
 
@@ -276,18 +285,10 @@ func (h *handler) editDiscussion(w http.ResponseWriter, r *http.Request, ws *sto
 	for _, l := range discussion.Labels {
 		in.LabelIDs = append(in.LabelIDs, l.ID)
 	}
-	h.r.renderDiscussionForm(w, http.StatusOK, discussionFormPage{
-		Title:       fmt.Sprintf(msgFor(r).EditDiscussion, discussion.ID),
-		Heading:     fmt.Sprintf(msgFor(r).EditDiscussion, discussion.ID),
-		Action:      discussionURL(ws, discussion.ID) + "/edit",
-		SubmitLabel: msgFor(r).BtnSaveChanges,
-		Input:       in,
-		Categories:  categories,
-		Labels:      labels,
-		Section:     "discussions",
-		Workspace:   ws,
-		User:        userFromContext(r.Context()),
-	}, localeFromContext(r.Context()))
+	title := fmt.Sprintf(msgFor(r).EditDiscussion, discussion.ID)
+	h.r.renderDiscussionForm(w, http.StatusOK, newDiscussionFormPage(r, ws,
+		title, discussionURL(ws, discussion.ID)+"/edit", msgFor(r).BtnSaveChanges,
+		in, categories, labels, discussionFormErrors{}), localeFromContext(r.Context()))
 
 }
 
@@ -628,19 +629,9 @@ func (h *handler) renderDiscussionFormError(w http.ResponseWriter, r *http.Reque
 		h.internalError(w, r, err)
 		return
 	}
-	h.r.renderDiscussionForm(w, http.StatusUnprocessableEntity, discussionFormPage{
-		Title:       title,
-		Heading:     heading,
-		Action:      action,
-		SubmitLabel: submitLabel,
-		Input:       in,
-		Categories:  categories,
-		Labels:      labels,
-		Errors:      errs,
-		Section:     "discussions",
-		Workspace:   ws,
-		User:        userFromContext(r.Context()),
-	}, localeFromContext(r.Context()))
+	h.r.renderDiscussionForm(w, http.StatusUnprocessableEntity,
+		newDiscussionFormPage(r, ws, title, action, submitLabel, in, categories, labels, errs),
+		localeFromContext(r.Context()))
 
 }
 

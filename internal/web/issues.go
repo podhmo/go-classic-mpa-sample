@@ -68,6 +68,22 @@ type issueFormErrors struct {
 
 func (e issueFormErrors) any() bool { return e.Title != "" || e.Body != "" }
 
+// newIssueFormPage fills the fields every issue form render shares.
+func newIssueFormPage(r *http.Request, ws *store.Workspace, title, action, submitLabel string, input store.IssueInput, labels []*store.Label, errs issueFormErrors) issueFormPage {
+	return issueFormPage{
+		Title:       title,
+		Heading:     title,
+		Action:      action,
+		SubmitLabel: submitLabel,
+		Input:       input,
+		Labels:      labels,
+		Errors:      errs,
+		Section:     "issues",
+		Workspace:   ws,
+		User:        userFromContext(r.Context()),
+	}
+}
+
 // issueDeletePage is the view model for the delete confirmation page.
 type issueDeletePage struct {
 	Title     string
@@ -141,16 +157,9 @@ func (h *handler) newIssue(w http.ResponseWriter, r *http.Request, ws *store.Wor
 		h.internalError(w, r, err)
 		return
 	}
-	h.r.renderIssueForm(w, http.StatusOK, issueFormPage{
-		Title:       msgFor(r).NewIssue,
-		Heading:     msgFor(r).NewIssue,
-		Action:      "/w/" + ws.Slug + "/issues",
-		SubmitLabel: msgFor(r).CreateIssue,
-		Labels:      labels,
-		Section:     "issues",
-		Workspace:   ws,
-		User:        userFromContext(r.Context()),
-	}, localeFromContext(r.Context()))
+	h.r.renderIssueForm(w, http.StatusOK, newIssueFormPage(r, ws,
+		msgFor(r).NewIssue, "/w/"+ws.Slug+"/issues", msgFor(r).CreateIssue,
+		store.IssueInput{}, labels, issueFormErrors{}), localeFromContext(r.Context()))
 
 }
 
@@ -166,18 +175,9 @@ func (h *handler) createIssue(w http.ResponseWriter, r *http.Request, ws *store.
 			h.internalError(w, r, err)
 			return
 		}
-		h.r.renderIssueForm(w, http.StatusUnprocessableEntity, issueFormPage{
-			Title:       msgFor(r).NewIssue,
-			Heading:     msgFor(r).NewIssue,
-			Action:      "/w/" + ws.Slug + "/issues",
-			SubmitLabel: msgFor(r).CreateIssue,
-			Input:       in,
-			Labels:      labels,
-			Errors:      errs,
-			Section:     "issues",
-			Workspace:   ws,
-			User:        userFromContext(r.Context()),
-		}, localeFromContext(r.Context()))
+		h.r.renderIssueForm(w, http.StatusUnprocessableEntity, newIssueFormPage(r, ws,
+			msgFor(r).NewIssue, "/w/"+ws.Slug+"/issues", msgFor(r).CreateIssue,
+			in, labels, errs), localeFromContext(r.Context()))
 
 		return
 	}
@@ -266,17 +266,10 @@ func (h *handler) editIssue(w http.ResponseWriter, r *http.Request, ws *store.Wo
 	for _, l := range issue.Labels {
 		in.LabelIDs = append(in.LabelIDs, l.ID)
 	}
-	h.r.renderIssueForm(w, http.StatusOK, issueFormPage{
-		Title:       fmt.Sprintf(msgFor(r).EditIssue, issue.ID),
-		Heading:     fmt.Sprintf(msgFor(r).EditIssue, issue.ID),
-		Action:      issueURL(ws, issue.ID) + "/edit",
-		SubmitLabel: msgFor(r).BtnSaveChanges,
-		Input:       in,
-		Labels:      labels,
-		Section:     "issues",
-		Workspace:   ws,
-		User:        userFromContext(r.Context()),
-	}, localeFromContext(r.Context()))
+	title := fmt.Sprintf(msgFor(r).EditIssue, issue.ID)
+	h.r.renderIssueForm(w, http.StatusOK, newIssueFormPage(r, ws,
+		title, issueURL(ws, issue.ID)+"/edit", msgFor(r).BtnSaveChanges,
+		in, labels, issueFormErrors{}), localeFromContext(r.Context()))
 
 }
 
@@ -298,18 +291,10 @@ func (h *handler) updateIssue(w http.ResponseWriter, r *http.Request, ws *store.
 			h.internalError(w, r, err)
 			return
 		}
-		h.r.renderIssueForm(w, http.StatusUnprocessableEntity, issueFormPage{
-			Title:       fmt.Sprintf(msgFor(r).EditIssue, issue.ID),
-			Heading:     fmt.Sprintf(msgFor(r).EditIssue, issue.ID),
-			Action:      issueURL(ws, issue.ID) + "/edit",
-			SubmitLabel: msgFor(r).BtnSaveChanges,
-			Input:       in,
-			Labels:      labels,
-			Errors:      errs,
-			Section:     "issues",
-			Workspace:   ws,
-			User:        userFromContext(r.Context()),
-		}, localeFromContext(r.Context()))
+		title := fmt.Sprintf(msgFor(r).EditIssue, issue.ID)
+		h.r.renderIssueForm(w, http.StatusUnprocessableEntity, newIssueFormPage(r, ws,
+			title, issueURL(ws, issue.ID)+"/edit", msgFor(r).BtnSaveChanges,
+			in, labels, errs), localeFromContext(r.Context()))
 
 		return
 	}
