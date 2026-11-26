@@ -2,11 +2,21 @@ package web
 
 import (
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
+
+func TestJapaneseCatalogHasNoEmptyFields(t *testing.T) {
+	v := reflect.ValueOf(messagesJA)
+	for i := range v.NumField() {
+		if v.Field(i).String() == "" {
+			t.Errorf("messagesJA.%s is empty; en fallback would be silent", v.Type().Field(i).Name)
+		}
+	}
+}
 
 func TestLangQuerySetsCookieAndRedirects(t *testing.T) {
 	srv, _ := newTestServer(t)
