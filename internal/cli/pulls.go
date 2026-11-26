@@ -720,6 +720,10 @@ func prRepairPin(ctx context.Context, o Options, args []string) error {
 	if err != nil {
 		return err
 	}
+	if !needs {
+		fmt.Fprintf(o.Stdout, "pull request #%d pin is already healthy\n", id)
+		return nil
+	}
 	target := expected
 	if pr.Open() {
 		target, err = repo.RevParse(ctx, pr.HeadRef)
@@ -729,10 +733,6 @@ func prRepairPin(ctx context.Context, o Options, args []string) error {
 	}
 	if target == "" {
 		return errors.New("cli: no head commit is recorded for pinning")
-	}
-	if !needs {
-		fmt.Fprintf(o.Stdout, "pull request #%d pin is already healthy\n", id)
-		return nil
 	}
 	if err := repo.UpdatePin(ctx, id, target); err != nil {
 		return err

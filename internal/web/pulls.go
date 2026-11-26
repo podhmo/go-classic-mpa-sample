@@ -1232,16 +1232,18 @@ func (h *handler) repairPullPin(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	needs, _ := h.pinRepairState(ctx, pr)
+	if !needs {
+		redirectSeeOther(w, r, fmt.Sprintf("/pulls/%d", pr.ID))
+		return
+	}
 	target, err := h.pinRepairTarget(ctx, pr)
 	if err != nil || target == "" {
 		h.renderError(w, r, http.StatusConflict, msgFor(r).ErrNotMergeableH, msgFor(r).ErrPinUnrepairable)
 		return
 	}
-	if needs {
-		if err := h.repo.UpdatePin(ctx, pr.ID, target); err != nil {
-			h.pullError(w, r, err)
-			return
-		}
+	if err := h.repo.UpdatePin(ctx, pr.ID, target); err != nil {
+		h.pullError(w, r, err)
+		return
 	}
 	redirectSeeOther(w, r, fmt.Sprintf("/pulls/%d", pr.ID))
 }

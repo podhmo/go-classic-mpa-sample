@@ -687,6 +687,10 @@ func (h *handler) repairPullPin(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	if !needs {
+		writeJSON(w, http.StatusOK, map[string]any{"pull_request": pullRequestDTO(pr)})
+		return
+	}
 	target := expected
 	if pr.Open() {
 		target, err = h.repo.RevParse(ctx, pr.HeadRef)
@@ -699,13 +703,11 @@ func (h *handler) repairPullPin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "No head commit is recorded for pinning.", nil)
 		return
 	}
-	if needs {
-		if err := h.repo.UpdatePin(ctx, pr.ID, target); err != nil {
-			if !h.gitError(w, err) {
-				writeError(w, http.StatusInternalServerError, "Internal server error.", nil)
-			}
-			return
+	if err := h.repo.UpdatePin(ctx, pr.ID, target); err != nil {
+		if !h.gitError(w, err) {
+			writeError(w, http.StatusInternalServerError, "Internal server error.", nil)
 		}
+		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"pull_request": pullRequestDTO(pr)})
 }
