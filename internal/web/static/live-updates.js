@@ -127,33 +127,51 @@ function start(section) {
     timer = setTimeout(flush, 250);
   }
 
-  // A replaced element may hold a reply draft (details.reply-details on
-  // a thread <li>) — open or merely closed-with-text: stash both state
-  // and value and restore onto the freshly rendered node so an answer
-  // mark never eats a half-typed reply.
+  // A replaced element may hold a reply draft or an open moderation
+  // picker — open or merely closed-with-input: stash both state and
+  // value and restore onto the freshly rendered node so a resync never
+  // eats a half-typed interaction.
   function stashDrafts(root) {
     const drafts = new Map();
     for (const d of root.querySelectorAll("details.reply-details")) {
       const ta = d.querySelector("textarea");
       const li = d.closest("li[id]");
       if (li && ta && (d.open || ta.value !== "")) {
-        drafts.set(li.id, { open: d.open, text: ta.value });
+        drafts.set(`reply:${li.id}`, { open: d.open, text: ta.value });
+      }
+    }
+    for (const d of root.querySelectorAll("details.comment-hide")) {
+      const select = d.querySelector("select[name=reason]");
+      const li = d.closest("li[id]");
+      if (li && select && (d.open || select.value !== "")) {
+        drafts.set(`hide:${li.id}`, { open: d.open, reason: select.value });
       }
     }
     return drafts;
   }
   function restoreDrafts(root, drafts) {
-    for (const [liId, draft] of drafts) {
+    for (const [key, draft] of drafts) {
+      const [kind, liId] = key.split(":", 2);
       const li = root.querySelector(`li#${CSS.escape(liId)}`);
-      const d = li?.querySelector("details.reply-details");
-      const ta = d?.querySelector("textarea");
-      if (d && ta) {
-        d.open = draft.open;
-        ta.value = draft.text;
-        // Programmatic assignment raises no input event, so the restored
-        // draft would match the baseline leave-guard snapshots on attach
-        // — mark the form dirty or leaving drops the draft silently.
-        if (draft.text !== "") markDirty(ta.closest("form"));
+      if (kind === "reply") {
+        const d = li?.querySelector("details.reply-details");
+        const ta = d?.querySelector("textarea");
+        if (d && ta) {
+          d.open = draft.open;
+          ta.value = draft.text;
+          // Programmatic assignment raises no input event, so the restored
+          // draft would match the baseline leave-guard snapshots on attach
+          // — mark the form dirty or leaving drops the draft silently.
+          if (draft.text !== "") markDirty(ta.closest("form"));
+        }
+      } else if (kind === "hide") {
+        const d = li?.querySelector("details.comment-hide");
+        const select = d?.querySelector("select[name=reason]");
+        if (d && select) {
+          d.open = draft.open;
+          select.value = draft.reason;
+          if (draft.reason !== "") markDirty(select.closest("form"));
+        }
       }
     }
   }
