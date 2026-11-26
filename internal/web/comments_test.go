@@ -176,7 +176,7 @@ func TestCommentHideInvalidReasonRendersLocalizedHeading(t *testing.T) {
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", resp.StatusCode)
 	}
-	if !strings.Contains(body, "不正なリクエスト") {
+	if !strings.Contains(body, "<h1>不正なリクエスト</h1>") {
 		t.Error("ja response should localize the bad-request heading")
 	}
 	if strings.Contains(body, "<h1>Bad request</h1>") {
