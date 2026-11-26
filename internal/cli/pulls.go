@@ -884,7 +884,7 @@ func twoIDs(rest []string) (int64, int64, error) {
 
 func prViewJSON(p *store.PullRequest) api.PullRequest {
 	return api.PullRequest{
-		ID: p.ID, Title: p.Title, Body: p.Body, Status: p.Status,
+		ID: p.ID, Version: p.Version, Title: p.Title, Body: p.Body, Status: p.Status,
 		Base: p.BaseRef, Head: p.HeadRef, HeadSHA: p.HeadSHA,
 		MergeSHA: p.MergeSHA, MergeMethod: p.MergeMethod,
 		Author:    userView(p.Author),
@@ -905,7 +905,7 @@ func prCommentViews(cs []*store.PRComment) []api.PRComment {
 	out := make([]api.PRComment, 0, len(cs))
 	for _, c := range cs {
 		out = append(out, api.PRComment{
-			ID: c.ID, Body: c.Body,
+			ID: c.ID, Version: c.Version, Body: c.Body,
 			Path: c.Path, Line: c.Line, Side: c.Side,
 			AnchorSHA: c.AnchorSHA, DiffSnippet: c.DiffSnippet,
 			Author:     userView(c.Author),
