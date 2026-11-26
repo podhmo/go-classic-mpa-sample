@@ -1414,38 +1414,42 @@ func StoryPullEdit() {
 // StoryPullFiles renders the files-changed page: one modified file with an
 // inline comment form and one anchored comment.
 func StoryPullFiles() {
-	renderPullFiles(http.StatusOK, pullFilesPage{
-		Title: storyPulls[0].Title, Section: "pulls",
-		PR: storyPulls[0],
-		Files: []pullFileView{
-			{
-				Change:       gitrepo.FileChange{Status: "M", NewPath: "internal/web/templates/pulls.html"},
-				CommentPath:  "internal/web/templates/pulls.html",
-				StatusLetter: "M",
-				Anchor:       "file-internal-web-templates-pulls-html",
-				Lines: []diffLine{
-					{Kind: "meta", Text: "diff --git a/internal/web/templates/pulls.html b/internal/web/templates/pulls.html"},
-					{Kind: "hunk", Text: "@@ -12,6 +12,8 @@"},
-					{Kind: "ctx", OldNo: 12, NewNo: 12, Text: " <nav>"},
-					{Kind: "add", NewNo: 13, Text: "+  <a href=\"/pulls\">Pull requests</a>"},
-					{Kind: "del", OldNo: 13, Text: "-  <a href=\"/old\">Old</a>"},
-					{Kind: "ctx", OldNo: 14, NewNo: 14, Text: " </nav>"},
-				},
-				Comments: []*store.PRComment{storyPRComments[1]},
+	files := []pullFileView{
+		{
+			Change:       gitrepo.FileChange{Status: "M", NewPath: "internal/web/templates/pulls.html"},
+			CommentPath:  "internal/web/templates/pulls.html",
+			StatusLetter: "M",
+			Anchor:       "file-internal-web-templates-pulls-html",
+			Lines: []diffLine{
+				{Kind: "meta", Text: "diff --git a/internal/web/templates/pulls.html b/internal/web/templates/pulls.html"},
+				{Kind: "hunk", Text: "@@ -12,6 +12,8 @@"},
+				{Kind: "ctx", OldNo: 12, NewNo: 12, Text: " <nav>"},
+				{Kind: "add", NewNo: 13, Text: "+  <a href=\"/pulls\">Pull requests</a>"},
+				{Kind: "del", OldNo: 13, Text: "-  <a href=\"/old\">Old</a>"},
+				{Kind: "ctx", OldNo: 14, NewNo: 14, Text: " </nav>"},
 			},
-			{
-				Change:       gitrepo.FileChange{Status: "A", NewPath: "internal/web/pulls.go"},
-				CommentPath:  "internal/web/pulls.go",
-				StatusLetter: "A",
-				Anchor:       "file-internal-web-pulls-go",
-				Lines: []diffLine{
-					{Kind: "hunk", Text: "@@ -0,0 +1,3 @@"},
-					{Kind: "add", NewNo: 1, Text: "+package web"},
-					{Kind: "add", NewNo: 2, Text: "+"},
-					{Kind: "add", NewNo: 3, Text: "+// Pull request pages."},
-				},
+			Comments: []*store.PRComment{storyPRComments[1]},
+		},
+		{
+			Change:       gitrepo.FileChange{Status: "A", NewPath: "internal/web/pulls.go"},
+			CommentPath:  "internal/web/pulls.go",
+			StatusLetter: "A",
+			Anchor:       "file-internal-web-pulls-go",
+			Lines: []diffLine{
+				{Kind: "hunk", Text: "@@ -0,0 +1,3 @@"},
+				{Kind: "add", NewNo: 1, Text: "+package web"},
+				{Kind: "add", NewNo: 2, Text: "+"},
+				{Kind: "add", NewNo: 3, Text: "+// Pull request pages."},
 			},
 		},
+	}
+	open := &openLineComment{Path: "internal/web/templates/pulls.html", Line: 13, Side: "right"}
+	for i := range files {
+		annotateDiffLines(files[i].Lines, storyPulls[0].ID, files[i].Change, files[i].CommentPath, files[i].Anchor, open, &messagesEN)
+	}
+	renderPullFiles(http.StatusOK, pullFilesPage{
+		Title: storyPulls[0].Title, Section: "pulls",
+		PR: storyPulls[0], Files: files, Open: open,
 	})
 }
 

@@ -270,8 +270,8 @@ type messages struct {
 	FilesEmpty          string
 	BinaryNote          string
 	CommentLineTitle    string
-	CommentLinePh       string // args: line no
-	CommentLinePhLeft   string // args: line no
+	CommentLinePh       string // args: path, line no
+	CommentLinePhLeft   string // args: path, line no
 	RefsLabel           string
 	BaseBranch          string
 	HeadBranch          string

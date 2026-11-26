@@ -101,9 +101,18 @@ type pullFilesPage struct {
 	Section   string
 	PR        *store.PullRequest
 	Files     []pullFileView
-	Error     string // set when the diff could not be computed (e.g. refs gone)
+	Open      *openLineComment // the single server-rendered line-comment form
+	Error     string           // set when the diff could not be computed (e.g. refs gone)
 	Workspace *store.Workspace
 	User      *store.User
+}
+
+// openLineComment identifies the one row whose comment form is rendered.
+// Keeping the form server-rendered avoids one hidden form per diff line.
+type openLineComment struct {
+	Path string
+	Line int
+	Side string
 }
 
 // pullFileView is one changed file: its diff split into numbered lines,
@@ -121,10 +130,16 @@ type pullFileView struct {
 // diffLine is one parsed unified-diff row; Kind drives the CSS class and
 // which side's line number the comment form anchors to.
 type diffLine struct {
-	Kind  string // "meta" | "hunk" | "ctx" | "add" | "del"
-	OldNo int
-	NewNo int
-	Text  string
+	Kind         string // "meta" | "hunk" | "ctx" | "add" | "del"
+	OldNo        int
+	NewNo        int
+	Text         string
+	CommentURL   string // GET that asks the server to render this row's form
+	CommentPath  string
+	CommentLine  int
+	CommentSide  string
+	CommentLabel string
+	OpenComment  bool
 }
 
 // parseUnifiedDiff splits a per-file diff into numbered lines. Numbers
@@ -176,6 +191,128 @@ func hunkStart(field string) int {
 	}
 	n, _ := strconv.Atoi(s)
 	return n
+}
+
+// canonicalDiffPath is the path under which a file entry is displayed and
+// right-side comments are anchored.
+func canonicalDiffPath(ch gitrepo.FileChange) string {
+	if ch.NewPath != "" {
+		return ch.NewPath
+	}
+	return ch.OldPath
+}
+
+// splitUnifiedDiffs splits one whole-patch git diff into per-file patches.
+// The whole patch is one git invocation; splitting it here avoids one git
+// subprocess per changed file. Entry headers are matched against the known
+// ChangedFiles set, which keeps paths containing spaces unambiguous.
+func splitUnifiedDiffs(patch string, changes []gitrepo.FileChange) map[string]string {
+	type candidate struct {
+		header string
+		path   string
+	}
+	var candidates []candidate
+	for _, ch := range changes {
+		oldPath := ch.OldPath
+		newPath := ch.NewPath
+		if oldPath == "" {
+			oldPath = newPath
+		}
+		if newPath == "" {
+			newPath = oldPath
+		}
+		candidates = append(candidates, candidate{
+			header: "diff --git a/" + oldPath + " b/" + newPath,
+			path:   canonicalDiffPath(ch),
+		})
+	}
+	out := map[string]string{}
+	var cur strings.Builder
+	curPath := ""
+	flush := func() {
+		if curPath != "" {
+			out[curPath] = cur.String()
+		}
+		cur.Reset()
+	}
+	fallback := 0
+	for line := range strings.Lines(patch) {
+		if strings.HasPrefix(line, "diff --git ") {
+			flush()
+			curPath = ""
+			header := strings.TrimRight(line, "\n")
+			for _, c := range candidates {
+				if header == c.header {
+					curPath = c.path
+					break
+				}
+			}
+			// Quoted or otherwise unusual paths still appear in the same
+			// diff order as ChangedFiles; use that order as a fallback.
+			if curPath == "" && fallback < len(changes) {
+				curPath = canonicalDiffPath(changes[fallback])
+			}
+			fallback++
+		}
+		if curPath != "" {
+			cur.WriteString(line)
+		}
+	}
+	flush()
+	return out
+}
+
+// parseOpenLineComment reads the GET parameters selecting the one row whose
+// form this page render expands. Invalid input simply renders no form.
+func parseOpenLineComment(q url.Values) *openLineComment {
+	path := q.Get("path")
+	line, _ := strconv.Atoi(q.Get("line"))
+	side := q.Get("side")
+	if side == "" {
+		side = "right"
+	}
+	if path == "" || line < 1 || (side != "right" && side != "left") {
+		return nil
+	}
+	return &openLineComment{Path: path, Line: line, Side: side}
+}
+
+// annotateDiffLines adds the per-row GET link and marks the selected row.
+// The POST still carries path/line/side in hidden fields; only presentation
+// of the form is controlled by the GET.
+func annotateDiffLines(lines []diffLine, prID int64, ch gitrepo.FileChange, commentPath, anchor string, open *openLineComment, m *messages) {
+	for i := range lines {
+		line := &lines[i]
+		path := commentPath
+		lineNo := line.NewNo
+		side := "right"
+		labelFmt := m.CommentLinePh
+		switch line.Kind {
+		case "del":
+			lineNo = line.OldNo
+			side = "left"
+			labelFmt = m.CommentLinePhLeft
+			if ch.OldPath != "" {
+				path = ch.OldPath
+			}
+		case "ctx", "add":
+		default:
+			continue
+		}
+		if lineNo < 1 {
+			continue
+		}
+		q := url.Values{}
+		q.Set("path", path)
+		q.Set("line", strconv.Itoa(lineNo))
+		q.Set("side", side)
+		line.CommentURL = fmt.Sprintf("/pulls/%d/files?%s#%s", prID, q.Encode(), anchor)
+		line.CommentPath = path
+		line.CommentLine = lineNo
+		line.CommentSide = side
+		line.CommentLabel = fmt.Sprintf(labelFmt, path, lineNo)
+		line.OpenComment = open != nil && open.Path == path && open.Line == lineNo && open.Side == side
+	}
 }
 
 // fileAnchor makes a stable element id for a file card so #links and
@@ -607,11 +744,16 @@ func (h *handler) pullFiles(w http.ResponseWriter, r *http.Request) {
 		h.r.renderPullFiles(w, http.StatusOK, page, localeFromContext(r.Context()))
 		return
 	}
+	open := parseOpenLineComment(r.URL.Query())
+	page.Open = open
+	patch, _, diffErr := h.repo.Diff(r.Context(), from, to)
+	if diffErr != nil {
+		log.Printf("web: pulls: diff #%d: %v", pr.ID, diffErr)
+	}
+	diffs := splitUnifiedDiffs(patch, changed)
+	m := msgFor(r)
 	for _, ch := range changed {
-		path := ch.NewPath
-		if path == "" {
-			path = ch.OldPath
-		}
+		path := canonicalDiffPath(ch)
 		fv := pullFileView{
 			Change:       ch,
 			CommentPath:  path,
@@ -627,17 +769,12 @@ func (h *handler) pullFiles(w http.ResponseWriter, r *http.Request) {
 				return a.CreatedAt.Compare(b.CreatedAt)
 			})
 		}
-		paths := []string{path}
-		if ch.OldPath != "" && ch.OldPath != path {
-			paths = append(paths, ch.OldPath)
-		}
-		diff, binary, err := h.repo.Diff(r.Context(), from, to, paths...)
-		if err != nil {
-			log.Printf("web: pulls: diff #%d %s: %v", pr.ID, path, err)
-		} else if binary {
+		diff := diffs[path]
+		if strings.Contains(diff, "\nBinary files ") {
 			fv.Binary = true
 		} else {
 			fv.Lines = parseUnifiedDiff(diff)
+			annotateDiffLines(fv.Lines, pr.ID, ch, path, fv.Anchor, open, m)
 		}
 		page.Files = append(page.Files, fv)
 	}

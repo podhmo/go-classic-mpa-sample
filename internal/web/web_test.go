@@ -1823,7 +1823,12 @@ func (f *fakeStore) ListPullRequests(_ context.Context, fl store.PRListFilter) (
 	return append([]*store.PullRequest(nil), matched[int(start):int(end)]...), total, nil
 }
 
-func (f *fakeStore) GetPullRequest(context.Context, int64) (*store.PullRequest, error) {
+func (f *fakeStore) GetPullRequest(_ context.Context, id int64) (*store.PullRequest, error) {
+	for _, pr := range f.pulls {
+		if pr.ID == id {
+			return pr, nil
+		}
+	}
 	return nil, store.ErrNotFound
 }
 

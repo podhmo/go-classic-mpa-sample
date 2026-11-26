@@ -41,7 +41,36 @@
   {{if .Binary}}
   <p class="muted">{{BinaryNote}}</p>
   {{else}}
-  <pre class="diff">{{range .Lines}}<div class="diff-line diff-{{.Kind}}">{{if or (eq .Kind "ctx") (eq .Kind "add")}}<details class="line-comment"><summary title="{{CommentLineTitle}}"><span class="line-no">{{.NewNo}}</span></summary><form method="post" action="/pulls/{{$.PR.ID}}/comments" class="line-comment-form comment-form"><input type="hidden" name="path" value="{{$f.CommentPath}}"><input type="hidden" name="line" value="{{.NewNo}}"><input type="hidden" name="side" value="right"><input type="hidden" name="back" value="files"><textarea name="body" rows="3" required placeholder="{{CommentLinePh .NewNo}}"></textarea><button type="submit" class="btn">{{BtnComment}}</button></form></details>{{else if eq .Kind "del"}}<details class="line-comment"><summary title="{{CommentLineTitle}}"><span class="line-no">{{.OldNo}}</span></summary><form method="post" action="/pulls/{{$.PR.ID}}/comments" class="line-comment-form comment-form"><input type="hidden" name="path" value="{{if $f.Change.OldPath}}{{$f.Change.OldPath}}{{else}}{{$f.CommentPath}}{{end}}"><input type="hidden" name="line" value="{{.OldNo}}"><input type="hidden" name="side" value="left"><input type="hidden" name="back" value="files"><textarea name="body" rows="3" required placeholder="{{CommentLinePhLeft .OldNo}}"></textarea><button type="submit" class="btn">{{BtnComment}}</button></form></details>{{else}}<span class="line-no">{{if .NewNo}}{{.NewNo}}{{end}}</span>{{end}}<span class="line-text">{{.Text}}</span></div>{{end}}</pre>
+  <div class="diff-scroll">
+  <table class="diff">
+    <caption class="visually-hidden">{{if .Change.OldPath}}{{.Change.OldPath}} → {{end}}{{.Change.NewPath}}</caption>
+    <tbody>
+      {{range .Lines}}
+      <tr class="diff-line diff-{{.Kind}}">
+        <td class="line-no">{{if .CommentURL}}<a href="{{.CommentURL}}" aria-label="{{.CommentLabel}}" title="{{CommentLineTitle}}">{{if eq .Kind "del"}}{{.OldNo}}{{else}}{{.NewNo}}{{end}}</a>{{else}}{{if .NewNo}}{{.NewNo}}{{end}}{{end}}</td>
+        <td class="line-text"><code>{{.Text}}</code></td>
+      </tr>
+      {{if .OpenComment}}
+      <tr class="line-comment-row">
+        <td class="line-no"></td>
+        <td>
+          <form method="post" action="/pulls/{{$.PR.ID}}/comments" class="line-comment-form comment-form" novalidate>
+            <input type="hidden" name="path" value="{{.CommentPath}}">
+            <input type="hidden" name="line" value="{{.CommentLine}}">
+            <input type="hidden" name="side" value="{{.CommentSide}}">
+            <input type="hidden" name="back" value="files">
+            <label class="visually-hidden" for="line-comment-body">{{.CommentLabel}}</label>
+            <textarea id="line-comment-body" name="body" rows="3" required placeholder="{{.CommentLabel}}"></textarea>
+            <button type="submit" class="btn">{{BtnComment}}</button>
+            <a class="btn btn-quiet" href="/pulls/{{$.PR.ID}}/files#{{$f.Anchor}}">{{BtnCancel}}</a>
+          </form>
+        </td>
+      </tr>
+      {{end}}
+      {{end}}
+    </tbody>
+  </table>
+  </div>
   {{end}}
 
   {{if .Comments}}
