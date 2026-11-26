@@ -718,6 +718,28 @@ func TestRepairPinComparesObservedValue(t *testing.T) {
 	}
 }
 
+func TestUpdatePinMissingRetryWinsOverProvisionalRepair(t *testing.T) {
+	ctx := context.Background()
+	dir := initRepo(t)
+	r := openRepo(t, dir)
+	head := strings.TrimSpace(git(t, dir, "rev-parse", "main"))
+
+	git(t, dir, "checkout", "-qb", "provisional-pin")
+	write(t, dir, "provisional.txt", "provisional\n")
+	provisional := strings.TrimSpace(git(t, dir, "rev-parse", "provisional-pin"))
+	if err := r.PinHead(ctx, 42, provisional); err != nil {
+		t.Fatal(err)
+	}
+	// This is the state UpdatePin's missing-ref path sees after a repair
+	// wins the create race. The final close/merge target must replace it.
+	if err := r.createPinThenCAS(ctx, 42, head); err != nil {
+		t.Fatalf("create-then-CAS over provisional pin: %v", err)
+	}
+	if got, err := r.RevParse(ctx, PinRef(42)); err != nil || got != head {
+		t.Fatalf("pin = %q err=%v, want %q", got, err, head)
+	}
+}
+
 func TestUpdatePinFailureKeepsGitError(t *testing.T) {
 	ctx := context.Background()
 	dir := initRepo(t)

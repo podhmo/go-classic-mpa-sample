@@ -453,23 +453,46 @@ func (r *Repo) PinHead(ctx context.Context, id int64, sha string) error {
 
 // UpdatePin moves the pin ref compare-and-swap style when it already
 // exists (close/merge time), so a concurrent pin update cannot silently
-// lose. A missing pin is created.
+// lose. A missing pin is created; if a repair creates it first, the
+// close/merge update retries as CAS and still wins the final transition.
 func (r *Repo) UpdatePin(ctx context.Context, id int64, sha string) error {
 	if err := checkRevArg(sha); err != nil {
 		return err
 	}
 	old, err := r.RevParse(ctx, PinRef(id))
 	if err != nil {
-		// No pin yet (created before this feature or a failed create):
-		// plain create.
-		return r.PinHead(ctx, id, sha)
+		return r.createPinThenCAS(ctx, id, sha)
 	}
-	_, err = r.run(ctx, nil, "update-ref", PinRef(id), sha, old)
+	return r.casPin(ctx, id, sha, old)
+}
+
+// createPinThenCAS handles UpdatePin's missing-ref path. PinHead can lose
+// to a repair that starts after the initial existence check; that pin is
+// only provisional, so close/merge retries as a compare-and-swap against
+// the value that appeared instead of leaving the provisional pin behind.
+func (r *Repo) createPinThenCAS(ctx context.Context, id int64, sha string) error {
+	err := r.PinHead(ctx, id, sha)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, ErrConcurrentUpdate) {
+		return err
+	}
+	old, revErr := r.RevParse(ctx, PinRef(id))
+	if revErr != nil {
+		return revErr
+	}
+	return r.casPin(ctx, id, sha, old)
+}
+
+// casPin moves an existing pin only while it still has old. A moved or
+// deleted pin is ErrConcurrentUpdate; permission/lock/corruption failures
+// keep git's stderr rather than being mislabeled as races.
+func (r *Repo) casPin(ctx context.Context, id int64, sha, old string) error {
+	_, err := r.run(ctx, nil, "update-ref", PinRef(id), sha, old)
 	if err != nil {
-		// A compare-and-swap failure means someone moved the ref. Other
-		// update-ref failures (permissions, locks, corruption) must keep
-		// git's stderr instead of being mislabeled as a race.
-		if now, revErr := r.RevParse(ctx, PinRef(id)); revErr == nil && now != old {
+		now, revErr := r.RevParse(ctx, PinRef(id))
+		if revErr != nil || now != old {
 			return ErrConcurrentUpdate
 		}
 		return err
@@ -510,15 +533,7 @@ func (r *Repo) RepairPin(ctx context.Context, id int64, sha, oldSHA string) erro
 	if oldSHA == "" {
 		return r.PinHead(ctx, id, sha)
 	}
-	_, err := r.run(ctx, nil, "update-ref", PinRef(id), sha, oldSHA)
-	if err != nil {
-		now, revErr := r.RevParse(ctx, PinRef(id))
-		if revErr != nil || now != oldSHA {
-			return ErrConcurrentUpdate
-		}
-		return err
-	}
-	return nil
+	return r.casPin(ctx, id, sha, oldSHA)
 }
 
 // Unpin drops the pin ref; used if a pin must follow a comment/PR delete.
