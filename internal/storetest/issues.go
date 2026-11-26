@@ -31,8 +31,9 @@ type IssueStore interface {
 type IssueFixture struct {
 	Store         IssueStore
 	WorkspaceID   int64
-	SeedIssue     func(tb testing.TB, in store.IssueInput) int64
+	SeedIssue     func(tb testing.TB, in store.IssueInput, authorID int64) int64
 	BackdateIssue func(tb testing.TB, id int64, age time.Duration)
+	SeedUser      func(tb testing.TB, name string) int64
 
 	// Declared simplifications. These are part of the fake's public test
 	// contract rather than silently tolerated drift.
@@ -49,7 +50,7 @@ func RunIssueContract(t *testing.T, factory func(tb testing.TB) IssueFixture) {
 	t.Run("status bump and error ordering", func(t *testing.T) {
 		fx := factory(t)
 		ctx := context.Background()
-		id := fx.SeedIssue(t, store.IssueInput{Title: "contract status"})
+		id := fx.SeedIssue(t, store.IssueInput{Title: "contract status"}, 0)
 		fx.BackdateIssue(t, id, time.Hour)
 		before := mustGetIssue(t, fx.Store, id)
 		beforeUpdated := before.UpdatedAt // implementations may return shared mutable pointers
@@ -76,7 +77,7 @@ func RunIssueContract(t *testing.T, factory func(tb testing.TB) IssueFixture) {
 
 	t.Run("update bump semantics", func(t *testing.T) {
 		fx := factory(t)
-		id := fx.SeedIssue(t, store.IssueInput{Title: "before", Body: "old body"})
+		id := fx.SeedIssue(t, store.IssueInput{Title: "before", Body: "old body"}, 0)
 		fx.BackdateIssue(t, id, time.Hour)
 		before := mustGetIssue(t, fx.Store, id)
 		beforeTitle := before.Title
@@ -104,7 +105,7 @@ func RunIssueContract(t *testing.T, factory func(tb testing.TB) IssueFixture) {
 	t.Run("comment creation bumps parent", func(t *testing.T) {
 		fx := factory(t)
 		ctx := context.Background()
-		id := fx.SeedIssue(t, store.IssueInput{Title: "comment parent"})
+		id := fx.SeedIssue(t, store.IssueInput{Title: "comment parent"}, 0)
 		fx.BackdateIssue(t, id, time.Hour)
 		before := mustGetIssue(t, fx.Store, id)
 		beforeUpdated := before.UpdatedAt
@@ -152,9 +153,10 @@ func RunIssueContract(t *testing.T, factory func(tb testing.TB) IssueFixture) {
 		if err != nil {
 			t.Fatalf("CreateLabel: %v", err)
 		}
-		openOld := fx.SeedIssue(t, store.IssueInput{Title: "Crash report", Body: "alpha", LabelIDs: []int64{labelID}})
-		openNew := fx.SeedIssue(t, store.IssueInput{Title: "Other export", Body: "csv alpha"})
-		closed := fx.SeedIssue(t, store.IssueInput{Title: "Crash closed", Body: "alpha", LabelIDs: []int64{labelID}})
+		openOld := fx.SeedIssue(t, store.IssueInput{Title: "Crash report", Body: "alpha", LabelIDs: []int64{labelID}}, 0)
+		authorID := fx.SeedUser(t, "contract-author")
+		openNew := fx.SeedIssue(t, store.IssueInput{Title: "Other export", Body: "csv alpha"}, authorID)
+		closed := fx.SeedIssue(t, store.IssueInput{Title: "Crash closed", Body: "alpha", LabelIDs: []int64{labelID}}, 0)
 		if err := fx.Store.SetIssueStatus(ctx, closed, store.StatusClosed); err != nil {
 			t.Fatalf("close fixture: %v", err)
 		}
@@ -178,6 +180,7 @@ func RunIssueContract(t *testing.T, factory func(tb testing.TB) IssueFixture) {
 		check("is closed qualifier", store.ListFilter{Query: "crash is:closed"}, 1, closed)
 		check("conflicting is qualifiers", store.ListFilter{Query: "is:open is:closed"}, 0)
 		check("label qualifier", store.ListFilter{Query: "label:contract-bug"}, 1, openOld)
+		check("author qualifier", store.ListFilter{Query: "author:contract-author"}, 1, openNew)
 		check("label id", store.ListFilter{LabelID: labelID}, 1, openOld)
 		check("oldest all", store.ListFilter{Status: "all", Sort: "oldest"}, 3, openOld, openNew, closed)
 		check("total before pagination", store.ListFilter{Status: "all", Sort: "oldest", PerPage: 2, Page: 2}, 3, closed)

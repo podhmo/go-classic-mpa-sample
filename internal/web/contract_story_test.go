@@ -16,7 +16,7 @@ func TestIssueContractStoryStore(t *testing.T) {
 		return storetest.IssueFixture{
 			Store:       s,
 			WorkspaceID: 1,
-			SeedIssue: func(tb testing.TB, _ store.IssueInput) int64 {
+			SeedIssue: func(tb testing.TB, _ store.IssueInput, _ int64) int64 {
 				tb.Helper()
 				return 2 // fixture issue used for mutation-only stories
 			},

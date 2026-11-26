@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/podhmo/go-classic-mpa-sample/internal/auth"
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 	"github.com/podhmo/go-classic-mpa-sample/internal/storetest"
 )
@@ -15,11 +16,23 @@ func TestIssueContractFakeStore(t *testing.T) {
 		return storetest.IssueFixture{
 			Store:       f,
 			WorkspaceID: 1,
-			SeedIssue: func(tb testing.TB, in store.IssueInput) int64 {
+			SeedIssue: func(tb testing.TB, in store.IssueInput, authorID int64) int64 {
 				tb.Helper()
-				id, err := f.CreateIssue(context.Background(), 1, in, 0)
+				id, err := f.CreateIssue(context.Background(), 1, in, authorID)
 				if err != nil {
 					tb.Fatalf("seed CreateIssue: %v", err)
+				}
+				return id
+			},
+			SeedUser: func(tb testing.TB, name string) int64 {
+				tb.Helper()
+				hash, err := auth.HashPassword("password123")
+				if err != nil {
+					tb.Fatalf("HashPassword: %v", err)
+				}
+				id, err := f.CreateUser(context.Background(), name, hash)
+				if err != nil {
+					tb.Fatalf("CreateUser: %v", err)
 				}
 				return id
 			},

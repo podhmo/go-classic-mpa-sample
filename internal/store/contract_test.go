@@ -27,11 +27,23 @@ func TestIssueContract(t *testing.T) {
 		return storetest.IssueFixture{
 			Store:       s,
 			WorkspaceID: 1,
-			SeedIssue: func(tb testing.TB, in store.IssueInput) int64 {
+			SeedIssue: func(tb testing.TB, in store.IssueInput, authorID int64) int64 {
 				tb.Helper()
-				id, err := s.CreateIssue(context.Background(), 1, in, 0)
+				id, err := s.CreateIssue(context.Background(), 1, in, authorID)
 				if err != nil {
 					tb.Fatalf("seed CreateIssue: %v", err)
+				}
+				return id
+			},
+			SeedUser: func(tb testing.TB, name string) int64 {
+				tb.Helper()
+				res, err := db.Exec("INSERT INTO users(name, password_hash, created_at) VALUES(?, 'contract-hash', 0)", name)
+				if err != nil {
+					tb.Fatalf("seed user: %v", err)
+				}
+				id, err := res.LastInsertId()
+				if err != nil {
+					tb.Fatalf("user id: %v", err)
 				}
 				return id
 			},
