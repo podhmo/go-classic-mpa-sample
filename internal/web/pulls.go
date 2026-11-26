@@ -752,13 +752,27 @@ func (h *handler) pullFiles(w http.ResponseWriter, r *http.Request) {
 	if diffErr != nil {
 		log.Printf("web: pulls: diff #%d: %v", pr.ID, diffErr)
 	}
-	if truncated {
-		log.Printf("web: pulls: diff #%d: output truncated", pr.ID)
-		page.Error = msgFor(r).ErrDiffCompute
-		h.r.renderPullFiles(w, http.StatusOK, page, localeFromContext(r.Context()))
-		return
-	}
 	diffs := splitUnifiedDiffs(patch, changed)
+	if truncated {
+		// The combined patch shares gitrepo's 8 MiB output cap across all
+		// files. Falling back to per-file patches preserves the old behavior
+		// for very large PRs; the normal path still uses one git invocation.
+		log.Printf("web: pulls: diff #%d: combined output truncated; using per-file diffs", pr.ID)
+		diffs = map[string]string{}
+		for _, ch := range changed {
+			path := canonicalDiffPath(ch)
+			paths := []string{path}
+			if ch.OldPath != "" && ch.OldPath != path {
+				paths = append(paths, ch.OldPath)
+			}
+			diff, _, err := h.repo.Diff(r.Context(), from, to, paths...)
+			if err != nil {
+				log.Printf("web: pulls: diff #%d %s: %v", pr.ID, path, err)
+				continue
+			}
+			diffs[path] = diff
+		}
+	}
 	m := msgFor(r)
 	for _, ch := range changed {
 		path := canonicalDiffPath(ch)
