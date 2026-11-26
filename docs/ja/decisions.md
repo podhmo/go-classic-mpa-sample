@@ -773,3 +773,9 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 - **layout はロケールごとに 1 回だけ parse する**: 各 page はその template set を `Clone()` してから自分の `content` / `head` override を足す。page ごとに layout を再 parse しないため起動時の CPU を減らす。
 - **fragment は必要な detail page だけで parse する**: `html/template.Clone` は parse tree をコピーするため、全 fragment を shared set に入れると使わない page にも複製が残る。issue/discussion/pull detail にだけ従来どおり必要な fragment file を足す。
 - **`jsDictFor` の JSON は locale ごとに cache する**: catalog は起動後に変わらないため、描画や Renderer 構築のたびに marshal しない。
+
+## PR detail の git query batching/cache（2026-11-26、owner improvements 対応）
+
+- **base/head の commit SHA は `rev-parse` 1 回で解決する**: `RevParsePair` / `RevParseMany` は複数の `<ref>^{commit}` を同じ process に渡す。`--verify` を複数回指定すると git が単一 revision として扱えないため使わず、exit status・行数・hex 形式で batch 全体を検証する。1 件でも不正なら従来どおり `ErrBadRef`。
+- **open PR detail は先に SHA 解決し、その同じ commit pair で log と merge check を実行する**: ref 名を個別コマンドへ渡さないため、表示する commit 列と merge 判定が途中で動いた ref をまたがない。web/API/local CLI の detail 経路で共有する。
+- **`(baseSHA, headSHA)` を key にした process-local LRU は 32 件**: object id は immutable なので、同じ pair の `git log`・`merge-base`・`merge-tree` 結果を SSE fragment や再描画で再実行しない。ref 名そのものは movable なので cache key にしない。cache は git 失敗を保存せず、読み出し・格納時に slice を copy して caller mutation を遮断する。

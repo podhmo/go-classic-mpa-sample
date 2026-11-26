@@ -152,6 +152,8 @@ type Repo struct {
 	// Shallow marks a clone with .git/shallow — merge-base lookups can
 	// fail and the UI degrades to a "shallow repository" note.
 	Shallow bool
+
+	pairCache pullPairCache
 }
 
 // HasMergeTree reports whether this git supports `merge-tree --write-tree`

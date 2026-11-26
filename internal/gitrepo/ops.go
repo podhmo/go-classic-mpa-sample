@@ -76,6 +76,12 @@ func isHex(s string) bool {
 	return true
 }
 
+// isCommitSHA reports whether s is a full object id, the only form whose
+// log/merge result is safe to cache: branch names can move, object ids cannot.
+func isCommitSHA(s string) bool {
+	return (len(s) == 40 || len(s) == 64) && isHex(s)
+}
+
 // RevParse resolves ref to a commit SHA. ErrBadRef when it does not
 // resolve (missing branch, never-pushed head).
 func (r *Repo) RevParse(ctx context.Context, ref string) (string, error) {
@@ -87,6 +93,46 @@ func (r *Repo) RevParse(ctx context.Context, ref string) (string, error) {
 		return "", ErrBadRef
 	}
 	return strings.TrimSpace(res.stdout), nil
+}
+
+// RevParseMany resolves several refs in one git invocation. Any bad input
+// fails the whole batch with ErrBadRef; callers that need to know which one
+// failed can fall back to individual RevParse calls for diagnostics.
+func (r *Repo) RevParseMany(ctx context.Context, refs ...string) ([]string, error) {
+	if len(refs) == 0 {
+		return nil, nil
+	}
+	args := make([]string, 0, len(refs)+1)
+	args = append(args, "rev-parse")
+	for _, ref := range refs {
+		if err := checkRevArg(ref); err != nil {
+			return nil, err
+		}
+		args = append(args, ref+"^{commit}")
+	}
+	res, err := r.run(ctx, nil, args...)
+	if err != nil {
+		return nil, ErrBadRef
+	}
+	lines := strings.Fields(res.stdout)
+	if len(lines) != len(refs) {
+		return nil, ErrBadRef
+	}
+	for _, line := range lines {
+		if !isHex(line) {
+			return nil, ErrBadRef
+		}
+	}
+	return lines, nil
+}
+
+// RevParsePair resolves a base/head pair in one git invocation.
+func (r *Repo) RevParsePair(ctx context.Context, base, head string) (baseSHA, headSHA string, err error) {
+	shas, err := r.RevParseMany(ctx, base, head)
+	if err != nil {
+		return "", "", err
+	}
+	return shas[0], shas[1], nil
 }
 
 // NormalizeRef maps any accepted ref spelling — "main", "refs/heads/main",
@@ -173,13 +219,23 @@ func (r *Repo) IsAncestor(ctx context.Context, anc, desc string) (bool, error) {
 	return true, nil
 }
 
-// Log lists commits in base..head (newest first).
+// Log lists commits in base..head (newest first). Full-SHA pairs are
+// cached because their result cannot change; ref spellings are deliberately
+// not used as cache keys because refs can move.
 func (r *Repo) Log(ctx context.Context, base, head string) ([]Commit, error) {
 	if err := checkRevArg(base); err != nil {
 		return nil, err
 	}
 	if err := checkRevArg(head); err != nil {
 		return nil, err
+	}
+	key, cacheable := pullPairCacheKey{}, false
+	if isCommitSHA(base) && isCommitSHA(head) {
+		key = pullPairCacheKey{baseSHA: base, headSHA: head}
+		cacheable = true
+		if commits, ok := r.pairCache.cachedCommits(key); ok {
+			return commits, nil
+		}
 	}
 	res, err := r.run(ctx, nil, "log",
 		"--format=%H%x00%h%x00%s%x00%an%x00%aI", base+".."+head)
@@ -196,6 +252,9 @@ func (r *Repo) Log(ctx context.Context, base, head string) ([]Commit, error) {
 		c := Commit{SHA: f[0], ShortSHA: f[1], Subject: f[2], Author: f[3]}
 		c.Date, _ = time.Parse(time.RFC3339, f[4])
 		out = append(out, c)
+	}
+	if cacheable {
+		r.pairCache.putCommits(key, out)
 	}
 	return out, nil
 }
@@ -277,28 +336,41 @@ type MergeCheck struct {
 	MergeBaseSHA string
 }
 
-// CheckMerge resolves base/head, finds the merge-base, and asks
-// merge-tree --write-tree whether a merge would be clean. Old gits and
-// shallow clones report MergeUnknown. ErrBadRef when either side is gone;
+// CheckMerge resolves base/head in one git invocation, finds the merge-base,
+// and asks merge-tree --write-tree whether a merge would be clean. Old gits
+// and shallow clones report MergeUnknown. ErrBadRef when either side is gone;
 // ErrUnrelated when no merge base exists.
 func (r *Repo) CheckMerge(ctx context.Context, base, head string) (*MergeCheck, error) {
-	c := &MergeCheck{Status: MergeUnknown}
+	baseSHA, headSHA, err := r.RevParsePair(ctx, base, head)
+	if err != nil {
+		return nil, err
+	}
+	return r.CheckMergeResolved(ctx, baseSHA, headSHA)
+}
+
+// CheckMergeResolved is CheckMerge for a pair already resolved to full commit
+// SHAs. Its result is immutable and therefore cached by (baseSHA, headSHA).
+func (r *Repo) CheckMergeResolved(ctx context.Context, baseSHA, headSHA string) (*MergeCheck, error) {
+	if !isCommitSHA(baseSHA) || !isCommitSHA(headSHA) {
+		return nil, ErrBadRef
+	}
+	key := pullPairCacheKey{baseSHA: baseSHA, headSHA: headSHA}
+	if cached, ok := r.pairCache.cachedMergeCheck(key); ok {
+		return cached, nil
+	}
+	c := &MergeCheck{Status: MergeUnknown, BaseSHA: baseSHA, HeadSHA: headSHA}
 	var err error
-	if c.BaseSHA, err = r.RevParse(ctx, base); err != nil {
-		return nil, err
-	}
-	if c.HeadSHA, err = r.RevParse(ctx, head); err != nil {
-		return nil, err
-	}
 	if c.MergeBaseSHA, err = r.MergeBase(ctx, c.BaseSHA, c.HeadSHA); err != nil {
 		return nil, err
 	}
 	if !r.HasMergeTree() || r.Shallow {
+		r.pairCache.putMergeCheck(key, c)
 		return c, nil
 	}
 	res, err := r.run(ctx, nil, "merge-tree", "--write-tree", "--name-only", "--no-messages", "-z", c.BaseSHA, c.HeadSHA)
 	if err == nil {
 		c.Status = MergeClean
+		r.pairCache.putMergeCheck(key, c)
 		return c, nil
 	}
 	e, ok := err.(*Error)
@@ -313,6 +385,7 @@ func (r *Repo) CheckMerge(ctx context.Context, base, head string) (*MergeCheck, 
 	}
 	c.Status = MergeConflicting
 	c.Files = files
+	r.pairCache.putMergeCheck(key, c)
 	return c, nil
 }
 
