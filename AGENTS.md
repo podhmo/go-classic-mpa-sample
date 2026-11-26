@@ -8,6 +8,7 @@
 - `docs/ja/pitfalls.md` — 過去にハマった落とし穴（作業前に目を通すとよい）
 - `docs/ja/decisions.md` — 設計判断の記録（変更時は追記する）
 - `docs/ja/bugs.md` — 既知のバグ・問題点（発見したら重要度つきで記録）
+- `docs/ja/open-questions.md` — 実装前に判断が必要な論点（回答が必要なものを転記し、回答後は TODO.md へ移す）
 - `docs/ja/prompts.md` — 元の仕様書
 - `docs/ja/roadmap.md` — バージョン計画（v1: issue tracker 現行 / v2: アカウント+discussions / v3 候補）
 - `docs/ja/for-ui-designer.md` — デザイン担当者向け。css/js/html を書き換えながら見た目を確認する人が、自作 storybook でアプリ本体なしに試行錯誤する手順
