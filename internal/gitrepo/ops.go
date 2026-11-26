@@ -431,6 +431,24 @@ func PinRef(id int64) string {
 	return "refs/zatudan/pr/" + strconv.FormatInt(id, 10) + "/head"
 }
 
+var errPinMissing = errors.New("gitrepo: pull pin is missing")
+
+// readPin reads the pin through for-each-ref because a missing ref is an
+// empty successful result there. rev-parse collapses "missing" and real
+// git failures into the same non-zero exit, which cannot drive CAS error
+// classification.
+func (r *Repo) readPin(ctx context.Context, id int64) (string, error) {
+	res, err := r.run(ctx, nil, "for-each-ref", "--format=%(objectname)", PinRef(id))
+	if err != nil {
+		return "", err
+	}
+	got := strings.TrimSpace(res.stdout)
+	if got == "" {
+		return "", errPinMissing
+	}
+	return got, nil
+}
+
 // PinHead creates the PR's pin ref at sha (used at create time, when
 // nothing should exist yet). Creation is conditional so a close/merge pin
 // that won the race is never overwritten by the older create-time head.
@@ -443,7 +461,7 @@ func (r *Repo) PinHead(ctx context.Context, id int64, sha string) error {
 	// of the repository's hash algorithm (SHA-1 or SHA-256).
 	_, err := r.run(ctx, nil, "update-ref", PinRef(id), sha, "")
 	if err != nil {
-		if _, revErr := r.RevParse(ctx, PinRef(id)); revErr == nil {
+		if _, revErr := r.readPin(ctx, id); revErr == nil {
 			return ErrConcurrentUpdate
 		}
 		return err
@@ -459,9 +477,12 @@ func (r *Repo) UpdatePin(ctx context.Context, id int64, sha string) error {
 	if err := checkRevArg(sha); err != nil {
 		return err
 	}
-	old, err := r.RevParse(ctx, PinRef(id))
-	if err != nil {
+	old, err := r.readPin(ctx, id)
+	if errors.Is(err, errPinMissing) {
 		return r.createPinThenCAS(ctx, id, sha)
+	}
+	if err != nil {
+		return err
 	}
 	return r.casPin(ctx, id, sha, old)
 }
@@ -478,7 +499,7 @@ func (r *Repo) createPinThenCAS(ctx context.Context, id int64, sha string) error
 	if !errors.Is(err, ErrConcurrentUpdate) {
 		return err
 	}
-	old, revErr := r.RevParse(ctx, PinRef(id))
+	old, revErr := r.readPin(ctx, id)
 	if revErr != nil {
 		return revErr
 	}
@@ -491,8 +512,16 @@ func (r *Repo) createPinThenCAS(ctx context.Context, id int64, sha string) error
 func (r *Repo) casPin(ctx context.Context, id int64, sha, old string) error {
 	_, err := r.run(ctx, nil, "update-ref", PinRef(id), sha, old)
 	if err != nil {
-		now, revErr := r.RevParse(ctx, PinRef(id))
-		if revErr != nil || now != old {
+		now, revErr := r.readPin(ctx, id)
+		if errors.Is(revErr, errPinMissing) {
+			return ErrConcurrentUpdate
+		}
+		if revErr != nil {
+			// Keep the original write failure: without a successful read
+			// there is no evidence that another writer moved the pin.
+			return err
+		}
+		if now != old {
 			return ErrConcurrentUpdate
 		}
 		return err
@@ -506,8 +535,8 @@ func (r *Repo) casPin(ctx context.Context, id int64, sha, old string) error {
 // because their pin intentionally remains at the create-time head while
 // the feature branch advances; existence is enough there.
 func (r *Repo) PinRepairState(ctx context.Context, id int64, expectedSHA string) (needs bool, current string, err error) {
-	got, err := r.RevParse(ctx, PinRef(id))
-	if errors.Is(err, ErrBadRef) {
+	got, err := r.readPin(ctx, id)
+	if errors.Is(err, errPinMissing) {
 		return true, "", nil
 	}
 	if err != nil {
