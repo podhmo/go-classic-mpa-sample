@@ -50,30 +50,27 @@ func parsePages(lang string, pullsOn bool) map[string]*template.Template {
 		"workspaces", "workspace_form", "workspace_delete", "labels", "label_form",
 		"comment_edit", "comment_delete",
 		"pulls", "pull_detail", "pull_form", "pull_files", "pull_merge"}
-	// The detail pages also parse their fragment file: its defines power
-	// both their inline markup and the standalone partial-update responses.
-	fragments := map[string][]string{
-		"issue_detail":      {"templates/fragments.html"},
-		"discussion_detail": {"templates/fragments.html"},
-		// pull_detail needs both: its own defines plus the shared
-		// comment_actions it borrows for moderation controls.
-		"pull_detail": {"templates/pull_fragments.html", "templates/fragments.html"},
-	}
 	// Per-locale bindings: every messages field becomes a same-named
 	// function ({{IssuesTitle}}, {{IssuesCount args...}}), so a typo'd call
-	// is a parse error. {{lang}} prints the locale (<html lang>).
+	// is a parse error. {{lang}} prints the locale (<html lang>). jsDict is
+	// marshaled once per locale rather than once per page render.
 	funcs := maps.Clone(funcMap)
 	messageFuncs(funcs, lang)
 	funcs["lang"] = func() string { return lang }
-	funcs["jsDict"] = func() template.HTMLAttr { return jsDictFor(lang) }
+	jsDict := jsDictFor(lang)
+	funcs["jsDict"] = func() template.HTMLAttr { return jsDict }
 	funcs["pullsOn"] = func() bool { return pullsOn }
+
+	// Parse the shared layout and fragment defines once per locale, then
+	// clone that set for each page. Cloned templates share their parsed
+	// shared definitions while still letting one page override the empty
+	// "head" block without affecting its siblings.
+	shared := template.Must(template.New("shared").Funcs(funcs).ParseFS(templateFS,
+		"templates/layout.html", "templates/fragments.html", "templates/pull_fragments.html"))
 	pages := make(map[string]*template.Template, len(names))
 	for _, name := range names {
-		files := []string{"templates/layout.html", "templates/" + name + ".html"}
-		if frags, ok := fragments[name]; ok {
-			files = append(files, frags...)
-		}
-		pages[name] = template.Must(template.New(name).Funcs(funcs).ParseFS(templateFS, files...))
+		page := template.Must(shared.Clone())
+		pages[name] = template.Must(page.ParseFS(templateFS, "templates/"+name+".html"))
 	}
 	return pages
 }

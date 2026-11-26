@@ -22,6 +22,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
@@ -1476,9 +1477,16 @@ func fieldLabelFor(lang, field string) string {
 	return "Title"
 }
 
+var jsDictCache sync.Map
+
 // jsDictFor marshals the JS-layer strings for lang into the JSON blob the
-// <html data-i18n> attribute carries; /static/i18n.js parses it.
+// <html data-i18n> attribute carries; /static/i18n.js parses it. The
+// catalogs are immutable, so the JSON form is shared per locale instead of
+// being marshaled for every render or Renderer construction.
 func jsDictFor(lang string) template.HTMLAttr {
+	if cached, ok := jsDictCache.Load(lang); ok {
+		return cached.(template.HTMLAttr)
+	}
 	m := messagesFor(lang)
 	b, _ := json.Marshal(map[string]string{
 		"toast_notifications": m.JSToastNotifications,
@@ -1503,5 +1511,7 @@ func jsDictFor(lang string) template.HTMLAttr {
 		"list_discussions":    m.JSListDiscussions,
 		"list_prs":            m.JSListPRs,
 	})
-	return template.HTMLAttr(b)
+	dict := template.HTMLAttr(b)
+	cached, _ := jsDictCache.LoadOrStore(lang, dict)
+	return cached.(template.HTMLAttr)
 }

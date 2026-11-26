@@ -767,3 +767,9 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 - **page detail/form の依存 module を `<link rel="modulepreload">` で並列化**: bundler なしの ES module 構成は維持しつつ、entrypoint が import 解決で段階的に依存を発見する waterfall を避ける。`modulePreloads` は embedded JS の静的 `import`/`export ... from` 行から direct+transitive dependency を導くため、新しい依存を足したときにテンプレート側の手動一覧を更新しない。
 - **page ごとの script は `<head>` へ移す**: `<link rel="modulepreload">` が body 末尾近くにあると entrypoint 発見とほぼ同時になり効果が薄い。layout に空の `head` block を用意し、page template 側で override する。`type="module"` と `defer` はもともと parser blocking ではないため、body 先頭から head への移動で実行タイミングの意味論は変えない。
 - **versioned URL と同じ `staticURL` を使う**: preload も entrypoint も同じ content hash query を持ち、immutable cache の対象になる。
+
+## テンプレート parse の clone 化（2026-11-26、owner improvements 対応）
+
+- **layout + fragments + pull_fragments はロケールごとに 1 回だけ parse する**: 各 page はその template set を `Clone()` してから自分の `content` / `head` override を足す。page ごとに共有 template を再 parse しないため起動時の CPU と allocation を減らす。
+- **fragment は常に両方を shared set に入れる**: issue/discussion/pull の define 名は衝突しない。必要な page だけ fragment file を選ぶ従来の分岐を捨て、clone 元を単純化する。
+- **`jsDictFor` の JSON は locale ごとに cache する**: catalog は起動後に変わらないため、描画や Renderer 構築のたびに marshal しない。
