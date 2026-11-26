@@ -2301,6 +2301,7 @@ textarea[hidden] {
     inset-block-start: calc(100% + 0.5rem);
     z-index: 30;
     flex-direction: column;
+    flex-wrap: nowrap;
     align-items: stretch;
     gap: 0.625rem;
     inline-size: max-content;
