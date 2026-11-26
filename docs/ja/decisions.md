@@ -861,3 +861,9 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 - **API の `If-Match` は任意**: `"<version>"` 形式の strong tag 1件だけを受け付け、absent/`*` は従来どおり無条件更新、weak/複数/不正形式は 400、version 不一致は 412 にする。response DTO は `version` を返し、remote client は input/専用 method の expected version を `If-Match` へ写像する。
 - **web の編集フォームは hidden `version` を送る**: issue/discussion/pull/label/comment/thread/reply の edit form にだけ出し、作成フォームでは出さない。不一致は 409 の error page にし、最新内容の再確認を促す。差分表示はこの最小範囲に留める。
 - **GET の `If-None-Match` → 304 は今回入れない**: detail API が comments を同梱する構造では resource version だけでは response 全体を表せないため、更新 API という TODO scope に限定する。
+
+## PR merge の DB 予約による直列化（2026-11-27、owner improvements 対応）
+
+- **`pull_requests.merging_at` を merge reservation にする**: `ReserveMerge` は Unix nano の開始時刻を ownership token として `status='open' AND (merging_at IS NULL OR merging_at <= expired)` にだけ CAS し、api/cli/web の3箇所が git 操作の前に取得する。`MarkMergedWithReservation` は status 更新と reservation 解放を同じ UPDATE で行い、失敗・成功いずれの終了でも token 一致時だけ `ReleaseMerge` する。
+- **lease は5分、git 操作は2分で打ち切る**: `MergeGitTimeout` を lease より短くし、実行中の merge が lease 切れで別 merge と競合しないようにする。期限切れ reservation の上書きが最小の crash recovery で、close/delete も active reservation 中は拒否して DB 遷移不能な git 副作用を防ぐ。
+- **service 抽出と完全な git 照合復旧は後回し**: 予約保持プロセスが git ref 更新後・DB 遷移前に死んだ場合、lease 切れ後の retry は git 側適用有無を照合しないため、squash/rebase では空でない二重コミットが残りうる。今回の保証対象は通常の並行 merge 直列化で、object database と ref を調べる復旧手順は owner-improvements の service 抽出側の論点として残す。
