@@ -367,6 +367,13 @@ func TestMergeReservationAcrossConnections(t *testing.T) {
 	if err := s2.MarkMerged(ctx, id, info); err != nil {
 		t.Fatalf("tokenless mark after expiry: %v", err)
 	}
+	pr, err := s2.GetPullRequest(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pr.Status != PRStatusMerged {
+		t.Fatalf("status after tokenless mark = %q", pr.Status)
+	}
 
 	id2, err := s1.CreatePullRequest(ctx, PRInput{BaseRef: "refs/heads/main", HeadRef: "refs/heads/other", Title: "other"}, 0, nil)
 	if err != nil {
