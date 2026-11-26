@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"container/list"
 	"crypto/sha256"
-	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 	"html/template"
 	"log"
 	"regexp"
 	"sync"
 
+	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 	"github.com/yuin/goldmark-alert"
 	"github.com/yuin/goldmark/v2/extension"
 	"github.com/yuin/goldmark/v2/parser"
@@ -95,8 +95,8 @@ var (
 	)
 )
 
-// renderMarkdown renders s as markdown and returns safe HTML for direct
-// insertion into templates.
+// markdownCacheKeyForWorkspace scopes the display cache key because issue
+// reference expansion depends on the workspace.
 func markdownCacheKeyForWorkspace(workspace string, src []byte) string {
 	return markdownCacheKey(append(append([]byte(workspace), 0), src...))
 }
@@ -109,6 +109,8 @@ func markdownCacheKey(src []byte) string {
 
 var issueRefPattern = regexp.MustCompile(`(^|[^\w#])#([0-9]+)`)
 
+// renderMarkdown renders s as markdown and returns safe HTML for direct
+// insertion into templates.
 func renderMarkdown(s string) template.HTML {
 	return renderMarkdownForWorkspace(nil, s)
 }
