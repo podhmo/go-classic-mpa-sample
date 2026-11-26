@@ -3,6 +3,30 @@
 `docs/sketch/ja/owner-improvements.md`（PR #113）から派生した、実装前に判断が必要な論点を記録する。
 1項目につき、止まっている作業・選択肢・決める人を書く。回答が得られたら TODO.md に移し、ここでは解決済みとして残すか整理する。
 
+## PR pin の git subprocess を書き込み transaction の外へ出せるか
+
+止まっている作業: `owner-improvements.md` §1.6。`CreatePullRequest` は現在 transaction 内で `git update-ref` を実行し、その間 DB の write lock を保持する。
+
+選択肢:
+
+- A: DB commit 後に pin し、失敗時は PR 行を補償削除する。ロック時間は減るが、pin 完了前に PR が読める。
+- B: pin 用の下書き状態を導入し、pin 成功後に open へ遷移する。schema と状態遷移が増える。
+- C: 現状の transaction 内 pin を維持し、subprocess timeout だけ短くする。実装は最小だがロック保持は残る。
+
+判断: podhmo。A を選ぶ場合でも、補償削除では取り消せない読み取りを許容するか決めたい。
+
+## remote CLI の 404 を store sentinel にどう写像するか
+
+止まっている作業: bugs.md #27、`owner-improvements.md` §1.6。`errors.Is(err, store.ErrNotFound)` の local/remote 差を埋めたいが、repo 未検出で未 mount になった `/api/v1/pulls...` の 404 まで record missing として扱うと誤分類になる。
+
+選択肢:
+
+- A: `*client.Error.Is` で 404 を一律 `store.ErrNotFound` に写像する。実装は1メソッドだが、missing route と missing record を区別できない。
+- B: API が machine-readable error code（例: `code: "not_found"` / `"route_not_found"`）を返し、client は record missing だけ写像する。互換性のため additive に進める必要がある。
+- C: 各 client method が「この endpoint では 404 = record missing」という文脈付きで写像する。API 変更は不要だが写像点が増える。
+
+判断: podhmo。
+
 ## PR merge の直列化と `prservice` をどこまで先に入れるか
 
 止まっている作業: bugs.md #36（並行 merge）、`owner-improvements.md` §1.1・§1.5・§3.1。
