@@ -6,12 +6,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
 func TestClientPullViewAndStatus(t *testing.T) {
+	var mu sync.Mutex
 	var statusBody string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -25,7 +27,9 @@ func TestClientPullViewAndStatus(t *testing.T) {
 			}`)
 		case "/api/v1/pulls/7/status":
 			raw, _ := io.ReadAll(r.Body)
+			mu.Lock()
 			statusBody = string(raw)
+			mu.Unlock()
 			io.WriteString(w, `{}`)
 		default:
 			http.NotFound(w, r)
@@ -51,8 +55,11 @@ func TestClientPullViewAndStatus(t *testing.T) {
 	if err := c.ClosePullRequest(context.Background(), 7, "ignored", "ignored"); err != nil {
 		t.Fatalf("ClosePullRequest: %v", err)
 	}
-	if !strings.Contains(statusBody, `"status":"closed"`) {
-		t.Fatalf("status body = %q", statusBody)
+	mu.Lock()
+	body := statusBody
+	mu.Unlock()
+	if !strings.Contains(body, `"status":"closed"`) {
+		t.Fatalf("status body = %q", body)
 	}
 }
 

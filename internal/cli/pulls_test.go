@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -29,6 +30,7 @@ func TestPRDiffRemoteTruncationWarning(t *testing.T) {
 }
 
 func TestPRStateChangeRemote(t *testing.T) {
+	var mu sync.Mutex
 	var statuses []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/pulls/7/status" || r.Method != http.MethodPost {
@@ -38,7 +40,9 @@ func TestPRStateChangeRemote(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Errorf("decode status body: %v", err)
 		}
+		mu.Lock()
 		statuses = append(statuses, body["status"])
+		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		io.WriteString(w, `{}`)
 	}))
@@ -52,7 +56,10 @@ func TestPRStateChangeRemote(t *testing.T) {
 	if code != ExitOK || !strings.Contains(out, "pull request #7 reopened") {
 		t.Fatalf("reopen: code=%d stdout=%q stderr=%q", code, out, errOut)
 	}
-	if strings.Join(statuses, ",") != "closed,open" {
+	mu.Lock()
+	joined := strings.Join(statuses, ",")
+	mu.Unlock()
+	if joined != "closed,open" {
 		t.Fatalf("statuses = %v", statuses)
 	}
 }
