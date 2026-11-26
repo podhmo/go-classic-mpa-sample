@@ -288,18 +288,12 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request, ws *stor
 		h.storeError(w, err)
 		return
 	}
-	comments, err := h.store.ListComments(r.Context(), id)
+	c, err := h.store.GetComment(r.Context(), id, cid)
 	if err != nil {
 		h.storeError(w, err)
 		return
 	}
-	for _, c := range comments {
-		if c.ID == cid {
-			writeJSON(w, http.StatusCreated, map[string]any{"comment": commentDTO(c)})
-			return
-		}
-	}
-	writeJSON(w, http.StatusCreated, map[string]any{"comment": map[string]any{"id": cid}})
+	writeJSON(w, http.StatusCreated, map[string]any{"comment": commentDTO(c)})
 }
 
 func deref(s *string) string {

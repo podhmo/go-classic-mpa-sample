@@ -104,18 +104,7 @@ func (h *handler) requirePRComment(w http.ResponseWriter, r *http.Request, prID 
 	if !ok {
 		return nil, false
 	}
-	comments, err := h.store.ListPRComments(r.Context(), prID)
-	if err != nil {
-		h.prStoreError(w, err)
-		return nil, false
-	}
-	for _, c := range comments {
-		if c.ID == cid {
-			return c, true
-		}
-	}
-	writeError(w, http.StatusNotFound, "Not found.", nil)
-	return nil, false
+	return h.findPRComment(w, r, prID, cid)
 }
 
 // prStoreError maps store sentinel errors to HTTP statuses — the PR
