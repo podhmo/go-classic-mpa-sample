@@ -263,7 +263,7 @@ func New(st Store, opts ...Option) http.Handler {
 	mux.HandleFunc("GET /workspaces/new", h.newWorkspace)
 	mux.HandleFunc("POST /workspaces", h.createWorkspace)
 	mux.HandleFunc("GET /w/{ws}/delete", h.scopedWithCounts(h.confirmDeleteWorkspace))
-	mux.HandleFunc("POST /w/{ws}/delete", h.scopedWithCounts(h.deleteWorkspace))
+	mux.HandleFunc("POST /w/{ws}/delete", h.scoped(h.deleteWorkspace))
 	// Canonical resource URLs live under /w/{slug}; the workspace-less
 	// /issues and /discussions paths stay as redirects at the bottom.
 	mux.HandleFunc("GET /w/{ws}/issues", h.scoped(h.listIssues))
