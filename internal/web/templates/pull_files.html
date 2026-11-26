@@ -1,5 +1,10 @@
-{{define "content"}}
+{{define "head"}}
+{{range modulePreloads "page-detail.js"}}<link rel="modulepreload" href="{{staticURL .}}">
+{{end}}
 <script type="module" src="{{staticURL "page-detail.js"}}"></script>
+{{end}}
+
+{{define "content"}}
 <nav class="breadcrumb" aria-label="{{BreadcrumbAria}}">
   <ol>
     <li><a href="/pulls">{{LayoutNavPulls}}</a></li>

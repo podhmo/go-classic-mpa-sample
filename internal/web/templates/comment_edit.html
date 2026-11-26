@@ -1,9 +1,14 @@
+{{define "head"}}
+{{range modulePreloads "page-form.js"}}<link rel="modulepreload" href="{{staticURL .}}">
+{{end}}
+<script type="module" src="{{staticURL "page-form.js"}}"></script>
+{{end}}
+
 {{define "content"}}
 {{/* Shared comment edit page — issue comments, discussion threads and
    replies all render this; only .Action/.CancelURL differ. The one
    textarea is a required field: an empty body cannot be saved
    (deleting is the /delete page's job). */}}
-<script type="module" src="{{staticURL "page-form.js"}}"></script>
 <div class="page-head">
   <h1>{{.Heading}}</h1>
 </div>

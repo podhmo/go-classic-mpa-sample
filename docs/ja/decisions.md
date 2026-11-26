@@ -761,3 +761,9 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 - **HTML が参照する静的資産は `/static/<name>?v=<content hash>`**: 全 embedded asset の名前と内容から作る deployment hash を query に載せ、一致する URL だけ `Cache-Control: public, max-age=31536000, immutable` にする。`v` なしの旧 URL は互換 fallback として従来の `max-age=3600`、stale な `v` は 404。
 - **storybook 互換のため path ではなく query に hash を入れる**: storybook は `/static/` をアプリより先に live overlay へ振るため、`/static/v/<hash>/...` だと export/preview の資産解決を壊す。query なら path が変わらず、overlay は従来どおりファイルを供給できる。
 - **module import は serve 時に同じ `v` 付きへ書き換える**: `<script type="module">` の entrypoint だけ versioned にしても、`./clipboard.js` などの relative import から query は継承されない。embedded JS の `./<name>.js` 文字列を process-local に `?v=` 付きへ変換し、module graph 全体が deployment ごとの cache key を持つようにする。
+
+## ES module dependency の modulepreload（2026-11-26、owner improvements 対応）
+
+- **page detail/form の依存 module を `<link rel="modulepreload">` で並列化**: bundler なしの ES module 構成は維持しつつ、entrypoint が import 解決で段階的に依存を発見する waterfall を避ける。`modulePreloads` は embedded JS の静的 `import`/`export ... from` 行から direct+transitive dependency を導くため、新しい依存を足したときにテンプレート側の手動一覧を更新しない。
+- **page ごとの script は `<head>` へ移す**: `<link rel="modulepreload">` が body 末尾近くにあると entrypoint 発見とほぼ同時になり効果が薄い。layout に空の `head` block を用意し、page template 側で override する。`type="module"` と `defer` はもともと parser blocking ではないため、body 先頭から head への移動で実行タイミングの意味論は変えない。
+- **versioned URL と同じ `staticURL` を使う**: preload も entrypoint も同じ content hash query を持ち、immutable cache の対象になる。

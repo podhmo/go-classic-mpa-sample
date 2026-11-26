@@ -1,5 +1,10 @@
-{{define "content"}}
+{{define "head"}}
+{{range modulePreloads "page-form.js"}}<link rel="modulepreload" href="{{staticURL .}}">
+{{end}}
 <script type="module" src="{{staticURL "page-form.js"}}"></script>
+{{end}}
+
+{{define "content"}}
 <div class="page-head">
   <h1>{{.Heading}}</h1>
 </div>

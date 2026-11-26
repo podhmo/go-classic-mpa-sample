@@ -1,8 +1,11 @@
+{{define "head"}}
+<script src="{{staticURL "search-highlight.js"}}" defer></script>
+{{end}}
+
 {{define "content"}}
 {{/* Progressive enhancement: highlights the ?q= term inside discussion
    titles via the CSS Custom Highlight API — same script as the issue list,
    which matches the shared .issue-list/.issue-title classes. */}}
-<script src="{{staticURL "search-highlight.js"}}" defer></script>
 <div class="page-head">
   <h1>{{LayoutNavDiscussions}}</h1>
 </div>
