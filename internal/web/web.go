@@ -40,6 +40,7 @@ type staticAsset struct {
 	body        []byte
 	gzipBody    []byte
 	etag        string
+	gzipETag    string
 	contentType string
 }
 
@@ -65,10 +66,12 @@ func loadStaticAsset(name string) (*staticAsset, error) {
 	if err := zw.Close(); err != nil {
 		return nil, err
 	}
+	gzipSum := sha256.Sum256(compressed.Bytes())
 	asset := &staticAsset{
 		body:        body,
 		gzipBody:    compressed.Bytes(),
 		etag:        `"` + hex.EncodeToString(sum[:16]) + `"`,
+		gzipETag:    `"` + hex.EncodeToString(gzipSum[:16]) + `"`,
 		contentType: mime.TypeByExtension(path.Ext(name)),
 	}
 	staticAssets.Store(name, asset)
@@ -383,9 +386,16 @@ func New(st Store, opts ...Option) http.Handler {
 				http.NotFound(w, r)
 				return
 			}
+			body := asset.body
+			etag := asset.etag
+			useGzip := acceptsGzip(r.Header.Get("Accept-Encoding"))
+			if useGzip {
+				body = asset.gzipBody
+				etag = asset.gzipETag
+			}
 			h := w.Header()
 			h.Set("Cache-Control", "public, max-age=3600")
-			h.Set("ETag", asset.etag)
+			h.Set("ETag", etag)
 			h.Add("Vary", "Accept-Encoding")
 			if contentType == "" {
 				contentType = asset.contentType
@@ -393,13 +403,11 @@ func New(st Store, opts ...Option) http.Handler {
 			if contentType != "" {
 				h.Set("Content-Type", contentType)
 			}
-			if ifNoneMatch(r.Header.Get("If-None-Match"), asset.etag) {
+			if ifNoneMatch(r.Header.Get("If-None-Match"), etag) {
 				w.WriteHeader(http.StatusNotModified)
 				return
 			}
-			body := asset.body
-			if acceptsGzip(r.Header.Get("Accept-Encoding")) {
-				body = asset.gzipBody
+			if useGzip {
 				h.Set("Content-Encoding", "gzip")
 			}
 			h.Set("Content-Length", strconv.Itoa(len(body)))
