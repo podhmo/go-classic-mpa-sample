@@ -789,6 +789,7 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 ## hidden タブの SSE 切断（2026-11-26、owner improvements 対応）
 
 - **`EventSource` は visible な間だけ保持する**: detail page の `live-updates.js` は初期表示が hidden なら接続せず、`visibilitychange` で hidden になった時点で close する。localhost/HTTP/1.1 の同一オリジン 6 接続上限を休眠タブが占有しないようにする。
-- **visible 復帰時は hint 再構成を試みず whole-detail resync する**: hidden 中の SSE event は欠けるが、もともと invalidation-only で missed hint の replay もない設計なので、article card の存在確認後に article card と timeline fragment を再取得してから再接続する。network offline からの自動 reconnect 時の resync と同じ回復経路で、hidden 中の title/body/status 編集や close/reopen も action 表示へ反映する。
+- **visible 復帰時は hint 再構成を試みず whole-detail resync する**: hidden 中の SSE event は欠けるが、もともと invalidation-only で missed hint の replay もない設計なので、article probe で削除を確認したら `/events` へ接続し、その最初の open 後に article card と timeline fragment を再取得する。snapshot が subscription より後になるため、snapshot 取得と接続確立の間の書き込みを取りこぼさない。offline のままの復帰でも接続だけは開始し、EventSource の retry 後の open が同じ resync 経路へ入る。
 - **delete 済み resource では再接続も timeline resync もしない**: 接続中に delete event を受けた場合はその時点で `gone` にし、hidden 中に消えた場合は visible 復帰時の article fragment 404 を削除として恒久通知へ写す。`gone` 後は追加の fragment 再取得や `/events` 再接続を skip し、削除検出は article probe 1回に留める。
 - **row 再描画では reply draft に加えて hide reason picker も保持する**: visible 復帰 resync は unchanged row も replace するため、open state と選択中の reason を既存の draft restore 経路に載せる。
+- **flush 中に届いた hint は次回 batch へ残す**: fragment fetch 中の書き込みはその fetch 結果へ反映されないことがあるため、flush 開始時に pending を snapshot してから clear する。待機中に届いた event を finally で消すと、subscription 済みでも更新漏れが起きる。
