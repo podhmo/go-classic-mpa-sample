@@ -41,28 +41,32 @@ CDP の rule usage tracking を全 story に union 適用し、静的解析と�
 残りは dead code ではなく、静的 render の union では発火しない **検証盲点** に分類できる:
 
 - **pseudo-state**: `:hover`, `:focus-visible`, `:user-invalid`（実ブラウザでポインタ/キーボード/入力操作が必要）
-- **JS runtime state**: `.toast`, `[data-copied]`/`[data-failed]`, `.comment-new`, `.comment-form > progress`, `.markdown-preview-empty`, `textarea[hidden]`
-- **open/collapsed state**: `.confirm-dialog:modal`/`::backdrop`、closed `<details>` 内の `.comment-hidden-body .comment-body`、mobile nav の `[open]`/`:not([open])`
-- **環境依存 media/feature query**: dark scheme, reduced motion, narrow viewport, coarse pointer, `@supports not (order: sibling-index())` fallback
+- **JS runtime state**: `[data-failed]`, `.comment-new`, `.comment-form > progress`, `.markdown-preview-empty`, `textarea[hidden]`
+- **open/collapsed state**: closed `<details>` 内の `.comment-hidden-body .comment-body`、mobile nav の `[open]`/`:not([open])`
+- **環境依存 media/feature query**: reduced motion, narrow viewport, coarse pointer, `@supports not (order: sibling-index())` fallback
 - **pseudo-element / transition**: `::marker`, `::view-transition-*` は rule usage の観測対象になりにくく、navigation を伴わない story では発火しない
 
-→ naive な dead-code 除去はここで誤爆する（`badge-file-{{.StatusLetter}}` のようなテンプレート展開クラスは grep に出ない）。**coverage は「storybook の検証盲点の定量化」に使うのが正しい**。pseudo-state/JS/open state は story を増やすより `verify-ui` 側の実 app 検証へ振る。
+→ naive な dead-code 除去はここで誤爆する（`badge-file-{{.StatusLetter}}` のようなテンプレート展開クラスは grep に出ない）。**coverage は「storybook の検証盲点の定量化」に使うのが正しい**。`.toast` / `[data-copied]` / dialog open は visual-diff が storybook 上で操作して撮るようになったが、POST や SSE を伴って生成される状態は `verify-ui` 側の実 app 検証へ振る。
 
 ## 視覚差分検知の仕組み（確立済み）
 
 `tools/visual-diff.sh` を追加:
 
 ```sh
-tools/visual-diff.sh update   # 全 story を撮影して .visual-diff/baseline に保存
-tools/visual-diff.sh check    # 再撮影して ImageMagick compare -metric AE で閾値判定
+tools/visual-diff.sh update         # light/dark 両方の baseline を更新
+tools/visual-diff.sh check          # light/dark 両方を再撮影して閾値判定
+tools/visual-diff.sh check dark     # dark だけ確認
 ```
 
-- storybook（`make storybook` → :6006）の `/` から `/story/*` を全列挙（現状 58）し、1280x800 で fullPage 撮影
+- storybook（`make storybook` → :6006）の `/` から `/story/*` を全列挙（現状 58）し、1280x800 で fullPage 撮影。加えて JS 駆動状態の `StateDialogOpen` / `StateCopyPermalink` / `StateToast` を viewport 撮影するので、1 mode 61 枚
+- baseline は `.visual-diff/baseline/light` と `.visual-diff/baseline/dark` に分かれる。`page.emulateMedia({colorScheme})` で `prefers-color-scheme` を固定し、OS 側の theme に左右されない
 - **決定性のための4条件**:
   1. `page.screenshot({animations: 'disabled'})` — 無いと `.back-to-top` の scroll-state fade が中間状態で写って 23860px の偽差分になった
   2. `document.fonts.ready` 待機 — フォント非同期描画対策
   3. **fixture/handler の時刻 pin** — Pull 系 story が `time.Now()` を使っており実行ごとに時刻差分（263–1687px）が出たため、`story_pages.go` に `storyNow`（固定時刻）を導入して全 `time.Now()` を置換。POST replay で handler が作る new comment も実時刻だったため、`WithClock` を足して storybook から pin する。これが無いと baseline 比較が成立しない
   4. **scroll position の reset** — server error story の `autofocus` は load 時に下へ scroll し、sticky header / fixed back-to-top が fullPage screenshot 内で別位置に写る（108300px の偽差分）。撮影前に `scrollTo(0, 0)` へ戻す
+- **JS 駆動状態は実操作で撮る**: dialog は `.delete-open` click、copy feedback は clipboard 権限を与えたうえで `.copy-btn` click、toast は storybook では POST 先が無いため `/static/toast.js` の `toast()` をページ内で直接起動する。toast は描画 coverage のためのもので、partial POST 成功経路の E2E を置き換えるものではない
+- playwright-cli の `run-code` は open 済み browser を前提にする。capture ごとに close/open して、mode 間の tab/state 持ち越しと事前準備依存を避ける
 - 閾値は `PIXEL_THRESHOLD`（既定 100px）— sub-10px の AA ノイズ（StoryLabelFormEdit で 7px 観測）は許容し、レイアウト崩れは確実に拾う
 - `.visual-diff/` は gitignore。baseline は「今の正」を撮り直す運用
 
@@ -70,8 +74,8 @@ tools/visual-diff.sh check    # 再撮影して ImageMagick compare -metric AE �
 
 | 検証対象 | 場所 | 理由 |
 |---|---|---|
-| CSS/HTML の見た目回帰 | **storybook + visual-diff** | 全 variant を決定的に列挙できる、DB 不要、速い（58 story ≒ 20s） |
-| JS が付ける状態クラス（toast, [data-copied], .comment-new, dialog open） | **実 app + playwright-cli**（verify-ui） | storybook は静的 render で JS 駆動の状態に届かない |
+| CSS/HTML の見た目回帰 | **storybook + visual-diff** | 全 variant を決定的に列挙できる、DB 不要（1 mode ≒ 30s） |
+| JS が付ける状態クラス（.comment-new, markdown preview, submit progress） | **実 app + playwright-cli**（verify-ui） | POST/SSE を伴う生成経路は storybook 単体に無い。toast/copy/dialog の見た目自体は visual-diff で撮る |
 | PRG 遷移・view transition・SSE 部分更新 | **実 app** | ナビゲーション横断の振る舞いは story 単体に無い |
 | CSP/console エラー | **実 app**（`playwright-cli console` クリーン必須） | storybook は CSP を掛けない |
 
@@ -88,15 +92,14 @@ max-age=3600 を入れたので「CSS を直しても反映されない」事故
 ## 検証済みの流れ（再現手順）
 
 ```sh
-tools/visual-diff.sh update        # 変更前に baseline を撮る
+tools/visual-diff.sh update        # 変更前に light/dark baseline を撮る
 # … app.css / templates を編集 …
-tools/visual-diff.sh check         # 全 story が閾値内なら見た目不変
+tools/visual-diff.sh check         # 全 shot が閾値内なら見た目不変
 ```
 
 今回の CSS 変更は `--danger-hover` 削除 + `--font-mono` 集約で pixel diff 実質 0（差分は fixture 時刻 pin 由来のみ）を確認済み。
 
 ## 残課題（TODO.md へ転記）
 
-- pseudo-state/JS/open state の coverage 盲点を実 app 検証（verify-ui）へ明示的に振る
+- pseudo-state/POST/SSE 駆動 state の coverage 盲点を実 app 検証（verify-ui）へ明示的に振る
 - /static/ の versioned URL 化（`immutable` + hash query）で max-age=3600 の妥協を外す
-- dark モードの差分検証（現在の baseline は light のみ）
