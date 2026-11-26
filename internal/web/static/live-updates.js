@@ -5,7 +5,8 @@
 // server-side truth. Events are debounced/coalesced (a burst like an AI
 // posting several comments becomes one fetch), and any lost connection
 // triggers a whole-list resync on reconnect — missed hints are expected,
-// never replayed.
+// never replayed. Hidden tabs close the stream entirely and use the same
+// resync path when they become visible again.
 //
 // Progressive enhancement: with JS off (or EventSource missing) the page
 // is a normal static detail page; nothing here is required for posting.
@@ -48,43 +49,70 @@ function start(section) {
   let timer = 0;
   let flushing = false;
   let queued = false;
+  let es = null;
+  let gone = false;
 
-  const es = new EventSource(eventsURL);
-  es.addEventListener("comment", (e) => add(pending.ids, e));
-  es.addEventListener("thread", (e) => add(pending.ids, e));
-  es.addEventListener("reply", (e) => {
-    const { target, parent } = JSON.parse(e.data);
-    if (!pending.replies.has(parent)) pending.replies.set(parent, new Set());
-    pending.replies.get(parent).add(target);
-    poke();
+  function connect() {
+    if (es || gone) return;
+    es = new EventSource(eventsURL);
+    es.addEventListener("comment", (e) => add(pending.ids, e));
+    es.addEventListener("thread", (e) => add(pending.ids, e));
+    es.addEventListener("reply", (e) => {
+      const { target, parent } = JSON.parse(e.data);
+      if (!pending.replies.has(parent)) pending.replies.set(parent, new Set());
+      pending.replies.get(parent).add(target);
+      poke();
+    });
+    es.addEventListener("answer", (e) => {
+      const { target, parent } = JSON.parse(e.data);
+      pending.answerIds.add(target);
+      if (parent) pending.answerIds.add(parent);
+      poke();
+    });
+    es.addEventListener("status", () => mark("article"));
+    es.addEventListener("edit", () => mark("article"));
+    es.addEventListener("new", () => {});
+    es.addEventListener("delete", () => {
+      gone = true;
+      mark("deleted");
+    });
+    // A comment-level row (issue comment / thread / reply) was deleted:
+    // drop the node directly — issue comments live under #comment-N,
+    // threads under #thread-N, replies share the #comment-N namespace.
+    es.addEventListener("remove", (e) => {
+      pending.removes.push(JSON.parse(e.data));
+      poke();
+    });
+    es.addEventListener("resync", () => mark("resync"));
+    // EventSource fires onerror while retrying (its own backoff honors our
+    // `retry:` directive); onopen covers the successful reconnect.
+    es.onerror = () => {
+      lost = true;
+    };
+    es.onopen = () => {
+      if (lost) mark("resync");
+      lost = false;
+    };
+  }
+
+  function disconnect() {
+    const current = es;
+    es = null;
+    current?.close();
+  }
+
+  if (document.visibilityState !== "hidden") connect();
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      disconnect();
+      return;
+    }
+    connect();
+    // Hidden tabs receive no hints, so the first visible render rebuilds
+    // the list rather than trying to reconstruct what was missed. A
+    // deleted resource has no list to resync.
+    if (!gone) mark("resync");
   });
-  es.addEventListener("answer", (e) => {
-    const { target, parent } = JSON.parse(e.data);
-    pending.answerIds.add(target);
-    if (parent) pending.answerIds.add(parent);
-    poke();
-  });
-  es.addEventListener("status", () => mark("article"));
-  es.addEventListener("edit", () => mark("article"));
-  es.addEventListener("new", () => {});
-  es.addEventListener("delete", () => mark("deleted"));
-  // A comment-level row (issue comment / thread / reply) was deleted:
-  // drop the node directly — issue comments live under #comment-N,
-  // threads under #thread-N, replies share the #comment-N namespace.
-  es.addEventListener("remove", (e) => {
-    pending.removes.push(JSON.parse(e.data));
-    poke();
-  });
-  es.addEventListener("resync", () => mark("resync"));
-  // EventSource fires onerror while retrying (its own backoff honors our
-  // `retry:` directive); onopen covers the successful reconnect.
-  es.onerror = () => {
-    lost = true;
-  };
-  es.onopen = () => {
-    if (lost) mark("resync");
-    lost = false;
-  };
 
   function add(set, e) {
     set.add(JSON.parse(e.data).target);
@@ -245,7 +273,8 @@ function start(section) {
     flushing = true;
     try {
       if (pending.deleted) {
-        es.close();
+        gone = true;
+        disconnect();
         // The watched resource is gone: a persistent notice beats a
         // transient toast — the user may be mid-read.
         if (!section.querySelector("[data-live-deleted]")) {

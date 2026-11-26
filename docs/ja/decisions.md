@@ -785,3 +785,9 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 - **issue PATCH は事前読み出ししない**: `PatchIssueInWorkspace` が `WHERE id=? AND workspace_id=?` の scoped update で title/body を `COALESCE(?, column)` し、label 更新も同じ transaction に入れる。既存 issue を読まずに部分更新できる代わりに、missing id と validation error が同時にある request は validation を先に返す（従来の 404 優先ではなく 422 優先）。response 用の再読み出しも `GetIssueInWorkspace` で workspace scope 済みにする。
 - **comment の再取得は単行 lookup**: `GetComment` / `GetPRComment` を `(parent id, comment id)` で scope し、mutation response の DTO 組み立てで全件 `List*Comments` + 線形探索しない。API endpoint は増やさず store API の追加に留める。
 - **label 名解決は `LabelByName`**: 単一名なら全 label を読まず、kind/name/workspace visibility で 1 行だけ引く。複数 distinct 名の write では per-name query を避けて従来どおり catalog を 1 回だけ読む。shared master と workspace label が同名なら workspace 側を優先し、picker で workspace-specific に見える方と一致させる。
+
+## hidden タブの SSE 切断（2026-11-26、owner improvements 対応）
+
+- **`EventSource` は visible な間だけ保持する**: detail page の `live-updates.js` は初期表示が hidden なら接続せず、`visibilitychange` で hidden になった時点で close する。localhost/HTTP/1.1 の同一オリジン 6 接続上限を休眠タブが占有しないようにする。
+- **visible 復帰時は hint 再構成を試みず whole-list resync する**: hidden 中の SSE event は欠けるが、もともと invalidation-only で missed hint の replay もない設計なので、再接続と同時に既存の fragment 全件再取得へ寄せる。network offline からの自動 reconnect 時の resync と同じ回復経路。
+- **delete 済み resource では再接続も resync もしない**: delete event を受けた時点で `gone` にし、恒久通知を残す。visible 復帰時に削除済み fragment を fetch すると 404 console error になるだけなので、resync 自体も skip する。
