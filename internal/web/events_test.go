@@ -134,7 +134,13 @@ func TestIssueCommentsFragment(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer resp3.Body.Close()
+	if resp3.StatusCode != 200 {
+		t.Fatalf("empty ids status = %d", resp3.StatusCode)
+	}
 	body3, _ := io.ReadAll(resp3.Body)
+	if !strings.Contains(string(body3), `id="issue-meta"`) {
+		t.Fatal("empty ids should still render the meta swap node")
+	}
 	if strings.Contains(string(body3), `id="comment-`) {
 		t.Fatal("empty ids should filter every comment out")
 	}
