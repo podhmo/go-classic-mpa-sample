@@ -1371,8 +1371,20 @@ func TestVersionedStaticModuleImports(t *testing.T) {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 	body := getBody(t, resp)
-	if !strings.Contains(body, `"./enter-submit.js?v=`+staticBuildVersion()+`"`) {
+	dependencyURL := "/static/enter-submit.js?v=" + staticBuildVersion()
+	if !strings.Contains(body, `"./`+strings.TrimPrefix(dependencyURL, "/static/")+`"`) {
 		t.Error("page-detail.js import was not rewritten to the versioned URL")
+	}
+	depResp, err := srv.Client().Get(srv.URL + dependencyURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	depResp.Body.Close()
+	if depResp.StatusCode != http.StatusOK {
+		t.Fatalf("rewritten dependency status = %d, want 200", depResp.StatusCode)
+	}
+	if got := depResp.Header.Get("Cache-Control"); got != "public, max-age=31536000, immutable" {
+		t.Fatalf("rewritten dependency Cache-Control = %q, want immutable", got)
 	}
 	if strings.Contains(body, `"./enter-submit.js"`) {
 		t.Error("page-detail.js still contains an unversioned relative import")
