@@ -370,29 +370,46 @@ func TestPullPairCacheAvoidsRepeatedGitCalls(t *testing.T) {
 
 func TestLogDoesNotCacheShallowHistory(t *testing.T) {
 	ctx := context.Background()
-	dir := initRepo(t)
-	git(t, dir, "checkout", "-qb", "feat")
-	write(t, dir, "b.txt", "two\n")
-	git(t, dir, "checkout", "-q", "main")
-	r := openRepo(t, dir)
-	r.Shallow = true
-	logPath := installGitLogger(t)
+	origin := initRepo(t)
+	git(t, origin, "checkout", "-qb", "feat")
+	write(t, origin, "b.txt", "two\n")
+	write(t, origin, "c.txt", "three\n")
+	git(t, origin, "checkout", "-q", "main")
 
-	baseSHA, headSHA, err := r.RevParsePair(ctx, "main", "feat")
+	work := t.TempDir()
+	clone := filepath.Join(work, "clone")
+	git(t, work, "clone", "-q", "--depth", "1", "--no-single-branch", "file://"+origin, clone)
+	r := openRepo(t, clone)
+	if !r.Shallow {
+		t.Fatal("test clone is not shallow")
+	}
+
+	baseSHA, headSHA, err := r.RevParsePair(ctx, "origin/main", "origin/feat")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.Log(ctx, baseSHA, headSHA); err != nil {
+	before, err := r.Log(ctx, baseSHA, headSHA)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(logPath, nil, 0o644); err != nil {
+	if len(before) != 1 {
+		t.Fatalf("shallow log len = %d, want 1", len(before))
+	}
+
+	git(t, clone, "fetch", "-q", "--deepen=1", "origin")
+	afterBaseSHA, afterHeadSHA, err := r.RevParsePair(ctx, "origin/main", "origin/feat")
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.Log(ctx, baseSHA, headSHA); err != nil {
+	if afterBaseSHA != baseSHA || afterHeadSHA != headSHA {
+		t.Fatal("deepening moved a branch tip")
+	}
+	after, err := r.Log(ctx, baseSHA, headSHA)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if got := countLoggedGitCommand(loggedGitCommands(t, logPath), "log"); got != 1 {
-		t.Fatalf("shallow log invocations = %d, want 1", got)
+	if len(after) != 2 {
+		t.Fatalf("deepened log len = %d, want 2", len(after))
 	}
 }
 
