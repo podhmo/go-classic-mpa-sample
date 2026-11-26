@@ -396,6 +396,15 @@ func renderCurrentPath(r *http.Request) string {
 		if next := r.PostFormValue("next"); next != "" {
 			return safeNext(next)
 		}
+		// Validation errors are rendered from POST-only mutation URLs. Use the
+		// submitting page as the return destination; without it there is no
+		// meaningful page to go back to.
+		if ref := r.Referer(); ref != "" {
+			if u, err := url.Parse(ref); err == nil && u.Host == r.Host && (u.Scheme == "http" || u.Scheme == "https") {
+				return safeNext(u.RequestURI())
+			}
+		}
+		return "/issues"
 	}
 	if (r.URL.Path == "/login" || r.URL.Path == "/register") && r.URL.Query().Get("next") != "" {
 		return safeNext(r.URL.Query().Get("next"))
