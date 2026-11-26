@@ -18,6 +18,7 @@ func (panicOnRead) Close() error             { return nil }
 
 func TestRenderCurrentPathDoesNotParsePostBody(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "http://example.test/preview", nil)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Body = panicOnRead{}
 	if got := renderCurrentPath(req); got != "/issues" {
 		t.Fatalf("renderCurrentPath = %q, want /issues", got)
