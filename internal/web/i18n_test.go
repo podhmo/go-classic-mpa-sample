@@ -102,6 +102,28 @@ func TestIssueListRendersJapaneseViaAcceptLanguage(t *testing.T) {
 	}
 }
 
+func TestIssueListAcceptLanguageWeightsEnglishOverJapanese(t *testing.T) {
+	srv, f := newTestServer(t)
+	seedIssues(t, f)
+
+	req, err := http.NewRequest(http.MethodGet, srv.URL+"/w/default/issues", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Accept-Language", "en, ja;q=0.1")
+	resp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	body := getBody(t, resp)
+	if !strings.Contains(body, `<html lang="en"`) {
+		t.Error("weighted English preference should render the en page")
+	}
+	if strings.Contains(body, `<html lang="ja"`) {
+		t.Error("low-weight ja must not override q=1 en")
+	}
+}
+
 func TestIssueListDefaultsToEnglish(t *testing.T) {
 	srv, f := newTestServer(t)
 	seedIssues(t, f)
