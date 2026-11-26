@@ -71,7 +71,7 @@ _issues_completions() {
 		;;
 	pr)
 		if [ "$COMP_CWORD" -eq 2 ]; then
-			COMPREPLY=( $(compgen -W "list view diff create edit close reopen merge delete comment" -- "$cur") )
+			COMPREPLY=( $(compgen -W "list view diff create edit close reopen merge repair-pin delete comment" -- "$cur") )
 		elif [ "${COMP_WORDS[2]}" = "comment" ] && [ "$COMP_CWORD" -eq 3 ]; then
 			COMPREPLY=( $(compgen -W "create edit delete hide unhide" -- "$cur") )
 		fi
@@ -142,7 +142,7 @@ _zatu() {
 		pr)
 			if (( CURRENT == 3 )); then
 				_describe -t actions 'pr action' '(
-					list view diff create edit close reopen merge delete comment
+					list view diff create edit close reopen merge repair-pin delete comment
 				)'
 			elif [[ "$words[3]" == comment ]]; then
 				_describe -t actions 'comment action' '(create edit delete hide unhide)'
