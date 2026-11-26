@@ -183,7 +183,7 @@ func TestAuthModeSwitchPreservesNext(t *testing.T) {
 func TestAuthValidationKeepsNextInModeSwitch(t *testing.T) {
 	srv, _ := newTestServer(t)
 
-	resp := postForm(t, srv.Client(), srv.URL+"/login", url.Values{
+	resp := postForm(t, srv.Client(), srv.URL+"/login?next=/w/default/issues/3", url.Values{
 		"name": {"alice"}, "password": {"wrong-pass"}, "next": {"/w/default/issues/3"},
 	})
 	body := getBody(t, resp)
