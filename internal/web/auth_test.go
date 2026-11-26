@@ -45,6 +45,41 @@ func TestSessionLookupFailureIs500NotAnonymous(t *testing.T) {
 	}
 }
 
+func TestStaticAssetsSkipSessionLookup(t *testing.T) {
+	srv, f := newTestServer(t)
+	u := f.addUser(t, "alice", "password123")
+	f.sessions[auth.HashToken("tok")] = u.ID
+	f.sessionUserErr = errors.New("db gone")
+
+	req, err := http.NewRequest(http.MethodGet, srv.URL+"/static/app.css", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "tok"})
+	resp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("static status = %d, want 200", resp.StatusCode)
+	}
+
+	req, err = http.NewRequest(http.MethodGet, srv.URL+"/w/default/issues", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "tok"})
+	resp, err = srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("dynamic status = %d, want 500", resp.StatusCode)
+	}
+}
+
 // sessionCookie extracts the session cookie set by register/login, or fails.
 func sessionCookie(t *testing.T, resp *http.Response) *http.Cookie {
 	t.Helper()

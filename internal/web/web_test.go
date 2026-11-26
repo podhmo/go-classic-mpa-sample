@@ -1,6 +1,7 @@
 package web
 
 import (
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -1187,6 +1188,58 @@ func TestStaticCSS(t *testing.T) {
 	cv := regexp.MustCompile(`([^{}]+)\{[^}]*content-visibility:\s*auto`).FindStringSubmatch(body)
 	if cv == nil || !strings.Contains(cv[1], ".comment-body") {
 		t.Errorf("content-visibility must target .comment-body, got selector %q", cv)
+	}
+}
+
+func TestStaticAssetsUseGzipAndETag(t *testing.T) {
+	srv, _ := newTestServer(t)
+	req, err := http.NewRequest(http.MethodGet, srv.URL+"/static/app.css", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Accept-Encoding", "br, gzip;q=0.8")
+	resp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Content-Encoding"); got != "gzip" {
+		t.Fatalf("Content-Encoding = %q, want gzip", got)
+	}
+	etag := resp.Header.Get("ETag")
+	if etag == "" {
+		t.Fatal("ETag is empty")
+	}
+	zr, err := gzip.NewReader(resp.Body)
+	if err != nil {
+		t.Fatalf("gzip.NewReader: %v", err)
+	}
+	body, err := io.ReadAll(zr)
+	if err != nil {
+		t.Fatalf("read gzip body: %v", err)
+	}
+	if !strings.Contains(string(body), "@view-transition") {
+		t.Error("decompressed app.css lost its content")
+	}
+
+	req, err = http.NewRequest(http.MethodGet, srv.URL+"/static/app.css", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("If-None-Match", etag)
+	resp, err = srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotModified {
+		t.Fatalf("conditional status = %d, want 304", resp.StatusCode)
+	}
+	if body, err := io.ReadAll(resp.Body); err != nil || len(body) != 0 {
+		t.Errorf("304 body length/error = %d/%v, want empty", len(body), err)
 	}
 }
 
