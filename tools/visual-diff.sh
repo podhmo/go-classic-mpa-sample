@@ -84,6 +84,13 @@ case "${1:-}" in
 					fi ;;
 			esac
 		done
+		for png in "$ROOT_DIR"/current/*.png; do
+			name=$(basename "$png")
+			if [ ! -f "$ROOT_DIR/baseline/$name" ]; then
+				echo "NEW      $name (not in baseline)"
+				fail=1
+			fi
+		done
 		[ "$fail" -eq 0 ] && echo "OK: all stories within $PIXEL_THRESHOLD px"
 		exit "$fail"
 		;;
