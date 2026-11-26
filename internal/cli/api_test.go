@@ -7,7 +7,35 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/podhmo/go-classic-mpa-sample/internal/client"
 )
+
+func TestAPICommandTimesOutStalledResponse(t *testing.T) {
+	unblock := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		<-unblock
+	}))
+	defer srv.Close()
+	defer close(unblock)
+
+	old := client.HTTPClient
+	copy := *old
+	copy.Timeout = 50 * time.Millisecond
+	client.HTTPClient = &copy
+	defer func() { client.HTTPClient = old }()
+
+	code, _, errOut := run(t, Options{}, "api", "/issues", "--server", srv.URL)
+	if code != ExitError {
+		t.Fatalf("code = %d, want %d", code, ExitError)
+	}
+	if !strings.Contains(strings.ToLower(errOut), "timeout") && !strings.Contains(errOut, "deadline") {
+		t.Fatalf("stderr = %q, want timeout error", errOut)
+	}
+}
 
 // TestAPICommandFields exercises the wire behavior of `zatu api`: -f/-F
 // fields are query parameters on GET and a JSON body on other methods;

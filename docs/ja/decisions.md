@@ -48,6 +48,7 @@
 - **環境変数**: `ISSUES_ADDR` / `ISSUES_DB`（フラグ `-addr`/`-db` が優先）。
 - **静的ファイル**: `internal/web/static/` を `embed.FS` + `http.FileServerFS` で `/static/` 配信。
 - **サーバータイムアウト**: ReadHeader 10s / Read 15s / Write 15s / Idle 60s。
+- **remote client timeout**: `client.HTTPClient` は 30s の `http.Client.Timeout` を持つ。これは response body 読み取りまで含む全体 deadline で、応答を開始した長大な diff/markdown も 30s で打ち切る。CLI が無応答サーバーへ固まらないことを優先し、長時間転送が必要なら用途別 client を分ける。
 - **コメント投稿後**: `303` → `/issues/{id}#comment-{comment_id}`（新規コメントのパーマリンクへ着地）。各コメントは `<li id="comment-N">` アンカーを持ち、タイムスタンプが `#comment-N` へのリンク（GitHub 式）。`:target` 疑似クラスでリンク先コメントをアクセント色枠でハイライト（JS 不使用）。
 - **シード**: ラベル4種（Bug `#d73a4a`, Feature `#0075ca`, Documentation `#1f6feb`, Enhancement `#a2eeef`）+ issue 7件（open/closed混在、複数ラベル、コメント0〜3件、長文あり、作成日時ばらつき）。issues テーブル非空なら何もしない（tx内 `COUNT(*)` チェック）。
 - **`status` フィルタ**: web 側は `open|closed|all` に正規化してから `ListIssues` に渡す。
