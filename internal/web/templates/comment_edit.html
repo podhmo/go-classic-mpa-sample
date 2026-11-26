@@ -15,6 +15,7 @@
 
 <p class="form-note">{{FormNoteHTML}}</p>
 <form method="post" action="{{.Action}}" class="card issue-form comment-form" novalidate>
+  {{if .Version}}<input type="hidden" name="version" value="{{.Version}}">{{end}}
   <div class="field">
     <label for="comment-body">{{FieldComment}} <span class="req" aria-hidden="true">*</span></label>
     <textarea id="comment-body" name="body" rows="8" required data-error="comment-error" aria-keyshortcuts="Control+Enter Meta+Enter"{{if .Error}} aria-invalid="true" aria-describedby="comment-error comment-hint" autofocus{{else}} aria-invalid="false" aria-describedby="comment-hint"{{end}}>{{.Body}}</textarea>

@@ -167,7 +167,11 @@ func (h *handler) updateComment(w http.ResponseWriter, r *http.Request, ws *stor
 	if !ok {
 		return
 	}
-	if err := h.store.UpdateComment(r.Context(), c.IssueID, c.ID, body); err != nil {
+	expected, ok := parseIfMatch(w, r)
+	if !ok {
+		return
+	}
+	if err := h.store.UpdateCommentVersion(r.Context(), c.IssueID, c.ID, body, expected); err != nil {
 		h.storeError(w, err)
 		return
 	}
@@ -234,7 +238,11 @@ func (h *handler) updateThread(w http.ResponseWriter, r *http.Request, ws *store
 	if !ok {
 		return
 	}
-	if err := h.store.UpdateDiscussionThread(r.Context(), id, t.ID, body); err != nil {
+	expected, ok := parseIfMatch(w, r)
+	if !ok {
+		return
+	}
+	if err := h.store.UpdateDiscussionThreadVersion(r.Context(), id, t.ID, body, expected); err != nil {
 		h.storeError(w, err)
 		return
 	}
@@ -302,7 +310,11 @@ func (h *handler) updateReply(w http.ResponseWriter, r *http.Request, ws *store.
 	if !ok {
 		return
 	}
-	if err := h.store.UpdateDiscussionComment(r.Context(), id, c.ThreadID, c.ID, body); err != nil {
+	expected, ok := parseIfMatch(w, r)
+	if !ok {
+		return
+	}
+	if err := h.store.UpdateDiscussionCommentVersion(r.Context(), id, c.ThreadID, c.ID, body, expected); err != nil {
 		h.storeError(w, err)
 		return
 	}

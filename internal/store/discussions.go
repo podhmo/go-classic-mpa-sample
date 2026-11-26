@@ -51,6 +51,7 @@ type Discussion struct {
 	Title       string
 	Body        string
 	CreatedAt   time.Time
+	Version     int64
 	UpdatedAt   time.Time
 	Category    DiscussionCategory
 	Author      *User // nil for an anonymous post
@@ -68,6 +69,7 @@ type DiscussionThread struct {
 	DiscussionID int64
 	IsAnswer     bool
 	Body         string
+	Version      int64
 	CreatedAt    time.Time
 	Author       *User // nil for an anonymous post
 	Comments     []*DiscussionComment
@@ -79,6 +81,7 @@ type DiscussionComment struct {
 	ID        int64
 	ThreadID  int64
 	Body      string
+	Version   int64
 	CreatedAt time.Time
 	Author    *User // nil for an anonymous post
 	Moderation
@@ -90,6 +93,9 @@ type DiscussionInput struct {
 	Body       string
 	CategoryID int64
 	LabelIDs   []int64
+	// ExpectedVersion is 0 for an unconditional update; positive values
+	// make the update conditional on the row still carrying that version.
+	ExpectedVersion int64
 }
 
 // DiscussionListFilter controls ListDiscussions. Zero values apply the
@@ -166,7 +172,7 @@ func (s *Store) ListDiscussions(ctx context.Context, wsID int64, f DiscussionLis
 	}
 	page, perPage := normalizePage(f.Page, f.PerPage)
 
-	q := `SELECT d.id, d.workspace_id, d.title, d.body, d.created_at, d.updated_at,
+	q := `SELECT d.id, d.workspace_id, d.title, d.body, d.created_at, d.updated_at, d.version,
 		c.id, c.name, c.slug, c.description, c.format,
 		u.id, u.name, u.created_at,
 		` + discussionAnsweredCond + `
@@ -211,7 +217,7 @@ const discussionAnsweredCond = `EXISTS (
 // compare Discussion.WorkspaceID against their context.
 func (s *Store) GetDiscussion(ctx context.Context, id int64) (*Discussion, error) {
 	d, err := scanDiscussion(s.db.QueryRowContext(ctx,
-		`SELECT d.id, d.workspace_id, d.title, d.body, d.created_at, d.updated_at,
+		`SELECT d.id, d.workspace_id, d.title, d.body, d.created_at, d.updated_at, d.version,
 			c.id, c.name, c.slug, c.description, c.format,
 			u.id, u.name, u.created_at,
 			`+discussionAnsweredCond+`
@@ -282,13 +288,22 @@ func (s *Store) UpdateDiscussion(ctx context.Context, id int64, in DiscussionInp
 	if err != nil {
 		return err
 	}
-	res, err := tx.ExecContext(ctx,
-		"UPDATE discussions SET title = ?, body = ?, category_id = ?, updated_at = ? WHERE id = ?",
-		in.Title, in.Body, in.CategoryID, time.Now().UTC().Unix(), id)
+	query := "UPDATE discussions SET title = ?, body = ?, category_id = ?, version = version + 1, updated_at = ? WHERE id = ?"
+	args := []any{in.Title, in.Body, in.CategoryID, time.Now().UTC().Unix(), id}
+	if in.ExpectedVersion > 0 {
+		query += " AND version = ?"
+		args = append(args, in.ExpectedVersion)
+	}
+	res, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}
-	if err := checkAffected(res); err != nil {
+	if in.ExpectedVersion > 0 {
+		if err := checkVersionedAffected(ctx, tx, res,
+			"SELECT version FROM discussions WHERE id = ?", id); err != nil {
+			return err
+		}
+	} else if err := checkAffected(res); err != nil {
 		return err
 	}
 	var wsID int64
@@ -411,7 +426,7 @@ func (s *Store) DeleteDiscussion(ctx context.Context, id int64) error {
 // chronological order, each with its comments (chronological) attached.
 func (s *Store) ListDiscussionThreads(ctx context.Context, discussionID int64) ([]*DiscussionThread, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT t.id, t.discussion_id, t.is_answer, t.body, t.created_at,
+		`SELECT t.id, t.discussion_id, t.is_answer, t.body, t.created_at, t.version,
 			t.edited_at, t.hidden_at, t.hidden_reason,
 			u.id, u.name, u.created_at
 			FROM discussion_threads t LEFT JOIN users u ON u.id = t.author_id
@@ -440,7 +455,7 @@ func (s *Store) ListDiscussionThreads(ctx context.Context, discussionID int64) (
 	}
 
 	replies, err := s.db.QueryContext(ctx,
-		`SELECT c.id, c.thread_id, c.body, c.created_at,
+		`SELECT c.id, c.thread_id, c.body, c.created_at, c.version,
 			c.edited_at, c.hidden_at, c.hidden_reason,
 			u.id, u.name, u.created_at
 			FROM discussion_comments c LEFT JOIN users u ON u.id = c.author_id
@@ -644,7 +659,7 @@ func scanDiscussion(s scanner) (*Discussion, error) {
 	var acreated sql.NullInt64
 	var answered int64
 	if err := s.Scan(&d.ID, &d.WorkspaceID, &d.Title, &d.Body, &c, &u,
-		&d.Category.ID, &d.Category.Name, &d.Category.Slug, &d.Category.Description, &d.Category.Format,
+		&d.Version, &d.Category.ID, &d.Category.Name, &d.Category.Slug, &d.Category.Description, &d.Category.Format,
 		&aid, &aname, &acreated, &answered); err != nil {
 		return nil, err
 	}
@@ -663,7 +678,7 @@ func scanDiscussionThread(s scanner) (*DiscussionThread, error) {
 	var aid sql.NullInt64
 	var aname sql.NullString
 	var acreated sql.NullInt64
-	if err := s.Scan(&t.ID, &t.DiscussionID, &t.IsAnswer, &t.Body, &ts,
+	if err := s.Scan(&t.ID, &t.DiscussionID, &t.IsAnswer, &t.Body, &ts, &t.Version,
 		&ed, &hid, &reason, &aid, &aname, &acreated); err != nil {
 		return nil, err
 	}
@@ -681,7 +696,7 @@ func scanDiscussionComment(s scanner) (*DiscussionComment, error) {
 	var aid sql.NullInt64
 	var aname sql.NullString
 	var acreated sql.NullInt64
-	if err := s.Scan(&c.ID, &c.ThreadID, &c.Body, &ts,
+	if err := s.Scan(&c.ID, &c.ThreadID, &c.Body, &ts, &c.Version,
 		&ed, &hid, &reason, &aid, &aname, &acreated); err != nil {
 		return nil, err
 	}

@@ -19,6 +19,10 @@ import (
 // ErrNotFound is returned when a requested row does not exist.
 var ErrNotFound = errors.New("store: not found")
 
+// ErrVersionConflict reports a conditional update whose expected version
+// no longer matches the stored row.
+var ErrVersionConflict = errors.New("store: version conflict")
+
 // Store wraps the SQLite database handle.
 type Store struct {
 	db *sql.DB
@@ -67,6 +71,7 @@ CREATE TABLE IF NOT EXISTS issues (
 	title TEXT NOT NULL,
 	body TEXT NOT NULL DEFAULT '',
 	status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'closed')),
+	version INTEGER NOT NULL DEFAULT 1,
 	created_at INTEGER NOT NULL,
 	updated_at INTEGER NOT NULL,
 	author_id INTEGER REFERENCES users(id)
@@ -79,6 +84,7 @@ CREATE TABLE IF NOT EXISTS comments (
 	issue_id INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
 	author_id INTEGER REFERENCES users(id),
 	body TEXT NOT NULL,
+	version INTEGER NOT NULL DEFAULT 1,
 	created_at INTEGER NOT NULL,
 	edited_at INTEGER,
 	hidden_at INTEGER,
@@ -94,6 +100,7 @@ CREATE TABLE IF NOT EXISTS labels (
 	kind TEXT NOT NULL CHECK(kind IN ('issue', 'discussion')),
 	name TEXT NOT NULL,
 	color TEXT NOT NULL,
+	version INTEGER NOT NULL DEFAULT 1,
 	archived INTEGER NOT NULL DEFAULT 0
 );
 ` + defaultLabelsDDL + `
@@ -121,6 +128,7 @@ CREATE TABLE IF NOT EXISTS discussions (
 	author_id INTEGER REFERENCES users(id),
 	title TEXT NOT NULL,
 	body TEXT NOT NULL DEFAULT '',
+	version INTEGER NOT NULL DEFAULT 1,
 	created_at INTEGER NOT NULL,
 	updated_at INTEGER NOT NULL
 );
@@ -130,6 +138,7 @@ CREATE TABLE IF NOT EXISTS discussion_threads (
 	author_id INTEGER REFERENCES users(id),
 	is_answer INTEGER NOT NULL DEFAULT 0,
 	body TEXT NOT NULL,
+	version INTEGER NOT NULL DEFAULT 1,
 	created_at INTEGER NOT NULL,
 	edited_at INTEGER,
 	hidden_at INTEGER,
@@ -140,6 +149,7 @@ CREATE TABLE IF NOT EXISTS discussion_comments (
 	thread_id INTEGER NOT NULL REFERENCES discussion_threads(id) ON DELETE CASCADE,
 	author_id INTEGER REFERENCES users(id),
 	body TEXT NOT NULL,
+	version INTEGER NOT NULL DEFAULT 1,
 	created_at INTEGER NOT NULL,
 	edited_at INTEGER,
 	hidden_at INTEGER,
@@ -201,6 +211,7 @@ var migrations = []func(ctx context.Context, tx *sql.Tx) error{
 	migrateV3, // labels gain workspace_id/kind/archived + discussion_labels
 	migrateV4, // comment-moderation columns on the three post tables
 	migrateV5, // pull_requests + pr_comments
+	migrateV6, // optimistic-concurrency version columns
 }
 
 // schemaVersion is the user_version a fully migrated database reports.
@@ -367,6 +378,7 @@ CREATE TABLE IF NOT EXISTS pull_requests (
 	title TEXT NOT NULL,
 	body TEXT NOT NULL DEFAULT '',
 	status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','closed','merged')),
+	version INTEGER NOT NULL DEFAULT 1,
 	author_id INTEGER REFERENCES users(id),
 	base_sha TEXT,                         -- resolved at create time (display)
 	head_sha TEXT,                         -- resolved at close/merge time
@@ -392,6 +404,7 @@ CREATE TABLE IF NOT EXISTS pr_comments (
 	anchor_sha TEXT,                       -- commit whose blob the line refers to
 	diff_snippet TEXT,                     -- surrounding lines captured at post time
 	body TEXT NOT NULL,
+	version INTEGER NOT NULL DEFAULT 1,
 	author_id INTEGER REFERENCES users(id),
 	edited_at INTEGER,
 	hidden_at INTEGER,
@@ -408,6 +421,39 @@ CREATE INDEX IF NOT EXISTS idx_pr_comments_pr ON pr_comments(pr_id, created_at);
 func migrateV5(ctx context.Context, tx *sql.Tx) error {
 	_, err := tx.ExecContext(ctx, pullsDDL)
 	return err
+}
+
+// migrateV6 adds optimistic-concurrency versions to mutable content rows.
+// The guards mirror migrateV4: a fresh schema already carries the columns,
+// while an older database receives them with version 1 for existing rows.
+func migrateV6(ctx context.Context, tx *sql.Tx) error {
+	for _, table := range []string{
+		"issues", "comments", "labels", "discussions", "discussion_threads",
+		"discussion_comments", "pull_requests", "pr_comments",
+	} {
+		var n int
+		if err := tx.QueryRowContext(ctx, fmt.Sprintf(
+			"SELECT COUNT(*) FROM pragma_table_info('%s') WHERE name = 'version'", table)).Scan(&n); err != nil {
+			return err
+		}
+		if n > 0 {
+			continue
+		}
+		// Focused migration tests rebuild only the table under test; a real
+		// database reaches v6 with every content table present.
+		var exists int
+		if err := tx.QueryRowContext(ctx,
+			"SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?", table).Scan(&exists); err != nil {
+			return err
+		}
+		if exists == 0 {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, "ALTER TABLE "+table+" ADD COLUMN version INTEGER NOT NULL DEFAULT 1"); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // migrateWithFKOff runs one migration on a dedicated connection with
@@ -590,6 +636,27 @@ func nullID(id int64) any {
 		return nil
 	}
 	return id
+}
+
+// checkVersionedAffected distinguishes a version mismatch from a missing
+// row after a conditional UPDATE. existsQuery must select the row's current
+// version with the same identity predicates as the UPDATE.
+func checkVersionedAffected(ctx context.Context, tx *sql.Tx, res sql.Result, existsQuery string, args ...any) error {
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	var version int64
+	if err := tx.QueryRowContext(ctx, existsQuery, args...).Scan(&version); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return err
+	}
+	return ErrVersionConflict
 }
 
 func checkAffected(res sql.Result) error {

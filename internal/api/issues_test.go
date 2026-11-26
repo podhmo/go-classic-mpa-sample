@@ -245,3 +245,39 @@ func TestIssueLabelsMultiNamePrefersWorkspaceLabel(t *testing.T) {
 		t.Fatalf("label ids = %v, want workspace bug %d and other %d, not shared %d", gotIDs, ownID, otherID, sharedID)
 	}
 }
+
+func TestUpdateIssueIfMatch(t *testing.T) {
+	srv, _ := newServer(t)
+	id := createIssue(t, srv, `{"title":"first","body":"hello"}`)
+	path := fmt.Sprintf("/api/v1/w/default/issues/%d", id)
+
+	req, err := http.NewRequest("PATCH", srv.URL+path, strings.NewReader(`{"title":"stale"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+testToken)
+	req.Header.Set("If-Match", `"99"`)
+	resp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusPreconditionFailed {
+		t.Fatalf("stale If-Match status = %d, want 412", resp.StatusCode)
+	}
+
+	req, err = http.NewRequest("PATCH", srv.URL+path, strings.NewReader(`{"title":"fresh"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+testToken)
+	req.Header.Set("If-Match", `"1"`)
+	resp, err = srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("matching If-Match status = %d, want 200", resp.StatusCode)
+	}
+}

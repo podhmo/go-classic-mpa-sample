@@ -539,3 +539,46 @@ func TestListLabels(t *testing.T) {
 		t.Fatalf("ListLabels ws2 = %d rows, want 4 master labels: %+v", len(ls2), ls2)
 	}
 }
+
+func TestVersionedIssueAndCommentUpdates(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	id, err := s.CreateIssue(ctx, 1, IssueInput{Title: "v"}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issue, err := s.GetIssue(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if issue.Version != 1 {
+		t.Fatalf("initial issue version = %d, want 1", issue.Version)
+	}
+	if err := s.UpdateIssue(ctx, id, IssueInput{Title: "v2", ExpectedVersion: 1}); err != nil {
+		t.Fatalf("matching update: %v", err)
+	}
+	issue, _ = s.GetIssue(ctx, id)
+	if issue.Version != 2 {
+		t.Fatalf("updated issue version = %d, want 2", issue.Version)
+	}
+	if err := s.UpdateIssue(ctx, id, IssueInput{Title: "stale", ExpectedVersion: 1}); !errors.Is(err, ErrVersionConflict) {
+		t.Fatalf("stale update err = %v, want ErrVersionConflict", err)
+	}
+	cid, err := s.CreateComment(ctx, id, "body", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpdateCommentVersion(ctx, id, cid, "edited", 1); err != nil {
+		t.Fatalf("matching comment update: %v", err)
+	}
+	if err := s.UpdateCommentVersion(ctx, id, cid, "stale", 1); !errors.Is(err, ErrVersionConflict) {
+		t.Fatalf("stale comment update err = %v, want ErrVersionConflict", err)
+	}
+	comment, err := s.GetComment(ctx, id, cid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if comment.Version != 2 || comment.Body != "edited" {
+		t.Fatalf("comment = version %d body %q, want version 2 edited", comment.Version, comment.Body)
+	}
+}

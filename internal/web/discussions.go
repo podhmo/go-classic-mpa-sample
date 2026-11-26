@@ -279,10 +279,11 @@ func (h *handler) editDiscussion(w http.ResponseWriter, r *http.Request, ws *sto
 		return
 	}
 	in := store.DiscussionInput{
-		Title:      discussion.Title,
-		Body:       discussion.Body,
-		CategoryID: discussion.Category.ID,
-		LabelIDs:   make([]int64, 0, len(discussion.Labels)),
+		Title:           discussion.Title,
+		Body:            discussion.Body,
+		CategoryID:      discussion.Category.ID,
+		LabelIDs:        make([]int64, 0, len(discussion.Labels)),
+		ExpectedVersion: discussion.Version,
 	}
 	for _, l := range discussion.Labels {
 		in.LabelIDs = append(in.LabelIDs, l.ID)
@@ -620,6 +621,10 @@ func (h *handler) discussionError(w http.ResponseWriter, r *http.Request, err er
 		h.notFound(w, r)
 		return
 	}
+	if errors.Is(err, store.ErrVersionConflict) {
+		h.versionConflict(w, r)
+		return
+	}
 	h.internalError(w, r, err)
 }
 
@@ -646,8 +651,9 @@ func discussionURL(ws *store.Workspace, id int64) string {
 // problems — the caller must have parsed the form already.
 func (h *handler) validateDiscussionInput(_ http.ResponseWriter, r *http.Request) (*store.DiscussionInput, *discussionFormErrors) {
 	in := store.DiscussionInput{
-		Title: strings.TrimSpace(r.PostFormValue("title")),
-		Body:  strings.TrimSpace(r.PostFormValue("body")),
+		Title:           strings.TrimSpace(r.PostFormValue("title")),
+		Body:            strings.TrimSpace(r.PostFormValue("body")),
+		ExpectedVersion: formVersion(r),
 	}
 	if v := r.PostFormValue("category_id"); v != "" {
 		if id, err := strconv.ParseInt(v, 10, 64); err == nil && id > 0 {

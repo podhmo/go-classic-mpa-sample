@@ -116,9 +116,9 @@ func (c *Client) CreatePullRequest(ctx context.Context, in store.PRInput, _ int6
 }
 
 func (c *Client) UpdatePullRequest(ctx context.Context, id int64, in store.PRInput) error {
-	return c.do(ctx, "PATCH", "/pulls/"+fmt.Sprint(id), map[string]any{
+	return c.doWithOptions(ctx, "PATCH", "/pulls/"+fmt.Sprint(id), map[string]any{
 		"title": in.Title, "body": in.Body,
-	}, nil)
+	}, nil, requestOptions{ifMatch: in.ExpectedVersion})
 }
 
 func (c *Client) DeletePullRequest(ctx context.Context, id int64) error {
@@ -182,8 +182,12 @@ func (c *Client) CreatePRComment(ctx context.Context, prID int64, in store.PRCom
 }
 
 func (c *Client) UpdatePRComment(ctx context.Context, prID, commentID int64, body string) error {
-	return c.do(ctx, "PATCH", fmt.Sprintf("/pulls/%d/comments/%d", prID, commentID),
-		map[string]any{"body": body}, nil)
+	return c.UpdatePRCommentVersion(ctx, prID, commentID, body, 0)
+}
+
+func (c *Client) UpdatePRCommentVersion(ctx context.Context, prID, commentID int64, body string, expectedVersion int64) error {
+	return c.doWithOptions(ctx, "PATCH", fmt.Sprintf("/pulls/%d/comments/%d", prID, commentID),
+		map[string]any{"body": body}, nil, requestOptions{ifMatch: expectedVersion})
 }
 
 func (c *Client) DeletePRComment(ctx context.Context, prID, commentID int64) error {
@@ -255,7 +259,7 @@ func (c *Client) getTextWithHeaders(ctx context.Context, path string) (string, h
 
 func pullRequestFromDTO(p api.PullRequest) *store.PullRequest {
 	pr := &store.PullRequest{
-		ID: p.ID, Title: p.Title, Body: p.Body, Status: p.Status,
+		ID: p.ID, Version: p.Version, Title: p.Title, Body: p.Body, Status: p.Status,
 		BaseRef: p.Base, HeadRef: p.Head, HeadSHA: p.HeadSHA,
 		MergeSHA: p.MergeSHA, MergeMethod: p.MergeMethod,
 		Author: userFromDTO(p.Author),
@@ -276,7 +280,7 @@ func pullRequestFromDTO(p api.PullRequest) *store.PullRequest {
 
 func prCommentFromDTO(c api.PRComment, prID int64) *store.PRComment {
 	out := &store.PRComment{
-		ID: c.ID, PRID: prID, Body: c.Body,
+		ID: c.ID, Version: c.Version, PRID: prID, Body: c.Body,
 		Path: c.Path, Line: c.Line, Side: c.Side,
 		AnchorSHA: c.AnchorSHA, DiffSnippet: c.DiffSnippet,
 		Author:     userFromDTO(c.Author),

@@ -349,6 +349,8 @@ func (h *handler) pullError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		h.notFound(w, r)
+	case errors.Is(err, store.ErrVersionConflict):
+		h.versionConflict(w, r)
 	case errors.Is(err, store.ErrInvalidPRTransition):
 		h.renderError(w, r, http.StatusConflict, msgFor(r).ErrPRTransitionH,
 			msgFor(r).ErrPRTransitionM)
@@ -665,7 +667,7 @@ func (h *handler) editPullForm(w http.ResponseWriter, r *http.Request) {
 		Action:    fmt.Sprintf("/pulls/%d/edit", pr.ID),
 		Section:   "pulls",
 		PR:        pr,
-		Input:     store.PRInput{Title: pr.Title, Body: pr.Body},
+		Input:     store.PRInput{Title: pr.Title, Body: pr.Body, ExpectedVersion: pr.Version},
 		Workspace: h.navWorkspace(r),
 		User:      userFromContext(r.Context()),
 	}, localeFromContext(r.Context()))
@@ -682,10 +684,11 @@ func (h *handler) updatePull(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in := store.PRInput{
-		BaseRef: pr.BaseRef,
-		HeadRef: pr.HeadRef,
-		Title:   strings.TrimSpace(r.PostFormValue("title")),
-		Body:    strings.TrimSpace(r.PostFormValue("body")),
+		BaseRef:         pr.BaseRef,
+		HeadRef:         pr.HeadRef,
+		Title:           strings.TrimSpace(r.PostFormValue("title")),
+		Body:            strings.TrimSpace(r.PostFormValue("body")),
+		ExpectedVersion: formVersion(r),
 	}
 	if fe := store.ValidatePullRequestInput(in); len(fe) > 0 {
 		lang := localeFromContext(r.Context())
@@ -992,6 +995,7 @@ func (h *handler) editPRCommentForm(w http.ResponseWriter, r *http.Request) {
 		Action:    fmt.Sprintf("/pulls/%d/comments/%d/edit", pr.ID, c.ID),
 		CancelURL: fmt.Sprintf("/pulls/%d#comment-%d", pr.ID, c.ID),
 		Body:      c.Body,
+		Version:   c.Version,
 		Section:   "pulls",
 		Workspace: h.navWorkspace(r),
 		User:      userFromContext(r.Context()),
@@ -1017,6 +1021,7 @@ func (h *handler) updatePRComment(w http.ResponseWriter, r *http.Request) {
 			Action:    fmt.Sprintf("/pulls/%d/comments/%d/edit", pr.ID, c.ID),
 			CancelURL: cancelURL,
 			Body:      body,
+			Version:   formVersion(r),
 			Error:     fieldErrText(localeFromContext(r.Context()), "body", fe),
 			Section:   "pulls",
 			Workspace: h.navWorkspace(r),
@@ -1025,7 +1030,7 @@ func (h *handler) updatePRComment(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
-	if err := h.store.UpdatePRComment(r.Context(), pr.ID, c.ID, body); err != nil {
+	if err := h.store.UpdatePRCommentVersion(r.Context(), pr.ID, c.ID, body, formVersion(r)); err != nil {
 		h.pullError(w, r, err)
 		return
 	}

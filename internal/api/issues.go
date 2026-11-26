@@ -158,7 +158,11 @@ func (h *handler) updateIssue(w http.ResponseWriter, r *http.Request, ws *store.
 	if !decodeBody(w, r, &in) {
 		return
 	}
-	patch := store.IssuePatch{}
+	expected, ok := parseIfMatch(w, r)
+	if !ok {
+		return
+	}
+	patch := store.IssuePatch{ExpectedVersion: expected}
 	validation := store.IssueInput{Title: "x"}
 	if in.Title != nil {
 		title := strings.TrimSpace(*in.Title)
@@ -307,6 +311,7 @@ func deref(s *string) string {
 
 type Label struct {
 	ID          int64  `json:"id"`
+	Version     int64  `json:"version"`
 	Name        string `json:"name"`
 	Color       string `json:"color"`
 	Kind        string `json:"kind"`
@@ -316,6 +321,7 @@ type Label struct {
 
 type Issue struct {
 	ID        int64   `json:"id"`
+	Version   int64   `json:"version"`
 	Title     string  `json:"title"`
 	Body      string  `json:"body"`
 	Status    string  `json:"status"`
@@ -327,6 +333,7 @@ type Issue struct {
 
 type Comment struct {
 	ID        int64  `json:"id"`
+	Version   int64  `json:"version"`
 	Body      string `json:"body"`
 	Author    *User  `json:"author"`
 	CreatedAt string `json:"created_at"`
@@ -334,7 +341,7 @@ type Comment struct {
 }
 
 func labelDTO(l store.Label) Label {
-	out := Label{ID: l.ID, Name: l.Name, Color: l.Color, Kind: l.Kind, Archived: l.Archived}
+	out := Label{ID: l.ID, Version: l.Version, Name: l.Name, Color: l.Color, Kind: l.Kind, Archived: l.Archived}
 	if l.WorkspaceID != 0 {
 		id := l.WorkspaceID
 		out.WorkspaceID = &id
@@ -344,7 +351,7 @@ func labelDTO(l store.Label) Label {
 
 func issueDTO(i *store.Issue) Issue {
 	out := Issue{
-		ID: i.ID, Title: i.Title, Body: i.Body, Status: i.Status,
+		ID: i.ID, Version: i.Version, Title: i.Title, Body: i.Body, Status: i.Status,
 		Author: userDTO(i.Author), CreatedAt: fmtTime(i.CreatedAt), UpdatedAt: fmtTime(i.UpdatedAt),
 		Labels: []Label{},
 	}
@@ -356,7 +363,7 @@ func issueDTO(i *store.Issue) Issue {
 
 func commentDTO(c *store.Comment) Comment {
 	return Comment{
-		ID: c.ID, Body: c.Body, Author: userDTO(c.Author), CreatedAt: fmtTime(c.CreatedAt),
+		ID: c.ID, Version: c.Version, Body: c.Body, Author: userDTO(c.Author), CreatedAt: fmtTime(c.CreatedAt),
 		Moderation: moderationDTO(c.Moderation),
 	}
 }

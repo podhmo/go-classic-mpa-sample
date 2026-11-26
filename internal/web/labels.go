@@ -102,8 +102,9 @@ func (h *handler) createLabel(w http.ResponseWriter, r *http.Request, ws *store.
 		return
 	}
 	in := store.LabelInput{
-		Name:  strings.TrimSpace(r.PostFormValue("name")),
-		Color: strings.TrimSpace(r.PostFormValue("color")),
+		Name:            strings.TrimSpace(r.PostFormValue("name")),
+		Color:           strings.TrimSpace(r.PostFormValue("color")),
+		ExpectedVersion: formVersion(r),
 	}
 	kind := r.PostFormValue("kind")
 	scope := r.PostFormValue("scope")
@@ -173,7 +174,7 @@ func (h *handler) editLabel(w http.ResponseWriter, r *http.Request, ws *store.Wo
 		Heading:   fmt.Sprintf(msgFor(r).EditLabel, l.Name),
 		Action:    fmt.Sprintf("/w/%s/labels/%d/edit", ws.Slug, id),
 		Label:     l,
-		Input:     store.LabelInput{Name: l.Name, Color: l.Color},
+		Input:     store.LabelInput{Name: l.Name, Color: l.Color, ExpectedVersion: l.Version},
 		Section:   "labels",
 		Workspace: ws,
 		User:      userFromContext(r.Context()),

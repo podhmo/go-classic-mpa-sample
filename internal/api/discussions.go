@@ -162,7 +162,11 @@ func (h *handler) updateDiscussion(w http.ResponseWriter, r *http.Request, ws *s
 	if !h.requireScope(w, ws, d.WorkspaceID) {
 		return
 	}
-	input := store.DiscussionInput{Title: d.Title, Body: d.Body, CategoryID: d.Category.ID}
+	expected, ok := parseIfMatch(w, r)
+	if !ok {
+		return
+	}
+	input := store.DiscussionInput{Title: d.Title, Body: d.Body, CategoryID: d.Category.ID, ExpectedVersion: expected}
 	for _, l := range d.Labels {
 		input.LabelIDs = append(input.LabelIDs, l.ID)
 	}
@@ -408,6 +412,7 @@ type DiscussionCategory struct {
 
 type Discussion struct {
 	ID        int64              `json:"id"`
+	Version   int64              `json:"version"`
 	Title     string             `json:"title"`
 	Body      string             `json:"body"`
 	Category  DiscussionCategory `json:"category"`
@@ -420,6 +425,7 @@ type Discussion struct {
 
 type DiscussionThread struct {
 	ID        int64               `json:"id"`
+	Version   int64               `json:"version"`
 	IsAnswer  bool                `json:"is_answer"`
 	Body      string              `json:"body"`
 	Author    *User               `json:"author"`
@@ -430,6 +436,7 @@ type DiscussionThread struct {
 
 type DiscussionComment struct {
 	ID        int64  `json:"id"`
+	Version   int64  `json:"version"`
 	Body      string `json:"body"`
 	Author    *User  `json:"author"`
 	CreatedAt string `json:"created_at"`
@@ -442,7 +449,7 @@ func categoryDTO(c store.DiscussionCategory) DiscussionCategory {
 
 func discussionDTO(d *store.Discussion) Discussion {
 	out := Discussion{
-		ID: d.ID, Title: d.Title, Body: d.Body, Category: categoryDTO(d.Category),
+		ID: d.ID, Version: d.Version, Title: d.Title, Body: d.Body, Category: categoryDTO(d.Category),
 		Author: userDTO(d.Author), Answered: d.Answered,
 		CreatedAt: fmtTime(d.CreatedAt), UpdatedAt: fmtTime(d.UpdatedAt),
 		Labels: []Label{},
@@ -455,7 +462,7 @@ func discussionDTO(d *store.Discussion) Discussion {
 
 func discussionThreadDTO(t *store.DiscussionThread) DiscussionThread {
 	out := DiscussionThread{
-		ID: t.ID, IsAnswer: t.IsAnswer, Body: t.Body,
+		ID: t.ID, Version: t.Version, IsAnswer: t.IsAnswer, Body: t.Body,
 		Author: userDTO(t.Author), CreatedAt: fmtTime(t.CreatedAt),
 		Moderation: moderationDTO(t.Moderation),
 	}
@@ -467,7 +474,7 @@ func discussionThreadDTO(t *store.DiscussionThread) DiscussionThread {
 
 func discussionCommentDTO(c *store.DiscussionComment) DiscussionComment {
 	return DiscussionComment{
-		ID: c.ID, Body: c.Body,
+		ID: c.ID, Version: c.Version, Body: c.Body,
 		Author: userDTO(c.Author), CreatedAt: fmtTime(c.CreatedAt),
 		Moderation: moderationDTO(c.Moderation),
 	}

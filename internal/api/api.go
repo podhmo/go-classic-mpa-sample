@@ -39,6 +39,7 @@ type Store interface {
 	GetComment(ctx context.Context, issueID, commentID int64) (*store.Comment, error)
 	CreateComment(ctx context.Context, issueID int64, body string, authorID int64) (int64, error)
 	UpdateComment(ctx context.Context, issueID, commentID int64, body string) error
+	UpdateCommentVersion(ctx context.Context, issueID, commentID int64, body string, expectedVersion int64) error
 	DeleteComment(ctx context.Context, issueID, commentID int64) error
 	SetCommentHidden(ctx context.Context, issueID, commentID int64, reason string) error
 	ListLabels(ctx context.Context, wsID int64, kind string) ([]*store.Label, error)
@@ -57,9 +58,11 @@ type Store interface {
 	CreateDiscussionComment(ctx context.Context, discussionID, threadID int64, body string, authorID int64) (int64, error)
 	SetThreadAnswer(ctx context.Context, discussionID, threadID int64, answer bool) error
 	UpdateDiscussionThread(ctx context.Context, discussionID, threadID int64, body string) error
+	UpdateDiscussionThreadVersion(ctx context.Context, discussionID, threadID int64, body string, expectedVersion int64) error
 	DeleteDiscussionThread(ctx context.Context, discussionID, threadID int64) error
 	SetDiscussionThreadHidden(ctx context.Context, discussionID, threadID int64, reason string) error
 	UpdateDiscussionComment(ctx context.Context, discussionID, threadID, commentID int64, body string) error
+	UpdateDiscussionCommentVersion(ctx context.Context, discussionID, threadID, commentID int64, body string, expectedVersion int64) error
 	DeleteDiscussionComment(ctx context.Context, discussionID, threadID, commentID int64) error
 	SetDiscussionCommentHidden(ctx context.Context, discussionID, threadID, commentID int64, reason string) error
 	ListDiscussionCategories(ctx context.Context) ([]*store.DiscussionCategory, error)
@@ -84,6 +87,7 @@ type Store interface {
 	GetPRComment(ctx context.Context, prID, commentID int64) (*store.PRComment, error)
 	CreatePRComment(ctx context.Context, prID int64, in store.PRCommentInput, authorID int64) (int64, error)
 	UpdatePRComment(ctx context.Context, prID, commentID int64, body string) error
+	UpdatePRCommentVersion(ctx context.Context, prID, commentID int64, body string, expectedVersion int64) error
 	DeletePRComment(ctx context.Context, prID, commentID int64) error
 	SetPRCommentHidden(ctx context.Context, prID, commentID int64, reason string) error
 }
@@ -327,6 +331,27 @@ func (h *handler) pathID(w http.ResponseWriter, r *http.Request, name string) (i
 	return id, true
 }
 
+// parseIfMatch reads the optional update precondition. The API exposes
+// versions as strong integer entity tags; absent or "*" means
+// unconditional. Weak or malformed tags are rejected rather than silently
+// downgraded to an unconditional write.
+func parseIfMatch(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	h := strings.TrimSpace(r.Header.Get("If-Match"))
+	if h == "" || h == "*" {
+		return 0, true
+	}
+	if strings.Contains(h, ",") || strings.HasPrefix(h, "W/") || len(h) < 2 || h[0] != '"' || h[len(h)-1] != '"' {
+		writeError(w, http.StatusBadRequest, "If-Match must be one strong version tag.", nil)
+		return 0, false
+	}
+	v, err := strconv.ParseInt(h[1:len(h)-1], 10, 64)
+	if err != nil || v < 1 {
+		writeError(w, http.StatusBadRequest, "If-Match must be one strong version tag.", nil)
+		return 0, false
+	}
+	return v, true
+}
+
 // queryInt reads a positive int query parameter with a default.
 func queryInt(r *http.Request, name string, def int) int {
 	if v, err := strconv.Atoi(r.URL.Query().Get(name)); err == nil && v > 0 {
@@ -371,6 +396,8 @@ func (h *handler) storeError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		writeError(w, http.StatusNotFound, "Not found.", nil)
+	case errors.Is(err, store.ErrVersionConflict):
+		writeError(w, http.StatusPreconditionFailed, "Version conflict.", nil)
 	case errors.Is(err, store.ErrDuplicateSlug):
 		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", map[string]string{"slug": "This slug is already taken."})
 	case errors.Is(err, store.ErrLastWorkspace):

@@ -102,9 +102,9 @@ func (c *Client) UpdateDiscussion(ctx context.Context, id int64, in store.Discus
 		// Same nil-means-clear convention as UpdateIssue.
 		labelIDs = []int64{}
 	}
-	return c.doWorkspaceRecordEndpoint(ctx, "PATCH", c.wsPath("discussions/")+fmt.Sprint(id), map[string]any{
+	return c.doVersionedWorkspaceRecordEndpoint(ctx, "PATCH", c.wsPath("discussions/")+fmt.Sprint(id), map[string]any{
 		"title": in.Title, "body": in.Body, "category_id": in.CategoryID, "label_ids": labelIDs,
-	}, nil)
+	}, nil, in.ExpectedVersion)
 }
 
 func (c *Client) DeleteDiscussion(ctx context.Context, id int64) error {
@@ -144,9 +144,13 @@ func (c *Client) SetThreadAnswer(ctx context.Context, discussionID, threadID int
 
 // UpdateDiscussionThread PATCHes the thread's body (the opening post).
 func (c *Client) UpdateDiscussionThread(ctx context.Context, discussionID, threadID int64, body string) error {
-	return c.doWorkspaceRecordEndpoint(ctx, "PATCH",
+	return c.UpdateDiscussionThreadVersion(ctx, discussionID, threadID, body, 0)
+}
+
+func (c *Client) UpdateDiscussionThreadVersion(ctx context.Context, discussionID, threadID int64, body string, expectedVersion int64) error {
+	return c.doVersionedWorkspaceRecordEndpoint(ctx, "PATCH",
 		c.wsPath("discussions/")+fmt.Sprint(discussionID)+"/threads/"+fmt.Sprint(threadID),
-		map[string]any{"body": body}, nil)
+		map[string]any{"body": body}, nil, expectedVersion)
 }
 
 // DeleteDiscussionThread removes the thread and its replies.
@@ -171,9 +175,13 @@ func (c *Client) SetDiscussionThreadHidden(ctx context.Context, discussionID, th
 
 // UpdateDiscussionComment PATCHes a reply's body.
 func (c *Client) UpdateDiscussionComment(ctx context.Context, discussionID, threadID, commentID int64, body string) error {
-	return c.doWorkspaceRecordEndpoint(ctx, "PATCH",
+	return c.UpdateDiscussionCommentVersion(ctx, discussionID, threadID, commentID, body, 0)
+}
+
+func (c *Client) UpdateDiscussionCommentVersion(ctx context.Context, discussionID, threadID, commentID int64, body string, expectedVersion int64) error {
+	return c.doVersionedWorkspaceRecordEndpoint(ctx, "PATCH",
 		c.wsPath("discussions/")+fmt.Sprint(discussionID)+"/threads/"+fmt.Sprint(threadID)+"/comments/"+fmt.Sprint(commentID),
-		map[string]any{"body": body}, nil)
+		map[string]any{"body": body}, nil, expectedVersion)
 }
 
 // DeleteDiscussionComment removes a reply.
@@ -217,7 +225,7 @@ func (c *Client) ListDiscussionCategories(ctx context.Context) ([]*store.Discuss
 
 func discussionFromDTO(d api.Discussion) *store.Discussion {
 	out := &store.Discussion{
-		ID: d.ID, Title: d.Title, Body: d.Body,
+		ID: d.ID, Version: d.Version, Title: d.Title, Body: d.Body,
 		Category:  categoryFromDTO(d.Category),
 		Author:    userFromDTO(d.Author),
 		Answered:  d.Answered,
@@ -231,7 +239,7 @@ func discussionFromDTO(d api.Discussion) *store.Discussion {
 
 func discussionThreadFromDTO(t api.DiscussionThread, discussionID int64) *store.DiscussionThread {
 	out := &store.DiscussionThread{
-		ID: t.ID, DiscussionID: discussionID,
+		ID: t.ID, Version: t.Version, DiscussionID: discussionID,
 		IsAnswer: t.IsAnswer, Body: t.Body,
 		Author:     userFromDTO(t.Author),
 		CreatedAt:  parseTime(t.CreatedAt),
@@ -245,7 +253,7 @@ func discussionThreadFromDTO(t api.DiscussionThread, discussionID int64) *store.
 
 func discussionCommentFromDTO(c api.DiscussionComment, threadID int64) *store.DiscussionComment {
 	return &store.DiscussionComment{
-		ID: c.ID, ThreadID: threadID, Body: c.Body,
+		ID: c.ID, Version: c.Version, ThreadID: threadID, Body: c.Body,
 		Author:     userFromDTO(c.Author),
 		CreatedAt:  parseTime(c.CreatedAt),
 		Moderation: moderationFromDTO(c.Hidden, c.HiddenReason, c.EditedAt),

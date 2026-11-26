@@ -256,6 +256,7 @@ type Store interface {
 	GetComment(ctx context.Context, issueID, commentID int64) (*store.Comment, error)
 	CreateComment(ctx context.Context, issueID int64, body string, authorID int64) (int64, error)
 	UpdateComment(ctx context.Context, issueID, commentID int64, body string) error
+	UpdateCommentVersion(ctx context.Context, issueID, commentID int64, body string, expectedVersion int64) error
 	DeleteComment(ctx context.Context, issueID, commentID int64) error
 	SetCommentHidden(ctx context.Context, issueID, commentID int64, reason string) error
 	ListLabels(ctx context.Context, wsID int64, kind string) ([]*store.Label, error)
@@ -275,9 +276,11 @@ type Store interface {
 	CreateDiscussionComment(ctx context.Context, discussionID, threadID int64, body string, authorID int64) (int64, error)
 	SetThreadAnswer(ctx context.Context, discussionID, threadID int64, answer bool) error
 	UpdateDiscussionThread(ctx context.Context, discussionID, threadID int64, body string) error
+	UpdateDiscussionThreadVersion(ctx context.Context, discussionID, threadID int64, body string, expectedVersion int64) error
 	DeleteDiscussionThread(ctx context.Context, discussionID, threadID int64) error
 	SetDiscussionThreadHidden(ctx context.Context, discussionID, threadID int64, reason string) error
 	UpdateDiscussionComment(ctx context.Context, discussionID, threadID, commentID int64, body string) error
+	UpdateDiscussionCommentVersion(ctx context.Context, discussionID, threadID, commentID int64, body string, expectedVersion int64) error
 	DeleteDiscussionComment(ctx context.Context, discussionID, threadID, commentID int64) error
 	SetDiscussionCommentHidden(ctx context.Context, discussionID, threadID, commentID int64, reason string) error
 	ListDiscussionCategories(ctx context.Context) ([]*store.DiscussionCategory, error)
@@ -307,6 +310,7 @@ type Store interface {
 	GetPRComment(ctx context.Context, prID, commentID int64) (*store.PRComment, error)
 	CreatePRComment(ctx context.Context, prID int64, in store.PRCommentInput, authorID int64) (int64, error)
 	UpdatePRComment(ctx context.Context, prID, commentID int64, body string) error
+	UpdatePRCommentVersion(ctx context.Context, prID, commentID int64, body string, expectedVersion int64) error
 	DeletePRComment(ctx context.Context, prID, commentID int64) error
 	SetPRCommentHidden(ctx context.Context, prID, commentID int64, reason string) error
 }
@@ -807,6 +811,23 @@ func (h *handler) internalError(w http.ResponseWriter, r *http.Request, err erro
 	log.Printf("web: %s %s: %v", r.Method, r.URL.Path, err)
 	msg := msgFor(r)
 	h.renderError(w, r, http.StatusInternalServerError, msg.ErrInternalH, msg.ErrInternalM)
+}
+
+// formVersion reads the hidden optimistic-concurrency token. Empty means
+// an unconditional update, matching the API's absent If-Match; malformed
+// values are treated as absent because they can only come from a crafted
+// form post, while normal browsers submit the server-rendered value.
+func formVersion(r *http.Request) int64 {
+	v, _ := strconv.ParseInt(r.PostFormValue("version"), 10, 64)
+	if v < 1 {
+		return 0
+	}
+	return v
+}
+
+func (h *handler) versionConflict(w http.ResponseWriter, r *http.Request) {
+	msg := msgFor(r)
+	h.renderError(w, r, http.StatusConflict, msg.ErrVersionConflictH, msg.ErrVersionConflictM)
 }
 
 // parseForm installs a body size cap and parses the submitted form. On

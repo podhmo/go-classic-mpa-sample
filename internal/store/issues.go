@@ -25,6 +25,7 @@ type Issue struct {
 	Title       string
 	Body        string
 	Status      string // StatusOpen or StatusClosed
+	Version     int64
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	Labels      []Label
@@ -36,6 +37,7 @@ type Comment struct {
 	ID        int64
 	IssueID   int64
 	Body      string
+	Version   int64
 	CreatedAt time.Time
 	Author    *User
 	Moderation
@@ -46,6 +48,9 @@ type IssueInput struct {
 	Title    string
 	Body     string
 	LabelIDs []int64
+	// ExpectedVersion is 0 for an unconditional update; positive values
+	// make the update conditional on the row still carrying that version.
+	ExpectedVersion int64
 }
 
 // ListFilter controls ListIssues. Zero values apply the defaults documented
@@ -125,7 +130,7 @@ func (s *Store) ListIssues(ctx context.Context, wsID int64, f ListFilter) ([]*Is
 	}
 	page, perPage := normalizePage(f.Page, f.PerPage)
 
-	q := `SELECT i.id, i.workspace_id, i.title, i.body, i.status, i.created_at, i.updated_at,
+	q := `SELECT i.id, i.workspace_id, i.title, i.body, i.status, i.created_at, i.updated_at, i.version,
 		u.id, u.name, u.created_at
 		FROM issues i LEFT JOIN users u ON u.id = i.author_id` + where +
 		" ORDER BY i.created_at " + dir + ", i.id " + dir + " LIMIT ? OFFSET ?"
@@ -159,7 +164,7 @@ func (s *Store) ListIssues(ctx context.Context, wsID int64, f ListFilter) ([]*Is
 // against their context.
 func (s *Store) GetIssue(ctx context.Context, id int64) (*Issue, error) {
 	i, err := scanIssue(s.db.QueryRowContext(ctx,
-		`SELECT i.id, i.workspace_id, i.title, i.body, i.status, i.created_at, i.updated_at,
+		`SELECT i.id, i.workspace_id, i.title, i.body, i.status, i.created_at, i.updated_at, i.version,
 			u.id, u.name, u.created_at
 			FROM issues i LEFT JOIN users u ON u.id = i.author_id WHERE i.id = ?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -178,7 +183,7 @@ func (s *Store) GetIssue(ctx context.Context, id int64) (*Issue, error) {
 // workspace is the same ErrNotFound as a missing id.
 func (s *Store) GetIssueInWorkspace(ctx context.Context, wsID, id int64) (*Issue, error) {
 	i, err := scanIssue(s.db.QueryRowContext(ctx,
-		`SELECT i.id, i.workspace_id, i.title, i.body, i.status, i.created_at, i.updated_at,
+		`SELECT i.id, i.workspace_id, i.title, i.body, i.status, i.created_at, i.updated_at, i.version,
 			u.id, u.name, u.created_at
 			FROM issues i LEFT JOIN users u ON u.id = i.author_id
 			WHERE i.id = ? AND i.workspace_id = ?`, id, wsID))
@@ -234,13 +239,22 @@ func (s *Store) UpdateIssue(ctx context.Context, id int64, in IssueInput) error 
 	}
 	defer tx.Rollback()
 
-	res, err := tx.ExecContext(ctx,
-		"UPDATE issues SET title = ?, body = ?, updated_at = ? WHERE id = ?",
-		in.Title, in.Body, time.Now().UTC().Unix(), id)
+	query := "UPDATE issues SET title = ?, body = ?, version = version + 1, updated_at = ? WHERE id = ?"
+	args := []any{in.Title, in.Body, time.Now().UTC().Unix(), id}
+	if in.ExpectedVersion > 0 {
+		query += " AND version = ?"
+		args = append(args, in.ExpectedVersion)
+	}
+	res, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}
-	if err := checkAffected(res); err != nil {
+	if in.ExpectedVersion > 0 {
+		if err := checkVersionedAffected(ctx, tx, res,
+			"SELECT version FROM issues WHERE id = ?", id); err != nil {
+			return err
+		}
+	} else if err := checkAffected(res); err != nil {
 		return err
 	}
 	var wsID int64
@@ -264,6 +278,9 @@ type IssuePatch struct {
 	Body      *string
 	LabelIDs  []int64
 	SetLabels bool
+	// ExpectedVersion is 0 for an unconditional update; positive values
+	// make the patch conditional on the row still carrying that version.
+	ExpectedVersion int64
 }
 
 func patchString(p *string) any {
@@ -284,14 +301,24 @@ func (s *Store) PatchIssueInWorkspace(ctx context.Context, wsID, id int64, patch
 	}
 	defer tx.Rollback()
 
-	res, err := tx.ExecContext(ctx,
-		`UPDATE issues SET title = COALESCE(?, title), body = COALESCE(?, body), updated_at = ?
-			WHERE id = ? AND workspace_id = ?`,
-		patchString(patch.Title), patchString(patch.Body), time.Now().UTC().Unix(), id, wsID)
+	query := `UPDATE issues SET title = COALESCE(?, title), body = COALESCE(?, body),
+			version = version + 1, updated_at = ?
+			WHERE id = ? AND workspace_id = ?`
+	args := []any{patchString(patch.Title), patchString(patch.Body), time.Now().UTC().Unix(), id, wsID}
+	if patch.ExpectedVersion > 0 {
+		query += " AND version = ?"
+		args = append(args, patch.ExpectedVersion)
+	}
+	res, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}
-	if err := checkAffected(res); err != nil {
+	if patch.ExpectedVersion > 0 {
+		if err := checkVersionedAffected(ctx, tx, res,
+			"SELECT version FROM issues WHERE id = ? AND workspace_id = ?", id, wsID); err != nil {
+			return err
+		}
+	} else if err := checkAffected(res); err != nil {
 		return err
 	}
 	if patch.SetLabels {
@@ -358,7 +385,7 @@ func (s *Store) DeleteIssue(ctx context.Context, id int64) error {
 // ListComments returns comments for an issue in chronological order.
 func (s *Store) ListComments(ctx context.Context, issueID int64) ([]*Comment, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT c.id, c.issue_id, c.body, c.created_at,
+		`SELECT c.id, c.issue_id, c.body, c.created_at, c.version,
 			c.edited_at, c.hidden_at, c.hidden_reason,
 			u.id, u.name, u.created_at
 			FROM comments c LEFT JOIN users u ON u.id = c.author_id
@@ -383,7 +410,7 @@ func (s *Store) ListComments(ctx context.Context, issueID int64) ([]*Comment, er
 // GetComment returns one comment scoped to its issue, or ErrNotFound.
 func (s *Store) GetComment(ctx context.Context, issueID, commentID int64) (*Comment, error) {
 	c, err := scanComment(s.db.QueryRowContext(ctx,
-		`SELECT c.id, c.issue_id, c.body, c.created_at,
+		`SELECT c.id, c.issue_id, c.body, c.created_at, c.version,
 			c.edited_at, c.hidden_at, c.hidden_reason,
 			u.id, u.name, u.created_at
 			FROM comments c LEFT JOIN users u ON u.id = c.author_id
@@ -501,7 +528,7 @@ func scanIssue(s scanner) (*Issue, error) {
 	var aid sql.NullInt64
 	var aname sql.NullString
 	var acreated sql.NullInt64
-	if err := s.Scan(&i.ID, &i.WorkspaceID, &i.Title, &i.Body, &i.Status, &c, &u, &aid, &aname, &acreated); err != nil {
+	if err := s.Scan(&i.ID, &i.WorkspaceID, &i.Title, &i.Body, &i.Status, &c, &u, &i.Version, &aid, &aname, &acreated); err != nil {
 		return nil, err
 	}
 	i.CreatedAt = time.Unix(c, 0).UTC()
@@ -518,7 +545,7 @@ func scanComment(s scanner) (*Comment, error) {
 	var aid sql.NullInt64
 	var aname sql.NullString
 	var acreated sql.NullInt64
-	if err := s.Scan(&c.ID, &c.IssueID, &c.Body, &ts, &ed, &hid, &reason, &aid, &aname, &acreated); err != nil {
+	if err := s.Scan(&c.ID, &c.IssueID, &c.Body, &ts, &c.Version, &ed, &hid, &reason, &aid, &aname, &acreated); err != nil {
 		return nil, err
 	}
 	c.CreatedAt = time.Unix(ts, 0).UTC()

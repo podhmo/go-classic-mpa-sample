@@ -111,9 +111,9 @@ func (c *Client) UpdateIssue(ctx context.Context, id int64, in store.IssueInput)
 		// agree that nil LabelIDs clears the labels.
 		labelIDs = []int64{}
 	}
-	return c.doWorkspaceRecordEndpoint(ctx, "PATCH", c.wsPath("issues/")+fmt.Sprint(id), map[string]any{
+	return c.doVersionedWorkspaceRecordEndpoint(ctx, "PATCH", c.wsPath("issues/")+fmt.Sprint(id), map[string]any{
 		"title": in.Title, "body": in.Body, "label_ids": labelIDs,
-	}, nil)
+	}, nil, in.ExpectedVersion)
 }
 
 func (c *Client) SetIssueStatus(ctx context.Context, id int64, status string) error {
@@ -139,9 +139,13 @@ func (c *Client) CreateComment(ctx context.Context, issueID int64, body string, 
 
 // UpdateComment PATCHes the comment's body.
 func (c *Client) UpdateComment(ctx context.Context, issueID, commentID int64, body string) error {
-	return c.doWorkspaceRecordEndpoint(ctx, "PATCH",
+	return c.UpdateCommentVersion(ctx, issueID, commentID, body, 0)
+}
+
+func (c *Client) UpdateCommentVersion(ctx context.Context, issueID, commentID int64, body string, expectedVersion int64) error {
+	return c.doVersionedWorkspaceRecordEndpoint(ctx, "PATCH",
 		c.wsPath("issues/")+fmt.Sprint(issueID)+"/comments/"+fmt.Sprint(commentID),
-		map[string]any{"body": body}, nil)
+		map[string]any{"body": body}, nil, expectedVersion)
 }
 
 // DeleteComment removes the comment permanently.
@@ -167,7 +171,7 @@ func (c *Client) SetCommentHidden(ctx context.Context, issueID, commentID int64,
 
 func issueFromDTO(i api.Issue) *store.Issue {
 	out := &store.Issue{
-		ID: i.ID, Title: i.Title, Body: i.Body, Status: i.Status,
+		ID: i.ID, Version: i.Version, Title: i.Title, Body: i.Body, Status: i.Status,
 		Author:    userFromDTO(i.Author),
 		CreatedAt: parseTime(i.CreatedAt), UpdatedAt: parseTime(i.UpdatedAt),
 	}
@@ -179,7 +183,7 @@ func issueFromDTO(i api.Issue) *store.Issue {
 
 func commentFromDTO(c api.Comment, issueID int64) *store.Comment {
 	return &store.Comment{
-		ID: c.ID, IssueID: issueID, Body: c.Body,
+		ID: c.ID, Version: c.Version, IssueID: issueID, Body: c.Body,
 		Author:     userFromDTO(c.Author),
 		CreatedAt:  parseTime(c.CreatedAt),
 		Moderation: moderationFromDTO(c.Hidden, c.HiddenReason, c.EditedAt),
