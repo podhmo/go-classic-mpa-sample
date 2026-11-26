@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -30,17 +31,22 @@ func TestFileDBPragmas(t *testing.T) {
 	t.Cleanup(func() { s.Close() })
 	ctx := context.Background()
 
-	for i := range 10 {
+	// Hold both connections while checking them so the pool cannot reuse the
+	// first connection for the second assertion.
+	conns := make([]*sql.Conn, 0, 2)
+	for range 2 {
 		conn, err := s.db.Conn(ctx)
 		if err != nil {
 			t.Fatalf("Conn: %v", err)
 		}
+		defer conn.Close()
+		conns = append(conns, conn)
+	}
+	for i, conn := range conns {
 		var on int
 		if err := conn.QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&on); err != nil {
-			conn.Close()
 			t.Fatalf("PRAGMA foreign_keys: %v", err)
 		}
-		conn.Close()
 		if on != 1 {
 			t.Fatalf("conn %d: foreign_keys = %d, want 1", i, on)
 		}
