@@ -17,4 +17,11 @@
   };
   sync();
   narrowQuery.addEventListener("change", sync);
+
+  document.addEventListener("focusin", (event) => {
+    if (!menu.open || !narrowQuery.matches) return;
+    if (event.target instanceof Node && !menu.contains(event.target)) {
+      menu.open = false;
+    }
+  });
 })();
