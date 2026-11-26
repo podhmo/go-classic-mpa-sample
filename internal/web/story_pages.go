@@ -429,7 +429,7 @@ func StoryIssueDetailMarkdownRich() {
 | ---- | ----- |
 | one  | 1     |
 
-![placeholder](/static/markdown-fixture.svg)
+![placeholder](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAABaCAIAAACwpMoFAAACCUlEQVR42uzdQY4TMRAFUKaUG3AmNnOjEeuIG7HJUbgBUm4QIRbZoYhJ2nZ3lf3+kkVU9utvupPMzOnX7z9fZN6ELQAsgAWwABbAAlgAAxbAAlgAC2ABLIABC2ABLIBlaeDz5UalY94O/9Ldp6Lfv504lQR+qayYix3Rrx7Fju5KwNu0GNcAbnFinB24XYhxXuBeNozzNlimBe5bOyXWYAEMWAAL4DH3RO6zEgGP+KjAxw+JgAWwABbAchhw33sid1gaLLsD96rd/XXeP6780jW43ZhuauBGY7oFgDcb0y0DvMGY7rYc+bBxN3vyJxvQ1gN+WOXz5fbPv9AteUQ/6U13NuC6uu8f14TThv3qeyFmmzkUt/u0qYYPuo2jPpw2zxKC7qBRkywk6HYsbsLlRK0tK3cVHr6otwx/GKtlF37++GrO1A1uvMZ3q0iVOXMBd1n2DntXZc5ER/SI1Y44BrvPufNZHdPojnjZEXPu3OMDGjx6hV0qUmLIjA0u8f9liSEzNnjn02lbS0oMma7Bh7yPUeKdk9FDxtwbzTim3+ISb4KOmzAWKdCyxrFOb9Y0jqW2ckHj/o9J+Tfx/w8nSebv9fgUC+ouVeVYUHcp4+g1SsWvp69gHKsVt9yl2TherKxbZRUt4wXduY1PaOdeVIpvVcq4+DVKgAWwABbAAlgAC2DAAlhq5O8AQQsNZ/QVgE0AAAAASUVORK5CYII=)
 
 ---
 `
