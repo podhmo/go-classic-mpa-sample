@@ -97,6 +97,31 @@ func TestListPullsOutOfRangePageShowsLastPage(t *testing.T) {
 	}
 }
 
+func TestPullsNavStateIsPerHandler(t *testing.T) {
+	repo := initTestGitRepo(t)
+	f := newFakeStore()
+	withRepo := httptest.NewServer(New(f, WithRepo(repo)))
+	t.Cleanup(withRepo.Close)
+	withoutRepo := httptest.NewServer(New(f))
+	t.Cleanup(withoutRepo.Close)
+
+	resp, err := withRepo.Client().Get(withRepo.URL + "/w/default/issues")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if body := getBody(t, resp); !strings.Contains(body, `<a href="/pulls"`) {
+		t.Error("repo-backed handler should render the pulls nav link")
+	}
+
+	resp, err = withoutRepo.Client().Get(withoutRepo.URL + "/w/default/issues")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if body := getBody(t, resp); strings.Contains(body, `<a href="/pulls"`) {
+		t.Error("repo-less handler should not inherit pulls state from another handler")
+	}
+}
+
 func TestCreatePullInvalidRefRendersUnprocessable(t *testing.T) {
 	repo := initTestGitRepo(t)
 	srv := httptest.NewServer(New(newFakeStore(), WithRepo(repo)))

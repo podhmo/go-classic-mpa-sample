@@ -670,6 +670,7 @@ issue コメント・discussion スレッド（開設ポスト）・返信の3�
 issue tracker に git の pull request 相当を再現する機能。実体は DB の `pull_requests` 行（base_ref/head_ref + 記録済み SHA）で、コミット列・diff・conflict は open 中 git で都度計算する。
 
 - **repo の不在は機能の不在**: `zatudan` は `-repo`/`ZATUDAN_REPO`/`-db` 起点の `.git` 上方探索で解決（`off` で明示無効化）。未検出なら /pulls・/api/v1/pulls*・nav リンク・storybook 登録を全てマウントしない — 404 と機能消失は同じ扱い。解決は起動時1回で、後から現れた repo は再起動まで見えない（-api-token と同じポリシー）。
+- **nav の pulls 表示は Renderer ごとの状態**: repo-backed と repo-less の handler/storybook が同一プロセスに同居しても、layout の nav リンク状態が global variable 経由で漏れないようにする。
 - **pin `refs/zatudan/pr/<id>/head` が履歴保全の役**: open 中は head ref 追従、close/merge 時は記録済み `head_sha` で pin を更新し、アーカイブ済みコミットが gc されないことを保証。pin 失敗は操作自体を中断する。
 - **merge は web/CLI 2経路・同じ gitrepo.Merge**: `merge|squash|rebase` の3メソッド。squash の既定メッセージは `タイトル (#N)`。merge 後の pin は res.HeadSHA を使う（解決と merge の間に head が進みうるため）。
 - **diff 意味論の分割**: コミット列は two-dot `base..head`、files ビューは three-dot（open は merge-base→head の GitHub 同等、closed/merged は記録 SHA で固定）。rename コメントは旧/新パス両方へグルーピングする。
