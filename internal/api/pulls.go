@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 
@@ -694,9 +695,11 @@ func (h *handler) mergePull(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Pin the resolved head so the recorded merge survives head-branch
-	// deletion; the merge is already applied, so a failure degrades to a
-	// stray unprotected commit rather than a false "merge failed".
-	_ = h.repo.UpdatePin(ctx, pr.ID, res.HeadSHA)
+	// deletion. The merge is already applied, so a pin failure degrades to
+	// a stray unprotected commit: keep the merge successful but log it.
+	if err := h.repo.UpdatePin(ctx, pr.ID, res.HeadSHA); err != nil {
+		log.Printf("api: pulls: pin #%d on merge: %v", pr.ID, err)
+	}
 	if err := h.store.MarkMerged(ctx, pr.ID, store.PRMergeInfo{
 		MergeSHA:     res.MergeSHA,
 		MergeMethod:  string(res.Method),

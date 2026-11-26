@@ -624,7 +624,9 @@ func prMerge(ctx context.Context, o Options, args []string) error {
 	if err != nil {
 		return err
 	}
-	_ = repo.UpdatePin(ctx, id, res.HeadSHA)
+	if err := repo.UpdatePin(ctx, id, res.HeadSHA); err != nil {
+		fmt.Fprintf(o.Stderr, "warning: merged but failed to pin head %s for pull request #%d: %v\n", res.HeadSHA, id, err)
+	}
 	if err := b.MarkMerged(ctx, id, store.PRMergeInfo{
 		MergeSHA:     res.MergeSHA,
 		MergeMethod:  string(res.Method),
