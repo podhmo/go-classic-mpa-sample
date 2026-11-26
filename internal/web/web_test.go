@@ -1856,6 +1856,18 @@ func (f *fakeStore) MarkMerged(context.Context, int64, store.PRMergeInfo) error 
 	return store.ErrNotFound
 }
 
+func (f *fakeStore) ReserveMerge(context.Context, int64) (int64, error) {
+	return 1, nil
+}
+
+func (f *fakeStore) ReleaseMerge(context.Context, int64, int64) error {
+	return nil
+}
+
+func (f *fakeStore) MarkMergedWithReservation(ctx context.Context, id int64, info store.PRMergeInfo, token int64) error {
+	return f.MarkMerged(ctx, id, info)
+}
+
 func (f *fakeStore) ListPRComments(context.Context, int64) ([]*store.PRComment, error) {
 	return nil, nil
 }

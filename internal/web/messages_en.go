@@ -333,6 +333,7 @@ var messagesEN = messages{
 	ErrMergeConflict:    "The branches conflict: %s",
 	ErrDirtyWorktree:    "The base branch's worktree is dirty — commit or stash it first.",
 	ErrBaseMoved:        "The base branch moved while merging — try again.",
+	ErrMergeInProgress:  "Another merge of this pull request is already in progress — wait for it to finish.",
 	ErrThreadOnly:       "Comments can only be added to a thread.",
 	ErrDiffCompute:      "The diff could not be computed — the refs may have moved or been deleted.",
 	ErrDeleteLastWsH:    "Cannot delete workspace",

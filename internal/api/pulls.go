@@ -5,12 +5,14 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/podhmo/go-classic-mpa-sample/internal/export"
 	"github.com/podhmo/go-classic-mpa-sample/internal/gitrepo"
@@ -118,6 +120,8 @@ func (h *handler) prStoreError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusNotFound, "Not found.", nil)
 	case errors.Is(err, store.ErrVersionConflict):
 		writeError(w, http.StatusPreconditionFailed, "Version conflict.", nil)
+	case errors.Is(err, store.ErrMergeInProgress):
+		writeError(w, http.StatusConflict, "Another merge is already in progress.", nil)
 	case errors.Is(err, store.ErrDuplicatePR):
 		writeError(w, http.StatusUnprocessableEntity, "An open pull request already exists for this base/head pair.", nil)
 	case errors.Is(err, store.ErrSameRef):
@@ -689,7 +693,21 @@ func (h *handler) mergePull(w http.ResponseWriter, r *http.Request) {
 	if msg == "" && method == gitrepo.MethodSquash {
 		msg = fmt.Sprintf("%s (#%d)", pr.Title, pr.ID)
 	}
-	res, err := h.repo.Merge(ctx, pr.BaseRef, pr.HeadRef, method, msg)
+	token, err := h.store.ReserveMerge(ctx, pr.ID)
+	if err != nil {
+		h.prStoreError(w, err)
+		return
+	}
+	defer func() {
+		releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := h.store.ReleaseMerge(releaseCtx, pr.ID, token); err != nil {
+			log.Printf("api: pulls: release merge reservation #%d: %v", pr.ID, err)
+		}
+	}()
+	mergeCtx, stopMerge := context.WithTimeout(ctx, store.MergeGitTimeout)
+	res, err := h.repo.Merge(mergeCtx, pr.BaseRef, pr.HeadRef, method, msg)
+	stopMerge()
 	if err != nil {
 		if !h.gitError(w, err) {
 			writeError(w, http.StatusInternalServerError, "Internal server error.", nil)
@@ -702,12 +720,12 @@ func (h *handler) mergePull(w http.ResponseWriter, r *http.Request) {
 	if err := h.repo.UpdatePin(ctx, pr.ID, res.HeadSHA); err != nil {
 		log.Printf("api: pulls: pin #%d on merge: %v", pr.ID, err)
 	}
-	if err := h.store.MarkMerged(ctx, pr.ID, store.PRMergeInfo{
+	if err := h.store.MarkMergedWithReservation(ctx, pr.ID, store.PRMergeInfo{
 		MergeSHA:     res.MergeSHA,
 		MergeMethod:  string(res.Method),
 		HeadSHA:      res.HeadSHA,
 		MergeBaseSHA: res.MergeBaseSHA,
-	}); err != nil {
+	}, token); err != nil {
 		h.prStoreError(w, err)
 		return
 	}

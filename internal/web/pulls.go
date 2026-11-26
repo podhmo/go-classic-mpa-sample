@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/podhmo/go-classic-mpa-sample/internal/events"
 	"github.com/podhmo/go-classic-mpa-sample/internal/gitrepo"
@@ -354,6 +355,9 @@ func (h *handler) pullError(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, store.ErrInvalidPRTransition):
 		h.renderError(w, r, http.StatusConflict, msgFor(r).ErrPRTransitionH,
 			msgFor(r).ErrPRTransitionM)
+	case errors.Is(err, store.ErrMergeInProgress):
+		h.renderError(w, r, http.StatusConflict, msgFor(r).ErrNotMergeableH,
+			msgFor(r).ErrMergeInProgress)
 	case errors.Is(err, store.ErrDuplicatePR):
 		h.renderError(w, r, http.StatusConflict, msgFor(r).ErrDupPRH,
 			msgFor(r).ErrDupPRM)
@@ -1232,7 +1236,21 @@ func (h *handler) mergePull(w http.ResponseWriter, r *http.Request) {
 	if method == gitrepo.MethodSquash {
 		msg = fmt.Sprintf("%s (#%d)", pr.Title, pr.ID)
 	}
-	res, err := h.repo.Merge(ctx, pr.BaseRef, pr.HeadRef, method, msg)
+	token, err := h.store.ReserveMerge(ctx, pr.ID)
+	if err != nil {
+		h.pullError(w, r, err)
+		return
+	}
+	defer func() {
+		releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := h.store.ReleaseMerge(releaseCtx, pr.ID, token); err != nil {
+			log.Printf("web: pulls: release merge reservation #%d: %v", pr.ID, err)
+		}
+	}()
+	mergeCtx, stopMerge := context.WithTimeout(ctx, store.MergeGitTimeout)
+	res, err := h.repo.Merge(mergeCtx, pr.BaseRef, pr.HeadRef, method, msg)
+	stopMerge()
 	if err != nil {
 		var ce *gitrepo.ConflictError
 		var de *gitrepo.DirtyWorktreeError
@@ -1269,12 +1287,12 @@ func (h *handler) mergePull(w http.ResponseWriter, r *http.Request) {
 	if err := h.repo.UpdatePin(ctx, pr.ID, res.HeadSHA); err != nil {
 		log.Printf("web: pulls: pin #%d on merge: %v", pr.ID, err)
 	}
-	if err := h.store.MarkMerged(ctx, pr.ID, store.PRMergeInfo{
+	if err := h.store.MarkMergedWithReservation(ctx, pr.ID, store.PRMergeInfo{
 		MergeSHA:     res.MergeSHA,
 		MergeMethod:  string(res.Method),
 		HeadSHA:      res.HeadSHA,
 		MergeBaseSHA: res.MergeBaseSHA,
-	}); err != nil {
+	}, token); err != nil {
 		h.pullError(w, r, err)
 		return
 	}
