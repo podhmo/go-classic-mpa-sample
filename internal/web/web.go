@@ -392,6 +392,11 @@ func (w renderPathWriter) renderPath() string          { return w.path }
 // renderCurrentPath avoids nesting one auth redirect inside another when
 // the header is rendered on the login/register page itself.
 func renderCurrentPath(r *http.Request) string {
+	if r.Method == http.MethodPost {
+		if next := r.PostFormValue("next"); next != "" {
+			return safeNext(next)
+		}
+	}
 	if (r.URL.Path == "/login" || r.URL.Path == "/register") && r.URL.Query().Get("next") != "" {
 		return safeNext(r.URL.Query().Get("next"))
 	}

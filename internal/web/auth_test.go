@@ -166,8 +166,8 @@ func TestAuthValidationKeepsNextInModeSwitch(t *testing.T) {
 	if !strings.Contains(body, `name="next" value="/w/default/issues/3"`) {
 		t.Error("failed login dropped hidden next")
 	}
-	if !strings.Contains(body, `href="/register?next=%2Fw%2Fdefault%2Fissues%2F3"`) {
-		t.Error("failed login footer link dropped next")
+	if strings.Count(body, `href="/register?next=%2Fw%2Fdefault%2Fissues%2F3"`) != 2 {
+		t.Error("failed login header or footer link dropped next")
 	}
 }
 
