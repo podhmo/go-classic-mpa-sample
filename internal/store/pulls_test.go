@@ -3,7 +3,9 @@ package store
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"testing"
+	"time"
 )
 
 func prInput() PRInput {
@@ -335,5 +337,30 @@ func TestReleaseMergeReservation(t *testing.T) {
 	}
 	if err := s.ClosePullRequest(ctx, id, "head", "base"); err != nil {
 		t.Fatalf("close after release: %v", err)
+	}
+}
+
+func TestMergeReservationAcrossConnections(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "test.db")
+	s1 := mustOpen(t, path)
+	defer s1.Close()
+	s2 := mustOpen(t, path)
+	defer s2.Close()
+	id, err := s1.CreatePullRequest(ctx, prInput(), 0, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s1.ReserveMerge(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s2.ReserveMerge(ctx, id); !errors.Is(err, ErrMergeInProgress) {
+		t.Fatalf("second connection reserve err = %v", err)
+	}
+	if _, err := s1.db.ExecContext(ctx, "UPDATE pull_requests SET merging_at = ? WHERE id = ?", time.Now().Add(-mergeLease-time.Second).UnixNano(), id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s2.ReserveMerge(ctx, id); err != nil {
+		t.Fatalf("expired lease takeover: %v", err)
 	}
 }
