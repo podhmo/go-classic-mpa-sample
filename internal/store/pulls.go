@@ -481,10 +481,15 @@ func (s *Store) MarkMergedWithReservation(ctx context.Context, id int64, info PR
 	query := `UPDATE pull_requests SET status = 'merged', merge_sha = ?, merge_method = ?,
 		head_sha = ?, merge_base_sha = ?, merging_at = NULL, updated_at = ?, closed_at = ?
 		WHERE id = ? AND status = 'open'`
+	if token == 0 {
+		query += " AND (merging_at IS NULL OR merging_at <= ?)"
+	}
 	args := []any{info.MergeSHA, info.MergeMethod, info.HeadSHA, info.MergeBaseSHA, now, now, id}
 	if token > 0 {
 		query += " AND merging_at = ?"
 		args = append(args, token)
+	} else {
+		args = append(args, time.Now().UTC().Add(-mergeLease).UnixNano())
 	}
 	res, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {
@@ -510,7 +515,7 @@ func (s *Store) MarkMergedWithReservation(ctx context.Context, id int64, info PR
 		if status != PRStatusOpen {
 			return ErrInvalidPRTransition
 		}
-		if token > 0 && (!merging.Valid || merging.Int64 != token) {
+		if (token > 0 && (!merging.Valid || merging.Int64 != token)) || (token == 0 && merging.Valid && merging.Int64 > time.Now().UTC().Add(-mergeLease).UnixNano()) {
 			return ErrMergeInProgress
 		}
 		return ErrInvalidPRTransition
