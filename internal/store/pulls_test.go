@@ -357,10 +357,25 @@ func TestMergeReservationAcrossConnections(t *testing.T) {
 	if _, err := s2.ReserveMerge(ctx, id); !errors.Is(err, ErrMergeInProgress) {
 		t.Fatalf("second connection reserve err = %v", err)
 	}
+	info := PRMergeInfo{MergeSHA: "merge", MergeMethod: "merge", HeadSHA: "head", MergeBaseSHA: "base"}
+	if err := s2.MarkMerged(ctx, id, info); !errors.Is(err, ErrMergeInProgress) {
+		t.Fatalf("tokenless mark during active lease err = %v", err)
+	}
 	if _, err := s1.db.ExecContext(ctx, "UPDATE pull_requests SET merging_at = ? WHERE id = ?", time.Now().Add(-mergeLease-time.Second).UnixNano(), id); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s2.ReserveMerge(ctx, id); err != nil {
+	if err := s2.MarkMerged(ctx, id, info); err != nil {
+		t.Fatalf("tokenless mark after expiry: %v", err)
+	}
+
+	id2, err := s1.CreatePullRequest(ctx, PRInput{BaseRef: "refs/heads/main", HeadRef: "refs/heads/other", Title: "other"}, 0, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s1.db.ExecContext(ctx, "UPDATE pull_requests SET merging_at = ? WHERE id = ?", time.Now().Add(-mergeLease-time.Second).UnixNano(), id2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s2.ReserveMerge(ctx, id2); err != nil {
 		t.Fatalf("expired lease takeover: %v", err)
 	}
 }
