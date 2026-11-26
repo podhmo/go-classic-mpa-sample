@@ -109,10 +109,11 @@ func TestPullsNavStateIsPerHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	body := getBody(t, resp)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("repo-backed status = %d, want 200", resp.StatusCode)
 	}
-	if body := getBody(t, resp); !strings.Contains(body, `<a href="/pulls"`) {
+	if !strings.Contains(body, `<a href="/pulls"`) {
 		t.Error("repo-backed handler should render the pulls nav link")
 	}
 
@@ -120,10 +121,11 @@ func TestPullsNavStateIsPerHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	body = getBody(t, resp)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("repo-less status = %d, want 200", resp.StatusCode)
 	}
-	if body := getBody(t, resp); strings.Contains(body, `<a href="/pulls"`) {
+	if strings.Contains(body, `<a href="/pulls"`) {
 		t.Error("repo-less handler should not inherit pulls state from another handler")
 	}
 }
