@@ -7,6 +7,7 @@ import { t } from "./i18n.js";
 import { markDirty } from "./leave-guard.js";
 
 let nextID = 0;
+const editorStates = new WeakMap();
 
 function previewURL() {
   const match = location.pathname.match(/^\/w\/([^/]+)(?:\/|$)/);
@@ -145,6 +146,7 @@ function enhance(textarea) {
 
   textarea.before(tablist);
   textarea.after(panel);
+  editorStates.set(textarea, { panel, tabs: [write, preview], state });
   textarea.addEventListener("input", () => saveState(textarea, state));
   textarea.addEventListener("change", () => saveState(textarea, state));
 }
@@ -170,6 +172,12 @@ function trackSubmit(form) {
       const textarea = form.querySelector('textarea[name="body"]');
       if (textarea) {
         try { localStorage.removeItem(draftKey(textarea)); } catch {}
+        const editor = editorStates.get(textarea);
+        if (editor) {
+          activate(textarea, editor.panel, editor.tabs, "write", editor.state);
+          editor.panel.textContent = "";
+          editor.state.dirty = true;
+        }
       }
     });
   });
