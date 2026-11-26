@@ -118,8 +118,16 @@ func TestTransactionsBeginImmediate(t *testing.T) {
 	// transaction already holds the write lock, so the second begin must
 	// wait and its short context must expire.
 	lockCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	started := time.Now()
 	tx2, err := s2.db.BeginTx(lockCtx, nil)
 	cancel()
+	if elapsed := time.Since(started); elapsed < 50*time.Millisecond {
+		tx1.Rollback()
+		if err == nil {
+			tx2.Rollback()
+		}
+		t.Fatalf("overlapping BeginTx returned after %s before lock contention could be observed (err=%v)", elapsed, err)
+	}
 	if err == nil {
 		tx2.Rollback()
 		tx1.Rollback()
