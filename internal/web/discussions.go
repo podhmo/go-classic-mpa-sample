@@ -203,7 +203,7 @@ func (h *handler) createDiscussion(w http.ResponseWriter, r *http.Request, ws *s
 			return
 		}
 	}
-	h.renderDiscussionFormError(w, r, ws, msgFor(r).NewDiscussion, msgFor(r).NewDiscussion,
+	h.renderDiscussionFormError(w, r, ws, msgFor(r).NewDiscussion,
 		"/w/"+ws.Slug+"/discussions", msgFor(r).CreateDiscussion, *in, *errs)
 }
 
@@ -319,7 +319,7 @@ func (h *handler) updateDiscussion(w http.ResponseWriter, r *http.Request, ws *s
 		}
 	}
 	h.renderDiscussionFormError(w, r, ws,
-		fmt.Sprintf(msgFor(r).EditDiscussion, discussion.ID), fmt.Sprintf(msgFor(r).EditDiscussion, discussion.ID),
+		fmt.Sprintf(msgFor(r).EditDiscussion, discussion.ID),
 		discussionURL(ws, discussion.ID)+"/edit", msgFor(r).BtnSaveChanges, *in, *errs)
 }
 
@@ -623,7 +623,7 @@ func (h *handler) discussionError(w http.ResponseWriter, r *http.Request, err er
 
 // renderDiscussionFormError re-renders the discussion form with 422.
 func (h *handler) renderDiscussionFormError(w http.ResponseWriter, r *http.Request, ws *store.Workspace,
-	title, heading, action, submitLabel string, in store.DiscussionInput, errs discussionFormErrors) {
+	title, action, submitLabel string, in store.DiscussionInput, errs discussionFormErrors) {
 	categories, labels, err := h.discussionFormChoices(r, ws)
 	if err != nil {
 		h.internalError(w, r, err)
