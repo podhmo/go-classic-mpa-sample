@@ -1377,6 +1377,19 @@ func TestVersionedStaticModuleImports(t *testing.T) {
 	if strings.Contains(body, `"./enter-submit.js"`) {
 		t.Error("page-detail.js still contains an unversioned relative import")
 	}
+
+	resp, err = srv.Client().Get(srv.URL + "/static/page-detail.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	fallbackBody := getBody(t, resp)
+	if !strings.Contains(fallbackBody, `"./enter-submit.js"`) {
+		t.Error("unversioned fallback should keep raw unversioned imports")
+	}
+	if strings.Contains(fallbackBody, `"./enter-submit.js?v=`) {
+		t.Error("unversioned fallback must not pin imports to one deploy version")
+	}
 }
 
 func TestLayoutReferencesVersionedStaticAssets(t *testing.T) {

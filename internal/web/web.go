@@ -117,16 +117,25 @@ func versionedStaticBody(name string, body []byte) []byte {
 
 // loadStaticAsset reads and pre-compresses an embedded static file once.
 // The embedded files change only across deploys, so their hashes are stable
-// strong ETags for the process lifetime.
-func loadStaticAsset(name string) (*staticAsset, error) {
-	if cached, ok := staticAssets.Load(name); ok {
+// strong ETags for the process lifetime. Versioned module entrypoints get
+// version-pinned imports; unversioned fallback URLs keep the raw source so
+// an old cached fallback graph cannot start requesting rejected stale
+// versions after a deploy.
+func loadStaticAsset(name string, versioned bool) (*staticAsset, error) {
+	cacheKey := name
+	if versioned {
+		cacheKey += "\x00versioned"
+	}
+	if cached, ok := staticAssets.Load(cacheKey); ok {
 		return cached.(*staticAsset), nil
 	}
 	body, err := staticFS.ReadFile("static/" + name)
 	if err != nil {
 		return nil, err
 	}
-	body = versionedStaticBody(name, body)
+	if versioned {
+		body = versionedStaticBody(name, body)
+	}
 	sum := sha256.Sum256(body)
 	var compressed bytes.Buffer
 	zw := gzip.NewWriter(&compressed)
@@ -144,7 +153,7 @@ func loadStaticAsset(name string) (*staticAsset, error) {
 		gzipETag:    `"` + hex.EncodeToString(gzipSum[:16]) + `"`,
 		contentType: mime.TypeByExtension(path.Ext(name)),
 	}
-	staticAssets.Store(name, asset)
+	staticAssets.Store(cacheKey, asset)
 	return asset, nil
 }
 
@@ -452,7 +461,13 @@ func New(st Store, opts ...Option) http.Handler {
 	staticPaths := map[string]bool{}
 	serveStatic := func(name, contentType string) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
-			asset, err := loadStaticAsset(name)
+			version := r.URL.Query().Get("v")
+			if version != "" && version != staticBuildVersion() {
+				http.NotFound(w, r)
+				return
+			}
+			versioned := version == staticBuildVersion()
+			asset, err := loadStaticAsset(name, versioned)
 			if err != nil {
 				http.NotFound(w, r)
 				return
@@ -464,13 +479,8 @@ func New(st Store, opts ...Option) http.Handler {
 				body = asset.gzipBody
 				etag = asset.gzipETag
 			}
-			version := r.URL.Query().Get("v")
-			if version != "" && version != staticBuildVersion() {
-				http.NotFound(w, r)
-				return
-			}
 			cacheControl := "public, max-age=3600"
-			if version == staticBuildVersion() {
+			if versioned {
 				cacheControl = "public, max-age=31536000, immutable"
 			}
 			h := w.Header()
