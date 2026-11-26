@@ -689,3 +689,36 @@ func TestAPIMountedWithUserTokensOnly(t *testing.T) {
 		t.Fatalf("user-token GET = %d, want 200", resp.StatusCode)
 	}
 }
+
+func TestE2EStaleCommentEditConflicts(t *testing.T) {
+	srv, st := newRealServer(t)
+	ctx := context.Background()
+	issueID, err := st.CreateIssue(ctx, 1, store.IssueInput{Title: "target"}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	commentID, err := st.CreateComment(ctx, issueID, "original", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	editPath := "/w/default/issues/" + strconv.FormatInt(issueID, 10) + "/comments/" + strconv.FormatInt(commentID, 10) + "/edit"
+
+	status, _, body := e2eGet(t, srv, editPath)
+	if status != http.StatusOK || !strings.Contains(body, `name="version" value="1"`) {
+		t.Fatalf("edit form status/version = %d, contains hidden version 1: %v", status, strings.Contains(body, `name="version" value="1"`))
+	}
+	form := url.Values{"body": {"edited"}, "version": {"1"}}
+	resp := postForm(t, noRedirectClient(), srv.URL+editPath, form)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("first edit status = %d, want 303", resp.StatusCode)
+	}
+	resp = postForm(t, noRedirectClient(), srv.URL+editPath, form)
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("replayed edit status = %d, want 409", resp.StatusCode)
+	}
+	body = getBody(t, resp)
+	if !strings.Contains(body, "Someone else updated this record.") {
+		t.Fatal("409 page missing conflict explanation")
+	}
+}
