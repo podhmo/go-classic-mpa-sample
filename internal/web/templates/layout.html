@@ -10,7 +10,8 @@
   {{/* Cross-document view-transition opt-in as an inline style: Chrome
      checks @view-transition at pagereveal without reliably waiting for the
      external stylesheet (vtbag.dev "unreliable detection of
-     @view-transition"). Hash-pinned via style-src-elem in the CSP. */}}
+     @view-transition"). The CSP keeps style-src-elem 'unsafe-inline':
+     hashing cannot cover Chrome's runtime transition capture styles. */}}
   <style>@media (prefers-reduced-motion: no-preference) { @view-transition { navigation: auto; } }</style>
   <link rel="stylesheet" href="{{staticURL "app.css"}}">
   {{/* Direction tags for cross-document view transitions. Loaded in <head>

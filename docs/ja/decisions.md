@@ -78,7 +78,7 @@
 
 - ~~認証・認可（ローカル単一ユーザー前提。公開ネットワーク向けではない）~~ → 2026-11-15 に authentication（投稿者識別）は実装済み（下記「Accounts Phase 1」参照）。authorization と外部公開前提は引き続き実装しない
 - ~~JavaScript 全般（HTMX 等も含む）~~ → 2026-11-15 に緩和（下記「JavaScript 方針」参照）。SPA 化や HTMX/Turbo のようなクライアント駆動の枠組みは引き続き入れない
-- ラベル管理画面（シードの固定ラベルのみ）
+- ~~ラベル管理画面（シードの固定ラベルのみ）~~ → 2026-11-17 に DB 管理画面として実装済み（下記「ラベルを定数から DB 管理へ」参照）
 - Docker
 
 ## JavaScript 方針（2026-11-15 緩和）
@@ -816,3 +816,8 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 
 - **remote PR の状態遷移・markdown/diff・エラー写像を httptest で固定する**: CLI は wire path と出力文言、client は DTO→store 変換と text endpoint の `*Error` 写像を見る。git 実体が必要な merge 自体はここでは扱わない。
 - **`reopen` の成功出力 typo は修正する**: 従来の `action+"d"` は `reopend` になるため、reopen だけ `reopened` を明示する。
+
+## 古いドキュメント記述の同期（2026-11-26、owner improvements 対応）
+
+- **ラベル管理未実装の記述を除去**: decisions の「実装しないもの」と workspaces sketch の seed 固定 taxonomy 記述を、2026-11-17 の DB 管理化（master/shared + workspace-specific label）へ揃えた。
+- **view-transition inline `<style>` は hash 化しない**: Chrome が遷移 capture 用の `<style>` を実行時に挿入するため、静的な opt-in style だけを hash 固定しても遷移が CSP で abort される。既存の実ブラウザ計測（「inline `<style>` 解禁のため CSP に `style-src-elem` を追加」）を正として、layout コメントを実装中の `style-src-elem 'self' 'unsafe-inline'` に合わせた。
