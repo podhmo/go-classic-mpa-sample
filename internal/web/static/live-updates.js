@@ -107,10 +107,10 @@ function start(section) {
       disconnect();
       return;
     }
-    connect();
     // Hidden tabs receive no hints, so the first visible render rebuilds
-    // the list rather than trying to reconstruct what was missed. A
-    // deleted resource has no list to resync.
+    // the detail rather than trying to reconstruct what was missed. The
+    // stream reconnects after that probe so a deleted resource does not
+    // produce a second 404 on /events.
     if (!gone) mark("resync");
   });
 
@@ -346,6 +346,7 @@ function start(section) {
       }
       if (pending.resync) {
         await resync();
+        connect();
       } else {
         if (pending.article) {
           await refreshArticle(true);
