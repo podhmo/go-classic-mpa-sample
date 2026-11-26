@@ -113,6 +113,7 @@ func TestRenderMarkdownUsesCacheWithoutChangingOutput(t *testing.T) {
 	// next call returns. The sentinel input is test-only, so poisoning it
 	// cannot affect real pages.
 	key := markdownCacheKey([]byte(input))
+	t.Cleanup(func() { renderedMarkdown.add(key, first) })
 	renderedMarkdown.add(key, "<p>cache sentinel</p>")
 	if got := renderMarkdown(input); got != "<p>cache sentinel</p>" {
 		t.Fatalf("renderMarkdown after cache replacement = %q, want sentinel", got)
