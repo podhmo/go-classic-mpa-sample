@@ -69,6 +69,13 @@ func RunDiscussionContract(t *testing.T, factory func(tb testing.TB) DiscussionF
 		} else if sharedFirst.IsAnswer {
 			t.Fatal("previously returned thread row unexpectedly mutated")
 		}
+		afterFirst, err := fx.Store.ListDiscussionThreads(ctx, did)
+		if err != nil {
+			t.Fatalf("ListDiscussionThreads after first mark: %v", err)
+		}
+		if !findThread(t, afterFirst, first).IsAnswer || findThread(t, afterFirst, second).IsAnswer {
+			t.Fatalf("first mark did not select only thread %d", first)
+		}
 
 		if err := fx.Store.SetThreadAnswer(ctx, did, second, true); err != nil {
 			t.Fatalf("mark second: %v", err)
