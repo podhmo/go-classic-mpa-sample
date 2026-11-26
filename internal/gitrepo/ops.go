@@ -433,20 +433,19 @@ func PinRef(id int64) string {
 
 var errPinMissing = errors.New("gitrepo: pull pin is missing")
 
-// readPin reads the pin through for-each-ref because a missing ref is an
-// empty successful result there. rev-parse collapses "missing" and real
-// git failures into the same non-zero exit, which cannot drive CAS error
-// classification.
+// readPin reads the exact pin. rev-parse --verify --quiet exits 1 for a
+// missing ref without printing an error, while repository/read failures keep
+// their own non-zero exit and stderr; CAS error classification depends on
+// that distinction.
 func (r *Repo) readPin(ctx context.Context, id int64) (string, error) {
-	res, err := r.run(ctx, nil, "for-each-ref", "--format=%(objectname)", PinRef(id))
+	res, err := r.run(ctx, nil, "rev-parse", "--verify", "--quiet", PinRef(id)+"^{commit}")
 	if err != nil {
+		if e, ok := err.(*Error); ok && e.ExitCode == 1 {
+			return "", errPinMissing
+		}
 		return "", err
 	}
-	got := strings.TrimSpace(res.stdout)
-	if got == "" {
-		return "", errPinMissing
-	}
-	return got, nil
+	return strings.TrimSpace(res.stdout), nil
 }
 
 // PinHead creates the PR's pin ref at sha (used at create time, when

@@ -718,6 +718,22 @@ func TestRepairPinComparesObservedValue(t *testing.T) {
 	}
 }
 
+func TestPinRepairStateIgnoresDescendantRef(t *testing.T) {
+	ctx := context.Background()
+	dir := initRepo(t)
+	r := openRepo(t, dir)
+	head := strings.TrimSpace(git(t, dir, "rev-parse", "main"))
+	git(t, dir, "update-ref", PinRef(42)+"/child", head)
+
+	needs, observed, err := r.PinRepairState(ctx, 42, "")
+	if err != nil {
+		t.Fatalf("PinRepairState: %v", err)
+	}
+	if !needs || observed != "" {
+		t.Fatalf("PinRepairState = needs:%v observed:%q, want missing exact pin", needs, observed)
+	}
+}
+
 func TestUpdatePinMissingRetryWinsOverProvisionalRepair(t *testing.T) {
 	ctx := context.Background()
 	dir := initRepo(t)
