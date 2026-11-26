@@ -38,12 +38,14 @@ if [ "$mode_arg" = "all" ]; then
 else
 	modes=$mode_arg
 fi
+mode_count=0
 for mode in $modes; do
 	case "$mode" in
-		light|dark) ;;
+		light|dark) mode_count=$((mode_count + 1)) ;;
 		*) usage ;;
 	esac
 done
+[ "$mode_count" -gt 0 ] || usage
 
 command -v playwright-cli >/dev/null || { echo "playwright-cli not on PATH (pnpm dlx @playwright/cli)" >&2; exit 1; }
 command -v compare >/dev/null || { echo "ImageMagick 'compare' not found" >&2; exit 1; }
