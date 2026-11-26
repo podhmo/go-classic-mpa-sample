@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"path"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -1325,16 +1326,67 @@ func validLang(lang string) bool {
 }
 
 // wantsJapanese reports whether Accept-Language prefers Japanese over
-// English. Deliberately minimal: for a real multi-locale deployment use
-// golang.org/x/text/language.ParseAcceptLanguage, which weighs q-values.
+// English. It is deliberately limited to the two supported locales; a real
+// multi-locale deployment should use golang.org/x/text/language.
 func wantsJapanese(header string) bool {
-	for part := range strings.SplitSeq(header, ",") {
-		tag, _, _ := strings.Cut(strings.TrimSpace(part), ";")
-		if strings.HasPrefix(tag, "ja") {
-			return true
-		}
+	type preference struct {
+		q     float64
+		order int
+		set   bool
 	}
-	return false
+	var ja, en preference
+	order := 0
+	for part := range strings.SplitSeq(header, ",") {
+		tag, q, ok := parseAcceptLanguagePart(part)
+		if !ok {
+			continue
+		}
+		pref := preference{q: q, order: order, set: true}
+		switch {
+		case tag == "ja" || strings.HasPrefix(tag, "ja-"):
+			if !ja.set || q > ja.q {
+				ja = pref
+			}
+		case tag == "en" || strings.HasPrefix(tag, "en-"):
+			if !en.set || q > en.q {
+				en = pref
+			}
+		}
+		order++
+	}
+	if !ja.set || ja.q == 0 {
+		return false
+	}
+	if !en.set {
+		return true
+	}
+	if ja.q != en.q {
+		return ja.q > en.q
+	}
+	return ja.order < en.order
+}
+
+// parseAcceptLanguagePart parses one language-range plus its q parameter.
+// Entries with malformed or out-of-range q values are ignored.
+func parseAcceptLanguagePart(part string) (string, float64, bool) {
+	pieces := strings.Split(part, ";")
+	tag := strings.ToLower(strings.TrimSpace(pieces[0]))
+	if tag == "" {
+		return "", 0, false
+	}
+	q := 1.0
+	for _, piece := range pieces[1:] {
+		name, value, ok := strings.Cut(strings.TrimSpace(piece), "=")
+		if !ok || !strings.EqualFold(name, "q") {
+			continue
+		}
+		parsed, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+		if err != nil || parsed < 0 || parsed > 1 {
+			return "", 0, false
+		}
+		q = parsed
+	}
+	return tag, q, true
 }
 
 // fieldErrText renders a store validation failure for the page's locale.

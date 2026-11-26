@@ -159,6 +159,27 @@ func TestUnknownLangCookieFallsBack(t *testing.T) {
 	}
 }
 
+func TestWantsJapaneseQValues(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		header string
+		want   bool
+	}{
+		{"ja,en-US;q=0.9,en;q=0.8", true},
+		{"en, ja;q=0.1", false},
+		{"en;q=0.1, ja", true},
+		{"ja-JP;q=0.7, en-US;q=0.7", true},
+		{"en-US;q=0.7, ja-JP;q=0.7", false},
+		{"ja;q=0", false},
+		{"ja;q=2, en;q=0.1", false},
+		{"fr, en;q=0.5", false},
+	} {
+		if got := wantsJapanese(tc.header); got != tc.want {
+			t.Errorf("wantsJapanese(%q) = %v, want %v", tc.header, got, tc.want)
+		}
+	}
+}
+
 func TestMessagesForFallsBackToEnglish(t *testing.T) {
 	if got := messagesFor("fr").IssuesTitle; got != "Issues" {
 		t.Fatalf("unknown locale = %q, want en catalog", got)
