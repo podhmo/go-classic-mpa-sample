@@ -169,6 +169,16 @@ func (c *Client) doRecordEndpoint(ctx context.Context, method, path string, in, 
 		requestOptions{notFoundIsMissingRecord: true})
 }
 
+// doWorkspaceRecordEndpoint is doRecordEndpoint for routes mounted only
+// under /w/{slug}. Without a workspace the same method calls a missing
+// route instead, so its 404 must not become ErrNotFound.
+func (c *Client) doWorkspaceRecordEndpoint(ctx context.Context, method, path string, in, out any) error {
+	if c.ws == "" {
+		return c.do(ctx, method, path, in, out)
+	}
+	return c.doRecordEndpoint(ctx, method, path, in, out)
+}
+
 type requestOptions struct {
 	notFoundIsMissingRecord bool
 }

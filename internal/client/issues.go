@@ -50,7 +50,7 @@ func (c *Client) listIssuesPage(ctx context.Context, q url.Values) ([]*store.Iss
 		Issues []api.Issue `json:"issues"`
 		Total  int         `json:"total"`
 	}
-	if err := c.doRecordEndpoint(ctx, "GET", c.wsPath("issues")+"?"+q.Encode(), nil, &res); err != nil {
+	if err := c.doWorkspaceRecordEndpoint(ctx, "GET", c.wsPath("issues")+"?"+q.Encode(), nil, &res); err != nil {
 		return nil, 0, err
 	}
 	issues := make([]*store.Issue, 0, len(res.Issues))
@@ -64,7 +64,7 @@ func (c *Client) GetIssue(ctx context.Context, id int64) (*store.Issue, error) {
 	var res struct {
 		Issue api.Issue `json:"issue"`
 	}
-	if err := c.doRecordEndpoint(ctx, "GET", c.wsPath("issues/")+fmt.Sprint(id), nil, &res); err != nil {
+	if err := c.doWorkspaceRecordEndpoint(ctx, "GET", c.wsPath("issues/")+fmt.Sprint(id), nil, &res); err != nil {
 		return nil, err
 	}
 	return issueFromDTO(res.Issue), nil
@@ -78,7 +78,7 @@ func (c *Client) ListComments(ctx context.Context, issueID int64) ([]*store.Comm
 	var res struct {
 		Comments []api.Comment `json:"comments"`
 	}
-	if err := c.doRecordEndpoint(ctx, "GET", c.wsPath("issues/")+fmt.Sprint(issueID), nil, &res); err != nil {
+	if err := c.doWorkspaceRecordEndpoint(ctx, "GET", c.wsPath("issues/")+fmt.Sprint(issueID), nil, &res); err != nil {
 		return nil, err
 	}
 	out := make([]*store.Comment, 0, len(res.Comments))
@@ -94,7 +94,7 @@ func (c *Client) CreateIssue(ctx context.Context, in store.IssueInput, _ int64) 
 	var res struct {
 		Issue api.Issue `json:"issue"`
 	}
-	err := c.doRecordEndpoint(ctx, "POST", c.wsPath("issues"), map[string]any{
+	err := c.doWorkspaceRecordEndpoint(ctx, "POST", c.wsPath("issues"), map[string]any{
 		"title": in.Title, "body": in.Body, "label_ids": in.LabelIDs,
 	}, &res)
 	if err != nil {
@@ -111,25 +111,25 @@ func (c *Client) UpdateIssue(ctx context.Context, id int64, in store.IssueInput)
 		// agree that nil LabelIDs clears the labels.
 		labelIDs = []int64{}
 	}
-	return c.doRecordEndpoint(ctx, "PATCH", c.wsPath("issues/")+fmt.Sprint(id), map[string]any{
+	return c.doWorkspaceRecordEndpoint(ctx, "PATCH", c.wsPath("issues/")+fmt.Sprint(id), map[string]any{
 		"title": in.Title, "body": in.Body, "label_ids": labelIDs,
 	}, nil)
 }
 
 func (c *Client) SetIssueStatus(ctx context.Context, id int64, status string) error {
-	return c.doRecordEndpoint(ctx, "POST", c.wsPath("issues/")+fmt.Sprint(id)+"/status",
+	return c.doWorkspaceRecordEndpoint(ctx, "POST", c.wsPath("issues/")+fmt.Sprint(id)+"/status",
 		map[string]any{"status": status}, nil)
 }
 
 func (c *Client) DeleteIssue(ctx context.Context, id int64) error {
-	return c.doRecordEndpoint(ctx, "DELETE", c.wsPath("issues/")+fmt.Sprint(id), nil, nil)
+	return c.doWorkspaceRecordEndpoint(ctx, "DELETE", c.wsPath("issues/")+fmt.Sprint(id), nil, nil)
 }
 
 func (c *Client) CreateComment(ctx context.Context, issueID int64, body string, _ int64) (int64, error) {
 	var res struct {
 		Comment api.Comment `json:"comment"`
 	}
-	err := c.doRecordEndpoint(ctx, "POST", c.wsPath("issues/")+fmt.Sprint(issueID)+"/comments",
+	err := c.doWorkspaceRecordEndpoint(ctx, "POST", c.wsPath("issues/")+fmt.Sprint(issueID)+"/comments",
 		map[string]any{"body": body}, &res)
 	if err != nil {
 		return 0, err
@@ -139,14 +139,14 @@ func (c *Client) CreateComment(ctx context.Context, issueID int64, body string, 
 
 // UpdateComment PATCHes the comment's body.
 func (c *Client) UpdateComment(ctx context.Context, issueID, commentID int64, body string) error {
-	return c.doRecordEndpoint(ctx, "PATCH",
+	return c.doWorkspaceRecordEndpoint(ctx, "PATCH",
 		c.wsPath("issues/")+fmt.Sprint(issueID)+"/comments/"+fmt.Sprint(commentID),
 		map[string]any{"body": body}, nil)
 }
 
 // DeleteComment removes the comment permanently.
 func (c *Client) DeleteComment(ctx context.Context, issueID, commentID int64) error {
-	return c.doRecordEndpoint(ctx, "DELETE",
+	return c.doWorkspaceRecordEndpoint(ctx, "DELETE",
 		c.wsPath("issues/")+fmt.Sprint(issueID)+"/comments/"+fmt.Sprint(commentID), nil, nil)
 }
 
@@ -160,7 +160,7 @@ func (c *Client) SetCommentHidden(ctx context.Context, issueID, commentID int64,
 	} else {
 		action = "unhide"
 	}
-	return c.doRecordEndpoint(ctx, "POST",
+	return c.doWorkspaceRecordEndpoint(ctx, "POST",
 		c.wsPath("issues/")+fmt.Sprint(issueID)+"/comments/"+fmt.Sprint(commentID)+"/"+action,
 		body, nil)
 }

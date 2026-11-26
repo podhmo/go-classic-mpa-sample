@@ -15,7 +15,7 @@
 
 | # | 重要度 | 状態 | 概要 | 詳細 |
 |---|--------|------|------|------|
-| 27 | info | 修正済（ErrNotFound） | remote CLI（`*client.Client`）が store sentinel エラーに写像しない | `*client.Error` は endpoint 文脈付きでだけ `errors.Is(err, store.ErrNotFound)` を満たす。issues/discussions/labels/workspaces の恒常 route では missing workspace・対象 record・scope 外 record を local `ScopedStore` と同じく ErrNotFound として扱う。一方 `/pulls*` は repo 未検出 server で route 自体が未 mount になりうるため写像しない。JSON error body を持たない非 API の 404 も写像しない。`ErrNotAnswerable` は 422 validation と wire 上区別できないため、API error code を入れない今回の scope では対象外 |
+| 27 | info | 修正済（ErrNotFound） | remote CLI（`*client.Client`）が store sentinel エラーに写像しない | `*client.Error` は endpoint 文脈付きでだけ `errors.Is(err, store.ErrNotFound)` を満たす。workspace 付き client の issues/discussions/labels、および `/workspaces/{slug}` では missing workspace・対象 record・scope 外 record を local `ScopedStore` と同じく ErrNotFound として扱う。一方 `/pulls*` は repo 未検出 server で route 自体が未 mount になりうるため写像しない。JSON error body を持たない非 API の 404 も写像しない。`ErrNotAnswerable` は 422 validation と wire 上区別できないため、API error code を入れない今回の scope では対象外 |
 | 42 | nit | 修正済 | remote `zatu pr reopen` の成功出力が `reopend` | `prStateChange` が `action+"d"` を出力していたため、reopen だけ英語形が壊れていた。対応: reopen の表示語を明示し、remote close/reopen の wire status と出力をテストで固定 |
 | 40 | nit | 修正済 | エラー見出し `"Bad request"` が英語直書き（i18n 漏れ） | issue comment・discussion thread/reply・PR comment の hide reason 不正時に、エラー見出しだけ英語固定だった。対応: `msgFor(r).ErrBadRequestH` を使い、ja cookie 時の回帰テストを追加 |
 | 39 | nit | 修正済 | `CheckMerge` が解決済み SHA ではなく ref 名で merge-tree を実行 | RevParse 済みの `BaseSHA`/`HeadSHA` ではなく ref 名で `merge-base`/`merge-tree` を実行し、競合時に報告 SHA と判定対象がずれうる状態だった。対応: 解決済み SHA を両コマンドへ渡す |

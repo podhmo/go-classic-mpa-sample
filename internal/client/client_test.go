@@ -159,6 +159,14 @@ func TestClientNotFoundMapsOnlyRecordEndpoints(t *testing.T) {
 		t.Fatalf("ListIssues in missing workspace: errors.Is(..., ErrNotFound) = false, err=%v", err)
 	}
 
+	_, err = c.In("").GetIssue(ctx, 999)
+	if !errors.As(err, &ae) || ae.Status != 404 {
+		t.Fatalf("unscoped GetIssue: want *Error 404, got %T %v", err, err)
+	}
+	if errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("unscoped missing route was misclassified as a missing record: %v", err)
+	}
+
 	_, err = c.GetPullRequest(ctx, 999)
 	if !errors.As(err, &ae) || ae.Status != 404 {
 		t.Fatalf("GetPullRequest on repo-less server: want *Error 404, got %T %v", err, err)

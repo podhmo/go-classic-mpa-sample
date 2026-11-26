@@ -843,7 +843,7 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 
 ## remote client の 404 sentinel 写像（2026-11-27、owner improvements 対応）
 
-- **404 の写像は client method ごとの endpoint 文脈にする**: `*client.Error` は一律に `store.ErrNotFound` を名乗らず、issues/discussions/labels/workspaces のように API route が恒常存在し、404 が missing workspace・対象 record・scope 外 record のどれかを意味する endpoint だけ `errors.Is(err, store.ErrNotFound)` を満たす。scope 外を ErrNotFound に潰す意味論は local `ScopedStore` と同じ。
-- **`/pulls*` は写像しない**: repo 未検出 server では `/api/v1/pulls*` 自体が未 mount で、同じ JSON 404 が missing route と missing PR のどちらにも見える。API 変更なしには区別できないため、誤分類しないことを優先して PR 側の 404 は sentinel にしない。
+- **404 の写像は client method ごとの endpoint 文脈にする**: `*client.Error` は一律に `store.ErrNotFound` を名乗らず、workspace 付き client の issues/discussions/labels、および `/workspaces/{slug}` のように API route が存在し、404 が missing workspace・対象 record・scope 外 record のどれかを意味する endpoint だけ `errors.Is(err, store.ErrNotFound)` を満たす。scope 外を ErrNotFound に潰す意味論は local `ScopedStore` と同じ。
+- **unscoped client と `/pulls*` は写像しない**: workspace 無しの issue/discussion/label call は `/w/{slug}` なしの missing route になるため sentinel にしない。また repo 未検出 server では `/api/v1/pulls*` 自体が未 mount で、同じ JSON 404 が missing route と missing PR のどちらにも見える。API 変更なしには区別できないため、誤分類しないことを優先して PR 側の 404 は sentinel にしない。
 - **JSON error body を持たない 404 は写像しない**: proxy・HTML fallback・API ではないサーバー由来の 404 を record missing に見立てない。写像は API が返した JSON error envelope を decode できた場合にだけ付ける。
 - **`ErrNotAnswerable` は対象外**: answer endpoint の 422 は validation failure と区別する machine-readable code が無く、今回の「API 変更なしの 404 写像」では扱えない。
