@@ -1322,6 +1322,80 @@ func TestStaticAssetsUseGzipAndETag(t *testing.T) {
 	}
 }
 
+func TestVersionedStaticAssetsAreImmutable(t *testing.T) {
+	srv, _ := newTestServer(t)
+	versioned := staticURL("app.css")
+	if !regexp.MustCompile(`^/static/app\.css\?v=[a-f0-9]{16}$`).MatchString(versioned) {
+		t.Fatalf("staticURL(app.css) = %q, want content-versioned URL", versioned)
+	}
+
+	resp, err := srv.Client().Get(srv.URL + versioned)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("versioned status = %d, want 200", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Cache-Control"); got != "public, max-age=31536000, immutable" {
+		t.Fatalf("versioned Cache-Control = %q, want immutable", got)
+	}
+
+	resp, err = srv.Client().Get(srv.URL + "/static/app.css?v=stale")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("stale-version status = %d, want 404", resp.StatusCode)
+	}
+
+	resp, err = srv.Client().Get(srv.URL + "/static/app.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if got := resp.Header.Get("Cache-Control"); got != "public, max-age=3600" {
+		t.Fatalf("unversioned Cache-Control = %q, want one-hour fallback", got)
+	}
+}
+
+func TestVersionedStaticModuleImports(t *testing.T) {
+	srv, _ := newTestServer(t)
+	resp, err := srv.Client().Get(srv.URL + staticURL("page-detail.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	body := getBody(t, resp)
+	if !strings.Contains(body, `"./enter-submit.js?v=`+staticBuildVersion()+`"`) {
+		t.Error("page-detail.js import was not rewritten to the versioned URL")
+	}
+	if strings.Contains(body, `"./enter-submit.js"`) {
+		t.Error("page-detail.js still contains an unversioned relative import")
+	}
+}
+
+func TestLayoutReferencesVersionedStaticAssets(t *testing.T) {
+	srv, _ := newTestServer(t)
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := getBody(t, resp)
+	for _, want := range []string{
+		`href="` + staticURL("app.css") + `"`,
+		`src="` + staticURL("pagination-transition.js") + `"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("layout missing versioned asset reference %q", want)
+		}
+	}
+}
+
 func TestStaticAssetsSupportByteRanges(t *testing.T) {
 	srv, _ := newTestServer(t)
 	req, err := http.NewRequest(http.MethodGet, srv.URL+"/static/app.css", nil)
@@ -1544,13 +1618,13 @@ func TestSpeculationRules(t *testing.T) {
 	// The rules are delivered by header (external JSON ruleset), keeping
 	// inline <script> out of the markup — CSP script-src 'self' blocks
 	// inline scripts and anything not served from /static/.
-	if v := resp.Header.Get("Speculation-Rules"); v != `"/static/speculation-rules.json"` {
-		t.Errorf("Speculation-Rules = %q, want quoted ruleset URL", v)
+	if v := resp.Header.Get("Speculation-Rules"); !regexp.MustCompile(`^"/static/speculation-rules\.json\?v=[a-f0-9]{16}"$`).MatchString(v) {
+		t.Errorf("Speculation-Rules = %q, want quoted versioned ruleset URL", v)
 	}
 	// Every <script> must be an external same-origin /static/ file — inline
 	// scripts stay blocked by CSP (Go's regexp has no lookahead, so strip
 	// allowed tags and make sure nothing is left).
-	stripped := regexp.MustCompile(`<script[^>]*src="/static/[a-zA-Z0-9._/-]+"[^>]*>\s*</script>`).ReplaceAllString(body, "")
+	stripped := regexp.MustCompile(`<script[^>]*src="/static/[a-zA-Z0-9._/-]+\?v=[a-f0-9]+"[^>]*>\s*</script>`).ReplaceAllString(body, "")
 	if strings.Contains(stripped, "<script") {
 		t.Error("list page must only load same-origin /static scripts, never inline")
 	}

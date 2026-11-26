@@ -12,11 +12,11 @@
      external stylesheet (vtbag.dev "unreliable detection of
      @view-transition"). Hash-pinned via style-src-elem in the CSP. */}}
   <style>@media (prefers-reduced-motion: no-preference) { @view-transition { navigation: auto; } }</style>
-  <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="{{staticURL "app.css"}}">
   {{/* Direction tags for cross-document view transitions. Loaded in <head>
      so the pageswap/pagereveal listeners are registered before the new
      page's first render — defer at the end of <body> can miss pagereveal. */}}
-  <script src="/static/pagination-transition.js"></script>
+  <script src="{{staticURL "pagination-transition.js"}}"></script>
 </head>
 <body>
   <a class="skip-link" href="#main-content">{{LayoutSkip}}</a>

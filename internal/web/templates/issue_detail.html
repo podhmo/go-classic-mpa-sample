@@ -3,7 +3,7 @@
    behavior: permalink copy, Ctrl/Cmd+Enter, aria-invalid sync, partial
    submit + fragment swap, empty-submit disable, unsaved-input guard.
    All progressive enhancement — without JS the forms post normally. */}}
-<script type="module" src="/static/page-detail.js"></script>
+<script type="module" src="{{staticURL "page-detail.js"}}"></script>
 <nav class="breadcrumb" aria-label="{{BreadcrumbAria}}">
   <ol>
     <li><a href="/w/{{.Workspace.Slug}}/issues">{{LayoutNavIssues}}</a></li>
