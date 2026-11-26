@@ -225,10 +225,58 @@ function start(section) {
     nodes.at(-1)?.scrollIntoView({ block: "nearest" });
   }
 
-  // Whole-list rebuild: drafts preserved across the rebuild; nodes whose
-  // id already exists get replaced, everything else appended, and stale
-  // leftovers (deleted rows) are dropped — replaceChildren owns the list.
+  function showDeleted() {
+    // The watched resource is gone: a persistent notice beats a
+    // transient toast — the user may be mid-read.
+    if (!section.querySelector("[data-live-deleted]")) {
+      const p = document.createElement("p");
+      p.className = "card";
+      p.setAttribute("role", "alert");
+      p.dataset.liveDeleted = "";
+      const a = document.createElement("a");
+      a.href = listURL;
+      a.textContent = t("back_to", listName);
+      p.append(
+        document.createTextNode(t("noun_deleted", noun) + " "),
+        a,
+      );
+      section.before(p);
+    }
+    announce(t("noun_deleted", noun));
+  }
+
+  // Refresh the main article card. "missing" means the detail resource
+  // itself is gone; other failures are transient and leave the old card.
+  async function refreshArticle(announceChange) {
+    const res = await fetch(`${fragBase}/article`);
+    if (res.status === 404) return "missing";
+    if (!res.ok) return "failed";
+    const nodes = parseFragment(await res.text()).filter(
+      (n) => n.nodeType === Node.ELEMENT_NODE,
+    );
+    const old = document.querySelector(".issue-detail");
+    if (old && nodes[0]) {
+      await runScopedTransition(commonScope([old]), () =>
+        old.replaceWith(nodes[0]),
+      );
+      if (announceChange) {
+        announce(t("entity_updated", noun[0].toUpperCase() + noun.slice(1)));
+      }
+    }
+    return "ok";
+  }
+
+  // Whole-detail rebuild after hidden time or a lost connection: refresh
+  // the main card as well as the timeline. A missing article means the
+  // resource was deleted while disconnected.
   async function resync() {
+    const article = await refreshArticle(false);
+    if (article === "missing") {
+      gone = true;
+      disconnect();
+      showDeleted();
+      return;
+    }
     const url = `${fragBase}/${fragPath}`;
     const res = await fetch(url);
     if (!res.ok) return;
@@ -275,42 +323,14 @@ function start(section) {
       if (pending.deleted) {
         gone = true;
         disconnect();
-        // The watched resource is gone: a persistent notice beats a
-        // transient toast — the user may be mid-read.
-        if (!section.querySelector("[data-live-deleted]")) {
-          const p = document.createElement("p");
-          p.className = "card";
-          p.setAttribute("role", "alert");
-          p.dataset.liveDeleted = "";
-          const a = document.createElement("a");
-          a.href = listURL;
-          a.textContent = t("back_to", listName);
-          p.append(
-            document.createTextNode(t("noun_deleted", noun) + " "),
-            a,
-          );
-          section.before(p);
-        }
-        announce(t("noun_deleted", noun));
+        showDeleted();
         return;
       }
       if (pending.resync) {
         await resync();
       } else {
         if (pending.article) {
-          const res = await fetch(`${fragBase}/article`);
-          if (res.ok) {
-            const nodes = parseFragment(await res.text()).filter(
-              (n) => n.nodeType === Node.ELEMENT_NODE,
-            );
-            const old = document.querySelector(".issue-detail");
-            if (old && nodes[0]) {
-              await runScopedTransition(commonScope([old]), () =>
-                old.replaceWith(nodes[0]),
-              );
-              announce(t("entity_updated", noun[0].toUpperCase() + noun.slice(1)));
-            }
-          }
+          await refreshArticle(true);
         }
         if (pending.answerIds.size) {
           const ids = [...pending.answerIds].join(",");
