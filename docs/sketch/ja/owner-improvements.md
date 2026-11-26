@@ -44,12 +44,11 @@
 2. `repo.Merge(...)` で git の書き込みを行う
 3. `store.MarkMerged`（`WHERE status='open'`）を呼ぶ
 
-merge/rebase では、2本目のリクエストは「進めるコミットがない」で失敗する。squash では head が base の祖先にならないため、2本目もそのまま squash を作ってしまう。`MarkMerged` は後から `ErrInvalidPRTransition` で失敗するが、git 側の副作用はもう残っている。
+merge/rebase でも、2本目が1本目の base 更新前に読んだ同じ SHA で ref 更新を競わせるなら git 側の CAS で失敗する。ただし、1本目の更新後に base を読んだ場合は rebase でも空の差分をコミットでき、squash では head が base の祖先にならないため常に2回目の squash を作りうる。`MarkMerged` は後から `ErrInvalidPRTransition` で失敗するが、git 側の副作用はもう残っている。
 
 **案**: `pull_requests` に `merging_at` 列（または一時 status `merging`）を足し、
 `UPDATE ... SET merging_at=? WHERE id=? AND status='open' AND merging_at IS NULL` で
-所有権を取ってから git を叩く。失敗時は解放する。local CLI は別プロセスなので、
-in-process の mutex だけでは足りない。DB の CAS が要る。
+所有権を取ってから git を叩く。失敗時は解放するが、プロセスが予約を持ったまま終了した場合に備えて、起動時または期限切れ予約の回収時に git 側の適用有無を照合して解放する復旧手順も必要になる。local CLI は別プロセスなので、in-process の mutex だけでは足りない。DB の CAS が要る。
 
 ### 1.2 `createPull` の `normErr` 上書き（重要度: minor）
 
@@ -71,9 +70,9 @@ base が不正で head が正しいと、base のエラーが消える。不正�
 
 ### 1.4 API の `page` に上限がない
 
-web 側は `1..1_000_000` に制限済み（bugs.md #2）だが、`internal/api/api.go:338` の `queryInt` には上限がない。
+web の issue/discussion 一覧は `1..1_000_000` に制限済み（bugs.md #2）だが、`internal/api/api.go:338` の `queryInt` と web の PR 一覧には上限がない。
 巨大な page を渡すと `(page-1)*perPage` がオーバーフローする。
-**案**: store 層の共通 `normalizePage(page, perPage)` に寄せ、全呼び出し元を一度に守る。
+**案**: store 層の共通 `normalizePage(page, perPage)` に寄せ、API と web の PR 一覧を含む全呼び出し元を一度に守る。
 
 ### 1.5 merge が HTTP の WriteTimeout を超えうる
 
@@ -96,7 +95,7 @@ rebase はコミット数 × 約5回 git を呼ぶ。そのため、merge は成
 - **`Accept-Language` の q 値を無視している**: `wantsJapanese`（`i18n.go:1330`）は `en, ja;q=0.1` で ja を選ぶ。簡易な q パースで直る。
 - **bugs.md #27**: `*client.Error` に `Is(target error) bool` を実装し、404 を `store.ErrNotFound` に写像する。1メソッドで local と remote の乖離が消える。
 
-§1.1・§1.2・§1.4・§1.6（CheckMerge・i18n 漏れ）は `docs/ja/bugs.md` に #36〜#40 として追記した。
+§1.1・§1.2・§1.4・§1.6（CheckMerge・i18n 漏れ・diff 切り詰め）は `docs/ja/bugs.md` に #36〜#41 として追記した。
 
 ---
 
@@ -219,7 +218,7 @@ fake の実装量も減り、TODO の「fake/stub 向けの共有 contract test�
 ### 3.5 テンプレートの共通化
 
 - ページネーションの nav が issues、discussions、pulls の 3 テンプレートにコピーされている。`{{define "pager"}}` にする。
-  pulls 側は `sort` を落とし、空の `q=` を出し、最終ページへのクランプがない。共通化で直る。
+  pulls 側は空の `q=` を出し、最終ページへのクランプが `listPulls` にない。共通化で重複を減らし、クランプは取得処理で直す。
 - `issue_delete.html` と `discussion_delete.html` は双子。
 - 一覧の行マークアップも 3 回書かれている。
 
@@ -251,8 +250,9 @@ fake の実装量も減り、TODO の「fake/stub 向けの共有 contract test�
 PATCH は read-modify-write で前提条件を見ないため、同時編集は後勝ちで黙って消える。
 CLI 経由の AI エージェントと人が同じ issue を触る、というこのアプリの想定では起こりやすい。
 
-- `updated_at` を weak ETag として返し、`If-Match` が不一致なら 412 にする。
-- web の編集フォームには hidden の `updated_at` を持たせ、不一致なら「他の人が更新しました」と差分を示して再編集させる。
+- 編集ごとに進む `version` 列を足し、それを strong ETag として返す。`updated_at` は秒精度なので同じ秒の編集を区別できず、weak ETag は `If-Match` に使えない。
+- 書き込み側は `WHERE version=?` で同時に照合し、`If-Match` 不一致なら 412 にする。
+- web の編集フォームには hidden の `version` を持たせ、不一致なら「他の人が更新しました」と差分を示して再編集させる。
 - GET には `If-None-Match` → 304 も付ける。
 
 ### 4.2 検索・フィルタの拡充
@@ -269,7 +269,7 @@ CLI 経由の AI エージェントと人が同じ issue を触る、という�
   クライアントが 100 件の上限を越えるためにページを繋いでいる処理が単純になる。
 - コメントの一覧・単体取得エンドポイント。今は issue 詳細から読んでいて、404 の意味が local と remote で違う。
 - API トークンに `last_used_at`、`expires_at`、任意の scope（read/write）を持たせる。
-  起動時に API を mount するかどうかを決めているため、実行中に発行したトークンは再起動まで使えない。これを解消する。
+  共有トークンか既存の DB トークンで API が登録済みなら、Bearer 認証はリクエストごとに DB を引く。残る問題は、トークンなしで起動してから最初のトークンを発行した場合に API が mount されないことなので、この起動条件を解消する。
 
 ### 4.4 PR のレビュー体験
 
