@@ -12,6 +12,7 @@
 # (gitignored). The pixel threshold defaults to 100 — sub-10px
 # antialiasing noise is normal between runs.
 set -eu
+CDPATH=
 
 STORYBOOK_URL="${STORYBOOK_URL:-http://127.0.0.1:6006}"
 ROOT_DIR=.visual-diff
