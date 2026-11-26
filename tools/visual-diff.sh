@@ -16,6 +16,8 @@ set -eu
 STORYBOOK_URL="${STORYBOOK_URL:-http://127.0.0.1:6006}"
 ROOT_DIR=.visual-diff
 PIXEL_THRESHOLD="${PIXEL_THRESHOLD:-100}"
+mkdir -p "$ROOT_DIR"
+ROOT_DIR=$(cd "$ROOT_DIR" && pwd)
 
 usage() {
 	sed -n '2,14p' "$0"
