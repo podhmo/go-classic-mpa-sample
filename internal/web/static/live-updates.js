@@ -107,12 +107,31 @@ function start(section) {
       disconnect();
       return;
     }
-    // Hidden tabs receive no hints, so the first visible render rebuilds
-    // the detail rather than trying to reconstruct what was missed. The
-    // stream reconnects after that probe so a deleted resource does not
-    // produce a second 404 on /events.
-    if (!gone) mark("resync");
+    if (!gone) void resume();
   });
+
+  // Return from hidden time: probe the article first so a deleted resource
+  // is detected without a doomed /events connection, then subscribe before
+  // taking the whole-detail snapshot. `lost` makes the first open schedule
+  // that snapshot; until then no server-side change can fall between the
+  // snapshot and the subscription. Even an offline probe still connects —
+  // EventSource retries and the eventual open performs the resync.
+  async function resume() {
+    let article = "failed";
+    try {
+      article = await refreshArticle(false);
+    } catch {
+      // Offline: connecting now lets the stream recover on its own.
+    }
+    if (gone || document.visibilityState === "hidden") return;
+    if (article === "missing") {
+      gone = true;
+      showDeleted();
+      return;
+    }
+    lost = true;
+    connect();
+  }
 
   function add(set, e) {
     set.add(JSON.parse(e.data).target);
@@ -345,8 +364,11 @@ function start(section) {
         return;
       }
       if (pending.resync) {
-        await resync();
-        connect();
+        try {
+          await resync();
+        } catch {
+          // A dropped network is recovered by EventSource's retry/open path.
+        }
       } else {
         if (pending.article) {
           await refreshArticle(true);
