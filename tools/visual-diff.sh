@@ -31,8 +31,9 @@ STORIES=$(grep -oE '/story/[A-Za-z0-9_-]+' /tmp/visual-diff-index.html | sed 's|
 
 capture() {
 	out_dir=$1
-	mkdir -p "$out_dir"
-	stage_dir=$(mktemp -d)
+	parent_dir=$(dirname "$out_dir")
+	mkdir -p "$parent_dir"
+	stage_dir=$(mktemp -d "$parent_dir/.capture.XXXXXX")
 	tmp_js=$(mktemp --suffix=.js)
 	# %STORIES% / %BASE% / %OUTDIR% are substituted below; run-code only
 	# passes `page`, so everything else is baked into the file.
@@ -73,9 +74,14 @@ EOF
 		echo "capture incomplete:$missing; keeping existing $out_dir" >&2
 		exit 1
 	fi
-	rm -f "$out_dir"/*.png
-	mv "$stage_dir"/*.png "$out_dir"/
-	rmdir "$stage_dir"
+	backup_dir="$parent_dir/.backup.$$"
+	if [ -d "$out_dir" ]; then
+		mv "$out_dir" "$backup_dir"
+	fi
+	mv "$stage_dir" "$out_dir"
+	if [ -d "$backup_dir" ]; then
+		rm -rf "$backup_dir"
+	fi
 }
 
 case "${1:-}" in
