@@ -103,12 +103,12 @@ func writeSSE(w http.ResponseWriter, c events.Change) (int, error) {
 	return fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", c.Seq, c.Kind, data)
 }
 
-// parseIDSet reads the ?ids=1,2,3 filter; an absent parameter means "all"
-// (the whole list — the resync path), an empty one filters to nothing.
-func parseIDSet(r *http.Request) (map[int64]bool, bool, error) {
+// parseIDSet reads the ?ids=1,2,3 filter. An absent parameter returns nil
+// (the whole list — the resync path); an empty one filters to nothing.
+func parseIDSet(r *http.Request) (map[int64]bool, error) {
 	raw, present := r.URL.Query()["ids"]
 	if !present {
-		return nil, false, nil
+		return nil, nil
 	}
 	set := map[int64]bool{}
 	for _, v := range strings.Split(strings.Join(raw, ","), ",") {
@@ -117,11 +117,25 @@ func parseIDSet(r *http.Request) (map[int64]bool, bool, error) {
 		}
 		id, err := strconv.ParseInt(v, 10, 64)
 		if err != nil || id < 1 {
-			return nil, false, fmt.Errorf("bad id %q", v)
+			return nil, fmt.Errorf("bad id %q", v)
 		}
 		set[id] = true
 	}
-	return set, true, nil
+	return set, nil
+}
+
+// filterByID applies a parseIDSet result in place. nil ids mean unfiltered.
+func filterByID[T any](items []T, ids map[int64]bool, id func(T) int64) []T {
+	if ids == nil {
+		return items
+	}
+	out := items[:0]
+	for _, item := range items {
+		if ids[id(item)] {
+			out = append(out, item)
+		}
+	}
+	return out
 }
 
 // issueCommentsFragment serves GET /issues/{id}/fragments/comments:
@@ -129,7 +143,7 @@ func parseIDSet(r *http.Request) (map[int64]bool, bool, error) {
 // The fragment leads with the issue meta as a data-swap node — a new
 // comment bumps updated_at.
 func (h *handler) issueCommentsFragment(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
-	ids, filtered, err := parseIDSet(r)
+	ids, err := parseIDSet(r)
 	if err != nil {
 		h.renderError(w, r, http.StatusBadRequest, msgFor(r).ErrBadRequestH, msgFor(r).ErrInvalidIDs)
 		return
@@ -143,15 +157,7 @@ func (h *handler) issueCommentsFragment(w http.ResponseWriter, r *http.Request, 
 		h.internalError(w, r, err)
 		return
 	}
-	out := comments
-	if filtered {
-		out = comments[:0]
-		for _, c := range comments {
-			if ids[c.ID] {
-				out = append(out, c)
-			}
-		}
-	}
+	out := filterByID(comments, ids, func(c *store.Comment) int64 { return c.ID })
 	h.r.renderFragment(w, "issue_detail", "issue_comments_update", http.StatusOK, dict("Issue", issue, "Comments", out, "Workspace", ws), localeFromContext(r.Context()))
 
 }
@@ -175,7 +181,7 @@ func (h *handler) issueArticleFragment(w http.ResponseWriter, r *http.Request, w
 // — ?ids= picks specific threads (also how answer-move swaps fetch the two
 // changed <li>s), no ids returns the whole list.
 func (h *handler) discussionThreadsFragment(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
-	ids, filtered, err := parseIDSet(r)
+	ids, err := parseIDSet(r)
 	if err != nil {
 		h.renderError(w, r, http.StatusBadRequest, msgFor(r).ErrBadRequestH, msgFor(r).ErrInvalidIDs)
 		return
@@ -189,15 +195,7 @@ func (h *handler) discussionThreadsFragment(w http.ResponseWriter, r *http.Reque
 		h.internalError(w, r, err)
 		return
 	}
-	out := threads
-	if filtered {
-		out = threads[:0]
-		for _, t := range threads {
-			if ids[t.ID] {
-				out = append(out, t)
-			}
-		}
-	}
+	out := filterByID(threads, ids, func(t *store.DiscussionThread) int64 { return t.ID })
 	h.r.renderFragment(w, "discussion_detail", "discussion_threads_update", http.StatusOK, dict("Discussion", discussion, "Threads", out, "Workspace", ws), localeFromContext(r.Context()))
 
 }
@@ -212,7 +210,7 @@ func (h *handler) discussionRepliesFragment(w http.ResponseWriter, r *http.Reque
 		h.renderError(w, r, http.StatusBadRequest, msgFor(r).ErrBadRequestH, msgFor(r).ErrInvalidThreadID)
 		return
 	}
-	ids, filtered, err := parseIDSet(r)
+	ids, err := parseIDSet(r)
 	if err != nil {
 		h.renderError(w, r, http.StatusBadRequest, msgFor(r).ErrBadRequestH, msgFor(r).ErrInvalidIDs)
 		return
@@ -237,15 +235,7 @@ func (h *handler) discussionRepliesFragment(w http.ResponseWriter, r *http.Reque
 		h.notFound(w, r)
 		return
 	}
-	out := thread.Comments
-	if filtered {
-		out = thread.Comments[:0]
-		for _, c := range thread.Comments {
-			if ids[c.ID] {
-				out = append(out, c)
-			}
-		}
-	}
+	out := filterByID(thread.Comments, ids, func(c *store.DiscussionComment) int64 { return c.ID })
 	h.r.renderFragment(w, "discussion_detail", "discussion_replies_update", http.StatusOK, dict("Discussion", discussion, "Comments", out, "Workspace", ws), localeFromContext(r.Context()))
 
 }

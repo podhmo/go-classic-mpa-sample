@@ -127,4 +127,15 @@ func TestIssueCommentsFragment(t *testing.T) {
 			t.Fatalf("resync fragment missing %s", want)
 		}
 	}
+
+	// A present but empty ids parameter is an explicit empty selection.
+	resp3, err := srv.Client().Get(srv.URL + "/w/default/issues/" + itoa(issue.ID) + "/fragments/comments?ids=")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp3.Body.Close()
+	body3, _ := io.ReadAll(resp3.Body)
+	if strings.Contains(string(body3), `id="comment-`) {
+		t.Fatal("empty ids should filter every comment out")
+	}
 }
