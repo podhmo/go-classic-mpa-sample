@@ -34,6 +34,10 @@ var (
 	// ErrMergeInProgress reports a merge attempt while another process owns
 	// the pull request's unexpired merge reservation.
 	ErrMergeInProgress = errors.New("store: pull request merge already in progress")
+	// ErrPinFailed marks a created pull request whose git pin callback failed
+	// after the database row committed. The id remains valid; callers should
+	// treat this as a warning and offer pin repair rather than rolling back.
+	ErrPinFailed = errors.New("store: pull request pin failed")
 	// ErrSameRef reports a create whose base and head normalized to the
 	// same ref — a PR with an empty range is meaningless.
 	ErrSameRef = errors.New("store: base and head are the same ref")
@@ -199,9 +203,9 @@ func (s *Store) GetPullRequest(ctx context.Context, id int64) (*PullRequest, err
 }
 
 // CreatePullRequest inserts an open PR and returns its id. pin is invoked
-// inside the same transaction with the new id — the caller pins
-// refs/zatudan/pr/<id>/head there, so a failed pin rolls the insert back
-// instead of leaving an unprotected PR. base == head is rejected before
+// after the row commits — a failed pin leaves the PR visible and returns
+// ErrPinFailed with the valid id so callers can offer repair instead of
+// rolling user-visible state back. base == head is rejected before
 // insert; a second open PR for the same pair reports ErrDuplicatePR via
 // the partial unique index.
 func (s *Store) CreatePullRequest(ctx context.Context, in PRInput, authorID int64, pin func(prID int64) error) (int64, error) {
@@ -229,14 +233,14 @@ func (s *Store) CreatePullRequest(ctx context.Context, in PRInput, authorID int6
 	if err != nil {
 		return 0, err
 	}
-	if pin != nil {
-		if err := pin(id); err != nil {
-			return 0, err
-		}
-	}
 	if err := s.commitTx(ctx, tx,
 		events.Change{Topic: events.PullsTopic, Kind: events.KindNew, Target: id}); err != nil {
 		return 0, err
+	}
+	if pin != nil {
+		if err := pin(id); err != nil {
+			return id, errors.Join(ErrPinFailed, err)
+		}
 	}
 	return id, nil
 }
