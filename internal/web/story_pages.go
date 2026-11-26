@@ -297,6 +297,25 @@ func StoryIssueList() {
 	})
 }
 
+// StoryIssueListAuthenticated renders the issue list for a signed-in user:
+// the header switches from login/register links to the user handle and logout.
+func StoryIssueListAuthenticated() {
+	renderIssueList(http.StatusOK, issueListPage{
+		Title:      "Issues",
+		Issues:     storyIssues,
+		Labels:     storyLabels,
+		Filter:     store.ListFilter{Status: store.StatusOpen, Page: 1, PerPage: perPage},
+		Total:      len(storyIssues),
+		Page:       1,
+		TotalPages: 1,
+		RangeStart: 1,
+		RangeEnd:   len(storyIssues),
+		Workspace:  storyWorkspace,
+		Section:    "issues",
+		User:       &store.User{ID: 1, Name: "demo"},
+	})
+}
+
 // StoryIssueListEmpty renders the issue list with no results.
 func StoryIssueListEmpty() {
 	renderIssueList(http.StatusOK, issueListPage{
@@ -365,11 +384,69 @@ func StoryIssueDetail() {
 	})
 }
 
+// StoryIssueDetailNoBody renders an issue whose optional body was left empty.
+func StoryIssueDetailNoBody() {
+	issue := *storyIssue
+	issue.Body = ""
+	renderIssueDetail(http.StatusOK, issueDetailPage{
+		Title:     "#2 Improve responsive layout",
+		Issue:     &issue,
+		Comments:  storyComments,
+		Workspace: storyWorkspace,
+		Section:   "issues",
+	})
+}
+
+// StoryIssueDetailMarkdownRich exercises the markdown elements and alert
+// variants that the ordinary fixtures do not use.
+func StoryIssueDetailMarkdownRich() {
+	issue := *storyIssue
+	issue.Body = `# Heading 1
+
+## Heading 2
+
+### Heading 3
+
+#### Heading 4
+
+` + "```go\nfmt.Println(\"preformatted\")\n```" + `
+
+> A blockquote.
+
+> [!TIP]
+> A tip.
+
+> [!IMPORTANT]
+> Important information.
+
+> [!WARNING]
+> A warning.
+
+> [!CAUTION]
+> A caution.
+
+| Name | Value |
+| ---- | ----- |
+| one  | 1     |
+
+![placeholder](/static/app.css)
+
+---
+`
+	renderIssueDetail(http.StatusOK, issueDetailPage{
+		Title:     "#2 Improve responsive layout",
+		Issue:     &issue,
+		Comments:  storyComments,
+		Workspace: storyWorkspace,
+		Section:   "issues",
+	})
+}
+
 // StoryIssueDetailLong renders the detail page with a long comment thread
 // so the back-to-top affordance can be exercised by scrolling.
 func StoryIssueDetailLong() {
 	var comments []*store.Comment
-	for i := range 24 {
+	for i := range 51 {
 		comments = append(comments, &store.Comment{
 			ID: int64(i + 1), IssueID: 2,
 			Body:      fmt.Sprintf("Comment %d — a filler line to make the thread tall enough to scroll.", i+1),
@@ -577,7 +654,7 @@ func StoryDiscussionDetailReplyOpen() {
 // placement) can be exercised.
 func StoryDiscussionDetailLong() {
 	var threads []*store.DiscussionThread
-	for i := range 24 {
+	for i := range 51 {
 		threads = append(threads, &store.DiscussionThread{
 			ID: int64(i + 1), DiscussionID: 2,
 			Body:      fmt.Sprintf("Thread %d — a filler line to make the page tall enough to scroll.", i+1),
@@ -1441,6 +1518,28 @@ func StoryPullFiles() {
 				{Kind: "add", NewNo: 1, Text: "+package web"},
 				{Kind: "add", NewNo: 2, Text: "+"},
 				{Kind: "add", NewNo: 3, Text: "+// Pull request pages."},
+			},
+		},
+		{
+			Change:       gitrepo.FileChange{Status: "D", NewPath: "internal/web/old_pulls.go"},
+			CommentPath:  "internal/web/old_pulls.go",
+			StatusLetter: "D",
+			Anchor:       "file-internal-web-old-pulls-go",
+			Lines: []diffLine{
+				{Kind: "hunk", Text: "@@ -1,2 +0,0 @@"},
+				{Kind: "del", OldNo: 1, Text: "-package web"},
+				{Kind: "del", OldNo: 2, Text: "-// Removed in favor of pull_pages.go."},
+			},
+		},
+		{
+			Change:       gitrepo.FileChange{Status: "R100", OldPath: "internal/web/prs.go", NewPath: "internal/web/pulls.go"},
+			CommentPath:  "internal/web/pulls.go",
+			StatusLetter: "R",
+			Anchor:       "file-internal-web-pulls-go-renamed",
+			Lines: []diffLine{
+				{Kind: "hunk", Text: "@@ -1,2 +1,2 @@"},
+				{Kind: "ctx", OldNo: 1, NewNo: 1, Text: " package web"},
+				{Kind: "ctx", OldNo: 2, NewNo: 2, Text: " // Pull request pages."},
 			},
 		},
 	}
