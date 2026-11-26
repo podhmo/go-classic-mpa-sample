@@ -336,6 +336,7 @@ var messagesEN = messages{
 	PinRepairNeeded:     "The protective head pin is missing or stale — the archived commits may not survive branch deletion or garbage collection.",
 	BtnRepairPin:        "Repair pin",
 	ErrPinUnrepairable:  "No head commit is available to pin.",
+	ErrPinConflict:      "The pin changed while repairing — reload and try again.",
 	ErrMergeInProgress:  "Another merge of this pull request is already in progress — wait for it to finish.",
 	ErrThreadOnly:       "Comments can only be added to a thread.",
 	ErrDiffCompute:      "The diff could not be computed — the refs may have moved or been deleted.",

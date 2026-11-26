@@ -1242,6 +1242,10 @@ func (h *handler) repairPullPin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.repo.RepairPin(ctx, pr.ID, target, current); err != nil {
+		if errors.Is(err, gitrepo.ErrConcurrentUpdate) {
+			h.renderError(w, r, http.StatusConflict, msgFor(r).ErrNotMergeableH, msgFor(r).ErrPinConflict)
+			return
+		}
 		h.pullError(w, r, err)
 		return
 	}

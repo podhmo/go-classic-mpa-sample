@@ -345,6 +345,7 @@ type messages struct {
 	PinRepairNeeded     string
 	BtnRepairPin        string
 	ErrPinUnrepairable  string
+	ErrPinConflict      string
 	ErrMergeInProgress  string
 	ErrThreadOnly       string
 	ErrDiffCompute      string

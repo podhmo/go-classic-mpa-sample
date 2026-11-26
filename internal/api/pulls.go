@@ -704,6 +704,10 @@ func (h *handler) repairPullPin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.repo.RepairPin(ctx, pr.ID, target, current); err != nil {
+		if errors.Is(err, gitrepo.ErrConcurrentUpdate) {
+			writeError(w, http.StatusConflict, "The pin changed while repairing — try again.", nil)
+			return
+		}
 		if !h.gitError(w, err) {
 			writeError(w, http.StatusInternalServerError, "Internal server error.", nil)
 		}
