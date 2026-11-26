@@ -2261,6 +2261,30 @@ textarea[hidden] {
 
 .nav-menu-summary {
   display: none;
+  list-style: none;
+}
+
+.nav-menu-summary::-webkit-details-marker {
+  display: none;
+}
+
+.nav-menu-summary::marker {
+  content: "";
+}
+
+.nav-menu-summary::after {
+  content: "▾";
+  margin-left: 0.375rem;
+}
+
+.nav-menu[open] .nav-menu-summary::after {
+  content: "▴";
+}
+
+/* If a no-JS user closes the menu while narrow and then widens the viewport,
+   keep the summary available as the control that restores the navigation. */
+.nav-menu:not([open]) .nav-menu-summary {
+  display: inline-block;
 }
 
 @media (max-width: 40em) {
@@ -2271,24 +2295,6 @@ textarea[hidden] {
 
   .nav-menu-summary {
     display: inline-block;
-    list-style: none;
-  }
-
-  .nav-menu-summary::-webkit-details-marker {
-    display: none;
-  }
-
-  .nav-menu-summary::marker {
-    content: "";
-  }
-
-  .nav-menu-summary::after {
-    content: "▾";
-    margin-left: 0.375rem;
-  }
-
-  .nav-menu[open] .nav-menu-summary::after {
-    content: "▴";
   }
 
   .nav-menu:not([open]) .site-nav {
