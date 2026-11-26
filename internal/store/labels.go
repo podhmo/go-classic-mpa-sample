@@ -151,7 +151,7 @@ func (s *Store) CreateLabel(ctx context.Context, wsID int64, kind string, in Lab
 		return 0, err
 	case archived == 1:
 		if _, err := s.db.ExecContext(ctx,
-			"UPDATE labels SET archived = 0, color = ? WHERE id = ?", in.Color, existingID); err != nil {
+			"UPDATE labels SET archived = 0, color = ?, version = version + 1 WHERE id = ?", in.Color, existingID); err != nil {
 			return 0, err
 		}
 		return existingID, nil
