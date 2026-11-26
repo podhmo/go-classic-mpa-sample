@@ -178,9 +178,14 @@ func (f *fakeStore) ListIssues(_ context.Context, wsID int64, fl store.ListFilte
 		}
 		for _, name := range search.Labels {
 			found := false
-			for _, l := range is.Labels {
-				if l.Kind == store.KindLabelIssue && strings.EqualFold(l.Name, name) {
-					found = true
+			for _, attached := range is.Labels {
+				for _, catalog := range f.labels {
+					if catalog.ID == attached.ID && catalog.Kind == store.KindLabelIssue && strings.EqualFold(catalog.Name, name) {
+						found = true
+						break
+					}
+				}
+				if found {
 					break
 				}
 			}
