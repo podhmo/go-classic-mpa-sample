@@ -580,8 +580,11 @@ func (h *handler) createPull(w http.ResponseWriter, r *http.Request) {
 		return h.repo.PinHead(ctx, prID, headSHA)
 	})
 	if err != nil {
-		h.pullError(w, r, err)
-		return
+		if id == 0 || !errors.Is(err, store.ErrPinFailed) {
+			h.pullError(w, r, err)
+			return
+		}
+		log.Printf("web: pulls: pin #%d on create: %v", id, err)
 	}
 	redirectSeeOther(w, r, fmt.Sprintf("/pulls/%d", id))
 }

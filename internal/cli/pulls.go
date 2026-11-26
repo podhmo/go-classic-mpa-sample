@@ -477,7 +477,10 @@ func prCreate(ctx context.Context, o Options, args []string) error {
 		})
 	}
 	if err != nil {
-		return err
+		if id == 0 || !errors.Is(err, store.ErrPinFailed) {
+			return err
+		}
+		fmt.Fprintf(o.Stderr, "warning: pull request #%d created but pinning its head failed: %v\n", id, err)
 	}
 	fmt.Fprintf(o.Stdout, "pull request #%d created\n", id)
 	return nil

@@ -6,6 +6,7 @@ package gitrepo
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -464,6 +465,21 @@ func (r *Repo) UpdatePin(ctx context.Context, id int64, sha string) error {
 		return err
 	}
 	return nil
+}
+
+// PinNeedsRepair reports whether the protective pin is missing or, when
+// expectedSHA is nonempty, points somewhere else. Open PRs pass an empty
+// expectedSHA because their pin intentionally remains at the create-time
+// head while the feature branch advances; existence is enough there.
+func (r *Repo) PinNeedsRepair(ctx context.Context, id int64, expectedSHA string) (bool, error) {
+	got, err := r.RevParse(ctx, PinRef(id))
+	if errors.Is(err, ErrBadRef) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return expectedSHA != "" && got != expectedSHA, nil
 }
 
 // Unpin drops the pin ref; used if a pin must follow a comment/PR delete.

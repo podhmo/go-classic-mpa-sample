@@ -258,8 +258,11 @@ func (h *handler) createPull(w http.ResponseWriter, r *http.Request) {
 		return h.repo.PinHead(ctx, prID, headSHA)
 	})
 	if err != nil {
-		h.prStoreError(w, err)
-		return
+		if id == 0 || !errors.Is(err, store.ErrPinFailed) {
+			h.prStoreError(w, err)
+			return
+		}
+		log.Printf("api: pulls: pin #%d on create: %v", id, err)
 	}
 	pr, err := h.store.GetPullRequest(ctx, id)
 	if err != nil {
