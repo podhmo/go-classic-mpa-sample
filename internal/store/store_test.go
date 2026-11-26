@@ -21,6 +21,24 @@ func newTestStore(t *testing.T) *Store {
 	return s
 }
 
+func TestSQLiteMemoryDSNRepeatedModeUsesLastValue(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		dsn  string
+		want bool
+	}{
+		{"file::memory:", true},
+		{"file:test.db?mode=memory", true},
+		{"file:test.db?mode=rwc&mode=memory", true},
+		{"file:test.db?mode=memory&mode=rwc", false},
+		{"file:archive-mode=memory.db", false},
+	} {
+		if got := sqliteMemoryDSN(tc.dsn); got != tc.want {
+			t.Errorf("sqliteMemoryDSN(%q) = %v, want %v", tc.dsn, got, tc.want)
+		}
+	}
+}
+
 // TestFileDBPragmas verifies pragmas reach every pooled connection on a real
 // file database (foreign_keys is per-connection in SQLite).
 func TestFileDBPragmas(t *testing.T) {

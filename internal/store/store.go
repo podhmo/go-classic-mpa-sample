@@ -465,7 +465,12 @@ func sqliteMemoryDSN(dsn string) bool {
 		return false
 	}
 	values, err := url.ParseQuery(query)
-	return err == nil && values.Get("mode") == "memory"
+	if err != nil {
+		return false
+	}
+	// SQLite applies repeated URI parameters in order, so the last mode wins.
+	modes := values["mode"]
+	return len(modes) > 0 && modes[len(modes)-1] == "memory"
 }
 
 // Open opens (or creates) the SQLite database at path, enables foreign keys,
