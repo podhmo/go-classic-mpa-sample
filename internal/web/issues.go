@@ -550,7 +550,7 @@ func listURL(ws *store.Workspace, f store.ListFilter, page int) string {
 func statusURL(ws *store.Workspace, f store.ListFilter, status string) string {
 	f.Status = status
 	f.Page = 1
-	return issuesURLWithStatus(ws, f, true)
+	return issuesURLWithStatus(ws, f, f.Query != "")
 }
 
 // labelURL keeps the filter but selects a label and resets paging.
