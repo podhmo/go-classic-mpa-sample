@@ -27,6 +27,7 @@ type issueListPage struct {
 	RangeStart      int
 	RangeEnd        int
 	HasActiveFilter bool
+	StatusExplicit  bool
 	Section         string
 	Workspace       *store.Workspace
 	User            *store.User
@@ -135,9 +136,10 @@ func (h *handler) listIssues(w http.ResponseWriter, r *http.Request, ws *store.W
 		Pager:      newPager(f.Page, totalPages, func(page int) string { return listURL(ws, f, page) }),
 		HasActiveFilter: f.Query != "" || f.LabelID != 0 ||
 			f.Status != store.StatusOpen || f.Sort != "",
-		Section:   "issues",
-		Workspace: ws,
-		User:      userFromContext(r.Context()),
+		StatusExplicit: qHasStatus(r),
+		Section:        "issues",
+		Workspace:      ws,
+		User:           userFromContext(r.Context()),
 	}
 	if total > 0 {
 		data.RangeStart = (f.Page-1)*perPage + 1
@@ -560,6 +562,10 @@ func parsePageQuery(raw string) int {
 		return n
 	}
 	return 1
+}
+
+func qHasStatus(r *http.Request) bool {
+	return r.URL.Query().Get("status") != ""
 }
 
 // parseListFilter reads and normalizes the list query parameters.

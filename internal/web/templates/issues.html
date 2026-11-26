@@ -17,7 +17,7 @@
 </nav>
 
 <form method="get" action="/w/{{.Workspace.Slug}}/issues" class="filter-bar" role="search" aria-label="{{IssuesFilterAria}}">
-  <input type="hidden" name="status" value="{{.Filter.Status}}">
+  {{if .StatusExplicit}}<input type="hidden" name="status" value="{{.Filter.Status}}">{{end}}
   <div class="filter-field">
     <label for="filter-q">{{FilterSearch}}</label>
     <input type="search" id="filter-q" name="q" value="{{.Filter.Query}}" placeholder="{{FilterSearchPh}}">
