@@ -378,14 +378,18 @@ func TestUpdatePinFailureKeepsGitError(t *testing.T) {
 		t.Fatalf("pin: %v", err)
 	}
 
+	// Replacing the ref's parent directory with a regular file makes the
+	// update-ref lock unwritable even when tests run as root.
 	lockDir := filepath.Join(dir, ".git", "refs", "zatudan", "pr", "42")
-	if err := os.Chmod(lockDir, 0o555); err != nil {
+	if err := os.RemoveAll(lockDir); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chmod(lockDir, 0o755)
+	if err := os.WriteFile(lockDir, []byte("not a directory"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	err := r.UpdatePin(ctx, 42, head)
 	if err == nil {
-		t.Fatal("UpdatePin succeeded in a read-only refs directory")
+		t.Fatal("UpdatePin succeeded with an unwritable ref path")
 	}
 	if errors.Is(err, ErrConcurrentUpdate) {
 		t.Fatalf("permission failure was mislabeled concurrent: %v", err)
