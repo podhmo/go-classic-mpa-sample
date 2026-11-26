@@ -61,7 +61,11 @@ func linkifyIssueRefs(doc any, source []byte, workspace string) {
 			pos = m[1]
 		}
 		insertText(value[pos:])
-		if last != nil {
+		if node.SoftLineBreak() || node.HardLineBreak() {
+			if last == nil {
+				last = ast.NewText(text.NewSingleLineValueFromString("", nil))
+				parent.InsertBefore(node, last)
+			}
 			last.SetSoftLineBreak(node.SoftLineBreak())
 			last.SetHardLineBreak(node.HardLineBreak())
 		}

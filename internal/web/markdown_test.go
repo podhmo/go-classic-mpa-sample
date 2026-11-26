@@ -130,6 +130,13 @@ func TestRenderMarkdownIssueRefs(t *testing.T) {
 	}
 }
 
+func TestRenderMarkdownIssueRefKeepsHardBreak(t *testing.T) {
+	got := string(renderMarkdownForWorkspace(&store.Workspace{Slug: "default"}, "see #12  \nnext"))
+	if !strings.Contains(got, "<br") {
+		t.Fatalf("hard break after issue ref was lost: %s", got)
+	}
+}
+
 func TestRenderMarkdownIssueRefsSkipCodeAndLinks(t *testing.T) {
 	ws := &store.Workspace{Slug: "default"}
 	got := string(renderMarkdownForWorkspace(ws, "`#12`\n\n```\n#12\n```\n\n[#12](/already)"))
