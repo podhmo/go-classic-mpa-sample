@@ -784,4 +784,4 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 
 - **issue PATCH は事前読み出ししない**: `PatchIssueInWorkspace` が `WHERE id=? AND workspace_id=?` の scoped update で title/body を `COALESCE(?, column)` し、label 更新も同じ transaction に入れる。既存 issue を読まずに部分更新できる代わりに、missing id と validation error が同時にある request は validation を先に返す（従来の 404 優先ではなく 422 優先）。response 用の再読み出しも `GetIssueInWorkspace` で workspace scope 済みにする。
 - **comment の再取得は単行 lookup**: `GetComment` / `GetPRComment` を `(parent id, comment id)` で scope し、mutation response の DTO 組み立てで全件 `List*Comments` + 線形探索しない。API endpoint は増やさず store API の追加に留める。
-- **label 名解決は `LabelByName`**: 全 label を読まず、kind/name/workspace visibility で 1 行だけ引く。shared master と workspace label が同名なら workspace 側を優先し、picker で workspace-specific に見える方と一致させる。一覧 query parameter と create/update の `labels` 配列で共用する。
+- **label 名解決は `LabelByName`**: 単一名なら全 label を読まず、kind/name/workspace visibility で 1 行だけ引く。複数 distinct 名の write では per-name query を避けて従来どおり catalog を 1 回だけ読む。shared master と workspace label が同名なら workspace 側を優先し、picker で workspace-specific に見える方と一致させる。

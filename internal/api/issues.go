@@ -106,7 +106,7 @@ type issueBody struct {
 	Title    *string  `json:"title"`
 	Body     *string  `json:"body"`
 	LabelIDs []int64  `json:"label_ids"`
-	Labels   []string `json:"labels"` // label names, resolved one at a time
+	Labels   []string `json:"labels"` // label names, resolved to ids before validation
 }
 
 // POST /api/v1/issues {"title", "body", "label_ids"|"labels"} → 201
