@@ -105,8 +105,14 @@ function targetName(textarea) {
   const explicit = textarea.getAttribute("aria-label");
   if (explicit) return explicit.trim();
   if (!textarea.id) return "";
-  const label = document.querySelector(`label[for="${CSS.escape(textarea.id)}"]`);
-  return (label?.textContent || "").replace(/\s+/g, " ").replace(/\s*\*\s*$/, "").trim();
+  if (textarea.id) {
+    const label = document.querySelector(`label[for="${CSS.escape(textarea.id)}"]`);
+    const text = (label?.textContent || "").replace(/\s+/g, " ").replace(/\s*\*\s*$/, "").trim();
+    if (text) return text;
+  }
+  // Review-line textareas have no id/label; their localized placeholder is
+  // the only line-specific name the server rendered ("Comment on line 42").
+  return (textarea.getAttribute("placeholder") || "").replace(/\s+/g, " ").trim();
 }
 
 function enhance(textarea) {
