@@ -97,6 +97,14 @@ function activate(textarea, panel, tabs, which, state) {
   if (!writing && state.dirty) loadPreview(textarea, panel, state);
 }
 
+function targetName(textarea) {
+  const explicit = textarea.getAttribute("aria-label");
+  if (explicit) return explicit.trim();
+  if (!textarea.id) return "";
+  const label = document.querySelector(`label[for="${CSS.escape(textarea.id)}"]`);
+  return (label?.textContent || "").replace(/\s+/g, " ").replace(/\s*\*\s*$/, "").trim();
+}
+
 function enhance(textarea) {
   if (!(textarea instanceof HTMLTextAreaElement) || textarea.dataset.markdownEditor) return;
   textarea.dataset.markdownEditor = "1";
@@ -110,6 +118,7 @@ function enhance(textarea) {
   }
 
   const base = textarea.id || `markdown-body-${++nextID}`;
+  const target = targetName(textarea);
   const tablist = document.createElement("div");
   tablist.className = "markdown-tabs";
   tablist.setAttribute("role", "tablist");
@@ -121,6 +130,7 @@ function enhance(textarea) {
     button.setAttribute("role", "tab");
     button.id = `${base}-${mode}-tab`;
     button.textContent = label;
+    if (target) button.setAttribute("aria-label", t(`${mode}_for`, target));
     button.addEventListener("click", () => activate(textarea, panel, [write, preview], mode, state));
     tablist.append(button);
   }

@@ -138,6 +138,8 @@ var messagesEN = messages{
 	JSPreview:            "Preview",
 	JSPreviewEmpty:       "Nothing to preview.",
 	JSPreviewFailed:      "Preview could not be loaded.",
+	JSWriteFor:           "Write — %s",
+	JSPreviewFor:         "Preview — %s",
 
 	IssuesTitle:            "Issues",
 	IssuesFilterAria:       "Filter issues",

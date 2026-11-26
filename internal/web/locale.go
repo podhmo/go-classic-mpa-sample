@@ -504,6 +504,8 @@ func jsDictFor(lang string) template.HTMLAttr {
 		"preview":             m.JSPreview,
 		"preview_empty":       m.JSPreviewEmpty,
 		"preview_failed":      m.JSPreviewFailed,
+		"write_for":           m.JSWriteFor,
+		"preview_for":         m.JSPreviewFor,
 	})
 	dict := template.HTMLAttr(b)
 	cached, _ := jsDictCache.LoadOrStore(lang, dict)

@@ -140,6 +140,8 @@ type messages struct {
 	JSPreview            string
 	JSPreviewEmpty       string
 	JSPreviewFailed      string
+	JSWriteFor           string
+	JSPreviewFor         string
 
 	// Issues.
 	IssuesTitle            string
