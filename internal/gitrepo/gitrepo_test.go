@@ -369,6 +369,33 @@ func TestPinSurvivesGC(t *testing.T) {
 	}
 }
 
+func TestUpdatePinFailureKeepsGitError(t *testing.T) {
+	ctx := context.Background()
+	dir := initRepo(t)
+	r := openRepo(t, dir)
+	head := strings.TrimSpace(git(t, dir, "rev-parse", "main"))
+	if err := r.PinHead(ctx, 42, head); err != nil {
+		t.Fatalf("pin: %v", err)
+	}
+
+	lockDir := filepath.Join(dir, ".git", "refs", "zatudan", "pr", "42")
+	if err := os.Chmod(lockDir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(lockDir, 0o755)
+	err := r.UpdatePin(ctx, 42, head)
+	if err == nil {
+		t.Fatal("UpdatePin succeeded in a read-only refs directory")
+	}
+	if errors.Is(err, ErrConcurrentUpdate) {
+		t.Fatalf("permission failure was mislabeled concurrent: %v", err)
+	}
+	var gitErr *Error
+	if !errors.As(err, &gitErr) || strings.TrimSpace(gitErr.Stderr) == "" {
+		t.Fatalf("error lost git stderr: %T %v", err, err)
+	}
+}
+
 func TestLogDiffFiles(t *testing.T) {
 	ctx := context.Background()
 	dir := initRepo(t)
