@@ -18,6 +18,7 @@ import (
 	"log"
 	"mime"
 	"net/http"
+	"net/url"
 	"path"
 	"sort"
 	"strconv"
@@ -388,6 +389,7 @@ func New(st Store, opts ...Option) http.Handler {
 	mux.HandleFunc("GET /login", h.loginForm)
 	mux.HandleFunc("POST /login", h.login)
 	mux.HandleFunc("POST /logout", h.logout)
+	mux.HandleFunc("POST /preview", h.scopedMarkdownPreview)
 	// Workspace management (docs/sketch/ja/workspaces.md).
 	mux.HandleFunc("GET /workspaces", h.listWorkspaces)
 	mux.HandleFunc("GET /workspaces/new", h.newWorkspace)
@@ -396,6 +398,7 @@ func New(st Store, opts ...Option) http.Handler {
 	mux.HandleFunc("POST /w/{ws}/delete", h.scoped(h.deleteWorkspace))
 	// Canonical resource URLs live under /w/{slug}; the workspace-less
 	// /issues and /discussions paths stay as redirects at the bottom.
+	mux.HandleFunc("POST /w/{ws}/preview", h.scoped(h.markdownPreview))
 	mux.HandleFunc("GET /w/{ws}/issues", h.scoped(h.listIssues))
 	mux.HandleFunc("GET /w/{ws}/issues/new", h.scoped(h.newIssue))
 	mux.HandleFunc("POST /w/{ws}/issues", h.scoped(h.createIssue))
@@ -601,6 +604,7 @@ func New(st Store, opts ...Option) http.Handler {
 	registerStatic("/static/comment-submit-disabled.js", "comment-submit-disabled.js")
 	// beforeunload guard against losing unsaved form input.
 	registerStatic("/static/leave-guard.js", "leave-guard.js")
+	registerStatic("/static/markdown-editor.js", "markdown-editor.js")
 	// Shared element-lifecycle registry (attach/detach on DOM mutations) —
 	// a module, fetched only as an import dependency.
 	registerStatic("/static/dom-hooks.js", "dom-hooks.js")
@@ -730,6 +734,7 @@ type handler struct {
 var funcMap = template.FuncMap{
 	"fmtTime":        fmtTime,
 	"markdown":       renderMarkdown,
+	"markdownWS":     renderMarkdownForWorkspace,
 	"staticURL":      staticURL,
 	"modulePreloads": modulePreloads,
 	"add":            func(a, b int) int { return a + b },
@@ -827,6 +832,23 @@ func (h *handler) parseForm(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	return true
+}
+
+// redirectSeeOther completes a successful classic form POST. When the form
+// carried the client-generated draft key, echo it in a short-lived cookie so
+// markdown-editor.js can delete exactly that local draft after the PRG
+// redirect; validation failures render in place and therefore never set it.
+func redirectSeeOther(w http.ResponseWriter, r *http.Request, target string) {
+	if key := r.PostFormValue("draft_key"); key != "" {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "zatudan_draft_posted",
+			Value:    url.QueryEscape(key),
+			Path:     "/",
+			MaxAge:   30,
+			SameSite: http.SameSiteLaxMode,
+		})
+	}
+	http.Redirect(w, r, target, http.StatusSeeOther)
 }
 
 // writeMarkdown serves an exported markdown document. The copy-as-markdown

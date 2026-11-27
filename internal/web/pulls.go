@@ -437,7 +437,7 @@ func (h *handler) createPull(w http.ResponseWriter, r *http.Request) {
 		h.pullError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("/pulls/%d", id), http.StatusSeeOther)
+	redirectSeeOther(w, r, fmt.Sprintf("/pulls/%d", id))
 }
 
 // renderPullFormErr re-renders the create/edit form with field errors.
@@ -569,7 +569,7 @@ func (h *handler) updatePull(w http.ResponseWriter, r *http.Request) {
 		h.pullError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("/pulls/%d", pr.ID), http.StatusSeeOther)
+	redirectSeeOther(w, r, fmt.Sprintf("/pulls/%d", pr.ID))
 }
 
 // pullFiles serves GET /pulls/{id}/files — the changed-files view with
@@ -738,10 +738,10 @@ func (h *handler) createPRComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if in.Path != "" || r.PostFormValue("back") == "files" {
-		http.Redirect(w, r, fmt.Sprintf("/pulls/%d/files#comment-%d", pr.ID, id), http.StatusSeeOther)
+		redirectSeeOther(w, r, fmt.Sprintf("/pulls/%d/files#comment-%d", pr.ID, id))
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("/pulls/%d#comment-%d", pr.ID, id), http.StatusSeeOther)
+	redirectSeeOther(w, r, fmt.Sprintf("/pulls/%d#comment-%d", pr.ID, id))
 }
 
 // renderPullDetailErr re-renders the detail page with the comment form's
@@ -866,7 +866,7 @@ func (h *handler) updatePRComment(w http.ResponseWriter, r *http.Request) {
 		h.pullError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, cancelURL, http.StatusSeeOther)
+	redirectSeeOther(w, r, cancelURL)
 }
 
 // confirmDeletePRComment renders the delete confirmation page.
@@ -902,7 +902,7 @@ func (h *handler) deletePRComment(w http.ResponseWriter, r *http.Request) {
 		h.pullError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("/pulls/%d", pr.ID), http.StatusSeeOther)
+	redirectSeeOther(w, r, fmt.Sprintf("/pulls/%d", pr.ID))
 }
 
 func (h *handler) hidePRComment(w http.ResponseWriter, r *http.Request) {
@@ -956,7 +956,7 @@ func (h *handler) setPRCommentHidden(w http.ResponseWriter, r *http.Request, hid
 
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("/pulls/%d#comment-%d", pr.ID, c.ID), http.StatusSeeOther)
+	redirectSeeOther(w, r, fmt.Sprintf("/pulls/%d#comment-%d", pr.ID, c.ID))
 }
 
 // updatePullStatus applies POST /pulls/{id}/status — close records the
@@ -1007,7 +1007,7 @@ func (h *handler) updatePullStatus(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, http.StatusBadRequest, msgFor(r).ErrBadRequestH, msgFor(r).ErrUnknownStatus)
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("/pulls/%d", pr.ID), http.StatusSeeOther)
+	redirectSeeOther(w, r, fmt.Sprintf("/pulls/%d", pr.ID))
 }
 
 // mergePullForm serves GET /pulls/{id}/merge — the confirmation page with
@@ -1110,7 +1110,7 @@ func (h *handler) mergePull(w http.ResponseWriter, r *http.Request) {
 		h.pullError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("/pulls/%d", pr.ID), http.StatusSeeOther)
+	redirectSeeOther(w, r, fmt.Sprintf("/pulls/%d", pr.ID))
 }
 
 // pullEvents streams changes for one pull request as text/event-stream.

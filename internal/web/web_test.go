@@ -1409,7 +1409,7 @@ func TestModulePreloadsIncludeTransitiveDependencies(t *testing.T) {
 	wantDetail := []string{
 		"announcer.js", "clipboard.js", "comment-submit-disabled.js", "copy-markdown.js",
 		"copy-permalink.js", "dom-hooks.js", "enter-submit.js", "form-errors.js",
-		"fragments.js", "i18n.js", "leave-guard.js", "live-updates.js",
+		"fragments.js", "i18n.js", "leave-guard.js", "live-updates.js", "markdown-editor.js",
 		"partial-submit.js", "toast.js",
 	}
 	if len(detail) != len(wantDetail) {
@@ -1434,7 +1434,7 @@ func TestModulePreloadsIncludeTransitiveDependencies(t *testing.T) {
 	form := modulePreloads("page-form.js")
 	wantForm := map[string]bool{
 		"announcer.js": true, "dom-hooks.js": true, "enter-submit.js": true,
-		"form-errors.js": true, "leave-guard.js": true,
+		"form-errors.js": true, "i18n.js": true, "leave-guard.js": true, "markdown-editor.js": true,
 	}
 	if len(form) != len(wantForm) {
 		t.Fatalf("page-form preload count = %d (%v), want %d", len(form), form, len(wantForm))

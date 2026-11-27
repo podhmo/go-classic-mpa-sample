@@ -23,7 +23,7 @@
   <h2>{{CommentsHeading}}<span class="comment-count"{{if not .Comments}} hidden{{end}}> (<span data-comment-count>{{len .Comments}}</span>)</span></h2>
 
   <ol class="comment-list" role="list"{{if not .Comments}} hidden{{end}}>
-    {{range .Comments}}{{template "pr_comment" (dict "C" . "PR" $.PR)}}{{end}}
+    {{range .Comments}}{{template "pr_comment" (dict "C" . "PR" $.PR "Workspace" $.Workspace)}}{{end}}
   </ol>
   <p class="muted" data-empty-note{{if .Comments}} hidden{{end}}>{{CommentsEmpty}}</p>
 

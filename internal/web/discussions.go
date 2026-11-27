@@ -201,7 +201,7 @@ func (h *handler) createDiscussion(w http.ResponseWriter, r *http.Request, ws *s
 			h.internalError(w, r, err)
 			return
 		case err == nil:
-			http.Redirect(w, r, discussionURL(ws, id), http.StatusSeeOther)
+			redirectSeeOther(w, r, discussionURL(ws, id))
 			return
 		}
 	}
@@ -316,7 +316,7 @@ func (h *handler) updateDiscussion(w http.ResponseWriter, r *http.Request, ws *s
 			h.discussionError(w, r, err)
 			return
 		case err == nil:
-			http.Redirect(w, r, discussionURL(ws, discussion.ID), http.StatusSeeOther)
+			redirectSeeOther(w, r, discussionURL(ws, discussion.ID))
 			return
 		}
 	}
@@ -355,7 +355,7 @@ func (h *handler) deleteDiscussion(w http.ResponseWriter, r *http.Request, ws *s
 		h.discussionError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, "/w/"+ws.Slug+"/discussions", http.StatusSeeOther)
+	redirectSeeOther(w, r, "/w/"+ws.Slug+"/discussions")
 }
 
 // createDiscussionComment validates POST /discussions/{id}/comments — a
@@ -411,7 +411,7 @@ func (h *handler) createDiscussionComment(w http.ResponseWriter, r *http.Request
 			if threadID == 0 {
 				anchor = "thread"
 			}
-			http.Redirect(w, r, fmt.Sprintf("%s#%s-%d", discussionURL(ws, id), anchor, commentID), http.StatusSeeOther)
+			redirectSeeOther(w, r, fmt.Sprintf("%s#%s-%d", discussionURL(ws, id), anchor, commentID))
 			return
 		case errors.Is(err, store.ErrInvalidThread):
 			errMsg = msgFor(r).ErrThreadOnly
@@ -574,7 +574,7 @@ func (h *handler) setCommentAnswer(w http.ResponseWriter, r *http.Request, ws *s
 			h.renderAnswerSwap(w, r, ws, id, cid, prevID)
 			return
 		}
-		http.Redirect(w, r, fmt.Sprintf("%s#thread-%d", discussionURL(ws, id), cid), http.StatusSeeOther)
+		redirectSeeOther(w, r, fmt.Sprintf("%s#thread-%d", discussionURL(ws, id), cid))
 	case errors.Is(err, store.ErrNotFound):
 		h.notFound(w, r)
 	case errors.Is(err, store.ErrNotAnswerable):

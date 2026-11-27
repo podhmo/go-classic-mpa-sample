@@ -58,10 +58,10 @@
       <p class="comment-hidden-note">{{MarkedAs (noun "comment") (hideReasonLabel .HiddenReason)}}</p>
       <details class="comment-hidden-body">
         <summary>{{ShowNoun (noun "comment")}}</summary>
-        <div class="comment-body markdown-body">{{markdown .Body}}</div>
+        <div class="comment-body markdown-body">{{markdownWS $.Workspace .Body}}</div>
       </details>
       {{else}}
-      <div class="comment-body markdown-body">{{markdown .Body}}</div>
+      <div class="comment-body markdown-body">{{markdownWS $.Workspace .Body}}</div>
       {{end}}
     </div>
     {{end}}

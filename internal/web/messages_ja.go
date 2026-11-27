@@ -134,6 +134,12 @@ var messagesJA = messages{
 	JSListIssues:         "イシュー",
 	JSListDiscussions:    "ディスカッション",
 	JSListPRs:            "プルリクエスト",
+	JSWrite:              "書く",
+	JSPreview:            "プレビュー",
+	JSPreviewEmpty:       "プレビューする内容がありません。",
+	JSPreviewFailed:      "プレビューを読み込めませんでした。",
+	JSWriteFor:           "書く — %s",
+	JSPreviewFor:         "プレビュー — %s",
 
 	IssuesTitle:            "イシュー",
 	IssuesFilterAria:       "イシューを絞り込み",

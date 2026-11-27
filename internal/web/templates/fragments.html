@@ -26,7 +26,7 @@
   </header>
 
   {{if .Issue.Body}}
-  <div class="issue-body markdown-body">{{markdown .Issue.Body}}</div>
+  <div class="issue-body markdown-body">{{markdownWS .Workspace .Issue.Body}}</div>
   {{else}}
   <div class="issue-body issue-body-empty"><em>{{NoDescription}}</em></div>
   {{end}}
@@ -111,10 +111,10 @@
   <p class="comment-hidden-note">{{MarkedAs (noun "comment") (hideReasonLabel .C.HiddenReason)}}</p>
   <details class="comment-hidden-body">
     <summary>{{ShowNoun (noun "comment")}}</summary>
-    <div class="comment-body markdown-body">{{markdown .C.Body}}</div>
+    <div class="comment-body markdown-body">{{markdownWS .Workspace .C.Body}}</div>
   </details>
   {{else}}
-  <div class="comment-body markdown-body">{{markdown .C.Body}}</div>
+  <div class="comment-body markdown-body">{{markdownWS .Workspace .C.Body}}</div>
   {{end}}
   <div class="comment-actions">
     {{template "comment_actions" (dict "C" .C "Noun" "comment" "Base" (printf "/w/%s/issues/%d/comments/%d" $.Workspace.Slug .C.IssueID .C.ID) "Target" (printf "#comment-%d" .C.ID))}}
@@ -186,7 +186,7 @@
   </header>
 
   {{if .Discussion.Body}}
-  <div class="issue-body markdown-body">{{markdown .Discussion.Body}}</div>
+  <div class="issue-body markdown-body">{{markdownWS .Workspace .Discussion.Body}}</div>
   {{else}}
   <div class="issue-body issue-body-empty"><em>{{NoDescription}}</em></div>
   {{end}}
@@ -232,10 +232,10 @@
   <p class="comment-hidden-note">{{MarkedAs (noun "thread") (hideReasonLabel .C.HiddenReason)}}</p>
   <details class="comment-hidden-body">
     <summary>{{ShowNoun (noun "thread")}}</summary>
-    <div class="comment-body markdown-body">{{markdown .C.Body}}</div>
+    <div class="comment-body markdown-body">{{markdownWS .Workspace .C.Body}}</div>
   </details>
   {{else}}
-  <div class="comment-body markdown-body">{{markdown .C.Body}}</div>
+  <div class="comment-body markdown-body">{{markdownWS .Workspace .C.Body}}</div>
   {{end}}
   <div class="comment-actions">
     {{if eq .Discussion.Category.Format "qa"}}
@@ -332,10 +332,10 @@
   <p class="comment-hidden-note">{{MarkedAs (noun "comment") (hideReasonLabel .C.HiddenReason)}}</p>
   <details class="comment-hidden-body">
     <summary>{{ShowNoun (noun "comment")}}</summary>
-    <div class="comment-body markdown-body">{{markdown .C.Body}}</div>
+    <div class="comment-body markdown-body">{{markdownWS .Workspace .C.Body}}</div>
   </details>
   {{else}}
-  <div class="comment-body markdown-body">{{markdown .C.Body}}</div>
+  <div class="comment-body markdown-body">{{markdownWS .Workspace .C.Body}}</div>
   {{end}}
   <div class="comment-actions">
     {{template "comment_actions" (dict "C" .C "Noun" "comment" "Base" (printf "/w/%s/discussions/%d/threads/%d/comments/%d" $.Workspace.Slug $.Discussion.ID .C.ThreadID .C.ID) "Target" (printf "#comment-%d" .C.ID))}}

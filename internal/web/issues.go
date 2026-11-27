@@ -188,7 +188,7 @@ func (h *handler) createIssue(w http.ResponseWriter, r *http.Request, ws *store.
 		h.internalError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, issueURL(ws, id), http.StatusSeeOther)
+	redirectSeeOther(w, r, issueURL(ws, id))
 }
 
 // requireIssue resolves /issues/{id} inside ws; any failure already wrote
@@ -304,7 +304,7 @@ func (h *handler) updateIssue(w http.ResponseWriter, r *http.Request, ws *store.
 		h.issueError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, issueURL(ws, issue.ID), http.StatusSeeOther)
+	redirectSeeOther(w, r, issueURL(ws, issue.ID))
 }
 
 // setStatus handles POST /issues/{id}/status. The target status arrives as a
@@ -346,7 +346,7 @@ func (h *handler) setStatus(w http.ResponseWriter, r *http.Request, ws *store.Wo
 
 		return
 	}
-	http.Redirect(w, r, issueURL(ws, issue.ID), http.StatusSeeOther)
+	redirectSeeOther(w, r, issueURL(ws, issue.ID))
 }
 
 // confirmDelete renders the delete confirmation page. Being a GET, it must
@@ -379,7 +379,7 @@ func (h *handler) deleteIssue(w http.ResponseWriter, r *http.Request, ws *store.
 		h.issueError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, "/w/"+ws.Slug+"/issues", http.StatusSeeOther)
+	redirectSeeOther(w, r, "/w/"+ws.Slug+"/issues")
 }
 
 // createComment validates POST /issues/{id}/comments and redirects back to
@@ -465,7 +465,7 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request, ws *stor
 
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("%s#comment-%d", issueURL(ws, id), commentID), http.StatusSeeOther)
+	redirectSeeOther(w, r, fmt.Sprintf("%s#comment-%d", issueURL(ws, id), commentID))
 }
 
 // issueError maps store.ErrNotFound to a 404 page and delegates everything

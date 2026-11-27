@@ -136,6 +136,12 @@ type messages struct {
 	JSListIssues         string
 	JSListDiscussions    string
 	JSListPRs            string
+	JSWrite              string
+	JSPreview            string
+	JSPreviewEmpty       string
+	JSPreviewFailed      string
+	JSWriteFor           string
+	JSPreviewFor         string
 
 	// Issues.
 	IssuesTitle            string
