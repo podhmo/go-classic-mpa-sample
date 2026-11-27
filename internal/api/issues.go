@@ -12,7 +12,9 @@ import (
 // GET /api/v1/issues?status=&q=&label=&label_id=&sort=&page=&per_page=
 // Response: {"issues": [...], "total": N, "page": P, "per_page": PP}
 // label_id filters by exact label id (preferred); label filters by name
-// and is ambiguous when shared and workspace labels share a name.
+// and is ambiguous when shared and workspace labels share a name. q supports
+// the shared issue syntax: is:open|is:closed, label:NAME, author:NAME,
+// and space-separated text terms, all ANDed.
 func (h *handler) listIssues(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
 	q := r.URL.Query()
 	f := store.ListFilter{

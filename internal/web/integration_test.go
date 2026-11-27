@@ -370,6 +370,11 @@ func TestE2EListInteractions(t *testing.T) {
 		}
 	}
 
+	_, _, body = e2eGet(t, srv, "/w/default/issues?q=is%3Aclosed")
+	if n := countRows(body); n != len(closedSeedTitles) {
+		t.Errorf("q=is:closed rendered %d rows, want %d", n, len(closedSeedTitles))
+	}
+
 	// q searches bodies, not just titles: "trigram" appears only in the
 	// body of "Search slows down with 10,000+ records" (seed.go).
 	_, _, body = e2eGet(t, srv, "/w/default/issues?q=trigram")

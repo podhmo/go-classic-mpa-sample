@@ -833,3 +833,10 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 - **nav tree は1本のまま `<details>` で包む**: 大幅では summary を隠して inline nav、40em 以下では summary "Menu" から absolute dropdown を開く。リンクは別 tree に複製しない。
 - **no-JS では open のまま機能させる**: markup は `open` 開始にし、`nav-menu.js` は narrow 判定が分かった初期だけ close、wide では常に open へ戻す。narrow 内の resize でユーザーが開いた状態を勝手に閉じない。
 - **closed 時は明示的に nav を display:none にする**: `.site-nav` 自体の author display が closed `<details>` の UA hiding を上書きするブラウザがあるため、窄 layout では `.nav-menu:not([open]) .site-nav` を明示する。
+
+## issue 検索クエリ構文（2026-11-26、owner improvements 対応）
+
+- **FTS5 の前段として issue 検索だけに qualifier parser を入れる**: `is:open` / `is:closed`、`label:NAME`、`author:NAME`、残りの空白区切り語をすべて AND で title/body substring 条件にする。discussions/pulls の検索と FTS5 化は後段。
+- **parser と解釈は store 側に置く**: web/API/local CLI/remote CLI が同じ `q` 文字列を store 層へ渡すので、3画面で文法実装が分岐しない。`label:` は workspace/shared label 名を SQL で直接照合し、未知 label は0件になる（既存の `label=` パラメータの422とは別仕様）。
+- **`is:` は暗黙 open default を上書きするが明示フィルタとは AND になる**: `status` 未指定なら `is:closed` で closed を出す。web/CLI は「status 未指定」を store へ残し、明示 `--state open` や `?status=open` と `is:closed` が衝突した場合は0件にする。
+- **検索語ハイライトも qualifier を外す**: client側 JS は Go parser と同じ quoted token 解釈で `is:/label:/author:` を除き、残り語を個別にハイライトする。

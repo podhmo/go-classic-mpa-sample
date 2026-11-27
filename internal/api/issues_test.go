@@ -85,6 +85,10 @@ func TestIssueLifecycle(t *testing.T) {
 	if out["total"].(float64) != 0 {
 		t.Fatalf("open list should be empty: %v", out)
 	}
+	code, out = do(t, srv, "GET", "/api/v1/w/default/issues?q=is:closed", "")
+	if code != http.StatusOK || out["total"].(float64) != 1 {
+		t.Fatalf("q=is:closed list = %d %v", code, out)
+	}
 
 	code, out = do(t, srv, "POST", fmt.Sprintf("/api/v1/w/default/issues/%d/comments", id), `{"body":"me too"}`)
 	if code != http.StatusCreated || out["comment"].(map[string]any)["body"] != "me too" {

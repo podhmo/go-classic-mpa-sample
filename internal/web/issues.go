@@ -27,6 +27,7 @@ type issueListPage struct {
 	RangeStart      int
 	RangeEnd        int
 	HasActiveFilter bool
+	StatusExplicit  bool
 	Section         string
 	Workspace       *store.Workspace
 	User            *store.User
@@ -135,9 +136,10 @@ func (h *handler) listIssues(w http.ResponseWriter, r *http.Request, ws *store.W
 		Pager:      newPager(f.Page, totalPages, func(page int) string { return listURL(ws, f, page) }),
 		HasActiveFilter: f.Query != "" || f.LabelID != 0 ||
 			f.Status != store.StatusOpen || f.Sort != "",
-		Section:   "issues",
-		Workspace: ws,
-		User:      userFromContext(r.Context()),
+		StatusExplicit: qHasStatus(r),
+		Section:        "issues",
+		Workspace:      ws,
+		User:           userFromContext(r.Context()),
 	}
 	if total > 0 {
 		data.RangeStart = (f.Page-1)*perPage + 1
@@ -509,9 +511,15 @@ func isChecked(id int64, ids []int64) bool {
 // filter state, so pagination, tabs and label links preserve active
 // filters.
 func issuesURL(ws *store.Workspace, f store.ListFilter) string {
+	return issuesURLWithStatus(ws, f, false)
+}
+
+func issuesURLWithStatus(ws *store.Workspace, f store.ListFilter, explicitOpen bool) string {
 	v := url.Values{}
-	// "open" is the default filter, so keep URLs clean by omitting it.
-	if f.Status != "" && f.Status != store.StatusOpen {
+	// "open" is the default filter, so keep ordinary URLs clean by omitting
+	// it; status-tab links ask for explicitOpen so the next search preserves
+	// the user's explicit choice.
+	if f.Status != "" && (f.Status != store.StatusOpen || explicitOpen) {
 		v.Set("status", f.Status)
 	}
 	if f.Query != "" {
@@ -542,7 +550,7 @@ func listURL(ws *store.Workspace, f store.ListFilter, page int) string {
 func statusURL(ws *store.Workspace, f store.ListFilter, status string) string {
 	f.Status = status
 	f.Page = 1
-	return issuesURL(ws, f)
+	return issuesURLWithStatus(ws, f, f.Query != "")
 }
 
 // labelURL keeps the filter but selects a label and resets paging.
@@ -561,6 +569,10 @@ func parsePageQuery(raw string) int {
 	return 1
 }
 
+func qHasStatus(r *http.Request) bool {
+	return r.URL.Query().Get("status") != ""
+}
+
 // parseListFilter reads and normalizes the list query parameters.
 func parseListFilter(r *http.Request) store.ListFilter {
 	q := r.URL.Query()
@@ -571,9 +583,13 @@ func parseListFilter(r *http.Request) store.ListFilter {
 		Page:    1,
 		PerPage: perPage,
 	}
-	switch f.Status {
-	case store.StatusOpen, store.StatusClosed, "all":
-	default:
+	if rawStatus := q.Get("status"); rawStatus != "" {
+		switch f.Status {
+		case store.StatusOpen, store.StatusClosed, "all":
+		default:
+			f.Status = store.StatusOpen
+		}
+	} else if len(store.ParseIssueSearchQuery(f.Query).Statuses) == 0 {
 		f.Status = store.StatusOpen
 	}
 	if f.Sort != "oldest" {
