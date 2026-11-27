@@ -18,8 +18,25 @@ import (
 // An unknown slug is a plain 404 — the segment is part of the canonical
 // address, not a redirect hint.
 func (h *handler) scoped(fn func(http.ResponseWriter, *http.Request, *store.Workspace)) http.HandlerFunc {
+	return h.scopedWorkspace(fn, false)
+}
+
+// scopedWithCounts is for workspace-management screens that render the
+// number of contents being deleted. Ordinary scoped routes use the count-free
+// lookup because they never display those totals.
+func (h *handler) scopedWithCounts(fn func(http.ResponseWriter, *http.Request, *store.Workspace)) http.HandlerFunc {
+	return h.scopedWorkspace(fn, true)
+}
+
+func (h *handler) scopedWorkspace(fn func(http.ResponseWriter, *http.Request, *store.Workspace), withCounts bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ws, err := h.store.WorkspaceBySlug(r.Context(), r.PathValue("ws"))
+		var ws *store.Workspace
+		var err error
+		if withCounts {
+			ws, err = h.store.WorkspaceBySlug(r.Context(), r.PathValue("ws"))
+		} else {
+			ws, err = h.store.WorkspaceRefBySlug(r.Context(), r.PathValue("ws"))
+		}
 		if err != nil {
 			h.workspaceError(w, r, err)
 			return
@@ -85,7 +102,7 @@ func (h *handler) home(w http.ResponseWriter, r *http.Request) {
 // defaultWorkspace returns 'default' when present, else the first
 // workspace by slug, else nil.
 func (h *handler) defaultWorkspace(r *http.Request) (*store.Workspace, error) {
-	ws, err := h.store.WorkspaceBySlug(r.Context(), store.DefaultWorkspaceSlug)
+	ws, err := h.store.WorkspaceRefBySlug(r.Context(), store.DefaultWorkspaceSlug)
 	if err == nil {
 		return ws, nil
 	}

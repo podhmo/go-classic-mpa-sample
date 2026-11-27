@@ -745,3 +745,8 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 
 - **既知の静的ファイルだけ exact path で認証 middleware の外に出す**: session cookie 付きでも stylesheet/module ごとに DB 照会しない。未知の `/static/` 配下は従来どおり動的 mux の styled 404 に落とす。
 - **embed 資産は起動後の初回アクセスで byte・gzip・sha256 ETag をキャッシュする**: deploy まで内容が変わらないため process lifetime で有効。ETag conditional request は 304、gzip 対応 client には事前圧縮 body を返し `Vary: Accept-Encoding` を付ける。versioned URL + immutable 化は別 TODO に残す。
+
+## workspace 解決の count-free lookup（2026-11-26、owner improvements 対応）
+
+- **scoped route は `WorkspaceRefBySlug` を使う**: `/w/{slug}/...` の定常解決では id/slug/name/description/created_at だけを読み、issues/discussions の `COUNT(*)` を実行しない。返り値の count field は zero value のまま。
+- **件数を表示する画面だけ従来の counted lookup を使う**: workspace delete 確認と API workspace detail/create response は `WorkspaceBySlug`、workspace 一覧は `ListWorkspaces` の counted query を使う。redirect 用の `WorkspaceByID` は稀な経路なので現状維持。

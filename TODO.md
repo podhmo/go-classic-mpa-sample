@@ -30,7 +30,7 @@ Guides referenced below are in the `modern-web-guidance` catalog (`.agents/skill
 - [x] **`Accept-Language` の q 値を解釈する**: `en, ja;q=0.1` で英語を選ぶよう簡易 q パースを実装し、`wantsJapanese` の回帰テストを足す（[owner-improvements §1.6](docs/sketch/ja/owner-improvements.md)）
 - [x] **SQLite を WAL + immediate transaction にする**: `_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_txlock=immediate` を検証し、並行 writer で `SQLITE_BUSY` が出ないテストを足す（[owner-improvements §1.3](docs/sketch/ja/owner-improvements.md)）
 - [x] **`/static/` を `withUser` の外に出し gzip + ETag を付ける**: 静的ファイルごとのセッション照会をなくし、事前圧縮と 304 を入れる。versioned URL 化は既存タスクで後段とする（[owner-improvements §2.3](docs/sketch/ja/owner-improvements.md)）
-- [ ] **workspace 解決から COUNT(*) を外す**: slug→ID の軽量クエリを用意し、件数が必要な画面だけで数える。`/w/{ws}/...` 全リクエストの定常クエリを減らす（[owner-improvements §2.1](docs/sketch/ja/owner-improvements.md)）
+- [x] **workspace 解決から COUNT(*) を外す**: slug→ID の軽量クエリを用意し、件数が必要な画面だけで数える。`/w/{ws}/...` 全リクエストの定常クエリを減らす（[owner-improvements §2.1](docs/sketch/ja/owner-improvements.md)）
 - [ ] **markdown レンダリング結果を LRU キャッシュする**: `sha256(body)` をキーに表示時変換の結果だけキャッシュし、DB に生 markdown を置く方針は維持する（[owner-improvements §2.4](docs/sketch/ja/owner-improvements.md)）
 - [ ] **PR 詳細の git 呼び出しをまとめる**: `rev-parse` の束ね方と `(baseSHA, headSHA)` キーの小さな cache を検討し、`Log` / `CheckMerge` の重複実行を減らす（[owner-improvements §2.6](docs/sketch/ja/owner-improvements.md)）
 - [ ] **テンプレート parse をロケールごとの clone に寄せる**: layout+fragments を 1 回 parse して `Clone()` し、`jsDictFor` の JSON 化もロケール単位にする（[owner-improvements §2.7](docs/sketch/ja/owner-improvements.md)）
