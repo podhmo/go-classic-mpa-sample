@@ -11,13 +11,13 @@
 | 25 | nit | 未修正 | 部分更新の append パスで "Last updated" メタ行が stale | PR #49 の Devin Review 指摘から発覚した同種問題: コメント/返信の部分投稿（`createComment`/`createDiscussionComment` の `X-Partial` 応答）は store の `updated_at` を進めるが、fragment は新 `<li>` のみを返すためヘッダの "Last updated" がリロードまで古いまま。answer swap 側は `discussion_meta` ノード同梱で解決済み（PR #49）。append モードは全ノードを挿入先へ追加する設計なので、自己ターゲットする swap ノードを混ぜるにはプロトコル拡張（例: `data-swap` 印付きノードは `replaceWith`）が要る → TODO.md にタスク記録済 |
 | 27 | info | 未修正 | remote CLI（`*client.Client`）が store sentinel エラーに写像しない | 同じ追検証で発見: `cli.Backend` の HTTP 実装は `*client.Error{Status,Message,Fields}` を返し `store.ErrNotFound`/`ErrNotAnswerable` に写像しないため、remote モードでは `errors.Is(err, store.ErrNotFound)` が成立しない。現状 sentinel を判定する消費者は local 限定の TokenStore のみで実害なし（潜在乖離）。根治候補: 404→ErrNotFound 写像 or API の機械可読エラーコード化 → TODO.md にタスク記録済 |
 | 36 | major | 未修正 | 並行 merge で git 側だけ二重適用されうる | 2026-11-26 コードレビューで発見（`docs/sketch/ja/owner-improvements.md` §1.1）: `mergePull`（api/web/cli 共通の流れ）は `pr.Open()` 確認 → `repo.Merge` → `MarkMerged(WHERE status='open')` の順で、git 副作用が DB の状態遷移より先。squash は常に2回目を作りえ、rebase も base 更新後に読んだ2本目が空差分をコミットしうる。対応案: git 前に DB で CAS による merging 確保 + 中断予約の復旧 |
-| 39 | nit | 未修正 | `CheckMerge` が解決済み SHA ではなく ref 名で merge-tree を実行 | `internal/gitrepo/ops.go:284-299`。報告 SHA と判定対象が競合時にずれうる |
 | 40 | nit | 未修正 | エラー見出し `"Bad request"` が英語直書き（i18n 漏れ） | `internal/web/comments.go:295,437,573`、`internal/web/pulls.go:894`。`msgFor(r).ErrBadRequestH` を使う |
 
 ## 修正済み
 
 | # | 重要度 | 状態 | 概要 | 詳細 |
 |---|--------|------|------|------|
+| 39 | nit | 修正済 | `CheckMerge` が解決済み SHA ではなく ref 名で merge-tree を実行 | RevParse 済みの `BaseSHA`/`HeadSHA` ではなく ref 名で `merge-base`/`merge-tree` を実行し、競合時に報告 SHA と判定対象がずれうる状態だった。対応: 解決済み SHA を両コマンドへ渡す |
 | 41 | minor | 修正済 | API の PR diff が 8MiB で切り詰められてもクライアントに通知されない | `pullDiff` が `repo.Diff` の truncation flag を捨て、remote CLI が不完全な差分を正常結果として受け取っていた。対応: API は `X-Truncated: true` を返し、client は header を解釈、remote `zatu pr diff` は stderr に警告する。回帰テスト追加済 |
 | 38 | minor | 修正済 | API と web の PR 一覧で `page` に上限がなく OFFSET がオーバーフローしうる | #2 の修正は web の issue/discussion 一覧のみで、API の `queryInt` と web の PR 一覧に上限がなかった。対応: store 層の共通 `normalizePage` + `MaxListPage`、API/web の入力クランプ、PR 一覧の最終ページ再取得。回帰テスト追加済 |
 | 37 | minor | 修正済 | `createPull` で base の ref エラーが head の結果で上書きされる | `internal/web/pulls.go` が `normErr` を共用し、base 不正・head 正常だと不正 base が `RevParse` に渡り 422 ではなく 500 になっていた。対応: `baseErr`/`headErr` に分離し、どちらかの不正でも 422 のフォームエラーにする。回帰テスト追加済 |

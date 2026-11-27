@@ -197,6 +197,69 @@ func TestCheckMergeCleanAndConflict(t *testing.T) {
 	}
 }
 
+func TestCheckMergePassesResolvedSHAs(t *testing.T) {
+	ctx := context.Background()
+	dir := initRepo(t)
+	git(t, dir, "checkout", "-qb", "feat")
+	write(t, dir, "b.txt", "two\n")
+	git(t, dir, "checkout", "-q", "main")
+	r := openRepo(t, dir)
+
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	quote := func(path string) string {
+		return "'" + strings.ReplaceAll(path, "'", "'\\''") + "'"
+	}
+	bin := t.TempDir()
+	logPath := filepath.Join(t.TempDir(), "git-args.log")
+	wrapper := "#!/bin/sh\n{\nfor arg do\nprintf '%s\\n' \"$arg\"\ndone\nprintf '\\n'\n} >> " + quote(logPath) + "\nexec " + quote(realGit) + " \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(wrapper), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	mc, err := r.CheckMerge(ctx, "main", "feat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertCommandUsesSHAs := func(command string) {
+		t.Helper()
+		for _, block := range strings.Split(strings.TrimSuffix(string(raw), "\n"), "\n\n") {
+			rawArgs := strings.Split(block, "\n")
+			args := rawArgs[:0]
+			for _, arg := range rawArgs {
+				if arg != "" {
+					args = append(args, arg)
+				}
+			}
+			found := false
+			for _, arg := range args {
+				if arg == command {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+			if len(args) >= 2 && args[len(args)-2] == mc.BaseSHA && args[len(args)-1] == mc.HeadSHA {
+				return
+			}
+			t.Fatalf("%s args = %v, want resolved SHAs %s %s", command, args, mc.BaseSHA, mc.HeadSHA)
+		}
+		t.Fatalf("%s was not invoked; log:\n%s", command, raw)
+	}
+	assertCommandUsesSHAs("merge-base")
+	assertCommandUsesSHAs("merge-tree")
+}
+
 func TestMergePlumbing(t *testing.T) {
 	ctx := context.Background()
 	dir := initRepo(t)
