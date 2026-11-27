@@ -498,6 +498,7 @@ func New(st Store, opts ...Option) http.Handler {
 		mux.HandleFunc("POST /pulls/{id}/comments/{cid}/hide", h.hidePRComment)
 		mux.HandleFunc("POST /pulls/{id}/comments/{cid}/unhide", h.unhidePRComment)
 		mux.HandleFunc("POST /pulls/{id}/status", h.updatePullStatus)
+		mux.HandleFunc("POST /pulls/{id}/repair-pin", h.repairPullPin)
 		mux.HandleFunc("GET /pulls/{id}/merge", h.mergePullForm)
 		mux.HandleFunc("POST /pulls/{id}/merge", h.mergePull)
 		mux.HandleFunc("GET /pulls/{id}/events", h.pullEvents)

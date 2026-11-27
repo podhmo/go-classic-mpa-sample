@@ -169,6 +169,36 @@ func TestPullsAPI_DiffTruncationHeader(t *testing.T) {
 	}
 }
 
+func TestPullsAPI_RepairPin(t *testing.T) {
+	srv, _, repo := newPullServer(t)
+	status, body := do(t, srv, "POST", "/api/v1/pulls",
+		`{"base":"main","head":"feat/x","title":"add b"}`)
+	if status != http.StatusCreated {
+		t.Fatalf("POST /pulls: %d %v", status, body)
+	}
+	id := int64(body["pull_request"].(map[string]any)["id"].(float64))
+	if err := repo.Unpin(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	needs, err := repo.PinNeedsRepair(context.Background(), id, "")
+	if err != nil || !needs {
+		t.Fatalf("deleted pin not detected: needs=%v err=%v", needs, err)
+	}
+
+	status, body = do(t, srv, "POST", fmt.Sprintf("/api/v1/pulls/%d/repair-pin", id), "")
+	if status != http.StatusOK {
+		t.Fatalf("POST repair-pin: got %d %v", status, body)
+	}
+	head, err := repo.RevParse(context.Background(), "refs/heads/feat/x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := repo.RevParse(context.Background(), gitrepo.PinRef(id))
+	if err != nil || got != head {
+		t.Fatalf("repaired pin=%q err=%v, want %q", got, err, head)
+	}
+}
+
 func TestPullsAPI_CreateValidation(t *testing.T) {
 	srv, _, _ := newPullServer(t)
 	status, body := do(t, srv, "POST", "/api/v1/pulls",

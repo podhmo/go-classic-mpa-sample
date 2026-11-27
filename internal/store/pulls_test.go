@@ -48,20 +48,18 @@ func TestPullRequestCRUD(t *testing.T) {
 	if _, err := s.CreatePullRequest(ctx, bad, 0, nil); !errors.Is(err, ErrSameRef) {
 		t.Fatalf("same-ref err = %v", err)
 	}
-	// Failed pin rolls the insert back.
+	// A failed pin leaves the committed PR repairable and reports ErrPinFailed
+	// with its valid id.
 	other := prInput()
 	other.HeadRef = "refs/heads/other"
-	if _, err := s.CreatePullRequest(ctx, other, 0, func(int64) error { return errors.New("pin fail") }); err == nil {
-		t.Fatal("pin failure should fail create")
-	}
-	if _, _, err := s.ListPullRequests(ctx, PRListFilter{Status: "all"}); err != nil {
-		t.Fatal(err)
+	unpinned, err := s.CreatePullRequest(ctx, other, 0, func(int64) error { return errors.New("pin fail") })
+	if !errors.Is(err, ErrPinFailed) || unpinned == 0 {
+		t.Fatalf("pin failure = id %d, err %v", unpinned, err)
 	}
 
-	// Pin failure rollback: only the first PR exists.
-	prs, total, err := s.ListPullRequests(ctx, PRListFilter{Status: "all"})
-	if err != nil || total != 1 || prs[0].ID != id {
-		t.Fatalf("after rollback: total=%d", total)
+	_, total, err := s.ListPullRequests(ctx, PRListFilter{Status: "all"})
+	if err != nil || total != 2 {
+		t.Fatalf("after pin failure: total=%d", total)
 	}
 
 	// Title/body update.

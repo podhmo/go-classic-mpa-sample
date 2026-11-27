@@ -621,6 +621,141 @@ func TestPinSurvivesGC(t *testing.T) {
 	}
 }
 
+func TestPinHeadDoesNotOverwriteExistingPin(t *testing.T) {
+	ctx := context.Background()
+	dir := initRepo(t)
+	r := openRepo(t, dir)
+	head := strings.TrimSpace(git(t, dir, "rev-parse", "main"))
+	if err := r.PinHead(ctx, 42, head); err != nil {
+		t.Fatal(err)
+	}
+
+	git(t, dir, "checkout", "-qb", "newer-pin")
+	write(t, dir, "newer-pin.txt", "newer\n")
+	newer := strings.TrimSpace(git(t, dir, "rev-parse", "newer-pin"))
+	if err := r.PinHead(ctx, 42, newer); !errors.Is(err, ErrConcurrentUpdate) {
+		t.Fatalf("second create error = %v, want ErrConcurrentUpdate", err)
+	}
+	if got, err := r.RevParse(ctx, PinRef(42)); err != nil || got != head {
+		t.Fatalf("pin after rejected create = %q err=%v, want %q", got, err, head)
+	}
+}
+
+func TestPinHeadSHA256Repository(t *testing.T) {
+	if err := exec.Command("git", "init", "--object-format=sha256", "--bare", filepath.Join(t.TempDir(), "probe.git")).Run(); err != nil {
+		t.Skipf("git without sha256 object-format support: %v", err)
+	}
+	ctx := context.Background()
+	dir := t.TempDir()
+	git(t, dir, "init", "--object-format=sha256", "-b", "main")
+	write(t, dir, "a.txt", "one\n")
+	r := openRepo(t, dir)
+	head := strings.TrimSpace(git(t, dir, "rev-parse", "main"))
+
+	if err := r.PinHead(ctx, 42, head); err != nil {
+		t.Fatalf("sha256 pin create: %v", err)
+	}
+	if got, err := r.RevParse(ctx, PinRef(42)); err != nil || got != head {
+		t.Fatalf("sha256 pin = %q err=%v, want %q", got, err, head)
+	}
+}
+
+func TestPinNeedsRepair(t *testing.T) {
+	ctx := context.Background()
+	dir := initRepo(t)
+	r := openRepo(t, dir)
+	head := strings.TrimSpace(git(t, dir, "rev-parse", "main"))
+
+	needs, err := r.PinNeedsRepair(ctx, 42, head)
+	if err != nil || !needs {
+		t.Fatalf("missing pin: needs=%v err=%v", needs, err)
+	}
+	if err := r.PinHead(ctx, 42, head); err != nil {
+		t.Fatal(err)
+	}
+	needs, err = r.PinNeedsRepair(ctx, 42, head)
+	if err != nil || needs {
+		t.Fatalf("correct pin: needs=%v err=%v", needs, err)
+	}
+
+	git(t, dir, "checkout", "-qb", "newer")
+	write(t, dir, "newer.txt", "newer\n")
+	other := strings.TrimSpace(git(t, dir, "rev-parse", "newer"))
+	needs, err = r.PinNeedsRepair(ctx, 42, other)
+	if err != nil || !needs {
+		t.Fatalf("stale pin: needs=%v err=%v", needs, err)
+	}
+	// An open PR only requires existence: its pin intentionally remains at
+	// the create-time head while the feature branch advances.
+	needs, err = r.PinNeedsRepair(ctx, 42, "")
+	if err != nil || needs {
+		t.Fatalf("existing open pin: needs=%v err=%v", needs, err)
+	}
+}
+
+func TestRepairPinComparesObservedValue(t *testing.T) {
+	ctx := context.Background()
+	dir := initRepo(t)
+	r := openRepo(t, dir)
+	head := strings.TrimSpace(git(t, dir, "rev-parse", "main"))
+	if err := r.PinHead(ctx, 42, head); err != nil {
+		t.Fatal(err)
+	}
+	needs, observed, err := r.PinRepairState(ctx, 42, "")
+	if err != nil || needs || observed != head {
+		t.Fatalf("state needs=%v observed=%q err=%v", needs, observed, err)
+	}
+
+	git(t, dir, "checkout", "-qb", "repair-race")
+	write(t, dir, "repair-race.txt", "newer\n")
+	newer := strings.TrimSpace(git(t, dir, "rev-parse", "repair-race"))
+	git(t, dir, "update-ref", PinRef(42), newer, head)
+	if err := r.RepairPin(ctx, 42, head, observed); !errors.Is(err, ErrConcurrentUpdate) {
+		t.Fatalf("stale repair error = %v, want ErrConcurrentUpdate", err)
+	}
+	if got, err := r.RevParse(ctx, PinRef(42)); err != nil || got != newer {
+		t.Fatalf("pin after stale repair = %q err=%v, want %q", got, err, newer)
+	}
+}
+
+func TestPinRepairStateIgnoresDescendantRef(t *testing.T) {
+	ctx := context.Background()
+	dir := initRepo(t)
+	r := openRepo(t, dir)
+	head := strings.TrimSpace(git(t, dir, "rev-parse", "main"))
+	git(t, dir, "update-ref", PinRef(42)+"/child", head)
+
+	needs, observed, err := r.PinRepairState(ctx, 42, "")
+	if err != nil {
+		t.Fatalf("PinRepairState: %v", err)
+	}
+	if !needs || observed != "" {
+		t.Fatalf("PinRepairState = needs:%v observed:%q, want missing exact pin", needs, observed)
+	}
+}
+
+func TestUpdatePinMissingRetryWinsOverProvisionalRepair(t *testing.T) {
+	ctx := context.Background()
+	dir := initRepo(t)
+	r := openRepo(t, dir)
+	head := strings.TrimSpace(git(t, dir, "rev-parse", "main"))
+
+	git(t, dir, "checkout", "-qb", "provisional-pin")
+	write(t, dir, "provisional.txt", "provisional\n")
+	provisional := strings.TrimSpace(git(t, dir, "rev-parse", "provisional-pin"))
+	if err := r.PinHead(ctx, 42, provisional); err != nil {
+		t.Fatal(err)
+	}
+	// This is the state UpdatePin's missing-ref path sees after a repair
+	// wins the create race. The final close/merge target must replace it.
+	if err := r.createPinThenCAS(ctx, 42, head); err != nil {
+		t.Fatalf("create-then-CAS over provisional pin: %v", err)
+	}
+	if got, err := r.RevParse(ctx, PinRef(42)); err != nil || got != head {
+		t.Fatalf("pin = %q err=%v, want %q", got, err, head)
+	}
+}
+
 func TestUpdatePinFailureKeepsGitError(t *testing.T) {
 	ctx := context.Background()
 	dir := initRepo(t)

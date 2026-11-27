@@ -6,6 +6,7 @@ package gitrepo
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -430,40 +431,137 @@ func PinRef(id int64) string {
 	return "refs/zatudan/pr/" + strconv.FormatInt(id, 10) + "/head"
 }
 
-// PinHead points the PR's pin ref at sha unconditionally (used at create
-// time, when nothing should exist yet).
+var errPinMissing = errors.New("gitrepo: pull pin is missing")
+
+// readPin reads the exact pin. rev-parse --verify --quiet exits 1 for a
+// missing ref without printing an error, while repository/read failures keep
+// their own non-zero exit and stderr; CAS error classification depends on
+// that distinction.
+func (r *Repo) readPin(ctx context.Context, id int64) (string, error) {
+	res, err := r.run(ctx, nil, "rev-parse", "--verify", "--quiet", PinRef(id)+"^{commit}")
+	if err != nil {
+		if e, ok := err.(*Error); ok && e.ExitCode == 1 {
+			return "", errPinMissing
+		}
+		return "", err
+	}
+	return strings.TrimSpace(res.stdout), nil
+}
+
+// PinHead creates the PR's pin ref at sha (used at create time, when
+// nothing should exist yet). Creation is conditional so a close/merge pin
+// that won the race is never overwritten by the older create-time head.
 func (r *Repo) PinHead(ctx context.Context, id int64, sha string) error {
 	if err := checkRevArg(sha); err != nil {
 		return err
 	}
-	_, err := r.run(ctx, nil, "update-ref", PinRef(id), sha)
-	return err
-}
-
-// UpdatePin moves the pin ref compare-and-swap style when it already
-// exists (close/merge time), so a concurrent pin update cannot silently
-// lose. A missing pin is created.
-func (r *Repo) UpdatePin(ctx context.Context, id int64, sha string) error {
-	if err := checkRevArg(sha); err != nil {
-		return err
-	}
-	old, err := r.RevParse(ctx, PinRef(id))
+	// An empty old value asks update-ref to create the ref only when it is
+	// still absent. Unlike a hard-coded zero object id, this is independent
+	// of the repository's hash algorithm (SHA-1 or SHA-256).
+	_, err := r.run(ctx, nil, "update-ref", PinRef(id), sha, "")
 	if err != nil {
-		// No pin yet (created before this feature or a failed create):
-		// plain create.
-		return r.PinHead(ctx, id, sha)
-	}
-	_, err = r.run(ctx, nil, "update-ref", PinRef(id), sha, old)
-	if err != nil {
-		// A compare-and-swap failure means someone moved the ref. Other
-		// update-ref failures (permissions, locks, corruption) must keep
-		// git's stderr instead of being mislabeled as a race.
-		if now, revErr := r.RevParse(ctx, PinRef(id)); revErr == nil && now != old {
+		if _, revErr := r.readPin(ctx, id); revErr == nil {
 			return ErrConcurrentUpdate
 		}
 		return err
 	}
 	return nil
+}
+
+// UpdatePin moves the pin ref compare-and-swap style when it already
+// exists (close/merge time), so a concurrent pin update cannot silently
+// lose. A missing pin is created; if a repair creates it first, the
+// close/merge update retries as CAS and still wins the final transition.
+func (r *Repo) UpdatePin(ctx context.Context, id int64, sha string) error {
+	if err := checkRevArg(sha); err != nil {
+		return err
+	}
+	old, err := r.readPin(ctx, id)
+	if errors.Is(err, errPinMissing) {
+		return r.createPinThenCAS(ctx, id, sha)
+	}
+	if err != nil {
+		return err
+	}
+	return r.casPin(ctx, id, sha, old)
+}
+
+// createPinThenCAS handles UpdatePin's missing-ref path. PinHead can lose
+// to a repair that starts after the initial existence check; that pin is
+// only provisional, so close/merge retries as a compare-and-swap against
+// the value that appeared instead of leaving the provisional pin behind.
+func (r *Repo) createPinThenCAS(ctx context.Context, id int64, sha string) error {
+	err := r.PinHead(ctx, id, sha)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, ErrConcurrentUpdate) {
+		return err
+	}
+	old, revErr := r.readPin(ctx, id)
+	if revErr != nil {
+		return revErr
+	}
+	return r.casPin(ctx, id, sha, old)
+}
+
+// casPin moves an existing pin only while it still has old. A moved or
+// deleted pin is ErrConcurrentUpdate; permission/lock/corruption failures
+// keep git's stderr rather than being mislabeled as races.
+func (r *Repo) casPin(ctx context.Context, id int64, sha, old string) error {
+	_, err := r.run(ctx, nil, "update-ref", PinRef(id), sha, old)
+	if err != nil {
+		now, revErr := r.readPin(ctx, id)
+		if errors.Is(revErr, errPinMissing) {
+			return ErrConcurrentUpdate
+		}
+		if revErr != nil {
+			// Keep the original write failure: without a successful read
+			// there is no evidence that another writer moved the pin.
+			return err
+		}
+		if now != old {
+			return ErrConcurrentUpdate
+		}
+		return err
+	}
+	return nil
+}
+
+// PinRepairState reports whether the protective pin is missing or, when
+// expectedSHA is nonempty, points somewhere else, together with the pin
+// value observed during the check. Open PRs pass an empty expectedSHA
+// because their pin intentionally remains at the create-time head while
+// the feature branch advances; existence is enough there.
+func (r *Repo) PinRepairState(ctx context.Context, id int64, expectedSHA string) (needs bool, current string, err error) {
+	got, err := r.readPin(ctx, id)
+	if errors.Is(err, errPinMissing) {
+		return true, "", nil
+	}
+	if err != nil {
+		return false, "", err
+	}
+	return expectedSHA != "" && got != expectedSHA, got, nil
+}
+
+// PinNeedsRepair is PinRepairState without the observed-pin value.
+func (r *Repo) PinNeedsRepair(ctx context.Context, id int64, expectedSHA string) (bool, error) {
+	needs, _, err := r.PinRepairState(ctx, id, expectedSHA)
+	return needs, err
+}
+
+// RepairPin recreates a missing pin or corrects a stale one. oldSHA must
+// be the value observed by PinRepairState, with empty meaning "missing";
+// this makes the write compare-and-swap against a close/merge pin that
+// may have been written after the repair target was resolved.
+func (r *Repo) RepairPin(ctx context.Context, id int64, sha, oldSHA string) error {
+	if err := checkRevArg(sha); err != nil {
+		return err
+	}
+	if oldSHA == "" {
+		return r.PinHead(ctx, id, sha)
+	}
+	return r.casPin(ctx, id, sha, oldSHA)
 }
 
 // Unpin drops the pin ref; used if a pin must follow a comment/PR delete.

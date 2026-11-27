@@ -43,16 +43,18 @@ type pullListPage struct {
 // pullDetailPage is GET /pulls/{id}: conversation data from the DB plus
 // live git data (commits, mergeability) computed while the PR is open.
 type pullDetailPage struct {
-	Title        string
-	Section      string
-	PR           *store.PullRequest
-	Commits      []gitrepo.Commit
-	Merge        *gitrepo.MergeCheck // nil when the probe could not run
-	Comments     []*store.PRComment
-	CommentDraft string
-	CommentError string
-	Workspace    *store.Workspace
-	User         *store.User
+	Title          string
+	Section        string
+	PR             *store.PullRequest
+	Commits        []gitrepo.Commit
+	Merge          *gitrepo.MergeCheck // nil when the probe could not run
+	Comments       []*store.PRComment
+	CommentDraft   string
+	CommentError   string
+	PinNeedsRepair bool
+	PinRepairable  bool
+	Workspace      *store.Workspace
+	User           *store.User
 }
 
 // pullFormPage backs both /pulls/new (base/head selects editable) and
@@ -384,6 +386,33 @@ func (h *handler) requirePull(w http.ResponseWriter, r *http.Request) (*store.Pu
 	return pr, true
 }
 
+// pinRepairState detects a missing/stale pin without letting git probe
+// failures take down the detail page. repairable is false when there is no
+// commit left that a repair could point at.
+func (h *handler) pinRepairState(ctx context.Context, pr *store.PullRequest) (needs, repairable bool, current string) {
+	expected := ""
+	if !pr.Open() {
+		expected = pr.HeadSHA
+	}
+	needs, current, err := h.repo.PinRepairState(ctx, pr.ID, expected)
+	if err != nil || !needs {
+		return needs, false, current
+	}
+	if pr.Open() {
+		_, err = h.repo.RevParse(ctx, pr.HeadRef)
+		return true, err == nil, current
+	}
+	return true, expected != "", current
+}
+
+// pinRepairTarget resolves the commit a repair should protect.
+func (h *handler) pinRepairTarget(ctx context.Context, pr *store.PullRequest) (string, error) {
+	if pr.Open() {
+		return h.repo.RevParse(ctx, pr.HeadRef)
+	}
+	return pr.HeadSHA, nil
+}
+
 // diffRange names the revisions a PR's code view covers: open PRs are live
 // (the refs themselves), closed/merged ones are pinned to the SHAs recorded
 // at close/merge so the view survives branch deletion.
@@ -580,8 +609,11 @@ func (h *handler) createPull(w http.ResponseWriter, r *http.Request) {
 		return h.repo.PinHead(ctx, prID, headSHA)
 	})
 	if err != nil {
-		h.pullError(w, r, err)
-		return
+		if id == 0 || !errors.Is(err, store.ErrPinFailed) {
+			h.pullError(w, r, err)
+			return
+		}
+		log.Printf("web: pulls: pin #%d on create: %v", id, err)
 	}
 	redirectSeeOther(w, r, fmt.Sprintf("/pulls/%d", id))
 }
@@ -645,15 +677,18 @@ func (h *handler) pullDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	commits, check := h.loadPullView(r, pr)
+	pinNeeds, pinRepairable, _ := h.pinRepairState(r.Context(), pr)
 	h.r.renderPullDetail(w, http.StatusOK, pullDetailPage{
-		Title:     pr.Title,
-		Section:   "pulls",
-		PR:        pr,
-		Commits:   commits,
-		Merge:     check,
-		Comments:  comments,
-		Workspace: h.navWorkspace(r),
-		User:      userFromContext(r.Context()),
+		Title:          pr.Title,
+		Section:        "pulls",
+		PR:             pr,
+		Commits:        commits,
+		Merge:          check,
+		PinNeedsRepair: pinNeeds,
+		PinRepairable:  pinRepairable,
+		Comments:       comments,
+		Workspace:      h.navWorkspace(r),
+		User:           userFromContext(r.Context()),
 	}, localeFromContext(r.Context()))
 
 }
@@ -923,17 +958,20 @@ func (h *handler) renderPullDetailErr(w http.ResponseWriter, r *http.Request, st
 		return
 	}
 	commits, check := h.loadPullView(r, pr)
+	pinNeeds, pinRepairable, _ := h.pinRepairState(r.Context(), pr)
 	h.r.renderPullDetail(w, status, pullDetailPage{
-		Title:        pr.Title,
-		Section:      "pulls",
-		PR:           pr,
-		Commits:      commits,
-		Merge:        check,
-		Comments:     comments,
-		CommentDraft: draft,
-		CommentError: msg,
-		Workspace:    h.navWorkspace(r),
-		User:         userFromContext(r.Context()),
+		Title:          pr.Title,
+		Section:        "pulls",
+		PR:             pr,
+		Commits:        commits,
+		Merge:          check,
+		PinNeedsRepair: pinNeeds,
+		PinRepairable:  pinRepairable,
+		Comments:       comments,
+		CommentDraft:   draft,
+		CommentError:   msg,
+		Workspace:      h.navWorkspace(r),
+		User:           userFromContext(r.Context()),
 	}, localeFromContext(r.Context()))
 
 }
@@ -1182,6 +1220,38 @@ func (h *handler) updatePullStatus(w http.ResponseWriter, r *http.Request) {
 	redirectSeeOther(w, r, fmt.Sprintf("/pulls/%d", pr.ID))
 }
 
+// repairPullPin applies POST /pulls/{id}/repair-pin. It is idempotent:
+// a healthy pin redirects without a git write.
+func (h *handler) repairPullPin(w http.ResponseWriter, r *http.Request) {
+	pr, ok := h.requirePull(w, r)
+	if !ok {
+		return
+	}
+	if !h.parseForm(w, r) {
+		return
+	}
+	ctx := r.Context()
+	needs, _, current := h.pinRepairState(ctx, pr)
+	if !needs {
+		redirectSeeOther(w, r, fmt.Sprintf("/pulls/%d", pr.ID))
+		return
+	}
+	target, err := h.pinRepairTarget(ctx, pr)
+	if err != nil || target == "" {
+		h.renderError(w, r, http.StatusConflict, msgFor(r).ErrNotMergeableH, msgFor(r).ErrPinUnrepairable)
+		return
+	}
+	if err := h.repo.RepairPin(ctx, pr.ID, target, current); err != nil {
+		if errors.Is(err, gitrepo.ErrConcurrentUpdate) {
+			h.renderError(w, r, http.StatusConflict, msgFor(r).ErrNotMergeableH, msgFor(r).ErrPinConflict)
+			return
+		}
+		h.pullError(w, r, err)
+		return
+	}
+	redirectSeeOther(w, r, fmt.Sprintf("/pulls/%d", pr.ID))
+}
+
 // mergePullForm serves GET /pulls/{id}/merge — the confirmation page with
 // the live conflict preview and the merge-method choice.
 func (h *handler) mergePullForm(w http.ResponseWriter, r *http.Request) {
@@ -1338,11 +1408,14 @@ func (h *handler) pullArticleFragment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	commits, check := h.loadPullView(r, pr)
+	pinNeeds, pinRepairable, _ := h.pinRepairState(r.Context(), pr)
 	h.r.renderFragment(w, "pull_detail", "pr_article", http.StatusOK, pullDetailPage{
-		PR:      pr,
-		Commits: commits,
-		Merge:   check,
-		User:    userFromContext(r.Context()),
+		PR:             pr,
+		Commits:        commits,
+		Merge:          check,
+		PinNeedsRepair: pinNeeds,
+		PinRepairable:  pinRepairable,
+		User:           userFromContext(r.Context()),
 	}, localeFromContext(r.Context()))
 
 }
