@@ -1110,7 +1110,7 @@ func (h *handler) pullCommentsFragment(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	ids, filtered, err := parseIDSet(r)
+	ids, err := parseIDSet(r)
 	if err != nil {
 		h.renderError(w, r, http.StatusBadRequest, msgFor(r).ErrBadRequestH, msgFor(r).ErrInvalidIDs)
 		return
@@ -1120,15 +1120,7 @@ func (h *handler) pullCommentsFragment(w http.ResponseWriter, r *http.Request) {
 		h.internalError(w, r, err)
 		return
 	}
-	out := comments
-	if filtered {
-		out = comments[:0]
-		for _, c := range comments {
-			if ids[c.ID] {
-				out = append(out, c)
-			}
-		}
-	}
+	out := filterByID(comments, ids, func(c *store.PRComment) int64 { return c.ID })
 	h.r.renderFragment(w, "pull_detail", "pr_comments_update", http.StatusOK, dict("PR", pr, "Comments", out), localeFromContext(r.Context()))
 
 }

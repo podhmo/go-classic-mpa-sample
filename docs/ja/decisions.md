@@ -793,3 +793,10 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 - **delete 済み resource では再接続も timeline resync もしない**: 接続中に delete event を受けた場合はその時点で `gone` にし、hidden 中に消えた場合は visible 復帰時の article fragment 404 を削除として恒久通知へ写す。`gone` 後は追加の fragment 再取得や `/events` 再接続を skip し、削除検出は article probe 1回に留める。
 - **row 再描画では reply draft に加えて hide reason picker も保持する**: visible 復帰 resync は unchanged row も replace するため、open state と選択中の reason を既存の draft restore 経路に載せる。
 - **flush 中に届いた hint は次回 batch へ残す**: fragment fetch 中の書き込みはその fetch 結果へ反映されないことがあるため、flush 開始時に pending を snapshot してから clear する。待機中に届いた event を finally で消すと、subscription 済みでも更新漏れが起きる。
+
+## web handler の定型整理（2026-11-26、owner improvements 対応）
+
+- **detail 参照は `requireIssue` / `requireDiscussion` に寄せる**: path id 検証、store 404 写像、workspace scope 確認を1箇所にし、handler 側は返された model の immutable な ID を使う。comment 作成など form parsing を先に行う必要がある経路だけ、順序を変えない範囲で helper を後置する。
+- **fragment の `?ids=` は nil map を unfiltered sentinel にする**: パラメータ無しは nil、空指定は空 map なので、従来の `filtered` bool を別に持たない。絞り込みは generic な `filterByID` に集約し、issue comments/discussion threads/replies/PR comments で共有する。
+- **form page は builder で共通フィールドを埋める**: `Section`/`Workspace`/`User` と title==heading の既定を `newIssueFormPage` / `newDiscussionFormPage` に寄せ、validation 再描画と通常表示で構造をずらさない。
+- **Renderer の dead code は削除する**: typed render method 経由になった `execute` と handler 側の styled 404 に置き換わった `Renderer.notFound` を残さない。

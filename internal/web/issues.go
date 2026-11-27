@@ -68,6 +68,22 @@ type issueFormErrors struct {
 
 func (e issueFormErrors) any() bool { return e.Title != "" || e.Body != "" }
 
+// newIssueFormPage fills the fields every issue form render shares.
+func newIssueFormPage(r *http.Request, ws *store.Workspace, title, action, submitLabel string, input store.IssueInput, labels []*store.Label, errs issueFormErrors) issueFormPage {
+	return issueFormPage{
+		Title:       title,
+		Heading:     title,
+		Action:      action,
+		SubmitLabel: submitLabel,
+		Input:       input,
+		Labels:      labels,
+		Errors:      errs,
+		Section:     "issues",
+		Workspace:   ws,
+		User:        userFromContext(r.Context()),
+	}
+}
+
 // issueDeletePage is the view model for the delete confirmation page.
 type issueDeletePage struct {
 	Title     string
@@ -141,16 +157,9 @@ func (h *handler) newIssue(w http.ResponseWriter, r *http.Request, ws *store.Wor
 		h.internalError(w, r, err)
 		return
 	}
-	h.r.renderIssueForm(w, http.StatusOK, issueFormPage{
-		Title:       msgFor(r).NewIssue,
-		Heading:     msgFor(r).NewIssue,
-		Action:      "/w/" + ws.Slug + "/issues",
-		SubmitLabel: msgFor(r).CreateIssue,
-		Labels:      labels,
-		Section:     "issues",
-		Workspace:   ws,
-		User:        userFromContext(r.Context()),
-	}, localeFromContext(r.Context()))
+	h.r.renderIssueForm(w, http.StatusOK, newIssueFormPage(r, ws,
+		msgFor(r).NewIssue, "/w/"+ws.Slug+"/issues", msgFor(r).CreateIssue,
+		store.IssueInput{}, labels, issueFormErrors{}), localeFromContext(r.Context()))
 
 }
 
@@ -166,18 +175,9 @@ func (h *handler) createIssue(w http.ResponseWriter, r *http.Request, ws *store.
 			h.internalError(w, r, err)
 			return
 		}
-		h.r.renderIssueForm(w, http.StatusUnprocessableEntity, issueFormPage{
-			Title:       msgFor(r).NewIssue,
-			Heading:     msgFor(r).NewIssue,
-			Action:      "/w/" + ws.Slug + "/issues",
-			SubmitLabel: msgFor(r).CreateIssue,
-			Input:       in,
-			Labels:      labels,
-			Errors:      errs,
-			Section:     "issues",
-			Workspace:   ws,
-			User:        userFromContext(r.Context()),
-		}, localeFromContext(r.Context()))
+		h.r.renderIssueForm(w, http.StatusUnprocessableEntity, newIssueFormPage(r, ws,
+			msgFor(r).NewIssue, "/w/"+ws.Slug+"/issues", msgFor(r).CreateIssue,
+			in, labels, errs), localeFromContext(r.Context()))
 
 		return
 	}
@@ -189,22 +189,32 @@ func (h *handler) createIssue(w http.ResponseWriter, r *http.Request, ws *store.
 	http.Redirect(w, r, issueURL(ws, id), http.StatusSeeOther)
 }
 
-// showIssue renders the detail page including comments and the comment form.
-func (h *handler) showIssue(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
+// requireIssue resolves /issues/{id} inside ws; any failure already wrote
+// a response.
+func (h *handler) requireIssue(w http.ResponseWriter, r *http.Request, ws *store.Workspace) (*store.Issue, bool) {
 	id, ok := parseID(r)
 	if !ok {
 		h.notFound(w, r)
-		return
+		return nil, false
 	}
 	issue, err := h.store.GetIssue(r.Context(), id)
 	if err != nil {
 		h.issueError(w, r, err)
-		return
+		return nil, false
 	}
 	if !h.requireScope(w, r, ws, issue.WorkspaceID) {
+		return nil, false
+	}
+	return issue, true
+}
+
+// showIssue renders the detail page including comments and the comment form.
+func (h *handler) showIssue(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
+	issue, ok := h.requireIssue(w, r, ws)
+	if !ok {
 		return
 	}
-	comments, err := h.store.ListComments(r.Context(), id)
+	comments, err := h.store.ListComments(r.Context(), issue.ID)
 	if err != nil {
 		h.internalError(w, r, err)
 		return
@@ -225,40 +235,22 @@ func (h *handler) showIssue(w http.ResponseWriter, r *http.Request, ws *store.Wo
 // action. The API route can't serve the HTML page (Bearer auth), so this
 // is the cookie-session twin of it.
 func (h *handler) issueMarkdown(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
-	id, ok := parseID(r)
+	issue, ok := h.requireIssue(w, r, ws)
 	if !ok {
-		h.notFound(w, r)
 		return
 	}
-	issue, err := h.store.GetIssue(r.Context(), id)
-	if err != nil {
-		h.issueError(w, r, err)
-		return
-	}
-	if !h.requireScope(w, r, ws, issue.WorkspaceID) {
-		return
-	}
-	comments, err := h.store.ListComments(r.Context(), id)
+	comments, err := h.store.ListComments(r.Context(), issue.ID)
 	if err != nil {
 		h.internalError(w, r, err)
 		return
 	}
-	writeMarkdown(w, fmt.Sprintf("issue-%d.md", id), export.IssueMarkdown(issue, comments, ws.Slug))
+	writeMarkdown(w, fmt.Sprintf("issue-%d.md", issue.ID), export.IssueMarkdown(issue, comments, ws.Slug))
 }
 
 // editIssue renders the edit form populated with the current values.
 func (h *handler) editIssue(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
-	id, ok := parseID(r)
+	issue, ok := h.requireIssue(w, r, ws)
 	if !ok {
-		h.notFound(w, r)
-		return
-	}
-	issue, err := h.store.GetIssue(r.Context(), id)
-	if err != nil {
-		h.issueError(w, r, err)
-		return
-	}
-	if !h.requireScope(w, r, ws, issue.WorkspaceID) {
 		return
 	}
 	labels, err := h.store.ListLabels(r.Context(), ws.ID, store.KindLabelIssue)
@@ -274,35 +266,19 @@ func (h *handler) editIssue(w http.ResponseWriter, r *http.Request, ws *store.Wo
 	for _, l := range issue.Labels {
 		in.LabelIDs = append(in.LabelIDs, l.ID)
 	}
-	h.r.renderIssueForm(w, http.StatusOK, issueFormPage{
-		Title:       fmt.Sprintf(msgFor(r).EditIssue, issue.ID),
-		Heading:     fmt.Sprintf(msgFor(r).EditIssue, issue.ID),
-		Action:      issueURL(ws, id) + "/edit",
-		SubmitLabel: msgFor(r).BtnSaveChanges,
-		Input:       in,
-		Labels:      labels,
-		Section:     "issues",
-		Workspace:   ws,
-		User:        userFromContext(r.Context()),
-	}, localeFromContext(r.Context()))
+	title := fmt.Sprintf(msgFor(r).EditIssue, issue.ID)
+	h.r.renderIssueForm(w, http.StatusOK, newIssueFormPage(r, ws,
+		title, issueURL(ws, issue.ID)+"/edit", msgFor(r).BtnSaveChanges,
+		in, labels, issueFormErrors{}), localeFromContext(r.Context()))
 
 }
 
 // updateIssue validates POST /issues/{id}/edit and redirects to the detail.
 func (h *handler) updateIssue(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
-	id, ok := parseID(r)
-	if !ok {
-		h.notFound(w, r)
-		return
-	}
 	// Fetch the issue up front so ANY POST to a missing issue — including
 	// one that fails validation — is a 404 rather than a 422 edit form.
-	issue, err := h.store.GetIssue(r.Context(), id)
-	if err != nil {
-		h.issueError(w, r, err)
-		return
-	}
-	if !h.requireScope(w, r, ws, issue.WorkspaceID) {
+	issue, ok := h.requireIssue(w, r, ws)
+	if !ok {
 		return
 	}
 	if !h.parseForm(w, r) {
@@ -315,43 +291,26 @@ func (h *handler) updateIssue(w http.ResponseWriter, r *http.Request, ws *store.
 			h.internalError(w, r, err)
 			return
 		}
-		h.r.renderIssueForm(w, http.StatusUnprocessableEntity, issueFormPage{
-			Title:       fmt.Sprintf(msgFor(r).EditIssue, id),
-			Heading:     fmt.Sprintf(msgFor(r).EditIssue, id),
-			Action:      issueURL(ws, id) + "/edit",
-			SubmitLabel: msgFor(r).BtnSaveChanges,
-			Input:       in,
-			Labels:      labels,
-			Errors:      errs,
-			Section:     "issues",
-			Workspace:   ws,
-			User:        userFromContext(r.Context()),
-		}, localeFromContext(r.Context()))
+		title := fmt.Sprintf(msgFor(r).EditIssue, issue.ID)
+		h.r.renderIssueForm(w, http.StatusUnprocessableEntity, newIssueFormPage(r, ws,
+			title, issueURL(ws, issue.ID)+"/edit", msgFor(r).BtnSaveChanges,
+			in, labels, errs), localeFromContext(r.Context()))
 
 		return
 	}
-	if err := h.store.UpdateIssue(r.Context(), id, in); err != nil {
+	if err := h.store.UpdateIssue(r.Context(), issue.ID, in); err != nil {
 		h.issueError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, issueURL(ws, id), http.StatusSeeOther)
+	http.Redirect(w, r, issueURL(ws, issue.ID), http.StatusSeeOther)
 }
 
 // setStatus handles POST /issues/{id}/status. The target status arrives as a
 // hidden form field rendered by the detail page ("closed" on an open issue,
 // "open" on a closed one).
 func (h *handler) setStatus(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
-	id, ok := parseID(r)
+	issue, ok := h.requireIssue(w, r, ws)
 	if !ok {
-		h.notFound(w, r)
-		return
-	}
-	issue0, err := h.store.GetIssue(r.Context(), id)
-	if err != nil {
-		h.issueError(w, r, err)
-		return
-	}
-	if !h.requireScope(w, r, ws, issue0.WorkspaceID) {
 		return
 	}
 	if !h.parseForm(w, r) {
@@ -362,7 +321,7 @@ func (h *handler) setStatus(w http.ResponseWriter, r *http.Request, ws *store.Wo
 		h.renderError(w, r, http.StatusBadRequest, msgFor(r).ErrBadRequestH, msgFor(r).ErrStatusValue)
 		return
 	}
-	if err := h.store.SetIssueStatus(r.Context(), id, status); err != nil {
+	if err := h.store.SetIssueStatus(r.Context(), issue.ID, status); err != nil {
 		h.issueError(w, r, err)
 		return
 	}
@@ -372,7 +331,7 @@ func (h *handler) setStatus(w http.ResponseWriter, r *http.Request, ws *store.Wo
 		// the true post-state: the store bumps updated_at only when the
 		// status actually changes, so a no-op toggle must echo the stored
 		// timestamp, not time.Now().
-		issue, err := h.store.GetIssue(r.Context(), id)
+		issue, err := h.store.GetIssue(r.Context(), issue.ID)
 		if err != nil {
 			h.issueError(w, r, err)
 			return
@@ -385,23 +344,14 @@ func (h *handler) setStatus(w http.ResponseWriter, r *http.Request, ws *store.Wo
 
 		return
 	}
-	http.Redirect(w, r, issueURL(ws, id), http.StatusSeeOther)
+	http.Redirect(w, r, issueURL(ws, issue.ID), http.StatusSeeOther)
 }
 
 // confirmDelete renders the delete confirmation page. Being a GET, it must
 // never delete anything itself.
 func (h *handler) confirmDelete(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
-	id, ok := parseID(r)
+	issue, ok := h.requireIssue(w, r, ws)
 	if !ok {
-		h.notFound(w, r)
-		return
-	}
-	issue, err := h.store.GetIssue(r.Context(), id)
-	if err != nil {
-		h.issueError(w, r, err)
-		return
-	}
-	if !h.requireScope(w, r, ws, issue.WorkspaceID) {
 		return
 	}
 	h.r.renderIssueDelete(w, http.StatusOK, issueDeletePage{
@@ -416,23 +366,14 @@ func (h *handler) confirmDelete(w http.ResponseWriter, r *http.Request, ws *stor
 
 // deleteIssue performs the deletion and returns to the list.
 func (h *handler) deleteIssue(w http.ResponseWriter, r *http.Request, ws *store.Workspace) {
-	id, ok := parseID(r)
+	issue, ok := h.requireIssue(w, r, ws)
 	if !ok {
-		h.notFound(w, r)
-		return
-	}
-	issue0, err := h.store.GetIssue(r.Context(), id)
-	if err != nil {
-		h.issueError(w, r, err)
-		return
-	}
-	if !h.requireScope(w, r, ws, issue0.WorkspaceID) {
 		return
 	}
 	if !h.parseForm(w, r) {
 		return
 	}
-	if err := h.store.DeleteIssue(r.Context(), id); err != nil {
+	if err := h.store.DeleteIssue(r.Context(), issue.ID); err != nil {
 		h.issueError(w, r, err)
 		return
 	}
@@ -456,12 +397,8 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request, ws *stor
 	body := strings.TrimSpace(r.PostFormValue("body"))
 	partial := wantsPartial(r)
 
-	issue, err := h.store.GetIssue(r.Context(), id)
-	if err != nil {
-		h.issueError(w, r, err)
-		return
-	}
-	if !h.requireScope(w, r, ws, issue.WorkspaceID) {
+	issue, ok := h.requireIssue(w, r, ws)
+	if !ok {
 		return
 	}
 
@@ -479,7 +416,7 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request, ws *stor
 
 			return
 		}
-		comments, err := h.store.ListComments(r.Context(), id)
+		comments, err := h.store.ListComments(r.Context(), issue.ID)
 		if err != nil {
 			h.internalError(w, r, err)
 			return
@@ -507,7 +444,7 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request, ws *stor
 		// The fragment also carries the header meta as a data-swap node —
 		// the comment bumped updated_at, so the stale "Last updated" line
 		// must be re-rendered from the post-write issue.
-		issue, err = h.store.GetIssue(r.Context(), id)
+		issue, err = h.store.GetIssue(r.Context(), issue.ID)
 		if err != nil {
 			h.issueError(w, r, err)
 			return
