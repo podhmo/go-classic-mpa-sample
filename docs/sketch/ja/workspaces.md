@@ -189,19 +189,19 @@ GET  /w/{ws}/issues/{id}/events|fragments/*    SSE/fragment も ws 配下
 
 ### 9. labels / categories / users
 
-workspace 非所属（グローバル共有）のまま:
+種別ごとの scope は現状に合わせる:
 
-- `labels`: GitHub では repo 単位だが、本アプリでは管理 UI がない seed 固定の
-  taxonomy。workspace 別にすると issue 移動 future work で再考が必要になる
-  のもあり今回はグローバルのまま（見送り理由を decisions に記録）。
-- `discussion_categories`: 同上（seed 固定 taxonomy）。
+- `labels`: 当初は seed 固定 taxonomy だったが、2026-11-17 に DB 管理化済み。
+  `workspace_id IS NULL` の master/shared label と workspace-specific label の
+  union になっている（decisions.md「ラベルを定数から DB 管理へ」参照）。
+- `discussion_categories`: workspace 非所属（グローバル共有）の seed 固定 taxonomy。
 - `users`/`sessions`/`api_tokens`: 認証基盤、workspace と無関係。
 
 ### 10. 見送り（future work）
 
 - workspace 間の issue/discussion 移動（要件で明示）。
 - workspace ごとの採番（論点1 案B）。
-- workspace 別 labels / categories、workspace の権限・メンバーシップ。
+- workspace 別 categories、workspace の権限・メンバーシップ。
 - workspace の rename / description 編集 UI。
 - workspace の archive、issue 一覧の cross-workspace 表示（global dashboard）。
 - 一覧ページへの SSE 適用（list topic の ws 分割含む）。

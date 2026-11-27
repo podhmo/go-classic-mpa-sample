@@ -40,7 +40,7 @@ Guides referenced below are in the `modern-web-guidance` catalog (`.agents/skill
 - [x] **重複テンプレートを共通化する**: pager と delete confirm の双子テンプレートを整理し、pulls 側の空 `q=` 出力も直す。markup 差分は storybook で確認する（[owner-improvements §3.5](docs/sketch/ja/owner-improvements.md)）
 - [x] **i18n catalog を分割し ja の空フィールドを検出する**: `messages.go` / `messages_en.go` / `messages_ja.go` / `locale.go` に分け、en fallback に黙って落ちるフィールドをテストで防ぐ（[owner-improvements §3.6](docs/sketch/ja/owner-improvements.md)）
 - [x] **`internal/cli/pulls.go` と `internal/client/pulls.go` の単体テストを足す**: 状態遷移・エラー写像・markdown/diff 出力の最低限を固定する（[owner-improvements §3.7](docs/sketch/ja/owner-improvements.md)）
-- [ ] **古いドキュメント記述を現状に揃える**: labels 管理画面は実装済み、`style-src-elem` の CSP 記述は実装とコメントのどちらかに揃える。CSP hash 化の可否は実ブラウザで確認する（[owner-improvements §3.8](docs/sketch/ja/owner-improvements.md)）
+- [x] **古いドキュメント記述を現状に揃える**: labels 管理画面は実装済み、`style-src-elem` の CSP 記述は実装とコメントのどちらかに揃える。CSP hash 化の可否は実ブラウザで確認する（[owner-improvements §3.8](docs/sketch/ja/owner-improvements.md)）
 - [ ] **writing experience を1PRで実装する**: Write/Preview タブ + `POST /preview`、localStorage の下書き自動保存（投稿成功時だけ削除・保持期限/手動クリアなし）、server-side `#12` リンク化をまとめて入れる（[open questions](docs/ja/open-questions.md) 回答済み、[owner-improvements §5.1](docs/sketch/ja/owner-improvements.md)）
 - [ ] **モバイル nav を `<details>` メニューに畳む**: 小幅 viewport では layout のリンク群を `<details>`/`<summary>` に畳み、storybook の `?w=360` と keyboard-only 操作で確認する（[open questions](docs/ja/open-questions.md) 回答済み、[owner-improvements §5.2](docs/sketch/ja/owner-improvements.md)）
 - [ ] **検索クエリパーサを FTS より先に入れる**: `is:open label:bug author:demo` 形式を web/CLI/API 共通の文法として parse し、条件はすべて AND にする。FTS5 への置き換えは後段とする（[open questions](docs/ja/open-questions.md) 回答済み、[owner-improvements §2.2](docs/sketch/ja/owner-improvements.md)）
