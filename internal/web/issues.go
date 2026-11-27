@@ -263,9 +263,10 @@ func (h *handler) editIssue(w http.ResponseWriter, r *http.Request, ws *store.Wo
 		return
 	}
 	in := store.IssueInput{
-		Title:    issue.Title,
-		Body:     issue.Body,
-		LabelIDs: make([]int64, 0, len(issue.Labels)),
+		Title:           issue.Title,
+		Body:            issue.Body,
+		LabelIDs:        make([]int64, 0, len(issue.Labels)),
+		ExpectedVersion: issue.Version,
 	}
 	for _, l := range issue.Labels {
 		in.LabelIDs = append(in.LabelIDs, l.ID)
@@ -477,6 +478,10 @@ func (h *handler) issueError(w http.ResponseWriter, r *http.Request, err error) 
 		h.notFound(w, r)
 		return
 	}
+	if errors.Is(err, store.ErrVersionConflict) {
+		h.versionConflict(w, r)
+		return
+	}
 	h.internalError(w, r, err)
 }
 
@@ -488,8 +493,9 @@ func issueURL(ws *store.Workspace, id int64) string {
 // reports validation problems; form parsing itself happened earlier.
 func validateIssueInput(r *http.Request) (store.IssueInput, issueFormErrors) {
 	in := store.IssueInput{
-		Title: strings.TrimSpace(r.PostFormValue("title")),
-		Body:  strings.TrimSpace(r.PostFormValue("body")),
+		Title:           strings.TrimSpace(r.PostFormValue("title")),
+		Body:            strings.TrimSpace(r.PostFormValue("body")),
+		ExpectedVersion: formVersion(r),
 	}
 	for _, v := range r.PostForm["label_id"] {
 		if id, err := strconv.ParseInt(v, 10, 64); err == nil && id > 0 {

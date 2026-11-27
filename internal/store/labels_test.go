@@ -422,3 +422,33 @@ func TestCrossWorkspaceLabelRejected(t *testing.T) {
 		t.Fatalf("labels after update = %+v", i.Labels)
 	}
 }
+
+func TestRestoreArchivedLabelBumpsVersion(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	id, err := s.CreateLabel(ctx, 1, KindLabelIssue, LabelInput{Name: "restore", Color: "#111111"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ArchiveLabel(ctx, id, true); err != nil {
+		t.Fatal(err)
+	}
+	before, err := s.GetLabel(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored, err := s.CreateLabel(ctx, 1, KindLabelIssue, LabelInput{Name: "restore", Color: "#222222"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored != id {
+		t.Fatalf("restored id = %d, want %d", restored, id)
+	}
+	after, err := s.GetLabel(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Version != before.Version+1 {
+		t.Fatalf("restored version = %d, want %d", after.Version, before.Version+1)
+	}
+}

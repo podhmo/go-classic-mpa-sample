@@ -38,7 +38,7 @@ func authorName(u *store.User) string {
 
 func issueViewJSON(i *store.Issue) api.Issue {
 	out := api.Issue{
-		ID: i.ID, Title: i.Title, Body: i.Body, Status: i.Status,
+		ID: i.ID, Version: i.Version, Title: i.Title, Body: i.Body, Status: i.Status,
 		Author:    userView(i.Author),
 		CreatedAt: i.CreatedAt.Format(time.RFC3339), UpdatedAt: i.UpdatedAt.Format(time.RFC3339),
 		Labels: []api.Label{},
@@ -61,7 +61,7 @@ func commentViews(cs []*store.Comment) []api.Comment {
 	out := make([]api.Comment, 0, len(cs))
 	for _, c := range cs {
 		out = append(out, api.Comment{
-			ID: c.ID, Body: c.Body, Author: userView(c.Author),
+			ID: c.ID, Version: c.Version, Body: c.Body, Author: userView(c.Author),
 			CreatedAt:  c.CreatedAt.Format(time.RFC3339),
 			Moderation: moderationView(c.Moderation),
 		})
@@ -94,7 +94,7 @@ func moderationMarks(m store.Moderation) string {
 }
 
 func labelView(l store.Label) api.Label {
-	out := api.Label{ID: l.ID, Name: l.Name, Color: l.Color, Kind: l.Kind, Archived: l.Archived}
+	out := api.Label{ID: l.ID, Version: l.Version, Name: l.Name, Color: l.Color, Kind: l.Kind, Archived: l.Archived}
 	if l.WorkspaceID != 0 {
 		wsID := l.WorkspaceID
 		out.WorkspaceID = &wsID
@@ -127,7 +127,7 @@ func categoryViews(cats []*store.DiscussionCategory) []api.DiscussionCategory {
 
 func discussionViewJSON(d *store.Discussion) api.Discussion {
 	out := api.Discussion{
-		ID: d.ID, Title: d.Title, Body: d.Body,
+		ID: d.ID, Version: d.Version, Title: d.Title, Body: d.Body,
 		Category:  categoryView(d.Category),
 		Labels:    []api.Label{},
 		Author:    userView(d.Author),
@@ -158,7 +158,7 @@ func discussionThreadViews(ts []*store.DiscussionThread) []api.DiscussionThread 
 
 func discussionThreadView(t *store.DiscussionThread) api.DiscussionThread {
 	out := api.DiscussionThread{
-		ID: t.ID, IsAnswer: t.IsAnswer, Body: t.Body,
+		ID: t.ID, Version: t.Version, IsAnswer: t.IsAnswer, Body: t.Body,
 		Author:     userView(t.Author),
 		CreatedAt:  t.CreatedAt.Format(time.RFC3339),
 		Moderation: moderationView(t.Moderation),
@@ -171,7 +171,7 @@ func discussionThreadView(t *store.DiscussionThread) api.DiscussionThread {
 
 func discussionCommentView(c *store.DiscussionComment) api.DiscussionComment {
 	return api.DiscussionComment{
-		ID: c.ID, Body: c.Body,
+		ID: c.ID, Version: c.Version, Body: c.Body,
 		Author:     userView(c.Author),
 		CreatedAt:  c.CreatedAt.Format(time.RFC3339),
 		Moderation: moderationView(c.Moderation),

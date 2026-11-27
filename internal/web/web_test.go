@@ -1945,3 +1945,19 @@ func (f *fakeStore) LabelByName(_ context.Context, wsID int64, kind, name string
 func (f *fakeStore) GetPRComment(context.Context, int64, int64) (*store.PRComment, error) {
 	return nil, store.ErrNotFound
 }
+
+func (f *fakeStore) UpdateCommentVersion(ctx context.Context, issueID, commentID int64, body string, _ int64) error {
+	return f.UpdateComment(ctx, issueID, commentID, body)
+}
+
+func (f *fakeStore) UpdateDiscussionThreadVersion(ctx context.Context, discussionID, threadID int64, body string, _ int64) error {
+	return f.UpdateDiscussionThread(ctx, discussionID, threadID, body)
+}
+
+func (f *fakeStore) UpdateDiscussionCommentVersion(ctx context.Context, discussionID, threadID, commentID int64, body string, _ int64) error {
+	return f.UpdateDiscussionComment(ctx, discussionID, threadID, commentID, body)
+}
+
+func (f *fakeStore) UpdatePRCommentVersion(ctx context.Context, prID, commentID int64, body string, _ int64) error {
+	return f.UpdatePRComment(ctx, prID, commentID, body)
+}

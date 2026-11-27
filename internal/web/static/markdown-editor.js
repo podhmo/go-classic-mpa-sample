@@ -24,7 +24,15 @@ function draftKey(textarea) {
       .filter((input) => ["path", "line", "side"].includes(input.name))
       .map((input) => `${input.name}=${input.value}`);
     const index = [...form.querySelectorAll('textarea[name="body"]')].indexOf(textarea);
-    if (lineAnchor.length) {
+    const version = hidden
+      .filter((input) => input.name === "version")
+      .map((input) => `${input.name}=${input.value}`);
+    if (version.length) {
+      // Optimistic-concurrency versions describe the record snapshot the
+      // form edits. A draft written against another snapshot must not
+      // reappear over the newer body after a 409 conflict.
+      identity = [action, textarea.id || "body", ...version].join(":");
+    } else if (lineAnchor.length) {
       identity = [action, ...lineAnchor].join(":");
     } else {
       identity = textarea.id;

@@ -854,3 +854,10 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 - **行コメント form は server-rendered な1件だけ**: 各行の行番号は `?path=&line=&side=` 付き GET link で、選ばれた行の直後にだけ form を描画する。全行に hidden input 付き form を出さず、JS も増やさない。cancel は query 無しの files page へ戻る link。
 - **diff の git 起動は1回**: ファイルごとに `git diff` せず whole patch を1回取得し、`ChangedFiles` と同じ順序・既知 path に照らして `diff --git` 単位で分割する。path に空白を含む場合は既知 path との完全一致で曖昧さを避け、quote が必要な path は順序で fallback する。 combined patch が output cap に達した場合だけ per-file diff へ fallback し、単一 file が cap に達した場合は警告を表示して partial diff であることを隠さない。
 - **大規模再設計は入れない**: テーブル化は invalid markup を直すための最小変更で、word-diff・ファイル折り畳み・インラインコメント再設計は今回の範囲外。
+
+## 更新 API の楽観的排他（2026-11-27、owner improvements 対応）
+
+- **mutable record に `version` を持たせる**: issues/comments/labels/discussions/discussion_threads/discussion_comments/pull_requests/pr_comments に version 列を足し、PATCH 相当の本文・メタデータ更新で increment する。status・hide・answer・merge などの action POST は別ライフサイクル操作として今回の条件付き更新対象に含めない。
+- **API の `If-Match` は任意**: `"<version>"` 形式の strong tag 1件だけを受け付け、absent/`*` は従来どおり無条件更新、weak/複数/不正形式は 400、version 不一致は 412 にする。response DTO は `version` を返し、remote client は input/専用 method の expected version を `If-Match` へ写像する。
+- **web の編集フォームは hidden `version` を送る**: issue/discussion/pull/label/comment/thread/reply の edit form にだけ出し、作成フォームでは出さない。不一致は 409 の error page にし、最新内容の再確認を促す。差分表示はこの最小範囲に留める。
+- **GET の `If-None-Match` → 304 は今回入れない**: detail API が comments を同梱する構造では resource version だけでは response 全体を表せないため、更新 API という TODO scope に限定する。

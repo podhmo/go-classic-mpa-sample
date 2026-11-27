@@ -1523,3 +1523,19 @@ func (storyStore) GetPRComment(_ context.Context, prID, commentID int64) (*store
 	}
 	return nil, store.ErrNotFound
 }
+
+func (s storyStore) UpdateCommentVersion(ctx context.Context, issueID, commentID int64, body string, _ int64) error {
+	return s.UpdateComment(ctx, issueID, commentID, body)
+}
+
+func (s storyStore) UpdateDiscussionThreadVersion(ctx context.Context, discussionID, threadID int64, body string, _ int64) error {
+	return s.UpdateDiscussionThread(ctx, discussionID, threadID, body)
+}
+
+func (s storyStore) UpdateDiscussionCommentVersion(ctx context.Context, discussionID, threadID, commentID int64, body string, _ int64) error {
+	return s.UpdateDiscussionComment(ctx, discussionID, threadID, commentID, body)
+}
+
+func (s storyStore) UpdatePRCommentVersion(ctx context.Context, prID, commentID int64, body string, _ int64) error {
+	return s.UpdatePRComment(ctx, prID, commentID, body)
+}

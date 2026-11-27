@@ -25,6 +25,7 @@ type commentEditPage struct {
 	Action    string // POST URL
 	CancelURL string // back link to the post's anchor
 	Body      string // current body, or the rejected draft on a 422
+	Version   int64
 	Error     string
 	Section   string
 	Workspace *store.Workspace
@@ -189,6 +190,7 @@ func (h *handler) editCommentForm(w http.ResponseWriter, r *http.Request, ws *st
 		Action:    fmt.Sprintf("%s/comments/%d/edit", issueURL(ws, issue.ID), c.ID),
 		CancelURL: fmt.Sprintf("%s#comment-%d", issueURL(ws, issue.ID), c.ID),
 		Body:      c.Body,
+		Version:   c.Version,
 		Section:   "issues",
 		Workspace: ws,
 		User:      userFromContext(r.Context()),
@@ -216,6 +218,7 @@ func (h *handler) updateComment(w http.ResponseWriter, r *http.Request, ws *stor
 			Action:    fmt.Sprintf("%s/comments/%d/edit", issueURL(ws, issue.ID), c.ID),
 			CancelURL: cancelURL,
 			Body:      body,
+			Version:   formVersion(r),
 			Error:     fieldErrText(localeFromContext(r.Context()), "body", fe),
 			Section:   "issues",
 			Workspace: ws,
@@ -224,7 +227,7 @@ func (h *handler) updateComment(w http.ResponseWriter, r *http.Request, ws *stor
 
 		return
 	}
-	if err := h.store.UpdateComment(r.Context(), issue.ID, c.ID, body); err != nil {
+	if err := h.store.UpdateCommentVersion(r.Context(), issue.ID, c.ID, body, formVersion(r)); err != nil {
 		h.issueError(w, r, err)
 		return
 	}
@@ -332,6 +335,7 @@ func (h *handler) editThreadForm(w http.ResponseWriter, r *http.Request, ws *sto
 		Action:    fmt.Sprintf("%s/threads/%d/edit", discussionURL(ws, discussion.ID), t.ID),
 		CancelURL: fmt.Sprintf("%s#thread-%d", discussionURL(ws, discussion.ID), t.ID),
 		Body:      t.Body,
+		Version:   t.Version,
 		Section:   "discussions",
 		Workspace: ws,
 		User:      userFromContext(r.Context()),
@@ -357,6 +361,7 @@ func (h *handler) updateThread(w http.ResponseWriter, r *http.Request, ws *store
 			Action:    fmt.Sprintf("%s/threads/%d/edit", discussionURL(ws, discussion.ID), t.ID),
 			CancelURL: cancelURL,
 			Body:      body,
+			Version:   formVersion(r),
 			Error:     fieldErrText(localeFromContext(r.Context()), "body", fe),
 			Section:   "discussions",
 			Workspace: ws,
@@ -365,7 +370,7 @@ func (h *handler) updateThread(w http.ResponseWriter, r *http.Request, ws *store
 
 		return
 	}
-	if err := h.store.UpdateDiscussionThread(r.Context(), discussion.ID, t.ID, body); err != nil {
+	if err := h.store.UpdateDiscussionThreadVersion(r.Context(), discussion.ID, t.ID, body, formVersion(r)); err != nil {
 		h.discussionError(w, r, err)
 		return
 	}
@@ -472,6 +477,7 @@ func (h *handler) editReplyForm(w http.ResponseWriter, r *http.Request, ws *stor
 		Action:    fmt.Sprintf("%s/threads/%d/comments/%d/edit", discussionURL(ws, discussion.ID), t.ID, c.ID),
 		CancelURL: fmt.Sprintf("%s#comment-%d", discussionURL(ws, discussion.ID), c.ID),
 		Body:      c.Body,
+		Version:   c.Version,
 		Section:   "discussions",
 		Workspace: ws,
 		User:      userFromContext(r.Context()),
@@ -497,6 +503,7 @@ func (h *handler) updateReply(w http.ResponseWriter, r *http.Request, ws *store.
 			Action:    fmt.Sprintf("%s/threads/%d/comments/%d/edit", discussionURL(ws, discussion.ID), t.ID, c.ID),
 			CancelURL: cancelURL,
 			Body:      body,
+			Version:   formVersion(r),
 			Error:     fieldErrText(localeFromContext(r.Context()), "body", fe),
 			Section:   "discussions",
 			Workspace: ws,
@@ -505,7 +512,7 @@ func (h *handler) updateReply(w http.ResponseWriter, r *http.Request, ws *store.
 
 		return
 	}
-	if err := h.store.UpdateDiscussionComment(r.Context(), discussion.ID, t.ID, c.ID, body); err != nil {
+	if err := h.store.UpdateDiscussionCommentVersion(r.Context(), discussion.ID, t.ID, c.ID, body, formVersion(r)); err != nil {
 		h.discussionError(w, r, err)
 		return
 	}

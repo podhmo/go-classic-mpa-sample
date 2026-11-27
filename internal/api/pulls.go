@@ -20,6 +20,7 @@ import (
 // PullRequest is the wire shape of a store.PullRequest.
 type PullRequest struct {
 	ID          int64   `json:"id"`
+	Version     int64   `json:"version"`
 	Title       string  `json:"title"`
 	Body        string  `json:"body"`
 	Status      string  `json:"status"`
@@ -36,7 +37,7 @@ type PullRequest struct {
 
 func pullRequestDTO(p *store.PullRequest) PullRequest {
 	out := PullRequest{
-		ID: p.ID, Title: p.Title, Body: p.Body, Status: p.Status,
+		ID: p.ID, Version: p.Version, Title: p.Title, Body: p.Body, Status: p.Status,
 		Base: p.BaseRef, Head: p.HeadRef, HeadSHA: p.HeadSHA,
 		Author:    userDTO(p.Author),
 		CreatedAt: fmtTime(p.CreatedAt), UpdatedAt: fmtTime(p.UpdatedAt),
@@ -55,6 +56,7 @@ func pullRequestDTO(p *store.PullRequest) PullRequest {
 // empty for plain conversation comments.
 type PRComment struct {
 	ID          int64  `json:"id"`
+	Version     int64  `json:"version"`
 	Body        string `json:"body"`
 	Path        string `json:"path,omitempty"`
 	Line        int    `json:"line,omitempty"`
@@ -68,7 +70,7 @@ type PRComment struct {
 
 func prCommentDTO(c *store.PRComment) PRComment {
 	return PRComment{
-		ID: c.ID, Body: c.Body,
+		ID: c.ID, Version: c.Version, Body: c.Body,
 		Path: c.Path, Line: c.Line, Side: c.Side,
 		AnchorSHA: c.AnchorSHA, DiffSnippet: c.DiffSnippet,
 		Author: userDTO(c.Author), CreatedAt: fmtTime(c.CreatedAt),
@@ -114,6 +116,8 @@ func (h *handler) prStoreError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		writeError(w, http.StatusNotFound, "Not found.", nil)
+	case errors.Is(err, store.ErrVersionConflict):
+		writeError(w, http.StatusPreconditionFailed, "Version conflict.", nil)
 	case errors.Is(err, store.ErrDuplicatePR):
 		writeError(w, http.StatusUnprocessableEntity, "An open pull request already exists for this base/head pair.", nil)
 	case errors.Is(err, store.ErrSameRef):
@@ -331,9 +335,13 @@ func (h *handler) updatePull(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &in) {
 		return
 	}
+	expected, ok := parseIfMatch(w, r)
+	if !ok {
+		return
+	}
 	input := store.PRInput{
 		BaseRef: pr.BaseRef, HeadRef: pr.HeadRef,
-		Title: pr.Title, Body: pr.Body,
+		Title: pr.Title, Body: pr.Body, ExpectedVersion: expected,
 	}
 	if in.Title != nil {
 		input.Title = strings.TrimSpace(*in.Title)
@@ -522,7 +530,11 @@ func (h *handler) updatePRComment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "Validation failed.", map[string]string{"body": fe.Message})
 		return
 	}
-	if err := h.store.UpdatePRComment(r.Context(), pr.ID, c.ID, body); err != nil {
+	expected, ok := parseIfMatch(w, r)
+	if !ok {
+		return
+	}
+	if err := h.store.UpdatePRCommentVersion(r.Context(), pr.ID, c.ID, body, expected); err != nil {
 		h.prStoreError(w, err)
 		return
 	}

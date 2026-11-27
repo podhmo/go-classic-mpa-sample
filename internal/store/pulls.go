@@ -56,6 +56,7 @@ type PullRequest struct {
 	MergeSHA     string
 	MergeMethod  string
 	CreatedAt    time.Time
+	Version      int64
 	UpdatedAt    time.Time
 	ClosedAt     *time.Time
 }
@@ -75,6 +76,7 @@ type PRComment struct {
 	AnchorSHA   string
 	DiffSnippet string
 	Body        string
+	Version     int64
 	CreatedAt   time.Time
 	Author      *User
 	Moderation
@@ -94,6 +96,9 @@ type PRInput struct {
 	HeadSHA string
 	Title   string
 	Body    string
+	// ExpectedVersion is 0 for an unconditional update; positive values
+	// make the update conditional on the row still carrying that version.
+	ExpectedVersion int64
 }
 
 // PRCommentInput carries a new comment; anchor fields are "" / 0 for a
@@ -120,7 +125,7 @@ type PRListFilter struct {
 // prColumns lists pull_requests in SELECT order shared by the scans.
 const prColumns = `p.id, p.base_ref, p.head_ref, p.title, p.body, p.status,
 	p.base_sha, p.head_sha, p.merge_base_sha, p.merge_sha, p.merge_method,
-	p.created_at, p.updated_at, p.closed_at,
+	p.created_at, p.updated_at, p.closed_at, p.version,
 	u.id, u.name, u.created_at`
 
 // ListPullRequests returns the page matching f plus the total before
@@ -242,13 +247,22 @@ func (s *Store) UpdatePullRequest(ctx context.Context, id int64, in PRInput) err
 		return err
 	}
 	defer tx.Rollback()
-	res, err := tx.ExecContext(ctx,
-		"UPDATE pull_requests SET title = ?, body = ?, updated_at = ? WHERE id = ?",
-		in.Title, in.Body, time.Now().UTC().Unix(), id)
+	query := "UPDATE pull_requests SET title = ?, body = ?, version = version + 1, updated_at = ? WHERE id = ?"
+	args := []any{in.Title, in.Body, time.Now().UTC().Unix(), id}
+	if in.ExpectedVersion > 0 {
+		query += " AND version = ?"
+		args = append(args, in.ExpectedVersion)
+	}
+	res, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}
-	if err := checkAffected(res); err != nil {
+	if in.ExpectedVersion > 0 {
+		if err := checkVersionedAffected(ctx, tx, res,
+			"SELECT version FROM pull_requests WHERE id = ?", id); err != nil {
+			return err
+		}
+	} else if err := checkAffected(res); err != nil {
 		return err
 	}
 	return s.commitTx(ctx, tx,
@@ -407,7 +421,7 @@ func (s *Store) MarkMerged(ctx context.Context, id int64, info PRMergeInfo) erro
 // prCommentColumns lists pr_comments in the order scanPRComment expects
 // (moderation triple sits before the author columns like everywhere).
 const prCommentColumns = `c.id, c.pr_id, c.path, c.line, c.side, c.anchor_sha, c.diff_snippet, c.body,
-	c.edited_at, c.hidden_at, c.hidden_reason, c.created_at,
+	c.edited_at, c.hidden_at, c.hidden_reason, c.created_at, c.version,
 	u.id, u.name, u.created_at`
 
 // ListPRComments returns the PR's conversation in chronological order —
@@ -495,20 +509,35 @@ func (s *Store) CreatePRComment(ctx context.Context, prID int64, in PRCommentInp
 // UpdatePRComment replaces a comment's body, stamping edited_at on a real
 // change. ErrNotFound when missing or belonging to a different PR.
 func (s *Store) UpdatePRComment(ctx context.Context, prID, commentID int64, body string) error {
+	return s.UpdatePRCommentVersion(ctx, prID, commentID, body, 0)
+}
+
+// UpdatePRCommentVersion is UpdatePRComment conditional on the row
+// version when expectedVersion is positive.
+func (s *Store) UpdatePRCommentVersion(ctx context.Context, prID, commentID int64, body string, expectedVersion int64) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	res, err := tx.ExecContext(ctx,
-		`UPDATE pr_comments SET body = ?,
+	query := `UPDATE pr_comments SET body = ?, version = version + 1,
 			edited_at = CASE WHEN body != ? THEN ? ELSE edited_at END
-			WHERE id = ? AND pr_id = ?`,
-		body, body, time.Now().UTC().Unix(), commentID, prID)
+			WHERE id = ? AND pr_id = ?`
+	args := []any{body, body, time.Now().UTC().Unix(), commentID, prID}
+	if expectedVersion > 0 {
+		query += " AND version = ?"
+		args = append(args, expectedVersion)
+	}
+	res, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}
-	if err := checkAffected(res); err != nil {
+	if expectedVersion > 0 {
+		if err := checkVersionedAffected(ctx, tx, res,
+			"SELECT version FROM pr_comments WHERE id = ? AND pr_id = ?", commentID, prID); err != nil {
+			return err
+		}
+	} else if err := checkAffected(res); err != nil {
 		return err
 	}
 	return s.commitTx(ctx, tx,
@@ -580,7 +609,7 @@ func scanPullRequest(s scanner) (*PullRequest, error) {
 	var acreated sql.NullInt64
 	if err := s.Scan(&p.ID, &p.BaseRef, &p.HeadRef, &p.Title, &p.Body, &p.Status,
 		&baseSHA, &headSHA, &mbaseSHA, &mergeSHA, &method,
-		&created, &updated, &closed,
+		&created, &updated, &closed, &p.Version,
 		&aid, &aname, &acreated); err != nil {
 		return nil, err
 	}
@@ -607,7 +636,7 @@ func scanPRComment(s scanner) (*PRComment, error) {
 	var aname sql.NullString
 	var acreated sql.NullInt64
 	if err := s.Scan(&c.ID, &c.PRID, &path, &line, &c.Side, &anchorSHA, &snippet, &c.Body,
-		&ed, &hid, &reason, &ts,
+		&ed, &hid, &reason, &ts, &c.Version,
 		&aid, &aname, &acreated); err != nil {
 		return nil, err
 	}

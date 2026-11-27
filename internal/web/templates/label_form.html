@@ -10,6 +10,7 @@
 <h1>{{.Heading}}</h1>
 <p class="field-hint">{{labelKind .Label.Kind}} {{LabelNoun}} · {{labelScope .Label.WorkspaceID}}{{if .Label.Archived}} · {{BadgeArchived}}{{end}}</p>
 <form method="post" action="{{.Action}}" class="form" novalidate>
+  {{if .Input.ExpectedVersion}}<input type="hidden" name="version" value="{{.Input.ExpectedVersion}}">{{end}}
   <div class="field">
     <label for="name">{{FieldName}}</label>
     <input type="text" id="name" name="name" value="{{.Input.Name}}" required maxlength="64" pattern=".*\S.*" autocomplete="off" data-error="f-label-name-error"{{if .Errors.Name}} aria-invalid="true" aria-describedby="f-label-name-error" autofocus{{else}} aria-invalid="false"{{end}}>

@@ -95,7 +95,11 @@ func (h *handler) updateLabel(w http.ResponseWriter, r *http.Request, ws *store.
 	if !decodeBody(w, r, &in) {
 		return
 	}
-	input := store.LabelInput{Name: l.Name, Color: l.Color}
+	expected, ok := parseIfMatch(w, r)
+	if !ok {
+		return
+	}
+	input := store.LabelInput{Name: l.Name, Color: l.Color, ExpectedVersion: expected}
 	if in.Name != nil {
 		input.Name = strings.TrimSpace(*in.Name)
 	}

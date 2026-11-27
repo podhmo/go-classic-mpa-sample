@@ -54,7 +54,7 @@ func (c *Client) ArchiveLabel(ctx context.Context, id int64, archived bool) erro
 }
 
 func labelFromDTO(l api.Label) store.Label {
-	out := store.Label{ID: l.ID, Name: l.Name, Color: l.Color, Kind: l.Kind, Archived: l.Archived}
+	out := store.Label{ID: l.ID, Version: l.Version, Name: l.Name, Color: l.Color, Kind: l.Kind, Archived: l.Archived}
 	if l.WorkspaceID != nil {
 		out.WorkspaceID = *l.WorkspaceID
 	}

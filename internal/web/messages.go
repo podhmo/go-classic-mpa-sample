@@ -296,53 +296,55 @@ type messages struct {
 	AuthLoginFailed     string
 
 	// Error pages and form-level errors.
-	ErrorBack          string
-	ErrNotFoundH       string
-	ErrNotFoundM       string
-	ErrInternalH       string
-	ErrInternalM       string
-	ErrBadRequestH     string
-	ErrUnprocessableH  string
-	ErrFormTooLargeH   string
-	ErrFormTooLargeM   string
-	ErrFormReadM       string
-	ErrTooLong         string // args: field label, limit — "Title must be 200 characters or fewer."
-	ErrSlugPattern     string // args: pattern
-	ErrColorHex        string
-	ErrSlugTaken       string
-	ErrLabelDup        string
-	ErrLabelKind       string
-	ErrBaseRefRequired string
-	ErrHeadRefRequired string
-	ErrRefsInvalid     string
-	ErrAnchorInvalid   string
-	ErrAnchorPath      string
-	ErrHideReason      string
-	ErrStatusValue     string
-	ErrAnswerValue     string
-	ErrAnswerQAH       string
-	ErrAnswerQAM       string
-	ErrInvalidIDs      string
-	ErrInvalidThreadID string
-	ErrReplyTarget     string
-	ErrArchivedValue   string
-	ErrPRTransitionH   string
-	ErrPRTransitionM   string
-	ErrDupPRH          string
-	ErrDupPRM          string
-	ErrSameRefH        string
-	ErrSameRefM        string
-	ErrCloseOnlyM      string
-	ErrNotMergeableH   string
-	ErrMergeOnlyM      string
-	ErrUnknownStatus   string
-	ErrUnknownMethod   string
-	ErrMergeConflict   string // args: file list
-	ErrDirtyWorktree   string
-	ErrBaseMoved       string
-	ErrThreadOnly      string
-	ErrDiffCompute     string
-	ErrDeleteLastWsH   string
-	ErrDeleteLastWsM   string
-	ErrSessionVerify   string
+	ErrorBack           string
+	ErrNotFoundH        string
+	ErrNotFoundM        string
+	ErrInternalH        string
+	ErrInternalM        string
+	ErrBadRequestH      string
+	ErrUnprocessableH   string
+	ErrFormTooLargeH    string
+	ErrFormTooLargeM    string
+	ErrFormReadM        string
+	ErrTooLong          string // args: field label, limit — "Title must be 200 characters or fewer."
+	ErrSlugPattern      string // args: pattern
+	ErrColorHex         string
+	ErrSlugTaken        string
+	ErrLabelDup         string
+	ErrLabelKind        string
+	ErrBaseRefRequired  string
+	ErrHeadRefRequired  string
+	ErrRefsInvalid      string
+	ErrAnchorInvalid    string
+	ErrAnchorPath       string
+	ErrHideReason       string
+	ErrStatusValue      string
+	ErrVersionConflictH string
+	ErrVersionConflictM string
+	ErrAnswerValue      string
+	ErrAnswerQAH        string
+	ErrAnswerQAM        string
+	ErrInvalidIDs       string
+	ErrInvalidThreadID  string
+	ErrReplyTarget      string
+	ErrArchivedValue    string
+	ErrPRTransitionH    string
+	ErrPRTransitionM    string
+	ErrDupPRH           string
+	ErrDupPRM           string
+	ErrSameRefH         string
+	ErrSameRefM         string
+	ErrCloseOnlyM       string
+	ErrNotMergeableH    string
+	ErrMergeOnlyM       string
+	ErrUnknownStatus    string
+	ErrUnknownMethod    string
+	ErrMergeConflict    string // args: file list
+	ErrDirtyWorktree    string
+	ErrBaseMoved        string
+	ErrThreadOnly       string
+	ErrDiffCompute      string
+	ErrDeleteLastWsH    string
+	ErrDeleteLastWsM    string
+	ErrSessionVerify    string
 }

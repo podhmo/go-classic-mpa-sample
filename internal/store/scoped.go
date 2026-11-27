@@ -383,7 +383,11 @@ func (sc *ScopedStore) CreatePRComment(ctx context.Context, prID int64, in PRCom
 	return sc.s.CreatePRComment(ctx, prID, in, authorID)
 }
 func (sc *ScopedStore) UpdatePRComment(ctx context.Context, prID, commentID int64, body string) error {
-	return sc.s.UpdatePRComment(ctx, prID, commentID, body)
+	return sc.UpdatePRCommentVersion(ctx, prID, commentID, body, 0)
+}
+
+func (sc *ScopedStore) UpdatePRCommentVersion(ctx context.Context, prID, commentID int64, body string, expectedVersion int64) error {
+	return sc.s.UpdatePRCommentVersion(ctx, prID, commentID, body, expectedVersion)
 }
 func (sc *ScopedStore) DeletePRComment(ctx context.Context, prID, commentID int64) error {
 	return sc.s.DeletePRComment(ctx, prID, commentID)

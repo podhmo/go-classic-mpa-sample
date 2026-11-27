@@ -13,6 +13,7 @@
 </div>
 
 <form method="post" action="{{.Action}}" class="card issue-form" novalidate>
+  {{if .Input.ExpectedVersion}}<input type="hidden" name="version" value="{{.Input.ExpectedVersion}}">{{end}}
   <p class="form-note">{{FormNoteHTML}}</p>
 
   <div class="field">

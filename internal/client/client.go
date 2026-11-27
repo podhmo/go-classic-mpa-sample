@@ -140,6 +140,9 @@ type Error struct {
 }
 
 func (e *Error) Is(target error) bool {
+	if target == store.ErrVersionConflict {
+		return e.Status == http.StatusPreconditionFailed
+	}
 	return target == store.ErrNotFound &&
 		e.Status == http.StatusNotFound && e.notFoundIsMissingRecord
 }
@@ -181,6 +184,15 @@ func (c *Client) doWorkspaceRecordEndpoint(ctx context.Context, method, path str
 
 type requestOptions struct {
 	notFoundIsMissingRecord bool
+	ifMatch                 int64
+}
+
+func (c *Client) doVersionedWorkspaceRecordEndpoint(ctx context.Context, method, path string, in, out any, expected int64) error {
+	if c.ws == "" {
+		return c.doWithOptions(ctx, method, path, in, out, requestOptions{ifMatch: expected})
+	}
+	return c.doWithOptions(ctx, method, path, in, out,
+		requestOptions{notFoundIsMissingRecord: true, ifMatch: expected})
 }
 
 func (c *Client) doWithOptions(ctx context.Context, method, path string, in, out any, opts requestOptions) error {
@@ -201,6 +213,9 @@ func (c *Client) doWithOptions(ctx context.Context, method, path string, in, out
 	req.Header.Set("Content-Type", "application/json")
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+	if opts.ifMatch > 0 {
+		req.Header.Set("If-Match", fmt.Sprintf("\"%d\"", opts.ifMatch))
 	}
 	resp, err := c.hc.Do(req)
 	if err != nil {

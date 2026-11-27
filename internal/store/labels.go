@@ -42,6 +42,7 @@ type Label struct {
 	Kind        string
 	Name        string
 	Color       string // CSS hex color, e.g. "#d73a4a"
+	Version     int64
 	Archived    bool
 }
 
@@ -50,13 +51,16 @@ type Label struct {
 type LabelInput struct {
 	Name  string
 	Color string
+	// ExpectedVersion is 0 for an unconditional update; positive values
+	// make the update conditional on the row still carrying that version.
+	ExpectedVersion int64
 }
 
 func scanLabel(s scanner) (*Label, error) {
 	var l Label
 	var ws sql.NullInt64
 	var archived int
-	if err := s.Scan(&l.ID, &ws, &l.Kind, &l.Name, &l.Color, &archived); err != nil {
+	if err := s.Scan(&l.ID, &ws, &l.Kind, &l.Name, &l.Color, &l.Version, &archived); err != nil {
 		return nil, err
 	}
 	l.WorkspaceID = ws.Int64
@@ -64,7 +68,7 @@ func scanLabel(s scanner) (*Label, error) {
 	return &l, nil
 }
 
-const labelColumns = "id, workspace_id, kind, name, color, archived"
+const labelColumns = "id, workspace_id, kind, name, color, version, archived"
 
 // ListLabels returns the active labels of kind visible in workspace wsID:
 // the shared master rows plus the workspace's own rows, ordered by name.
@@ -147,7 +151,7 @@ func (s *Store) CreateLabel(ctx context.Context, wsID int64, kind string, in Lab
 		return 0, err
 	case archived == 1:
 		if _, err := s.db.ExecContext(ctx,
-			"UPDATE labels SET archived = 0, color = ? WHERE id = ?", in.Color, existingID); err != nil {
+			"UPDATE labels SET archived = 0, color = ?, version = version + 1 WHERE id = ?", in.Color, existingID); err != nil {
 			return 0, err
 		}
 		return existingID, nil
@@ -160,8 +164,32 @@ func (s *Store) CreateLabel(ctx context.Context, wsID int64, kind string, in Lab
 // change. Returns ErrNotFound for a missing id and ErrDuplicateLabel when
 // the new name collides in the same kind and scope.
 func (s *Store) UpdateLabel(ctx context.Context, id int64, in LabelInput) error {
-	res, err := s.db.ExecContext(ctx,
-		"UPDATE labels SET name = ?, color = ? WHERE id = ?", in.Name, in.Color, id)
+	query := "UPDATE labels SET name = ?, color = ?, version = version + 1 WHERE id = ?"
+	args := []any{in.Name, in.Color, id}
+	if in.ExpectedVersion > 0 {
+		query += " AND version = ?"
+		args = append(args, in.ExpectedVersion)
+	}
+	if in.ExpectedVersion > 0 {
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		res, err := tx.ExecContext(ctx, query, args...)
+		if err != nil {
+			if isUniqueViolation(err) {
+				return ErrDuplicateLabel
+			}
+			return err
+		}
+		if err := checkVersionedAffected(ctx, tx, res,
+			"SELECT version FROM labels WHERE id = ?", id); err != nil {
+			return err
+		}
+		return tx.Commit()
+	}
+	res, err := s.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return ErrDuplicateLabel

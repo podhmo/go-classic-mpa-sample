@@ -88,20 +88,35 @@ func scanModeration(edited, hidden sql.NullInt64, reason sql.NullString) Moderat
 // text changed. ErrNotFound when the comment is missing or belongs to a
 // different issue.
 func (s *Store) UpdateComment(ctx context.Context, issueID, commentID int64, body string) error {
+	return s.UpdateCommentVersion(ctx, issueID, commentID, body, 0)
+}
+
+// UpdateCommentVersion is UpdateComment conditional on the row version
+// when expectedVersion is positive.
+func (s *Store) UpdateCommentVersion(ctx context.Context, issueID, commentID int64, body string, expectedVersion int64) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	res, err := tx.ExecContext(ctx,
-		`UPDATE comments SET body = ?,
+	query := `UPDATE comments SET body = ?, version = version + 1,
 			edited_at = CASE WHEN body != ? THEN ? ELSE edited_at END
-			WHERE id = ? AND issue_id = ?`,
-		body, body, time.Now().UTC().Unix(), commentID, issueID)
+			WHERE id = ? AND issue_id = ?`
+	args := []any{body, body, time.Now().UTC().Unix(), commentID, issueID}
+	if expectedVersion > 0 {
+		query += " AND version = ?"
+		args = append(args, expectedVersion)
+	}
+	res, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}
-	if err := checkAffected(res); err != nil {
+	if expectedVersion > 0 {
+		if err := checkVersionedAffected(ctx, tx, res,
+			"SELECT version FROM comments WHERE id = ? AND issue_id = ?", commentID, issueID); err != nil {
+			return err
+		}
+	} else if err := checkAffected(res); err != nil {
 		return err
 	}
 	return s.commitTx(ctx, tx,
@@ -152,20 +167,35 @@ func (s *Store) SetCommentHidden(ctx context.Context, issueID, commentID int64, 
 // opening post), stamping edited_at on a real change. ErrNotFound when
 // the thread is missing or belongs to a different discussion.
 func (s *Store) UpdateDiscussionThread(ctx context.Context, discussionID, threadID int64, body string) error {
+	return s.UpdateDiscussionThreadVersion(ctx, discussionID, threadID, body, 0)
+}
+
+// UpdateDiscussionThreadVersion is UpdateDiscussionThread conditional on
+// the row version when expectedVersion is positive.
+func (s *Store) UpdateDiscussionThreadVersion(ctx context.Context, discussionID, threadID int64, body string, expectedVersion int64) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	res, err := tx.ExecContext(ctx,
-		`UPDATE discussion_threads SET body = ?,
+	query := `UPDATE discussion_threads SET body = ?, version = version + 1,
 			edited_at = CASE WHEN body != ? THEN ? ELSE edited_at END
-			WHERE id = ? AND discussion_id = ?`,
-		body, body, time.Now().UTC().Unix(), threadID, discussionID)
+			WHERE id = ? AND discussion_id = ?`
+	args := []any{body, body, time.Now().UTC().Unix(), threadID, discussionID}
+	if expectedVersion > 0 {
+		query += " AND version = ?"
+		args = append(args, expectedVersion)
+	}
+	res, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}
-	if err := checkAffected(res); err != nil {
+	if expectedVersion > 0 {
+		if err := checkVersionedAffected(ctx, tx, res,
+			"SELECT version FROM discussion_threads WHERE id = ? AND discussion_id = ?", threadID, discussionID); err != nil {
+			return err
+		}
+	} else if err := checkAffected(res); err != nil {
 		return err
 	}
 	return s.commitTx(ctx, tx,
@@ -217,22 +247,41 @@ func (s *Store) SetDiscussionThreadHidden(ctx context.Context, discussionID, thr
 // a real change. ErrNotFound when the reply is missing or the
 // (discussion, thread, reply) chain does not line up.
 func (s *Store) UpdateDiscussionComment(ctx context.Context, discussionID, threadID, commentID int64, body string) error {
+	return s.UpdateDiscussionCommentVersion(ctx, discussionID, threadID, commentID, body, 0)
+}
+
+// UpdateDiscussionCommentVersion is UpdateDiscussionComment conditional
+// on the row version when expectedVersion is positive.
+func (s *Store) UpdateDiscussionCommentVersion(ctx context.Context, discussionID, threadID, commentID int64, body string, expectedVersion int64) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	res, err := tx.ExecContext(ctx,
-		`UPDATE discussion_comments SET body = ?,
+	query := `UPDATE discussion_comments SET body = ?, version = version + 1,
 			edited_at = CASE WHEN body != ? THEN ? ELSE edited_at END
 			WHERE id = ? AND thread_id = ? AND EXISTS (
 				SELECT 1 FROM discussion_threads t
-				WHERE t.id = discussion_comments.thread_id AND t.discussion_id = ?)`,
-		body, body, time.Now().UTC().Unix(), commentID, threadID, discussionID)
+				WHERE t.id = discussion_comments.thread_id AND t.discussion_id = ?)`
+	args := []any{body, body, time.Now().UTC().Unix(), commentID, threadID, discussionID}
+	if expectedVersion > 0 {
+		query += " AND version = ?"
+		args = append(args, expectedVersion)
+	}
+	res, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}
-	if err := checkAffected(res); err != nil {
+	if expectedVersion > 0 {
+		if err := checkVersionedAffected(ctx, tx, res,
+			`SELECT version FROM discussion_comments
+				WHERE id = ? AND thread_id = ? AND EXISTS (
+					SELECT 1 FROM discussion_threads t
+					WHERE t.id = discussion_comments.thread_id AND t.discussion_id = ?)`,
+			commentID, threadID, discussionID); err != nil {
+			return err
+		}
+	} else if err := checkAffected(res); err != nil {
 		return err
 	}
 	return s.commitTx(ctx, tx,
