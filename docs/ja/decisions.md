@@ -740,3 +740,8 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 
 - **file-backed DB は WAL + synchronous(NORMAL)**: reader/writer の並行性を上げる。WAL は DB ファイル側の永続設定だが、DSN にも `_pragma=journal_mode(WAL)` を付けて新規 DB から有効にする。in-memory DB には付けない。
 - **transaction は `_txlock=immediate`**: read-before-write の mutator が deferred transaction の upgrade で `SQLITE_BUSY` / snapshot conflict にならないよう、BEGIN 時点で write lock を取る。busy_timeout(5000) と foreign_keys(1) は従来どおり全接続へ付与する。
+
+## /static/ の認証外配信・gzip・ETag（2026-11-26、owner improvements 対応）
+
+- **既知の静的ファイルだけ exact path で認証 middleware の外に出す**: session cookie 付きでも stylesheet/module ごとに DB 照会しない。未知の `/static/` 配下は従来どおり動的 mux の styled 404 に落とす。
+- **embed 資産は起動後の初回アクセスで byte・gzip・sha256 ETag をキャッシュする**: deploy まで内容が変わらないため process lifetime で有効。ETag conditional request は 304、gzip 対応 client には事前圧縮 body を返し `Vary: Accept-Encoding` を付ける。versioned URL + immutable 化は別 TODO に残す。

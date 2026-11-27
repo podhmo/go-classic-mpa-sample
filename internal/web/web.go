@@ -5,8 +5,12 @@
 package web
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"html/template"
@@ -14,8 +18,10 @@ import (
 	"log"
 	"mime"
 	"net/http"
+	"path"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/podhmo/go-classic-mpa-sample/internal/api"
@@ -29,6 +35,84 @@ var templateFS embed.FS
 
 //go:embed static
 var staticFS embed.FS
+
+type staticAsset struct {
+	body        []byte
+	gzipBody    []byte
+	etag        string
+	gzipETag    string
+	contentType string
+}
+
+var staticAssets sync.Map
+
+// loadStaticAsset reads and pre-compresses an embedded static file once.
+// The embedded files change only across deploys, so their hashes are stable
+// strong ETags for the process lifetime.
+func loadStaticAsset(name string) (*staticAsset, error) {
+	if cached, ok := staticAssets.Load(name); ok {
+		return cached.(*staticAsset), nil
+	}
+	body, err := staticFS.ReadFile("static/" + name)
+	if err != nil {
+		return nil, err
+	}
+	sum := sha256.Sum256(body)
+	var compressed bytes.Buffer
+	zw := gzip.NewWriter(&compressed)
+	if _, err := zw.Write(body); err != nil {
+		return nil, err
+	}
+	if err := zw.Close(); err != nil {
+		return nil, err
+	}
+	gzipSum := sha256.Sum256(compressed.Bytes())
+	asset := &staticAsset{
+		body:        body,
+		gzipBody:    compressed.Bytes(),
+		etag:        `"` + hex.EncodeToString(sum[:16]) + `"`,
+		gzipETag:    `"` + hex.EncodeToString(gzipSum[:16]) + `"`,
+		contentType: mime.TypeByExtension(path.Ext(name)),
+	}
+	staticAssets.Store(name, asset)
+	return asset, nil
+}
+
+func acceptsGzip(header string) bool {
+	for part := range strings.SplitSeq(header, ",") {
+		name, params, _ := strings.Cut(part, ";")
+		if !strings.EqualFold(strings.TrimSpace(name), "gzip") {
+			continue
+		}
+		q := 1.0
+		for param := range strings.SplitSeq(params, ";") {
+			k, v, ok := strings.Cut(strings.TrimSpace(param), "=")
+			if ok && strings.EqualFold(k, "q") {
+				parsed, err := strconv.ParseFloat(v, 64)
+				if err != nil {
+					q = 0
+				} else {
+					q = parsed
+				}
+			}
+		}
+		if q > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func ifNoneMatch(header, etag string) bool {
+	for part := range strings.SplitSeq(header, ",") {
+		candidate := strings.TrimSpace(part)
+		candidate = strings.TrimPrefix(candidate, "W/")
+		if candidate == "*" || candidate == etag {
+			return true
+		}
+	}
+	return false
+}
 
 // Store is the persistence contract the web layer depends on. It matches the
 // methods of *store.Store, which satisfies this interface automatically.
@@ -293,66 +377,102 @@ func New(st Store, opts ...Option) http.Handler {
 	// The files are embedded in the binary and only change across deploys,
 	// so a moderate max-age is safe without content-hashed URLs; it keeps
 	// MPA navigations from refetching every stylesheet/script each time.
-	serveStatic := func(name string) http.HandlerFunc {
+	staticMux := http.NewServeMux()
+	staticPaths := map[string]bool{}
+	serveStatic := func(name, contentType string) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Cache-Control", "public, max-age=3600")
-			http.ServeFileFS(w, r, staticFS, "static/"+name)
+			asset, err := loadStaticAsset(name)
+			if err != nil {
+				http.NotFound(w, r)
+				return
+			}
+			body := asset.body
+			etag := asset.etag
+			useGzip := acceptsGzip(r.Header.Get("Accept-Encoding"))
+			if useGzip {
+				body = asset.gzipBody
+				etag = asset.gzipETag
+			}
+			h := w.Header()
+			h.Set("Cache-Control", "public, max-age=3600")
+			h.Set("ETag", etag)
+			h.Add("Vary", "Accept-Encoding")
+			ct := contentType
+			if ct == "" {
+				ct = asset.contentType
+			}
+			if ct != "" {
+				h.Set("Content-Type", ct)
+			}
+			if ifNoneMatch(r.Header.Get("If-None-Match"), etag) {
+				w.WriteHeader(http.StatusNotModified)
+				return
+			}
+			if useGzip {
+				h.Set("Content-Encoding", "gzip")
+			}
+			http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(body))
 		}
 	}
-	mux.HandleFunc("GET /static/app.css", serveStatic("app.css"))
-	mux.HandleFunc("GET /static/i18n.js", serveStatic("i18n.js"))
+	registerStatic := func(route, name string, contentTypes ...string) {
+		contentType := ""
+		if len(contentTypes) > 0 {
+			contentType = contentTypes[0]
+		}
+		staticPaths[route] = true
+		staticMux.HandleFunc("GET "+route, serveStatic(name, contentType))
+	}
+	registerStatic("/static/app.css", "app.css")
+	registerStatic("/static/i18n.js", "i18n.js")
 	// External speculation rules for the issue list (Speculation-Rules
 	// response header). The spec requires this exact media type; .json's
 	// application/json default would make the browser ignore the file.
-	mux.HandleFunc("GET /static/speculation-rules.json", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/speculationrules+json")
-		serveStatic("speculation-rules.json")(w, r)
-	})
+	registerStatic("/static/speculation-rules.json", "speculation-rules.json", "application/speculationrules+json")
 	// Search-term highlighting on the list page (CSS Custom Highlight API).
-	mux.HandleFunc("GET /static/search-highlight.js", serveStatic("search-highlight.js"))
+	registerStatic("/static/search-highlight.js", "search-highlight.js")
 	// Comment permalink copy buttons on the detail page.
-	mux.HandleFunc("GET /static/copy-permalink.js", serveStatic("copy-permalink.js"))
+	registerStatic("/static/copy-permalink.js", "copy-permalink.js")
 	// "Copy as markdown" action on the article rows (imported by
 	// page-detail.js).
-	mux.HandleFunc("GET /static/copy-markdown.js", serveStatic("copy-markdown.js"))
+	registerStatic("/static/copy-markdown.js", "copy-markdown.js")
 	// Shared clipboard write + tip feedback used by the copy-* modules
 	// (imported, not loaded as a script tag).
-	mux.HandleFunc("GET /static/clipboard.js", serveStatic("clipboard.js"))
+	registerStatic("/static/clipboard.js", "clipboard.js")
 	// Ctrl/Cmd+Enter form submission from textareas.
-	mux.HandleFunc("GET /static/enter-submit.js", serveStatic("enter-submit.js"))
+	registerStatic("/static/enter-submit.js", "enter-submit.js")
 	// Direction-tagging for cross-document view transitions between
 	// paginated list pages.
-	mux.HandleFunc("GET /static/pagination-transition.js", serveStatic("pagination-transition.js"))
+	registerStatic("/static/pagination-transition.js", "pagination-transition.js")
 	// aria-invalid ↔ :user-invalid sync + polite error announcements on
 	// pages with forms (detail comment form, issue create/edit form).
-	mux.HandleFunc("GET /static/form-errors.js", serveStatic("form-errors.js"))
+	registerStatic("/static/form-errors.js", "form-errors.js")
 	// Shared polite live region used by the form-error and partial-submit
 	// modules (imported, not loaded as a script tag).
-	mux.HandleFunc("GET /static/announcer.js", serveStatic("announcer.js"))
+	registerStatic("/static/announcer.js", "announcer.js")
 	// Comment forms' partial-update submission (fetch → fragment → DOM
 	// swap) on the issue/discussion detail pages.
-	mux.HandleFunc("GET /static/partial-submit.js", serveStatic("partial-submit.js"))
+	registerStatic("/static/partial-submit.js", "partial-submit.js")
 	// Visual toast notifications shown on partial-post success (imported
 	// by partial-submit.js, not loaded as a script tag).
-	mux.HandleFunc("GET /static/toast.js", serveStatic("toast.js"))
+	registerStatic("/static/toast.js", "toast.js")
 	// Disable comment submit buttons while the textarea is empty (module;
 	// also imported by partial-submit.js to re-sync after a partial post).
-	mux.HandleFunc("GET /static/comment-submit-disabled.js", serveStatic("comment-submit-disabled.js"))
+	registerStatic("/static/comment-submit-disabled.js", "comment-submit-disabled.js")
 	// beforeunload guard against losing unsaved form input.
-	mux.HandleFunc("GET /static/leave-guard.js", serveStatic("leave-guard.js"))
+	registerStatic("/static/leave-guard.js", "leave-guard.js")
 	// Shared element-lifecycle registry (attach/detach on DOM mutations) —
 	// a module, fetched only as an import dependency.
-	mux.HandleFunc("GET /static/dom-hooks.js", serveStatic("dom-hooks.js"))
+	registerStatic("/static/dom-hooks.js", "dom-hooks.js")
 	// Fragment parsing + scoped-transition helpers shared by
 	// partial-submit.js and live-updates.js (imported, not a script tag).
-	mux.HandleFunc("GET /static/fragments.js", serveStatic("fragments.js"))
+	registerStatic("/static/fragments.js", "fragments.js")
 	// EventSource client that refetches fragments on pushed change hints
 	// (imported by page-detail.js).
-	mux.HandleFunc("GET /static/live-updates.js", serveStatic("live-updates.js"))
+	registerStatic("/static/live-updates.js", "live-updates.js")
 	// Per-page-type module entries: the single <script type="module"> tag
 	// on the detail pages and the create/edit form pages.
-	mux.HandleFunc("GET /static/page-detail.js", serveStatic("page-detail.js"))
-	mux.HandleFunc("GET /static/page-form.js", serveStatic("page-form.js"))
+	registerStatic("/static/page-detail.js", "page-detail.js")
+	registerStatic("/static/page-form.js", "page-form.js")
 	// Catch-alls: unknown GET/POST paths render the styled 404 page instead
 	// of the mux's plaintext default. They are method-scoped on purpose — a
 	// method-less "/" pattern would match PUT/DELETE too and swallow the
@@ -361,12 +481,22 @@ func New(st Store, opts ...Option) http.Handler {
 	mux.HandleFunc("GET /", h.notFound)
 	mux.HandleFunc("POST /", h.notFound)
 
-	// Requests run under withUser (session-cookie → context auth resolution)
-	// and then the stdlib CrossOriginProtection middleware, which rejects
-	// cross-site state-changing browser requests (CSRF) via Sec-Fetch-Site /
-	// Origin headers. withLocale sits outside them so the ?lang= switcher
-	// redirect needs neither a session nor CSRF checks (it's a plain GET).
-	return securityHeaders(withLocale(http.NewCrossOriginProtection().Handler(withUser(h, mux))))
+	// Static files bypass withUser: embedded public assets must not pay a
+	// session lookup for every stylesheet/module. Dynamic requests still run
+	// under withUser, then the stdlib CrossOriginProtection middleware
+	// rejects cross-site state-changing browser requests (CSRF) via
+	// Sec-Fetch-Site / Origin headers. withLocale sits outside them so the
+	// ?lang= switcher redirect needs neither a session nor CSRF checks (it's
+	// a plain GET).
+	authedMux := withUser(h, mux)
+	root := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if staticPaths[r.URL.Path] {
+			staticMux.ServeHTTP(w, r)
+			return
+		}
+		authedMux.ServeHTTP(w, r)
+	})
+	return securityHeaders(withLocale(http.NewCrossOriginProtection().Handler(root)))
 }
 
 // contentSecurityPolicy is the enforced CSP for every response. The app
