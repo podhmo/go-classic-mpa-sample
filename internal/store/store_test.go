@@ -2,10 +2,14 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 func newTestStore(t *testing.T) *Store {
@@ -18,27 +22,53 @@ func newTestStore(t *testing.T) *Store {
 	return s
 }
 
+func TestSQLiteMemoryDSNRepeatedModeUsesLastValue(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		dsn  string
+		want bool
+	}{
+		{"file::memory:", true},
+		{"file:test.db?mode=memory", true},
+		{"file:test.db?mode=rwc&mode=memory", true},
+		{"file:test.db?mode=memory&mode=rwc", false},
+		{"file:test.db?mode=memory&mode=memory#notes", true},
+		{"file:archive-mode=memory.db", false},
+	} {
+		if got := sqliteMemoryDSN(tc.dsn); got != tc.want {
+			t.Errorf("sqliteMemoryDSN(%q) = %v, want %v", tc.dsn, got, tc.want)
+		}
+	}
+}
+
 // TestFileDBPragmas verifies pragmas reach every pooled connection on a real
 // file database (foreign_keys is per-connection in SQLite).
 func TestFileDBPragmas(t *testing.T) {
-	s, err := Open(filepath.Join(t.TempDir(), "test.db"))
+	s, err := Open(filepath.Join(t.TempDir(), "archive-mode=memory.db"))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
 	t.Cleanup(func() { s.Close() })
 	ctx := context.Background()
 
-	for i := range 10 {
-		conn, err := s.db.Conn(ctx)
+	// Hold both connections while checking them so the pool cannot reuse the
+	// first connection for the second assertion.
+	conns := make([]*sql.Conn, 0, 2)
+	for range 2 {
+		connCtx, cancel := context.WithTimeout(ctx, time.Second)
+		conn, err := s.db.Conn(connCtx)
+		cancel()
 		if err != nil {
 			t.Fatalf("Conn: %v", err)
 		}
+		defer conn.Close()
+		conns = append(conns, conn)
+	}
+	for i, conn := range conns {
 		var on int
 		if err := conn.QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&on); err != nil {
-			conn.Close()
 			t.Fatalf("PRAGMA foreign_keys: %v", err)
 		}
-		conn.Close()
 		if on != 1 {
 			t.Fatalf("conn %d: foreign_keys = %d, want 1", i, on)
 		}
@@ -49,6 +79,121 @@ func TestFileDBPragmas(t *testing.T) {
 	}
 	if bt != 5000 {
 		t.Fatalf("busy_timeout = %d, want 5000", bt)
+	}
+	var journalMode string
+	if err := s.db.QueryRowContext(ctx, "PRAGMA journal_mode").Scan(&journalMode); err != nil {
+		t.Fatalf("PRAGMA journal_mode: %v", err)
+	}
+	if journalMode != "wal" {
+		t.Fatalf("journal_mode = %q, want wal", journalMode)
+	}
+	var synchronous int
+	if err := s.db.QueryRowContext(ctx, "PRAGMA synchronous").Scan(&synchronous); err != nil {
+		t.Fatalf("PRAGMA synchronous: %v", err)
+	}
+	if synchronous != 1 { // NORMAL
+		t.Fatalf("synchronous = %d, want NORMAL (1)", synchronous)
+	}
+}
+
+func TestTransactionsBeginImmediate(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "immediate.db")
+	s1, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open first: %v", err)
+	}
+	t.Cleanup(func() { s1.Close() })
+	s2, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open second: %v", err)
+	}
+	t.Cleanup(func() { s2.Close() })
+
+	ctx := context.Background()
+	tx1, err := s1.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("first BeginTx: %v", err)
+	}
+
+	// Attempt the overlapping begin on this goroutine, not a helper whose
+	// scheduling may lag behind the commit. With BEGIN IMMEDIATE the first
+	// transaction already holds the write lock, so the second begin must
+	// wait and its short context must expire.
+	lockCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	started := time.Now()
+	tx2, err := s2.db.BeginTx(lockCtx, nil)
+	cancel()
+	if elapsed := time.Since(started); elapsed < 50*time.Millisecond {
+		tx1.Rollback()
+		if err == nil {
+			tx2.Rollback()
+		}
+		t.Fatalf("overlapping BeginTx returned after %s before lock contention could be observed (err=%v)", elapsed, err)
+	}
+	if err == nil {
+		tx2.Rollback()
+		tx1.Rollback()
+		t.Fatal("second transaction began while the first was open; txlock is not immediate")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		tx1.Rollback()
+		t.Fatalf("overlapping BeginTx error = %v, want context deadline", err)
+	}
+	if err := tx1.Commit(); err != nil {
+		t.Fatalf("first Commit: %v", err)
+	}
+	tx2, err = s2.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("second BeginTx after first Commit: %v", err)
+	}
+	if err := tx2.Rollback(); err != nil {
+		t.Fatalf("second Rollback: %v", err)
+	}
+}
+
+// Concurrent writers exercise the immediate txlock: transactions that read
+// before writing must serialize at BEGIN instead of failing a deferred
+// read-to-write upgrade with SQLITE_BUSY.
+func TestConcurrentWritersDoNotBusy(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "concurrent.db")
+	const handles = 4
+	stores := make([]*Store, 0, handles)
+	for range handles {
+		s, err := Open(path)
+		if err != nil {
+			t.Fatalf("Open: %v", err)
+		}
+		t.Cleanup(func() { s.Close() })
+		stores = append(stores, s)
+	}
+	cat := mustCategory(t, stores[0], "General", "general", CategoryFormatOpen)
+
+	const workers = 8
+	const writesPerWorker = 3
+	start := make(chan struct{})
+	errs := make(chan error, workers*writesPerWorker)
+	var wg sync.WaitGroup
+	for i := range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			s := stores[i%len(stores)]
+			for range writesPerWorker {
+				_, err := s.CreateDiscussion(context.Background(), 1, DiscussionInput{
+					Title: "concurrent", CategoryID: cat,
+				}, 0)
+				errs <- err
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent write: %v", err)
+		}
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -452,6 +453,29 @@ func migrateWithFKOff(ctx context.Context, db *sql.DB, version int) error {
 	return nil
 }
 
+// sqliteMemoryDSN reports whether the SQLite URI selects an in-memory
+// database. Checking the parsed query avoids mistaking a filename such as
+// archive-mode=memory.db for the mode=memory parameter.
+func sqliteMemoryDSN(dsn string) bool {
+	if strings.HasPrefix(dsn, "file::memory:") {
+		return true
+	}
+	_, query, ok := strings.Cut(dsn, "?")
+	if !ok {
+		return false
+	}
+	// SQLite ignores a URI fragment; do not let it become part of the final
+	// query parameter when mirroring that parsing here.
+	query, _, _ = strings.Cut(query, "#")
+	values, err := url.ParseQuery(query)
+	if err != nil {
+		return false
+	}
+	// SQLite applies repeated URI parameters in order, so the last mode wins.
+	modes := values["mode"]
+	return len(modes) > 0 && modes[len(modes)-1] == "memory"
+}
+
 // Open opens (or creates) the SQLite database at path, enables foreign keys,
 // and migrates the schema to the latest version. It does NOT insert demo
 // data; callers invoke SeedDemoData for that. Use ":memory:" (or a
@@ -468,13 +492,17 @@ func Open(path string) (*Store, error) {
 	if strings.Contains(dsn, "?") {
 		sep = "&"
 	}
-	dsn += sep + "_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)"
+	memory := sqliteMemoryDSN(dsn)
+	dsn += sep + "_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)&_txlock=immediate"
+	if !memory {
+		dsn += "&_pragma=journal_mode(WAL)"
+	}
 
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
 	}
-	if strings.HasPrefix(dsn, "file::memory:") || strings.Contains(dsn, "mode=memory") {
+	if memory {
 		// database/sql opens a fresh in-memory DB per pooled connection, so
 		// pin a single connection to keep one shared database alive.
 		db.SetMaxOpenConns(1)

@@ -735,3 +735,8 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 - **remote CLI の 404 写像は endpoint 文脈付き**: API 変更なしで、record missing と分かる endpoint だけ `store.ErrNotFound` に写像する。
 - **PR merge は最小 CAS を先に入れる**: service 抽出は後で行い、lease/復旧も実装しやすい最小範囲に留める。
 - **PR の pin 失敗は許容して修復可能にする**: pin 欠損を検出・再作成できる運用を優先し、厳密な transaction 結合は求めない。
+
+## SQLite WAL + immediate transaction（2026-11-26、owner improvements 対応）
+
+- **file-backed DB は WAL + synchronous(NORMAL)**: reader/writer の並行性を上げる。WAL は DB ファイル側の永続設定だが、DSN にも `_pragma=journal_mode(WAL)` を付けて新規 DB から有効にする。in-memory DB には付けない。
+- **transaction は `_txlock=immediate`**: read-before-write の mutator が deferred transaction の upgrade で `SQLITE_BUSY` / snapshot conflict にならないよう、BEGIN 時点で write lock を取る。busy_timeout(5000) と foreign_keys(1) は従来どおり全接続へ付与する。
