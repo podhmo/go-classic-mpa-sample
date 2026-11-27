@@ -755,3 +755,9 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 
 - **cache key は `sha256(body)`**: DB には生 markdown を残し、goldmark の表示 HTML だけを process-local にキャッシュする。LRU は128件まで、64KiBを超える source は cache しない（出力まで含めたメモリ上限を緩やかに抑える）。
 - **storybook 互換のため key は binary digest の string**: `sha256.Sum256` の `[32]byte` 返り値は minigo 経路で扱いにくいため、`sha256.New().Sum(nil)` の bytes を string key にする。衝突耐性の意味論は同じ。
+
+## /static/ versioned URL + immutable（2026-11-26、owner improvements 対応）
+
+- **HTML が参照する静的資産は `/static/<name>?v=<content hash>`**: 全 embedded asset の名前と内容から作る deployment hash を query に載せ、一致する URL だけ `Cache-Control: public, max-age=31536000, immutable` にする。`v` なしの旧 URL は互換 fallback として従来の `max-age=3600`、stale な `v` は 404。
+- **storybook 互換のため path ではなく query に hash を入れる**: storybook は `/static/` をアプリより先に live overlay へ振るため、`/static/v/<hash>/...` だと export/preview の資産解決を壊す。query なら path が変わらず、overlay は従来どおりファイルを供給できる。
+- **module import は serve 時に同じ `v` 付きへ書き換える**: `<script type="module">` の entrypoint だけ versioned にしても、`./clipboard.js` などの relative import から query は継承されない。embedded JS の `./<name>.js` 文字列を process-local に `?v=` 付きへ変換し、module graph 全体が deployment ごとの cache key を持つようにする。

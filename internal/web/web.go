@@ -19,6 +19,7 @@ import (
 	"mime"
 	"net/http"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -46,16 +47,94 @@ type staticAsset struct {
 
 var staticAssets sync.Map
 
+var staticManifest struct {
+	once    sync.Once
+	version string
+	jsNames []string
+}
+
+// loadStaticManifest hashes every embedded asset into one deployment
+// version. Entrypoint URLs use that version in a query string; keeping the
+// file path stable preserves the storybook's live /static/ overlay, while
+// changing any asset still busts the browser cache for the whole module
+// graph.
+func loadStaticManifest() {
+	entries, err := staticFS.ReadDir("static")
+	if err != nil {
+		panic(err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			names = append(names, entry.Name())
+		}
+	}
+	sort.Strings(names)
+	h := sha256.New()
+	jsNames := make([]string, 0, len(names))
+	for _, name := range names {
+		body, err := staticFS.ReadFile("static/" + name)
+		if err != nil {
+			panic(err)
+		}
+		h.Write([]byte(name))
+		h.Write([]byte{0})
+		h.Write(body)
+		h.Write([]byte{0})
+		if path.Ext(name) == ".js" {
+			jsNames = append(jsNames, name)
+		}
+	}
+	sum := h.Sum(nil)
+	staticManifest.version = hex.EncodeToString(sum[:8])
+	staticManifest.jsNames = jsNames
+}
+
+func staticBuildVersion() string {
+	staticManifest.once.Do(loadStaticManifest)
+	return staticManifest.version
+}
+
+func staticURL(name string) string {
+	return "/static/" + name + "?v=" + staticBuildVersion()
+}
+
+func versionedStaticBody(name string, body []byte) []byte {
+	if path.Ext(name) != ".js" {
+		return body
+	}
+	staticBuildVersion()
+	out := append([]byte(nil), body...)
+	for _, dep := range staticManifest.jsNames {
+		for _, quote := range []string{`"`, `'`} {
+			plain := quote + "./" + dep + quote
+			versioned := quote + "./" + dep + "?v=" + staticManifest.version + quote
+			out = bytes.ReplaceAll(out, []byte(plain), []byte(versioned))
+		}
+	}
+	return out
+}
+
 // loadStaticAsset reads and pre-compresses an embedded static file once.
 // The embedded files change only across deploys, so their hashes are stable
-// strong ETags for the process lifetime.
-func loadStaticAsset(name string) (*staticAsset, error) {
-	if cached, ok := staticAssets.Load(name); ok {
+// strong ETags for the process lifetime. Versioned module entrypoints get
+// version-pinned imports; unversioned fallback URLs keep the raw source so
+// an old cached fallback graph cannot start requesting rejected stale
+// versions after a deploy.
+func loadStaticAsset(name string, versioned bool) (*staticAsset, error) {
+	cacheKey := name
+	if versioned {
+		cacheKey += "\x00versioned"
+	}
+	if cached, ok := staticAssets.Load(cacheKey); ok {
 		return cached.(*staticAsset), nil
 	}
 	body, err := staticFS.ReadFile("static/" + name)
 	if err != nil {
 		return nil, err
+	}
+	if versioned {
+		body = versionedStaticBody(name, body)
 	}
 	sum := sha256.Sum256(body)
 	var compressed bytes.Buffer
@@ -74,7 +153,7 @@ func loadStaticAsset(name string) (*staticAsset, error) {
 		gzipETag:    `"` + hex.EncodeToString(gzipSum[:16]) + `"`,
 		contentType: mime.TypeByExtension(path.Ext(name)),
 	}
-	staticAssets.Store(name, asset)
+	staticAssets.Store(cacheKey, asset)
 	return asset, nil
 }
 
@@ -375,14 +454,20 @@ func New(st Store, opts ...Option) http.Handler {
 	}
 	// Static files: explicit per-file routes — a bare "GET /static/" file
 	// server would expose a directory listing and unstyled plaintext 404s.
-	// The files are embedded in the binary and only change across deploys,
-	// so a moderate max-age is safe without content-hashed URLs; it keeps
-	// MPA navigations from refetching every stylesheet/script each time.
+	// Rendered pages reference them with ?v=<content hash> and those URLs
+	// are immutable. Unversioned URLs remain as compatibility fallbacks
+	// with the older one-hour cache lifetime.
 	staticMux := http.NewServeMux()
 	staticPaths := map[string]bool{}
 	serveStatic := func(name, contentType string) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
-			asset, err := loadStaticAsset(name)
+			version := r.URL.Query().Get("v")
+			if version != "" && version != staticBuildVersion() {
+				http.NotFound(w, r)
+				return
+			}
+			versioned := version == staticBuildVersion()
+			asset, err := loadStaticAsset(name, versioned)
 			if err != nil {
 				http.NotFound(w, r)
 				return
@@ -394,8 +479,12 @@ func New(st Store, opts ...Option) http.Handler {
 				body = asset.gzipBody
 				etag = asset.gzipETag
 			}
+			cacheControl := "public, max-age=3600"
+			if versioned {
+				cacheControl = "public, max-age=31536000, immutable"
+			}
 			h := w.Header()
-			h.Set("Cache-Control", "public, max-age=3600")
+			h.Set("Cache-Control", cacheControl)
 			h.Set("ETag", etag)
 			h.Add("Vary", "Accept-Encoding")
 			ct := contentType
@@ -590,6 +679,7 @@ type handler struct {
 var funcMap = template.FuncMap{
 	"fmtTime":     fmtTime,
 	"markdown":    renderMarkdown,
+	"staticURL":   staticURL,
 	"add":         func(a, b int) int { return a + b },
 	"sub":         func(a, b int) int { return a - b },
 	"isChecked":   isChecked,

@@ -135,7 +135,7 @@ func (h *handler) listDiscussions(w http.ResponseWriter, r *http.Request, ws *st
 	}
 	// Same external speculation rules as the issue list; the shared rules
 	// file also matches .discussion-list a.issue-title.
-	w.Header().Set("Speculation-Rules", `"/static/speculation-rules.json"`)
+	w.Header().Set("Speculation-Rules", strconv.Quote(staticURL("speculation-rules.json")))
 	h.r.renderDiscussionList(w, http.StatusOK, data, localeFromContext(r.Context()))
 }
 
