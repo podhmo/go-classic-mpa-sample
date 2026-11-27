@@ -891,3 +891,8 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 
 - **`WithClock` は response-only entity の描画時刻だけを差し替える**: issue/discussion comment の partial POST response は store row を読み直さず、handler が組み立てた新規 object を返す。visual-diff の storybook replay ではこの `CreatedAt` を `storyNow` に pin し、fixture 側の timestamp と同じく実行間で byte-stable にする。永続化層の `created_at` / `updated_at` は従来どおり実時刻で、production の default も `time.Now` のまま。
 - **clock は global mutable state にせず `New` の option にする**: storybook と実 app が同じ process に同居しても handler instance ごとに決まる。clock を必要としない通常の render path には広げず、現状は POST 成功 fragment の新規 comment/thread にだけ使う。
+
+## visual-diff の dark baseline と JS 状態撮影（2026-11-27、visual-diff 拡張対応）
+
+- **light/dark の baseline は別 directory に分ける**: `.visual-diff/baseline/light` と `.visual-diff/baseline/dark` を使い、`page.emulateMedia({colorScheme})` で OS/browser の実設定に依存しない。既定の `update` / `check` は両 mode を通し、個別確認だけが必要なときは第2引数か `MODES` で絞る。
+- **JS 駆動状態は storybook 上で実操作できるものだけ visual-diff に入れる**: dialog open と copy feedback は実際に click し、toast は storybook に POST 先が無いため `/static/toast.js` の `toast()` を直接起動して描画だけを固定する。これは `.toast` 系 CSS の visual coverage であり、partial POST 成功経路や SSE 由来 `.comment-new` の E2E 検証を置き換えない。
