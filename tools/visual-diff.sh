@@ -12,10 +12,13 @@
 # (gitignored). The pixel threshold defaults to 100 — sub-10px
 # antialiasing noise is normal between runs.
 set -eu
+CDPATH=
 
 STORYBOOK_URL="${STORYBOOK_URL:-http://127.0.0.1:6006}"
 ROOT_DIR=.visual-diff
 PIXEL_THRESHOLD="${PIXEL_THRESHOLD:-100}"
+mkdir -p "$ROOT_DIR"
+ROOT_DIR=$(cd "$ROOT_DIR" && pwd)
 
 usage() {
 	sed -n '2,14p' "$0"
@@ -31,15 +34,17 @@ STORIES=$(grep -oE '/story/[A-Za-z0-9_-]+' /tmp/visual-diff-index.html | sed 's|
 
 capture() {
 	out_dir=$1
-	mkdir -p "$out_dir"
+	parent_dir=$(dirname "$out_dir")
+	mkdir -p "$parent_dir"
+	stage_dir=$(mktemp -d "$parent_dir/.capture.XXXXXX")
 	tmp_js=$(mktemp --suffix=.js)
 	# %STORIES% / %BASE% / %OUTDIR% are substituted below; run-code only
 	# passes `page`, so everything else is baked into the file.
 	cat > "$tmp_js" <<'EOF'
 async page => {
   const stories = %STORIES%;
-  const base = '%BASE%';
-  const outDir = '%OUTDIR%';
+  const base = %BASE%;
+  const outDir = %OUTDIR%;
   await page.setViewportSize({width: 1280, height: 800});
   const failed = [];
   for (const s of stories) {
@@ -54,11 +59,48 @@ async page => {
   return JSON.stringify(failed);
 }
 EOF
-	stories_json=$(printf '%s\n' "$STORIES" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read().split()))')
-	out_abs=$(cd "$out_dir" && pwd)
-	sed -i "s|%STORIES%|$stories_json|; s|%BASE%|$STORYBOOK_URL|; s|%OUTDIR%|$out_abs|" "$tmp_js"
-	playwright-cli run-code --filename "$tmp_js"
+	STORIES_DATA=$STORIES python3 - "$tmp_js" "$STORYBOOK_URL" "$stage_dir" <<'PY'
+import json
+import os
+import sys
+
+path, base, outdir = sys.argv[1:]
+with open(path) as f:
+    source = f.read()
+replacements = {
+    "%STORIES%": json.dumps(os.environ["STORIES_DATA"].split()),
+    "%BASE%": json.dumps(base),
+    "%OUTDIR%": json.dumps(outdir),
+}
+for placeholder, value in replacements.items():
+    source = source.replace(placeholder, value)
+with open(path, "w") as f:
+    f.write(source)
+PY
+	if ! playwright-cli run-code --filename "$tmp_js"; then
+		rm -f "$tmp_js"
+		rm -rf "$stage_dir"
+		echo "capture failed; keeping existing $out_dir" >&2
+		exit 1
+	fi
 	rm -f "$tmp_js"
+	missing=""
+	for story in $STORIES; do
+		[ -f "$stage_dir/$story.png" ] || missing="$missing $story"
+	done
+	if [ -n "$missing" ]; then
+		rm -rf "$stage_dir"
+		echo "capture incomplete:$missing; keeping existing $out_dir" >&2
+		exit 1
+	fi
+	backup_dir="$parent_dir/.backup.$$"
+	if [ -d "$out_dir" ]; then
+		mv "$out_dir" "$backup_dir"
+	fi
+	mv "$stage_dir" "$out_dir"
+	if [ -d "$backup_dir" ]; then
+		rm -rf "$backup_dir"
+	fi
 }
 
 case "${1:-}" in
@@ -83,6 +125,13 @@ case "${1:-}" in
 						echo "DIFF $n  $name"; fail=1
 					fi ;;
 			esac
+		done
+		for png in "$ROOT_DIR"/current/*.png; do
+			name=$(basename "$png")
+			if [ ! -f "$ROOT_DIR/baseline/$name" ]; then
+				echo "NEW      $name (not in baseline)"
+				fail=1
+			fi
 		done
 		[ "$fail" -eq 0 ] && echo "OK: all stories within $PIXEL_THRESHOLD px"
 		exit "$fail"
