@@ -5,6 +5,8 @@
 
 ## PR pin の git subprocess を書き込み transaction の外へ出せるか
 
+状態: 回答済み（2026-11-26、podhmo）— pin 失敗は許容し、後で修復できる運用にする。厳密な transaction 結合より、pin 欠損を検出・再作成できる方向で進める。
+
 止まっている作業: `owner-improvements.md` §1.6。`CreatePullRequest` は現在 transaction 内で `git update-ref` を実行し、その間 DB の write lock を保持する。
 
 選択肢:
@@ -16,6 +18,8 @@
 判断: podhmo。A を選ぶ場合でも、補償削除では取り消せない読み取りを許容するか決めたい。
 
 ## remote CLI の 404 を store sentinel にどう写像するか
+
+状態: 回答済み（2026-11-26、podhmo）— C: 各 client method が endpoint 文脈付きで record missing だけ `store.ErrNotFound` に写像する。API 変更はしない。
 
 止まっている作業: bugs.md #27、`owner-improvements.md` §1.6。`errors.Is(err, store.ErrNotFound)` の local/remote 差を埋めたいが、repo 未検出で未 mount になった `/api/v1/pulls...` の 404 まで record missing として扱うと誤分類になる。
 
@@ -29,6 +33,8 @@
 
 ## PR merge の直列化と `prservice` をどこまで先に入れるか
 
+状態: 回答済み（2026-11-26、podhmo）— B: まず api/cli/web の3箇所に最小の CAS を入れ、service 抽出は後で行う。lease/復旧は実装しやすい最小範囲に任せる。
+
 止まっている作業: bugs.md #36（並行 merge）、`owner-improvements.md` §1.1・§1.5・§3.1。
 
 選択肢:
@@ -40,6 +46,8 @@
 判断: podhmo。予約の lease/復旧（プロセス死亡時に git 側の適用有無をどう照合するか）もあわせて決めたい。
 
 ## PR files 画面の再設計の範囲をどこまでにするか
+
+状態: 回答済み（2026-11-26、podhmo）— A+B: 不正マークアップと N+1 git 起動を直し、行コメント form は JS を増やさず `?line=` 付き GET でサーバー側に描画する。大規模な再設計はしない。
 
 止まっている作業: `owner-improvements.md` §2.5・§4.4・§5.3。
 
@@ -53,6 +61,8 @@
 
 ## FTS5 と検索クエリ構文の仕様
 
+状態: 回答済み（2026-11-26、podhmo）— C: FTS より先に `is:open label:bug author:demo` のパーサだけ入れる。条件はすべて AND、web/CLI/API で同じ文法にする。
+
 止まっている作業: `owner-improvements.md` §2.2・§4.2。
 
 選択肢:
@@ -64,6 +74,8 @@
 判断: podhmo。AND/OR の意味論、web/CLI/API で同じ文法にするかも決める。
 
 ## 楽観的排他の API 互換性と衝突 UX
+
+状態: 回答済み（2026-11-26、podhmo）— B: `If-Match` は任意。指定時だけ `version` を照合し、web フォームは常に hidden version を送る。不一致時の差分表示は実装しやすい最小範囲に任せる。
 
 止まっている作業: `owner-improvements.md` §4.1。
 
@@ -77,6 +89,8 @@
 
 ## API 拡張の優先順位と互換性ポリシー
 
+状態: 回答済み（2026-11-26、podhmo）— 今は API 拡張しない。ページング拡張、コメント取得 endpoint、token scope/expiration はいずれも先送り。
+
 止まっている作業: `owner-improvements.md` §4.3。
 
 論点:
@@ -88,6 +102,8 @@
 判断: podhmo。外部クライアントを壊してよいバージョン境界がないため、原則 additive に進めるかも確認したい。
 
 ## 書く体験（Preview・下書き・参照リンク）の範囲
+
+状態: 回答済み（2026-11-26、podhmo）— D: 3つを1つの writing experience PR にまとめる。下書きは投稿成功時だけ自動削除し、保持期限も手動クリア導線も設けない。TODO.md へ移した。
 
 止まっている作業: `owner-improvements.md` §5.1。
 
@@ -101,6 +117,8 @@
 判断: podhmo。下書き保存の保持期間・手動クリア導線を入れるかも決める。
 
 ## ナビゲーション・キーボード操作の方針
+
+状態: 一部回答済み（2026-11-26、podhmo）— モバイル nav は `<details>` メニューに畳む（TODO.md へ移した）。キーボード shortcuts は今は入れない。最後に見た workspace の cookie 復帰は後回し。
 
 止まっている作業: `owner-improvements.md` §5.2。
 
@@ -126,6 +144,8 @@
 
 ## 一覧のライブ化は passive banner に限定するか
 
+状態: 回答済み（2026-11-26、podhmo）— C: 一覧のライブ化は行わない。実装タスクにはしない。
+
 止まっている作業: `owner-improvements.md` §4.5。
 
 選択肢:
@@ -137,6 +157,8 @@
 判断: podhmo。
 
 ## 一括操作と空状態の導線をどこまで入れるか
+
+状態: 回答済み（2026-11-26、podhmo）— 空状態の導線追加も一括操作も今は入れない。実装タスクにはしない。
 
 止まっている作業: `owner-improvements.md` §5.4。
 
