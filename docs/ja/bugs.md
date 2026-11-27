@@ -9,12 +9,12 @@
 | # | 重要度 | 状態 | 概要 | 詳細 |
 |---|--------|------|------|------|
 | 25 | nit | 未修正 | 部分更新の append パスで "Last updated" メタ行が stale | PR #49 の Devin Review 指摘から発覚した同種問題: コメント/返信の部分投稿（`createComment`/`createDiscussionComment` の `X-Partial` 応答）は store の `updated_at` を進めるが、fragment は新 `<li>` のみを返すためヘッダの "Last updated" がリロードまで古いまま。answer swap 側は `discussion_meta` ノード同梱で解決済み（PR #49）。append モードは全ノードを挿入先へ追加する設計なので、自己ターゲットする swap ノードを混ぜるにはプロトコル拡張（例: `data-swap` 印付きノードは `replaceWith`）が要る → TODO.md にタスク記録済 |
-| 36 | major | 未修正 | 並行 merge で git 側だけ二重適用されうる | 2026-11-26 コードレビューで発見（`docs/sketch/ja/owner-improvements.md` §1.1）: `mergePull`（api/web/cli 共通の流れ）は `pr.Open()` 確認 → `repo.Merge` → `MarkMerged(WHERE status='open')` の順で、git 副作用が DB の状態遷移より先。squash は常に2回目を作りえ、rebase も base 更新後に読んだ2本目が空差分をコミットしうる。対応案: git 前に DB で CAS による merging 確保 + 中断予約の復旧 |
 
 ## 修正済み
 
 | # | 重要度 | 状態 | 概要 | 詳細 |
 |---|--------|------|------|------|
+| 36 | major | 修正済 | 並行 merge で git 側だけ二重適用されうる | `pull_requests.merging_at` に Unix nano token を CAS し、api/cli/web が git 操作前に merge reservation を取る。merge 成功時の `MarkMergedWithReservation` は status 更新と予約解放を同じ UPDATE で行い、active reservation 中の close/delete も拒否する。lease 5分・git timeout 2分。crash recovery は期限切れ予約の上書きに留め、git 適用有無の照合は未実装（decisions.md「PR merge の DB 予約による直列化」） |
 | 27 | info | 修正済（ErrNotFound） | remote CLI（`*client.Client`）が store sentinel エラーに写像しない | `*client.Error` は endpoint 文脈付きでだけ `errors.Is(err, store.ErrNotFound)` を満たす。workspace 付き client の issues/discussions/labels、および `/workspaces/{slug}` では missing workspace・対象 record・scope 外 record を local `ScopedStore` と同じく ErrNotFound として扱う。一方 `/pulls*` は repo 未検出 server で route 自体が未 mount になりうるため写像しない。JSON error body を持たない非 API の 404 も写像しない。`ErrNotAnswerable` は 422 validation と wire 上区別できないため、API error code を入れない今回の scope では対象外 |
 | 42 | nit | 修正済 | remote `zatu pr reopen` の成功出力が `reopend` | `prStateChange` が `action+"d"` を出力していたため、reopen だけ英語形が壊れていた。対応: reopen の表示語を明示し、remote close/reopen の wire status と出力をテストで固定 |
 | 40 | nit | 修正済 | エラー見出し `"Bad request"` が英語直書き（i18n 漏れ） | issue comment・discussion thread/reply・PR comment の hide reason 不正時に、エラー見出しだけ英語固定だった。対応: `msgFor(r).ErrBadRequestH` を使い、ja cookie 時の回帰テストを追加 |

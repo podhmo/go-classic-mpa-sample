@@ -212,6 +212,7 @@ var migrations = []func(ctx context.Context, tx *sql.Tx) error{
 	migrateV4, // comment-moderation columns on the three post tables
 	migrateV5, // pull_requests + pr_comments
 	migrateV6, // optimistic-concurrency version columns
+	migrateV7, // pull-request merge reservations
 }
 
 // schemaVersion is the user_version a fully migrated database reports.
@@ -385,6 +386,7 @@ CREATE TABLE IF NOT EXISTS pull_requests (
 	merge_base_sha TEXT,                   -- merge-base at close/merge time
 	merge_sha TEXT,                        -- merged only: result commit
 	merge_method TEXT,                     -- merged only: merge|squash|rebase
+	merging_at INTEGER,                    -- merge-reservation lease token (Unix nano)
 	created_at INTEGER NOT NULL,
 	updated_at INTEGER NOT NULL,
 	closed_at INTEGER
@@ -454,6 +456,29 @@ func migrateV6(ctx context.Context, tx *sql.Tx) error {
 		}
 	}
 	return nil
+}
+
+// migrateV7 adds the cross-process merge reservation used to serialize
+// pull-request merges before the git side effects begin.
+func migrateV7(ctx context.Context, tx *sql.Tx) error {
+	var exists int
+	if err := tx.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'pull_requests'").Scan(&exists); err != nil {
+		return err
+	}
+	if exists == 0 {
+		return nil
+	}
+	var n int
+	if err := tx.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM pragma_table_info('pull_requests') WHERE name = 'merging_at'").Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := tx.ExecContext(ctx, "ALTER TABLE pull_requests ADD COLUMN merging_at INTEGER")
+	return err
 }
 
 // migrateWithFKOff runs one migration on a dedicated connection with

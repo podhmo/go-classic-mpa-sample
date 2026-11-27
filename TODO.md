@@ -47,7 +47,7 @@ Guides referenced below are in the `modern-web-guidance` catalog (`.agents/skill
 - [x] **remote CLI の 404 を endpoint 文脈付きで写像する**: API 変更は入れず、record missing と分かる endpoint だけ `store.ErrNotFound` に写像する。missing route を record missing に誤分類しない（[open questions](docs/ja/open-questions.md) 回答済み、[bugs.md #27](docs/ja/bugs.md)）
 - [x] **PR files の不正マークアップと N+1 git 起動を直す**: 行コメント form は JS を増やさず `?line=` 付き GET でサーバー側に描画する。テーブル化や word-diff などの大規模再設計は今回入れない（[open questions](docs/ja/open-questions.md) 回答済み、[owner-improvements §2.5](docs/sketch/ja/owner-improvements.md)）
 - [x] **更新 API に任意 `If-Match` と web hidden version を入れる**: `If-Match` 指定時だけ `version` を照合し、web フォームは常に hidden version を送る。不一致時の差分表示は実装しやすい最小範囲に留める（[open questions](docs/ja/open-questions.md) 回答済み、[owner-improvements §4.1](docs/sketch/ja/owner-improvements.md)）
-- [ ] **PR merge を最小 CAS で直列化する**: まず api/cli/web の3箇所に merging 予約を入れ、service 抽出は後で行う。lease/復旧は実装しやすい最小範囲に留める（[open questions](docs/ja/open-questions.md) 回答済み、[bugs.md #36](docs/ja/bugs.md)）
+- [x] **PR merge を最小 CAS で直列化する**: まず api/cli/web の3箇所に merging 予約を入れ、service 抽出は後で行う。lease/復旧は実装しやすい最小範囲に留める（[open questions](docs/ja/open-questions.md) 回答済み、[bugs.md #36](docs/ja/bugs.md)）
 - [ ] **PR の pin 欠損を修復可能にする**: pin 失敗で PR 作成自体を巻き戻す設計に寄せず、pin 欠損を検出して後で再作成できる導線を持たせる（[open questions](docs/ja/open-questions.md) 回答済み、[owner-improvements §1.6](docs/sketch/ja/owner-improvements.md)）
 - [ ] **ログイン後に元のページへ戻る**: login link に safe な `?next=` を付け、認証後に元の path+query へ戻す（[owner-improvements §5.2](docs/sketch/ja/owner-improvements.md)）
 - [x] **ES module の waterfall を modulepreload で平らにする**: page detail 系の依存 module を `<link rel="modulepreload">` で並列化し、バンドルしない方針は維持する（[owner-improvements §2.3](docs/sketch/ja/owner-improvements.md)）

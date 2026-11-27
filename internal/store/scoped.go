@@ -373,6 +373,18 @@ func (sc *ScopedStore) ReopenPullRequest(ctx context.Context, id int64) error {
 func (sc *ScopedStore) MarkMerged(ctx context.Context, id int64, mi PRMergeInfo) error {
 	return sc.s.MarkMerged(ctx, id, mi)
 }
+
+func (sc *ScopedStore) ReserveMerge(ctx context.Context, id int64) (int64, error) {
+	return sc.s.ReserveMerge(ctx, id)
+}
+
+func (sc *ScopedStore) ReleaseMerge(ctx context.Context, id int64, token int64) error {
+	return sc.s.ReleaseMerge(ctx, id, token)
+}
+
+func (sc *ScopedStore) MarkMergedWithReservation(ctx context.Context, id int64, mi PRMergeInfo, token int64) error {
+	return sc.s.MarkMergedWithReservation(ctx, id, mi, token)
+}
 func (sc *ScopedStore) ListPRComments(ctx context.Context, prID int64) ([]*PRComment, error) {
 	return sc.s.ListPRComments(ctx, prID)
 }

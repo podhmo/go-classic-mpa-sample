@@ -3,7 +3,9 @@ package store
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"testing"
+	"time"
 )
 
 func prInput() PRInput {
@@ -271,5 +273,116 @@ func TestListPullRequestsStatusFilter(t *testing.T) {
 	prs, _, _ := s.ListPullRequests(ctx, PRListFilter{Status: "open"})
 	if prs[0].ID != open1 {
 		t.Fatalf("open list = %+v", prs[0])
+	}
+}
+
+func TestMergeReservationSerializesLifecycle(t *testing.T) {
+	ctx := context.Background()
+	s := mustOpen(t, ":memory:")
+	id, err := s.CreatePullRequest(ctx, prInput(), 0, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := s.ReserveMerge(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ReserveMerge(ctx, id); !errors.Is(err, ErrMergeInProgress) {
+		t.Fatalf("second reserve err = %v", err)
+	}
+	if err := s.ClosePullRequest(ctx, id, "head", "base"); !errors.Is(err, ErrMergeInProgress) {
+		t.Fatalf("close during merge err = %v", err)
+	}
+	if err := s.DeletePullRequest(ctx, id); !errors.Is(err, ErrMergeInProgress) {
+		t.Fatalf("delete during merge err = %v", err)
+	}
+	info := PRMergeInfo{MergeSHA: "merge", MergeMethod: "merge", HeadSHA: "head", MergeBaseSHA: "base"}
+	if err := s.MarkMergedWithReservation(ctx, id, info, token+1); !errors.Is(err, ErrMergeInProgress) {
+		t.Fatalf("wrong token mark err = %v", err)
+	}
+	if err := s.MarkMergedWithReservation(ctx, id, info, token); err != nil {
+		t.Fatal(err)
+	}
+	pr, err := s.GetPullRequest(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pr.Status != PRStatusMerged {
+		t.Fatalf("status = %q", pr.Status)
+	}
+	if _, err := s.ReserveMerge(ctx, id); !errors.Is(err, ErrInvalidPRTransition) {
+		t.Fatalf("reserve merged err = %v", err)
+	}
+}
+
+func TestReleaseMergeReservation(t *testing.T) {
+	ctx := context.Background()
+	s := mustOpen(t, ":memory:")
+	id, err := s.CreatePullRequest(ctx, prInput(), 0, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := s.ReserveMerge(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ReleaseMerge(ctx, id, token+1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ReserveMerge(ctx, id); !errors.Is(err, ErrMergeInProgress) {
+		t.Fatalf("wrong-token release should keep reservation, got %v", err)
+	}
+	if err := s.ReleaseMerge(ctx, id, token); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ClosePullRequest(ctx, id, "head", "base"); err != nil {
+		t.Fatalf("close after release: %v", err)
+	}
+}
+
+func TestMergeReservationAcrossConnections(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "test.db")
+	s1 := mustOpen(t, path)
+	defer s1.Close()
+	s2 := mustOpen(t, path)
+	defer s2.Close()
+	id, err := s1.CreatePullRequest(ctx, prInput(), 0, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s1.ReserveMerge(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s2.ReserveMerge(ctx, id); !errors.Is(err, ErrMergeInProgress) {
+		t.Fatalf("second connection reserve err = %v", err)
+	}
+	info := PRMergeInfo{MergeSHA: "merge", MergeMethod: "merge", HeadSHA: "head", MergeBaseSHA: "base"}
+	if err := s2.MarkMerged(ctx, id, info); !errors.Is(err, ErrMergeInProgress) {
+		t.Fatalf("tokenless mark during active lease err = %v", err)
+	}
+	if _, err := s1.db.ExecContext(ctx, "UPDATE pull_requests SET merging_at = ? WHERE id = ?", time.Now().Add(-mergeLease-time.Second).UnixNano(), id); err != nil {
+		t.Fatal(err)
+	}
+	if err := s2.MarkMerged(ctx, id, info); err != nil {
+		t.Fatalf("tokenless mark after expiry: %v", err)
+	}
+	pr, err := s2.GetPullRequest(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pr.Status != PRStatusMerged {
+		t.Fatalf("status after tokenless mark = %q", pr.Status)
+	}
+
+	id2, err := s1.CreatePullRequest(ctx, PRInput{BaseRef: "refs/heads/main", HeadRef: "refs/heads/other", Title: "other"}, 0, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s1.db.ExecContext(ctx, "UPDATE pull_requests SET merging_at = ? WHERE id = ?", time.Now().Add(-mergeLease-time.Second).UnixNano(), id2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s2.ReserveMerge(ctx, id2); err != nil {
+		t.Fatalf("expired lease takeover: %v", err)
 	}
 }

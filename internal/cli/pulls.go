@@ -638,19 +638,40 @@ func prMerge(ctx context.Context, o Options, args []string) error {
 	if message == "" && m == gitrepo.MethodSquash {
 		message = fmt.Sprintf("%s (#%d)", pr.Title, pr.ID)
 	}
-	res, err := repo.Merge(ctx, pr.BaseRef, pr.HeadRef, m, message)
+	reserver, ok := b.(interface {
+		ReserveMerge(context.Context, int64) (int64, error)
+		ReleaseMerge(context.Context, int64, int64) error
+		MarkMergedWithReservation(context.Context, int64, store.PRMergeInfo, int64) error
+	})
+	if !ok {
+		return errors.New("cli: local backend does not support merge reservations")
+	}
+	token, err := reserver.ReserveMerge(ctx, id)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := reserver.ReleaseMerge(releaseCtx, id, token); err != nil {
+			fmt.Fprintf(o.Stderr, "warning: failed to release merge reservation for pull request #%d: %v\n", id, err)
+		}
+	}()
+	mergeCtx, stopMerge := context.WithTimeout(ctx, store.MergeGitTimeout)
+	res, err := repo.Merge(mergeCtx, pr.BaseRef, pr.HeadRef, m, message)
+	stopMerge()
 	if err != nil {
 		return err
 	}
 	if err := repo.UpdatePin(ctx, id, res.HeadSHA); err != nil {
 		fmt.Fprintf(o.Stderr, "warning: merged but failed to pin head %s for pull request #%d: %v\n", res.HeadSHA, id, err)
 	}
-	if err := b.MarkMerged(ctx, id, store.PRMergeInfo{
+	if err := reserver.MarkMergedWithReservation(ctx, id, store.PRMergeInfo{
 		MergeSHA:     res.MergeSHA,
 		MergeMethod:  string(res.Method),
 		HeadSHA:      res.HeadSHA,
 		MergeBaseSHA: res.MergeBaseSHA,
-	}); err != nil {
+	}, token); err != nil {
 		return err
 	}
 	fmt.Fprintf(o.Stdout, "pull request #%d merged as %s (%s)\n", id, res.MergeSHA, res.Method)

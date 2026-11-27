@@ -342,6 +342,7 @@ type messages struct {
 	ErrMergeConflict    string // args: file list
 	ErrDirtyWorktree    string
 	ErrBaseMoved        string
+	ErrMergeInProgress  string
 	ErrThreadOnly       string
 	ErrDiffCompute      string
 	ErrDeleteLastWsH    string

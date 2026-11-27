@@ -306,6 +306,9 @@ type Store interface {
 	ClosePullRequest(ctx context.Context, id int64, headSHA, mergeBaseSHA string) error
 	ReopenPullRequest(ctx context.Context, id int64) error
 	MarkMerged(ctx context.Context, id int64, info store.PRMergeInfo) error
+	ReserveMerge(ctx context.Context, id int64) (int64, error)
+	ReleaseMerge(ctx context.Context, id int64, token int64) error
+	MarkMergedWithReservation(ctx context.Context, id int64, info store.PRMergeInfo, token int64) error
 	ListPRComments(ctx context.Context, prID int64) ([]*store.PRComment, error)
 	GetPRComment(ctx context.Context, prID, commentID int64) (*store.PRComment, error)
 	CreatePRComment(ctx context.Context, prID int64, in store.PRCommentInput, authorID int64) (int64, error)

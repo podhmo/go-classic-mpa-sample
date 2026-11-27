@@ -333,6 +333,7 @@ var messagesJA = messages{
 	ErrMergeConflict:    "ブランチがコンフリクトしています: %s",
 	ErrDirtyWorktree:    "ベースブランチのワークツリーが dirty です — 先にコミットかスタッシュしてください。",
 	ErrBaseMoved:        "マージ中にベースブランチが動きました — もう一度お試しください。",
+	ErrMergeInProgress:  "このプルリクエストの別のマージが進行中です — 完了を待ってください。",
 	ErrThreadOnly:       "コメントはスレッドにのみ追加できます。",
 	ErrDiffCompute:      "diff を計算できませんでした — ref が移動または削除された可能性があります。",
 	ErrDeleteLastWsH:    "ワークスペースを削除できません",
