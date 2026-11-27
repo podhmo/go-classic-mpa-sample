@@ -16,6 +16,7 @@
 
 | # | 重要度 | 状態 | 概要 | 詳細 |
 |---|--------|------|------|------|
+| 42 | nit | 修正済 | remote `zatu pr reopen` の成功出力が `reopend` | `prStateChange` が `action+"d"` を出力していたため、reopen だけ英語形が壊れていた。対応: reopen の表示語を明示し、remote close/reopen の wire status と出力をテストで固定 |
 | 40 | nit | 修正済 | エラー見出し `"Bad request"` が英語直書き（i18n 漏れ） | issue comment・discussion thread/reply・PR comment の hide reason 不正時に、エラー見出しだけ英語固定だった。対応: `msgFor(r).ErrBadRequestH` を使い、ja cookie 時の回帰テストを追加 |
 | 39 | nit | 修正済 | `CheckMerge` が解決済み SHA ではなく ref 名で merge-tree を実行 | RevParse 済みの `BaseSHA`/`HeadSHA` ではなく ref 名で `merge-base`/`merge-tree` を実行し、競合時に報告 SHA と判定対象がずれうる状態だった。対応: 解決済み SHA を両コマンドへ渡す |
 | 41 | minor | 修正済 | API の PR diff が 8MiB で切り詰められてもクライアントに通知されない | `pullDiff` が `repo.Diff` の truncation flag を捨て、remote CLI が不完全な差分を正常結果として受け取っていた。対応: API は `X-Truncated: true` を返し、client は header を解釈、remote `zatu pr diff` は stderr に警告する。回帰テスト追加済 |
