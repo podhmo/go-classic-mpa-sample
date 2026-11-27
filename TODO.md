@@ -14,7 +14,7 @@ Module path: `github.com/podhmo/go-classic-mpa-sample`
 
 Guides referenced below are in the `modern-web-guidance` catalog (`.agents/skills/modern-web-guidance/`): run `npx -y modern-web-guidance@latest retrieve "<id>"` before implementing. Prefer declarative HTML/CSS; JavaScript is allowed only when its behavior can be verified via the storybook (`docs/ja/decisions.md` "JavaScript 方針") — entries marked **JS** need a `/static/` external file (CSP `script-src 'self'`; inline `<script>` stays blocked). When the first JS file lands, update the "No JavaScript." claim in `layout.html`'s footer.
 
-- [ ] **fake/stub 向けの共有 contract test を書く**: `*store.Store` / `fakeStore` / `storyStore` に同一振る舞いスイート（bump 規則・エラー種別・フィルタ意味論）を流す。fake のポインタ共有は answer-swap ハンドラが依存しているので本物に揃えず「fake の仕様として宣言」する方向（詳細: PR #71）
+- [x] **fake/stub 向けの共有 contract test を書く**: `*store.Store` / `fakeStore` / `storyStore` に同一振る舞いスイート（bump 規則・エラー種別・フィルタ意味論）を流す。fake のポインタ共有は answer-swap ハンドラが依存しているので本物に揃えず「fake の仕様として宣言」する方向（詳細: PR #71）
 - [ ] **CSS coverage 未到達ルールの仕分け**: 全 story の rule usage union で 68 ルール未到達 — pseudo-state/JS 駆動（toast, [data-copied], dialog :modal）と fixture gap（.issue-body-empty, .user-handle, .error-page, .badge-file-D/R）を分けて story 追加 or 実 app 検証に振る（詳細: [`docs/sketch/ja/rendering-and-visual-diff.md`](docs/sketch/ja/rendering-and-visual-diff.md)）
 - [ ] **Long story を content-visibility 閾値超にする**: StoryIssueDetailLong/StoryDiscussionDetailLong が 24 件で `.comment-list:has(> .comment:nth-child(50))` を発火しない → 50+ 件にして CV パスを視覚検証可能にする
 - [x] **/static/ の versioned URL 化**: `max-age=3600` は妥協案。hash 入り URL + `immutable` にすると長期キャッシュが効く（modern-web-guidance performance の CacheFirst 方針、[`docs/sketch/ja/rendering-and-visual-diff.md`](docs/sketch/ja/rendering-and-visual-diff.md)）

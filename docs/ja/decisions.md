@@ -879,3 +879,10 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 - **layout はページ view model と request state を分ける**: `layoutData{Data, CurrentPath}` を shared layout にだけ渡し、head/content template は従来どおり page data を受ける。72 ある typed render 呼び出しを個別変更せず、ResponseWriter wrapper が現在の path+query を renderer へ届ける。dispatch 時に評価すると form size cap より先に body parse が始まるため request 参照だけを持ち、render 時に遅延評価する。SSE flush のため wrapper は `Unwrap` を実装する。
 - **anonymous nav の login/register は現在 URL を `next` に入れる**: query 込みで `url.QueryEscape` し、既存の `safeNext` による same-site path 制限を通す。auth form は hidden `next` に加えて action query にも同じ値を置き、validation 再描画でも落とさない（`withUser` の shallow copy 経由でも render 時に body を再読みしないため）。
 - **login/register の切り替え link も `next` を引き継ぐ**: 片方の画面で間違いに気付いても元ページ情報が消えない。auth page 上の header link では現在の auth URL ではなく既存 `next` を使い、`/login?next=/login?...` の入れ子を作らない。
+
+## store fake/stub の共有 contract test（2026-11-27、owner improvements 対応）
+
+- **`internal/storetest` に実装非依存の振る舞いスイートを置く**: issue 側は status/update/comment の bump 規則、validation 優先のエラー種別、query qualifier・label・sort・pagination を含む filter 意味論を流す。discussion 側は answer mark の移動、ErrNotFound/ErrNotAnswerable、updated_at bump を流し、`*store.Store`・`fakeStore`・`storyStore` が同じ entry point を使う。
+- **stub の差分は capability として宣言する**: storyStore の filter 無視・update no-op・missing parent でも create success はスイート内で黙って skip せず、`FiltersIgnored` / `UpdatesPersist` / `MissingCommentNotFound` で明示する。storyStore だけの契約テストは build tag 上だけ存在するため `go test -tags story ./internal/web -run 'Test(Issue|Discussion)ContractStoryStore' -count=1` で実行する（tag 付き全テストには既存の markdown/minigo 失敗がある）。
+- **pointer 共有は fake/stub の仕様として固定する**: `ListDiscussionThreads` が返す thread object を answer mutation 後に読み直さず参照できることを fake/story では期待し、SQLite store では以前に返した row が変わらないことを期待する。shared pointer がある実装でも時間比較が壊れないよう、スイート自体は object 全体ではなく timestamp 等の scalar を先に snapshot する。
+- **fakeStore の issue query は store parser に揃える**: `is:` / `label:` / `author:` と残り terms の AND 解釈を `store.ParseIssueSearchQuery` から適用する。これにより web handler test 用 fake が PR #143 の検索文法だけ実 store から drift しない。
