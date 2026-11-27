@@ -800,3 +800,9 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 - **fragment の `?ids=` は nil map を unfiltered sentinel にする**: パラメータ無しは nil、空指定は空 map なので、従来の `filtered` bool を別に持たない。絞り込みは generic な `filterByID` に集約し、issue comments/discussion threads/replies/PR comments で共有する。
 - **form page は builder で共通フィールドを埋める**: `Section`/`Workspace`/`User` と title==heading の既定を `newIssueFormPage` / `newDiscussionFormPage` に寄せ、validation 再描画と通常表示で構造をずらさない。
 - **Renderer の dead code は削除する**: typed render method 経由になった `execute` と handler 側の styled 404 に置き換わった `Renderer.notFound` を残さない。
+
+## 一覧テンプレートの partial 化（2026-11-26、owner improvements 対応）
+
+- **pagination は `pager` partial + `pagerData`**: issue/discussion/pull の3コピーをやめ、URL だけ各 handler が `newPager` へ渡す。pulls URL は空の `q=` を出さず、最終ページクランプは既存の `listPulls` 側の挙動を維持する。
+- **issue/discussion delete confirm は `delete_confirm` partial**: 見出し・確認文・警告・action/cancel/submit label だけ各ページから `dict` で渡し、form markup を共有する。
+- **一覧行は `record_row` が外側の `<li>` と main/meta の2カラム構造だけ持つ**: 各行種別のリンク先や badge は page-local な `record_row_main` / `record_row_meta` に残し、URL 設計や status 表示の差分を無理に一般化しない。

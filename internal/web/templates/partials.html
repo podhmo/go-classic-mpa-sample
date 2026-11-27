@@ -1,0 +1,39 @@
+{{define "pager"}}
+{{if gt .TotalPages 1}}
+<nav class="pagination" aria-label="{{PagerAria}}">
+  {{if gt .Page 1}}
+  <a class="btn" href="{{.PrevURL}}">{{PagerPrev}}</a>
+  {{else}}
+  <span class="btn btn-disabled" aria-disabled="true">{{PagerPrev}}</span>
+  {{end}}
+  <span class="page-info">{{PagerInfo .Page .TotalPages}}</span>
+  {{if lt .Page .TotalPages}}
+  <a class="btn" href="{{.NextURL}}">{{PagerNext}}</a>
+  {{else}}
+  <span class="btn btn-disabled" aria-disabled="true">{{PagerNext}}</span>
+  {{end}}
+</nav>
+{{end}}
+{{end}}
+
+{{define "delete_confirm"}}
+<div class="page-head">
+  <h1>{{.Heading}}</h1>
+</div>
+
+<div class="card">
+  <p>{{.ConfirmHTML}}</p>
+  <p class="muted">{{.Warning}}</p>
+  <form method="post" action="{{.Action}}" class="form-actions">
+    <a class="btn btn-quiet" href="{{.CancelURL}}">{{BtnCancel}}</a>
+    <button type="submit" class="btn btn-danger">{{.SubmitLabel}}</button>
+  </form>
+</div>
+{{end}}
+
+{{define "record_row"}}
+<li class="issue-row">
+  <div class="issue-row-main">{{template "record_row_main" .}}</div>
+  <div class="issue-row-meta">{{template "record_row_meta" .}}</div>
+</li>
+{{end}}

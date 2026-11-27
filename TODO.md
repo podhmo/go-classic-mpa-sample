@@ -37,7 +37,7 @@ Guides referenced below are in the `modern-web-guidance` catalog (`.agents/skill
 - [x] **API のラウンドトリップを減らす**: workspace 解決を scoped update に寄せる、`GetComment` または `INSERT ... RETURNING` を足す、`LabelByName` を足す、の小さな store API 拡張を行う（[owner-improvements §2.8](docs/sketch/ja/owner-improvements.md)）
 - [x] **hidden タブの SSE を閉じる**: `visibilitychange` で hidden 時に `EventSource` を閉じ、visible 時に再接続 + resync する。storybook/実 app で確認する（**JS**、[owner-improvements §2.9](docs/sketch/ja/owner-improvements.md)）
 - [x] **web handler の小さな定型重複を削る**: `requireIssue` / `requireDiscussion`、generic な `filterByID`、フォーム page builder を入れ、未使用の `Renderer.execute` / `Renderer.notFound` を整理する（[owner-improvements §3.4](docs/sketch/ja/owner-improvements.md)）
-- [ ] **重複テンプレートを共通化する**: pager と delete confirm の双子テンプレートを整理し、pulls 側の空 `q=` 出力も直す。markup 差分は storybook で確認する（[owner-improvements §3.5](docs/sketch/ja/owner-improvements.md)）
+- [x] **重複テンプレートを共通化する**: pager と delete confirm の双子テンプレートを整理し、pulls 側の空 `q=` 出力も直す。markup 差分は storybook で確認する（[owner-improvements §3.5](docs/sketch/ja/owner-improvements.md)）
 - [ ] **i18n catalog を分割し ja の空フィールドを検出する**: `messages.go` / `messages_en.go` / `messages_ja.go` / `locale.go` に分け、en fallback に黙って落ちるフィールドをテストで防ぐ（[owner-improvements §3.6](docs/sketch/ja/owner-improvements.md)）
 - [ ] **`internal/cli/pulls.go` と `internal/client/pulls.go` の単体テストを足す**: 状態遷移・エラー写像・markdown/diff 出力の最低限を固定する（[owner-improvements §3.7](docs/sketch/ja/owner-improvements.md)）
 - [ ] **古いドキュメント記述を現状に揃える**: labels 管理画面は実装済み、`style-src-elem` の CSP 記述は実装とコメントのどちらかに揃える。CSP hash 化の可否は実ブラウザで確認する（[owner-improvements §3.8](docs/sketch/ja/owner-improvements.md)）

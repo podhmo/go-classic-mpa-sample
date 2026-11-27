@@ -314,13 +314,19 @@ func StoryIssueListEmpty() {
 // StoryIssueListPaged renders a middle page of a long filtered list.
 func StoryIssueListPaged() {
 	renderIssueList(http.StatusOK, issueListPage{
-		Title:           "Issues",
-		Issues:          storyIssues,
-		Labels:          storyLabels,
-		Filter:          store.ListFilter{Status: "all", Sort: "oldest", LabelID: 1, Page: 3, PerPage: perPage},
-		Total:           95,
-		Page:            3,
-		TotalPages:      5,
+		Title:      "Issues",
+		Issues:     storyIssues,
+		Labels:     storyLabels,
+		Filter:     store.ListFilter{Status: "all", Sort: "oldest", LabelID: 1, Page: 3, PerPage: perPage},
+		Total:      95,
+		Page:       3,
+		TotalPages: 5,
+		Pager: pagerData{
+			Page:       3,
+			TotalPages: 5,
+			PrevURL:    "/w/default/issues?label=1&page=2&sort=oldest&status=all",
+			NextURL:    "/w/default/issues?label=1&page=4&sort=oldest&status=all",
+		},
 		RangeStart:      41,
 		RangeEnd:        60,
 		HasActiveFilter: true,

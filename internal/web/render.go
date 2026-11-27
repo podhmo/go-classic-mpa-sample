@@ -72,12 +72,20 @@ func parsePages(lang string, pullsOn bool) map[string]*template.Template {
 		// comment_actions it borrows for moderation controls.
 		"pull_detail": {"templates/pull_fragments.html", "templates/fragments.html"},
 	}
+	partials := map[string][]string{
+		"issues":            {"templates/partials.html"},
+		"discussions":       {"templates/partials.html"},
+		"pulls":             {"templates/partials.html"},
+		"issue_delete":      {"templates/partials.html"},
+		"discussion_delete": {"templates/partials.html"},
+	}
 	shared := template.Must(template.New("shared").Funcs(funcs).ParseFS(templateFS, "templates/layout.html"))
 	pages := make(map[string]*template.Template, len(names))
 	for _, name := range names {
 		page := template.Must(shared.Clone())
 		files := []string{"templates/" + name + ".html"}
 		files = append(files, fragments[name]...)
+		files = append(files, partials[name]...)
 		pages[name] = template.Must(page.ParseFS(templateFS, files...))
 	}
 	return pages

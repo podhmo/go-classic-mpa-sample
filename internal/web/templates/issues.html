@@ -48,37 +48,11 @@
 <p class="result-count">{{IssuesCount .RangeStart .RangeEnd .Total}}</p>
 <ul class="issue-list" role="list">
   {{range .Issues}}
-  <li class="issue-row">
-    <div class="issue-row-main">
-      <a class="issue-title" href="/w/{{$.Workspace.Slug}}/issues/{{.ID}}">{{.Title}}</a>
-      <span class="issue-num">#{{.ID}}</span>
-    </div>
-    <div class="issue-row-meta">
-      <span class="badge badge-{{.Status}}">{{if eq .Status "open"}}{{StatusOpen}}{{else}}{{StatusClosed}}{{end}}</span>
-      {{range .Labels}}
-      <a class="label-badge" style="--label-color: {{.Color}}" href="{{labelURL $.Workspace $.Filter .ID}}">{{.Name}}</a>
-      {{end}}
-      <time class="issue-time" datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{OpenedAt (fmtTime .CreatedAt)}}</time>
-    </div>
-  </li>
+  {{template "record_row" dict "Row" . "Page" $}}
   {{end}}
 </ul>
 
-{{if gt .TotalPages 1}}
-<nav class="pagination" aria-label="{{PagerAria}}">
-  {{if gt .Page 1}}
-  <a class="btn" href="{{listURL .Workspace .Filter (sub .Page 1)}}">{{PagerPrev}}</a>
-  {{else}}
-  <span class="btn btn-disabled" aria-disabled="true">{{PagerPrev}}</span>
-  {{end}}
-  <span class="page-info">{{PagerInfo .Page .TotalPages}}</span>
-  {{if lt .Page .TotalPages}}
-  <a class="btn" href="{{listURL .Workspace .Filter (add .Page 1)}}">{{PagerNext}}</a>
-  {{else}}
-  <span class="btn btn-disabled" aria-disabled="true">{{PagerNext}}</span>
-  {{end}}
-</nav>
-{{end}}
+{{template "pager" .Pager}}
 
 {{else}}
 <div class="empty-state">
@@ -100,4 +74,19 @@
   (issue titles and pagination links). Declarative JSON: browsers without
   Speculation Rules support ignore it.
 */}}
+{{end}}
+
+{{define "record_row_main"}}
+{{$row := .Row}}{{$page := .Page}}
+<a class="issue-title" href="/w/{{$page.Workspace.Slug}}/issues/{{$row.ID}}">{{$row.Title}}</a>
+<span class="issue-num">#{{$row.ID}}</span>
+{{end}}
+
+{{define "record_row_meta"}}
+{{$row := .Row}}{{$page := .Page}}
+<span class="badge badge-{{$row.Status}}">{{if eq $row.Status "open"}}{{StatusOpen}}{{else}}{{StatusClosed}}{{end}}</span>
+{{range $row.Labels}}
+<a class="label-badge" style="--label-color: {{.Color}}" href="{{labelURL $page.Workspace $page.Filter .ID}}">{{.Name}}</a>
+{{end}}
+<time class="issue-time" datetime="{{$row.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{OpenedAt (fmtTime $row.CreatedAt)}}</time>
 {{end}}

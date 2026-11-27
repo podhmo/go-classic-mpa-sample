@@ -49,36 +49,11 @@
 <p class="result-count">{{DiscussionsCount .RangeStart .RangeEnd .Total}}</p>
 <ul class="issue-list discussion-list" role="list">
   {{range .Discussions}}
-  <li class="issue-row">
-    <div class="issue-row-main">
-      <a class="issue-title" href="/w/{{$.Workspace.Slug}}/discussions/{{.ID}}">{{.Title}}</a>
-      <span class="issue-num">#{{.ID}}</span>
-    </div>
-    <div class="issue-row-meta">
-      <a class="category-badge" href="/w/{{$.Workspace.Slug}}/discussions?category={{.Category.Slug}}">{{.Category.Name}}</a>
-      {{range .Labels}}<span class="label-badge" style="--label-color: {{.Color}}">{{.Name}}</span>{{end}}
-      {{if .Answered}}<span class="badge badge-answered">{{BadgeAnswered}}</span>{{end}}
-      <time class="issue-time" datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime .CreatedAt}}</time>
-    </div>
-  </li>
+  {{template "record_row" dict "Row" . "Page" $}}
   {{end}}
 </ul>
 
-{{if gt .TotalPages 1}}
-<nav class="pagination" aria-label="{{PagerAria}}">
-  {{if gt .Page 1}}
-  <a class="btn" href="{{dListURL .Workspace .Filter (sub .Page 1)}}">{{PagerPrev}}</a>
-  {{else}}
-  <span class="btn btn-disabled" aria-disabled="true">{{PagerPrev}}</span>
-  {{end}}
-  <span class="page-info">{{PagerInfo .Page .TotalPages}}</span>
-  {{if lt .Page .TotalPages}}
-  <a class="btn" href="{{dListURL .Workspace .Filter (add .Page 1)}}">{{PagerNext}}</a>
-  {{else}}
-  <span class="btn btn-disabled" aria-disabled="true">{{PagerNext}}</span>
-  {{end}}
-</nav>
-{{end}}
+{{template "pager" .Pager}}
 
 {{else}}
 <div class="empty-state">
@@ -95,4 +70,18 @@
 {{/* Speculative loading is delivered via the Speculation-Rules response
    header (same shared rules file as /issues — its selector matches
    .discussion-list a.issue-title too). */}}
+{{end}}
+
+{{define "record_row_main"}}
+{{$row := .Row}}{{$page := .Page}}
+<a class="issue-title" href="/w/{{$page.Workspace.Slug}}/discussions/{{$row.ID}}">{{$row.Title}}</a>
+<span class="issue-num">#{{$row.ID}}</span>
+{{end}}
+
+{{define "record_row_meta"}}
+{{$row := .Row}}{{$page := .Page}}
+<a class="category-badge" href="/w/{{$page.Workspace.Slug}}/discussions?category={{$row.Category.Slug}}">{{$row.Category.Name}}</a>
+{{range $row.Labels}}<span class="label-badge" style="--label-color: {{.Color}}">{{.Name}}</span>{{end}}
+{{if $row.Answered}}<span class="badge badge-answered">{{BadgeAnswered}}</span>{{end}}
+<time class="issue-time" datetime="{{$row.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{fmtTime $row.CreatedAt}}</time>
 {{end}}
