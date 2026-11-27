@@ -60,6 +60,61 @@ func openRepo(t *testing.T, dir string) *Repo {
 	return r
 }
 
+// installGitLogger puts a git shim first in PATH and returns its argv log.
+// Build fixtures before calling it when their commands should not be counted.
+func installGitLogger(t *testing.T) string {
+	t.Helper()
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	quote := func(path string) string {
+		return "'" + strings.ReplaceAll(path, "'", "'\\''") + "'"
+	}
+	bin := t.TempDir()
+	logPath := filepath.Join(t.TempDir(), "git-args.log")
+	wrapper := "#!/bin/sh\n{\nfor arg do\nprintf '%s\\n' \"$arg\"\ndone\nprintf '\\n'\n} >> " + quote(logPath) + "\nexec " + quote(realGit) + " \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(wrapper), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return logPath
+}
+
+func loggedGitCommands(t *testing.T, logPath string) [][]string {
+	t.Helper()
+	raw, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var commands [][]string
+	for _, block := range strings.Split(strings.TrimSuffix(string(raw), "\n"), "\n\n") {
+		var args []string
+		for _, arg := range strings.Split(block, "\n") {
+			if arg != "" {
+				args = append(args, arg)
+			}
+		}
+		if len(args) != 0 {
+			commands = append(commands, args)
+		}
+	}
+	return commands
+}
+
+func countLoggedGitCommand(commands [][]string, name string) int {
+	n := 0
+	for _, args := range commands {
+		for _, arg := range args {
+			if arg == name {
+				n++
+				break
+			}
+		}
+	}
+	return n
+}
+
 func TestParseVersion(t *testing.T) {
 	for in, want := range map[string]Version{
 		"git version 2.56.0":                 {2, 56, 0},
@@ -205,40 +260,17 @@ func TestCheckMergePassesResolvedSHAs(t *testing.T) {
 	git(t, dir, "checkout", "-q", "main")
 	r := openRepo(t, dir)
 
-	realGit, err := exec.LookPath("git")
-	if err != nil {
-		t.Fatal(err)
-	}
-	quote := func(path string) string {
-		return "'" + strings.ReplaceAll(path, "'", "'\\''") + "'"
-	}
-	bin := t.TempDir()
-	logPath := filepath.Join(t.TempDir(), "git-args.log")
-	wrapper := "#!/bin/sh\n{\nfor arg do\nprintf '%s\\n' \"$arg\"\ndone\nprintf '\\n'\n} >> " + quote(logPath) + "\nexec " + quote(realGit) + " \"$@\"\n"
-	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(wrapper), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	logPath := installGitLogger(t)
 
 	mc, err := r.CheckMerge(ctx, "main", "feat")
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, err := os.ReadFile(logPath)
-	if err != nil {
-		t.Fatal(err)
-	}
+	commands := loggedGitCommands(t, logPath)
 
 	assertCommandUsesSHAs := func(command string) {
 		t.Helper()
-		for _, block := range strings.Split(strings.TrimSuffix(string(raw), "\n"), "\n\n") {
-			rawArgs := strings.Split(block, "\n")
-			args := rawArgs[:0]
-			for _, arg := range rawArgs {
-				if arg != "" {
-					args = append(args, arg)
-				}
-			}
+		for _, args := range commands {
 			found := false
 			for _, arg := range args {
 				if arg == command {
@@ -254,10 +286,167 @@ func TestCheckMergePassesResolvedSHAs(t *testing.T) {
 			}
 			t.Fatalf("%s args = %v, want resolved SHAs %s %s", command, args, mc.BaseSHA, mc.HeadSHA)
 		}
-		t.Fatalf("%s was not invoked; log:\n%s", command, raw)
+		t.Fatalf("%s was not invoked; log: %v", command, commands)
 	}
 	assertCommandUsesSHAs("merge-base")
 	assertCommandUsesSHAs("merge-tree")
+}
+
+func TestRevParsePairBatchesResolution(t *testing.T) {
+	ctx := context.Background()
+	dir := initRepo(t)
+	git(t, dir, "checkout", "-qb", "feat")
+	write(t, dir, "b.txt", "two\n")
+	git(t, dir, "checkout", "-q", "main")
+	wantBase := strings.TrimSpace(git(t, dir, "rev-parse", "main"))
+	wantHead := strings.TrimSpace(git(t, dir, "rev-parse", "feat"))
+	r := openRepo(t, dir)
+	logPath := installGitLogger(t)
+
+	baseSHA, headSHA, err := r.RevParsePair(ctx, "main", "feat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if baseSHA != wantBase || headSHA != wantHead {
+		t.Fatalf("pair = %s %s, want %s %s", baseSHA, headSHA, wantBase, wantHead)
+	}
+	if got := countLoggedGitCommand(loggedGitCommands(t, logPath), "rev-parse"); got != 1 {
+		t.Fatalf("rev-parse invocations = %d, want 1", got)
+	}
+	if _, err := r.RevParseMany(ctx, "main", "no-such-ref"); !errors.Is(err, ErrBadRef) {
+		t.Fatalf("bad pair err = %v", err)
+	}
+}
+
+func TestPullPairCacheAvoidsRepeatedGitCalls(t *testing.T) {
+	ctx := context.Background()
+	dir := initRepo(t)
+	git(t, dir, "checkout", "-qb", "feat")
+	write(t, dir, "b.txt", "two\n")
+	git(t, dir, "checkout", "-q", "main")
+	r := openRepo(t, dir)
+	logPath := installGitLogger(t)
+
+	load := func() ([]Commit, *MergeCheck) {
+		t.Helper()
+		baseSHA, headSHA, err := r.RevParsePair(ctx, "main", "feat")
+		if err != nil {
+			t.Fatal(err)
+		}
+		commits, err := r.Log(ctx, baseSHA, headSHA)
+		if err != nil {
+			t.Fatal(err)
+		}
+		check, err := r.CheckMergeResolved(ctx, baseSHA, headSHA)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return commits, check
+	}
+	firstCommits, firstCheck := load()
+	if len(firstCommits) != 1 || firstCheck.Status != MergeClean {
+		t.Fatalf("first load = %d commits, %+v", len(firstCommits), firstCheck)
+	}
+	if err := os.WriteFile(logPath, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	secondCommits, secondCheck := load()
+	if len(secondCommits) != len(firstCommits) || secondCheck.Status != firstCheck.Status {
+		t.Fatalf("cached load differs: %d commits, %+v", len(secondCommits), secondCheck)
+	}
+	commands := loggedGitCommands(t, logPath)
+	for name, want := range map[string]int{
+		"rev-parse":  1,
+		"log":        0,
+		"merge-base": 0,
+		"merge-tree": 0,
+	} {
+		if got := countLoggedGitCommand(commands, name); got != want {
+			t.Fatalf("%s invocations = %d, want %d; commands %v", name, got, want, commands)
+		}
+	}
+}
+
+func TestLogDoesNotCacheShallowHistory(t *testing.T) {
+	ctx := context.Background()
+	origin := initRepo(t)
+	git(t, origin, "checkout", "-qb", "feat")
+	write(t, origin, "b.txt", "two\n")
+	write(t, origin, "c.txt", "three\n")
+	git(t, origin, "checkout", "-q", "main")
+
+	work := t.TempDir()
+	clone := filepath.Join(work, "clone")
+	git(t, work, "clone", "-q", "--depth", "1", "--no-single-branch", "file://"+origin, clone)
+	r := openRepo(t, clone)
+	if !r.Shallow {
+		t.Fatal("test clone is not shallow")
+	}
+
+	baseSHA, headSHA, err := r.RevParsePair(ctx, "origin/main", "origin/feat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := r.Log(ctx, baseSHA, headSHA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(before) != 1 {
+		t.Fatalf("shallow log len = %d, want 1", len(before))
+	}
+
+	git(t, clone, "fetch", "-q", "--deepen=1", "origin")
+	afterBaseSHA, afterHeadSHA, err := r.RevParsePair(ctx, "origin/main", "origin/feat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterBaseSHA != baseSHA || afterHeadSHA != headSHA {
+		t.Fatal("deepening moved a branch tip")
+	}
+	after, err := r.Log(ctx, baseSHA, headSHA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != 2 {
+		t.Fatalf("deepened log len = %d, want 2", len(after))
+	}
+}
+
+func TestConflictingMergeCheckIsNotCached(t *testing.T) {
+	ctx := context.Background()
+	dir := initRepo(t)
+	git(t, dir, "checkout", "-qb", "feat")
+	write(t, dir, "a.txt", "feat-side\n")
+	git(t, dir, "checkout", "-q", "main")
+	write(t, dir, "a.txt", "main-side\n")
+	r := openRepo(t, dir)
+	logPath := installGitLogger(t)
+
+	baseSHA, headSHA, err := r.RevParsePair(ctx, "main", "feat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	check, err := r.CheckMergeResolved(ctx, baseSHA, headSHA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if check.Status != MergeConflicting {
+		t.Fatalf("first check = %+v, want conflicting", check)
+	}
+	if err := os.WriteFile(logPath, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	check, err = r.CheckMergeResolved(ctx, baseSHA, headSHA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if check.Status != MergeConflicting {
+		t.Fatalf("second check = %+v, want conflicting", check)
+	}
+	if got := countLoggedGitCommand(loggedGitCommands(t, logPath), "merge-tree"); got != 1 {
+		t.Fatalf("conflict merge-tree invocations = %d, want 1", got)
+	}
 }
 
 func TestMergePlumbing(t *testing.T) {

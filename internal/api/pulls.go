@@ -295,27 +295,30 @@ func (h *handler) getPull(w http.ResponseWriter, r *http.Request) {
 		"commits":      []PRCommit{},
 	}
 	if pr.Open() {
-		if cs, err := h.repo.Log(ctx, pr.BaseRef, pr.HeadRef); err == nil {
-			commits := make([]PRCommit, 0, len(cs))
-			for _, c := range cs {
-				commits = append(commits, PRCommit{
-					SHA: c.SHA, Subject: c.Subject, Author: c.Author, Date: fmtTime(c.Date),
-				})
+		baseSHA, headSHA, err := h.repo.RevParsePair(ctx, pr.BaseRef, pr.HeadRef)
+		if err == nil {
+			if cs, err := h.repo.Log(ctx, baseSHA, headSHA); err == nil {
+				commits := make([]PRCommit, 0, len(cs))
+				for _, c := range cs {
+					commits = append(commits, PRCommit{
+						SHA: c.SHA, Subject: c.Subject, Author: c.Author, Date: fmtTime(c.Date),
+					})
+				}
+				resp["commits"] = commits
 			}
-			resp["commits"] = commits
-		}
-		// mergeable: "clean" | "conflicting" | "unknown"; nil when the
-		// probe could not run at all (e.g. the head ref is gone).
-		if check, err := h.repo.CheckMerge(ctx, pr.BaseRef, pr.HeadRef); err == nil && check != nil {
-			mergeable := map[string]any{"status": "unknown"}
-			switch check.Status {
-			case gitrepo.MergeClean:
-				mergeable["status"] = "clean"
-			case gitrepo.MergeConflicting:
-				mergeable["status"] = "conflicting"
-				mergeable["files"] = check.Files
+			// mergeable: "clean" | "conflicting" | "unknown"; nil when the
+			// probe could not run at all (e.g. the head ref is gone).
+			if check, err := h.repo.CheckMergeResolved(ctx, baseSHA, headSHA); err == nil && check != nil {
+				mergeable := map[string]any{"status": "unknown"}
+				switch check.Status {
+				case gitrepo.MergeClean:
+					mergeable["status"] = "clean"
+				case gitrepo.MergeConflicting:
+					mergeable["status"] = "conflicting"
+					mergeable["files"] = check.Files
+				}
+				resp["mergeable"] = mergeable
 			}
-			resp["mergeable"] = mergeable
 		}
 	} else if cs, err := h.repo.Log(ctx, pr.MergeBaseSHA, pr.HeadSHA); err == nil {
 		commits := make([]PRCommit, 0, len(cs))

@@ -32,7 +32,7 @@ Guides referenced below are in the `modern-web-guidance` catalog (`.agents/skill
 - [x] **`/static/` を `withUser` の外に出し gzip + ETag を付ける**: 静的ファイルごとのセッション照会をなくし、事前圧縮と 304 を入れる。versioned URL 化は既存タスクで後段とする（[owner-improvements §2.3](docs/sketch/ja/owner-improvements.md)）
 - [x] **workspace 解決から COUNT(*) を外す**: slug→ID の軽量クエリを用意し、件数が必要な画面だけで数える。`/w/{ws}/...` 全リクエストの定常クエリを減らす（[owner-improvements §2.1](docs/sketch/ja/owner-improvements.md)）
 - [x] **markdown レンダリング結果を LRU キャッシュする**: `sha256(body)` をキーに表示時変換の結果だけキャッシュし、DB に生 markdown を置く方針は維持する（[owner-improvements §2.4](docs/sketch/ja/owner-improvements.md)）
-- [ ] **PR 詳細の git 呼び出しをまとめる**: `rev-parse` の束ね方と `(baseSHA, headSHA)` キーの小さな cache を検討し、`Log` / `CheckMerge` の重複実行を減らす（[owner-improvements §2.6](docs/sketch/ja/owner-improvements.md)）
+- [x] **PR 詳細の git 呼び出しをまとめる**: `rev-parse` の束ね方と `(baseSHA, headSHA)` キーの小さな cache を検討し、`Log` / `CheckMerge` の重複実行を減らす（[owner-improvements §2.6](docs/sketch/ja/owner-improvements.md)）
 - [x] **テンプレート parse をロケールごとの clone に寄せる**: layout+fragments を 1 回 parse して `Clone()` し、`jsDictFor` の JSON 化もロケール単位にする（[owner-improvements §2.7](docs/sketch/ja/owner-improvements.md)）
 - [ ] **API のラウンドトリップを減らす**: workspace 解決を scoped update に寄せる、`GetComment` または `INSERT ... RETURNING` を足す、`LabelByName` を足す、の小さな store API 拡張を行う（[owner-improvements §2.8](docs/sketch/ja/owner-improvements.md)）
 - [ ] **hidden タブの SSE を閉じる**: `visibilitychange` で hidden 時に `EventSource` を閉じ、visible 時に再接続 + resync する。storybook/実 app で確認する（**JS**、[owner-improvements §2.9](docs/sketch/ja/owner-improvements.md)）

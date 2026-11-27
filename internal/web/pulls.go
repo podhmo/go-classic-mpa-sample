@@ -443,13 +443,22 @@ func (h *handler) renderPullFormErr(w http.ResponseWriter, r *http.Request, stat
 // to empty results — a deleted head branch must not take the page down.
 func (h *handler) loadPullView(r *http.Request, pr *store.PullRequest) (commits []gitrepo.Commit, check *gitrepo.MergeCheck) {
 	from, to := h.diffRange(pr)
+	open := pr.Open()
+	if open {
+		baseSHA, headSHA, err := h.repo.RevParsePair(r.Context(), pr.BaseRef, pr.HeadRef)
+		if err != nil {
+			log.Printf("web: pulls: resolve refs #%d: %v", pr.ID, err)
+			return nil, nil
+		}
+		from, to = baseSHA, headSHA
+	}
 	if c, err := h.repo.Log(r.Context(), from, to); err == nil {
 		commits = c
 	} else {
 		log.Printf("web: pulls: log %s..%s: %v", from, to, err)
 	}
-	if pr.Open() {
-		if mc, err := h.repo.CheckMerge(r.Context(), pr.BaseRef, pr.HeadRef); err == nil {
+	if open {
+		if mc, err := h.repo.CheckMergeResolved(r.Context(), from, to); err == nil {
 			check = mc
 		} else {
 			log.Printf("web: pulls: check merge #%d: %v", pr.ID, err)

@@ -145,7 +145,14 @@ func (o Options) prViewData(ctx context.Context, b Backend, repo *gitrepo.Repo, 
 		return nil, err
 	}
 	from, to := pr.BaseRef, pr.HeadRef
-	if !pr.Open() {
+	resolved := false
+	if pr.Open() {
+		baseSHA, headSHA, err := repo.RevParsePair(ctx, pr.BaseRef, pr.HeadRef)
+		if err == nil {
+			from, to = baseSHA, headSHA
+			resolved = true
+		}
+	} else {
 		from, to = pr.MergeBaseSHA, pr.HeadSHA
 	}
 	if from != "" && to != "" {
@@ -157,7 +164,14 @@ func (o Options) prViewData(ctx context.Context, b Backend, repo *gitrepo.Repo, 
 	}
 	if pr.Open() {
 		out.Mergeable = "unknown"
-		if check, err := repo.CheckMerge(ctx, pr.BaseRef, pr.HeadRef); err == nil && check != nil {
+		var check *gitrepo.MergeCheck
+		var err error
+		if resolved {
+			check, err = repo.CheckMergeResolved(ctx, from, to)
+		} else {
+			check, err = repo.CheckMerge(ctx, pr.BaseRef, pr.HeadRef)
+		}
+		if err == nil && check != nil {
 			switch check.Status {
 			case gitrepo.MergeClean:
 				out.Mergeable = "clean"
