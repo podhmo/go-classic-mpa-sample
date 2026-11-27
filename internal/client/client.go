@@ -126,14 +126,22 @@ func (c *Client) wsPath(p string) string {
 	return "/w/" + c.ws + "/" + p
 }
 
-// Error is a non-2xx API response with the server's error message. It is
-// deliberately not mapped onto the store's sentinel errors — remote
-// callers compare Status (mapping 404→ErrNotFound or a machine-readable
-// API error code is tracked as TODO work).
+// Error is a non-2xx API response with the server's error message.
+// A 404 satisfies errors.Is(err, store.ErrNotFound) only when the calling
+// method marked the endpoint as one whose 404 means a missing record.
+// Endpoints that may not be mounted at all — /pulls* on a repo-less
+// server — never get that mark, so a missing route is not misclassified.
 type Error struct {
 	Status  int
 	Message string
 	Fields  map[string]string
+
+	notFoundIsMissingRecord bool
+}
+
+func (e *Error) Is(target error) bool {
+	return target == store.ErrNotFound &&
+		e.Status == http.StatusNotFound && e.notFoundIsMissingRecord
 }
 
 func (e *Error) Error() string {
@@ -150,6 +158,32 @@ func (e *Error) Error() string {
 // do sends a JSON request and decodes a JSON response body into out
 // (nil out skips decoding). Non-2xx becomes *Error.
 func (c *Client) do(ctx context.Context, method, path string, in, out any) error {
+	return c.doWithOptions(ctx, method, path, in, out, requestOptions{})
+}
+
+// doRecordEndpoint is do for an endpoint whose 404 means a missing
+// record. The distinction is endpoint context, not a global status-code
+// mapping; a non-API 404 without the JSON error body never gets the mark.
+func (c *Client) doRecordEndpoint(ctx context.Context, method, path string, in, out any) error {
+	return c.doWithOptions(ctx, method, path, in, out,
+		requestOptions{notFoundIsMissingRecord: true})
+}
+
+// doWorkspaceRecordEndpoint is doRecordEndpoint for routes mounted only
+// under /w/{slug}. Without a workspace the same method calls a missing
+// route instead, so its 404 must not become ErrNotFound.
+func (c *Client) doWorkspaceRecordEndpoint(ctx context.Context, method, path string, in, out any) error {
+	if c.ws == "" {
+		return c.do(ctx, method, path, in, out)
+	}
+	return c.doRecordEndpoint(ctx, method, path, in, out)
+}
+
+type requestOptions struct {
+	notFoundIsMissingRecord bool
+}
+
+func (c *Client) doWithOptions(ctx context.Context, method, path string, in, out any, opts requestOptions) error {
 	var body *bytes.Reader
 	if in != nil {
 		raw, err := json.Marshal(in)
@@ -184,6 +218,7 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) error
 		if json.NewDecoder(resp.Body).Decode(&e) == nil && e.Err.Message != "" {
 			ae.Message = e.Err.Message
 			ae.Fields = e.Err.Fields
+			ae.notFoundIsMissingRecord = opts.notFoundIsMissingRecord
 		}
 		return ae
 	}

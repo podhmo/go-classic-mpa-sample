@@ -44,7 +44,7 @@ func (c *Client) listDiscussionsPage(ctx context.Context, q url.Values) ([]*stor
 		Discussions []api.Discussion `json:"discussions"`
 		Total       int              `json:"total"`
 	}
-	if err := c.do(ctx, "GET", c.wsPath("discussions?")+q.Encode(), nil, &res); err != nil {
+	if err := c.doWorkspaceRecordEndpoint(ctx, "GET", c.wsPath("discussions?")+q.Encode(), nil, &res); err != nil {
 		return nil, 0, err
 	}
 	out := make([]*store.Discussion, 0, len(res.Discussions))
@@ -58,21 +58,20 @@ func (c *Client) GetDiscussion(ctx context.Context, id int64) (*store.Discussion
 	var res struct {
 		Discussion api.Discussion `json:"discussion"`
 	}
-	if err := c.do(ctx, "GET", c.wsPath("discussions/")+fmt.Sprint(id), nil, &res); err != nil {
+	if err := c.doWorkspaceRecordEndpoint(ctx, "GET", c.wsPath("discussions/")+fmt.Sprint(id), nil, &res); err != nil {
 		return nil, err
 	}
 	return discussionFromDTO(res.Discussion), nil
 }
 
 // ListDiscussionThreads reads threads off the detail endpoint — like
-// ListComments there is no dedicated GET. A missing discussion
-// surfaces as *Error{Status:404} where the local backend returns an
-// empty list and no error.
+// ListComments there is no dedicated GET. A missing discussion surfaces
+// as *Error{Status:404} that satisfies errors.Is(err, store.ErrNotFound).
 func (c *Client) ListDiscussionThreads(ctx context.Context, discussionID int64) ([]*store.DiscussionThread, error) {
 	var res struct {
 		Threads []api.DiscussionThread `json:"threads"`
 	}
-	if err := c.do(ctx, "GET", c.wsPath("discussions/")+fmt.Sprint(discussionID), nil, &res); err != nil {
+	if err := c.doWorkspaceRecordEndpoint(ctx, "GET", c.wsPath("discussions/")+fmt.Sprint(discussionID), nil, &res); err != nil {
 		return nil, err
 	}
 	out := make([]*store.DiscussionThread, 0, len(res.Threads))
@@ -88,7 +87,7 @@ func (c *Client) CreateDiscussion(ctx context.Context, in store.DiscussionInput,
 	var res struct {
 		Discussion api.Discussion `json:"discussion"`
 	}
-	err := c.do(ctx, "POST", c.wsPath("discussions"), map[string]any{
+	err := c.doWorkspaceRecordEndpoint(ctx, "POST", c.wsPath("discussions"), map[string]any{
 		"title": in.Title, "body": in.Body, "category_id": in.CategoryID, "label_ids": in.LabelIDs,
 	}, &res)
 	if err != nil {
@@ -103,20 +102,20 @@ func (c *Client) UpdateDiscussion(ctx context.Context, id int64, in store.Discus
 		// Same nil-means-clear convention as UpdateIssue.
 		labelIDs = []int64{}
 	}
-	return c.do(ctx, "PATCH", c.wsPath("discussions/")+fmt.Sprint(id), map[string]any{
+	return c.doWorkspaceRecordEndpoint(ctx, "PATCH", c.wsPath("discussions/")+fmt.Sprint(id), map[string]any{
 		"title": in.Title, "body": in.Body, "category_id": in.CategoryID, "label_ids": labelIDs,
 	}, nil)
 }
 
 func (c *Client) DeleteDiscussion(ctx context.Context, id int64) error {
-	return c.do(ctx, "DELETE", c.wsPath("discussions/")+fmt.Sprint(id), nil, nil)
+	return c.doWorkspaceRecordEndpoint(ctx, "DELETE", c.wsPath("discussions/")+fmt.Sprint(id), nil, nil)
 }
 
 func (c *Client) CreateDiscussionThread(ctx context.Context, discussionID int64, body string, _ int64) (int64, error) {
 	var res struct {
 		Thread api.DiscussionThread `json:"thread"`
 	}
-	err := c.do(ctx, "POST", c.wsPath("discussions/")+fmt.Sprint(discussionID)+"/threads",
+	err := c.doWorkspaceRecordEndpoint(ctx, "POST", c.wsPath("discussions/")+fmt.Sprint(discussionID)+"/threads",
 		map[string]any{"body": body}, &res)
 	if err != nil {
 		return 0, err
@@ -128,7 +127,7 @@ func (c *Client) CreateDiscussionComment(ctx context.Context, discussionID, thre
 	var res struct {
 		Comment api.DiscussionComment `json:"comment"`
 	}
-	err := c.do(ctx, "POST",
+	err := c.doWorkspaceRecordEndpoint(ctx, "POST",
 		c.wsPath("discussions/")+fmt.Sprint(discussionID)+"/threads/"+fmt.Sprint(threadID)+"/comments",
 		map[string]any{"body": body}, &res)
 	if err != nil {
@@ -138,21 +137,21 @@ func (c *Client) CreateDiscussionComment(ctx context.Context, discussionID, thre
 }
 
 func (c *Client) SetThreadAnswer(ctx context.Context, discussionID, threadID int64, answer bool) error {
-	return c.do(ctx, "POST",
+	return c.doWorkspaceRecordEndpoint(ctx, "POST",
 		c.wsPath("discussions/")+fmt.Sprint(discussionID)+"/threads/"+fmt.Sprint(threadID)+"/answer",
 		map[string]any{"answer": answer}, nil)
 }
 
 // UpdateDiscussionThread PATCHes the thread's body (the opening post).
 func (c *Client) UpdateDiscussionThread(ctx context.Context, discussionID, threadID int64, body string) error {
-	return c.do(ctx, "PATCH",
+	return c.doWorkspaceRecordEndpoint(ctx, "PATCH",
 		c.wsPath("discussions/")+fmt.Sprint(discussionID)+"/threads/"+fmt.Sprint(threadID),
 		map[string]any{"body": body}, nil)
 }
 
 // DeleteDiscussionThread removes the thread and its replies.
 func (c *Client) DeleteDiscussionThread(ctx context.Context, discussionID, threadID int64) error {
-	return c.do(ctx, "DELETE",
+	return c.doWorkspaceRecordEndpoint(ctx, "DELETE",
 		c.wsPath("discussions/")+fmt.Sprint(discussionID)+"/threads/"+fmt.Sprint(threadID), nil, nil)
 }
 
@@ -165,21 +164,21 @@ func (c *Client) SetDiscussionThreadHidden(ctx context.Context, discussionID, th
 	} else {
 		action = "unhide"
 	}
-	return c.do(ctx, "POST",
+	return c.doWorkspaceRecordEndpoint(ctx, "POST",
 		c.wsPath("discussions/")+fmt.Sprint(discussionID)+"/threads/"+fmt.Sprint(threadID)+"/"+action,
 		body, nil)
 }
 
 // UpdateDiscussionComment PATCHes a reply's body.
 func (c *Client) UpdateDiscussionComment(ctx context.Context, discussionID, threadID, commentID int64, body string) error {
-	return c.do(ctx, "PATCH",
+	return c.doWorkspaceRecordEndpoint(ctx, "PATCH",
 		c.wsPath("discussions/")+fmt.Sprint(discussionID)+"/threads/"+fmt.Sprint(threadID)+"/comments/"+fmt.Sprint(commentID),
 		map[string]any{"body": body}, nil)
 }
 
 // DeleteDiscussionComment removes a reply.
 func (c *Client) DeleteDiscussionComment(ctx context.Context, discussionID, threadID, commentID int64) error {
-	return c.do(ctx, "DELETE",
+	return c.doWorkspaceRecordEndpoint(ctx, "DELETE",
 		c.wsPath("discussions/")+fmt.Sprint(discussionID)+"/threads/"+fmt.Sprint(threadID)+"/comments/"+fmt.Sprint(commentID),
 		nil, nil)
 }
@@ -193,7 +192,7 @@ func (c *Client) SetDiscussionCommentHidden(ctx context.Context, discussionID, t
 	} else {
 		action = "unhide"
 	}
-	return c.do(ctx, "POST",
+	return c.doWorkspaceRecordEndpoint(ctx, "POST",
 		c.wsPath("discussions/")+fmt.Sprint(discussionID)+"/threads/"+fmt.Sprint(threadID)+"/comments/"+fmt.Sprint(commentID)+"/"+action,
 		body, nil)
 }
