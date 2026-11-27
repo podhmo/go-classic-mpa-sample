@@ -29,17 +29,21 @@ import (
 type Store interface {
 	ListIssues(ctx context.Context, wsID int64, f store.ListFilter) ([]*store.Issue, int, error)
 	GetIssue(ctx context.Context, id int64) (*store.Issue, error)
+	GetIssueInWorkspace(ctx context.Context, wsID, id int64) (*store.Issue, error)
 	CreateIssue(ctx context.Context, wsID int64, in store.IssueInput, authorID int64) (int64, error)
 	UpdateIssue(ctx context.Context, id int64, in store.IssueInput) error
+	PatchIssueInWorkspace(ctx context.Context, wsID, id int64, patch store.IssuePatch) error
 	SetIssueStatus(ctx context.Context, id int64, status string) error
 	DeleteIssue(ctx context.Context, id int64) error
 	ListComments(ctx context.Context, issueID int64) ([]*store.Comment, error)
+	GetComment(ctx context.Context, issueID, commentID int64) (*store.Comment, error)
 	CreateComment(ctx context.Context, issueID int64, body string, authorID int64) (int64, error)
 	UpdateComment(ctx context.Context, issueID, commentID int64, body string) error
 	DeleteComment(ctx context.Context, issueID, commentID int64) error
 	SetCommentHidden(ctx context.Context, issueID, commentID int64, reason string) error
 	ListLabels(ctx context.Context, wsID int64, kind string) ([]*store.Label, error)
 	GetLabel(ctx context.Context, id int64) (*store.Label, error)
+	LabelByName(ctx context.Context, wsID int64, kind, name string) (*store.Label, error)
 	CreateLabel(ctx context.Context, wsID int64, kind string, in store.LabelInput) (int64, error)
 	UpdateLabel(ctx context.Context, id int64, in store.LabelInput) error
 	ArchiveLabel(ctx context.Context, id int64, archived bool) error
@@ -77,6 +81,7 @@ type Store interface {
 	ReopenPullRequest(ctx context.Context, id int64) error
 	MarkMerged(ctx context.Context, id int64, mi store.PRMergeInfo) error
 	ListPRComments(ctx context.Context, prID int64) ([]*store.PRComment, error)
+	GetPRComment(ctx context.Context, prID, commentID int64) (*store.PRComment, error)
 	CreatePRComment(ctx context.Context, prID int64, in store.PRCommentInput, authorID int64) (int64, error)
 	UpdatePRComment(ctx context.Context, prID, commentID int64, body string) error
 	DeletePRComment(ctx context.Context, prID, commentID int64) error

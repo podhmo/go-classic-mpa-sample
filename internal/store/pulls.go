@@ -432,6 +432,18 @@ func (s *Store) ListPRComments(ctx context.Context, prID int64) ([]*PRComment, e
 	return out, rows.Err()
 }
 
+// GetPRComment returns one comment scoped to its PR, or ErrNotFound.
+func (s *Store) GetPRComment(ctx context.Context, prID, commentID int64) (*PRComment, error) {
+	c, err := scanPRComment(s.db.QueryRowContext(ctx,
+		`SELECT `+prCommentColumns+`
+		FROM pr_comments c LEFT JOIN users u ON u.id = c.author_id
+		WHERE c.pr_id = ? AND c.id = ?`, prID, commentID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return c, err
+}
+
 // CreatePRComment appends a comment and bumps the PR's updated_at (a new
 // post is activity — the issue/discussion rule). Anchor consistency
 // (path ⇔ line set) is enforced by the schema CHECK; this validates it

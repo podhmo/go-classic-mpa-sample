@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
 // doText sends an authorized request and returns status + response
@@ -203,5 +205,39 @@ func TestIssueValidation(t *testing.T) {
 	code, out = do(t, srv, "POST", fmt.Sprintf("/api/v1/w/default/issues/%d/status", id), `{"status":"wip"}`)
 	if code != http.StatusUnprocessableEntity || out["error"].(map[string]any)["fields"].(map[string]any)["status"] == nil {
 		t.Fatalf("status = %d %v", code, out)
+	}
+}
+
+func TestIssueLabelsMultiNamePrefersWorkspaceLabel(t *testing.T) {
+	srv, st := newServer(t)
+	ctx := t.Context()
+	sharedID, err := st.CreateLabel(ctx, 0, store.KindLabelIssue, store.LabelInput{Name: "bug", Color: "#111111"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ownID, err := st.CreateLabel(ctx, 1, store.KindLabelIssue, store.LabelInput{Name: "bug", Color: "#222222"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherID, err := st.CreateLabel(ctx, 1, store.KindLabelIssue, store.LabelInput{Name: "other", Color: "#333333"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	code, out := do(t, srv, "POST", "/api/v1/w/default/issues", `{"title":"labels","labels":["bug","other"]}`)
+	if code != http.StatusCreated {
+		t.Fatalf("create = %d %v", code, out)
+	}
+	labels := out["issue"].(map[string]any)["labels"].([]any)
+	if len(labels) != 2 {
+		t.Fatalf("labels = %v, want exactly bug and other", labels)
+	}
+	gotIDs := map[int64]bool{}
+	for _, raw := range labels {
+		label := raw.(map[string]any)
+		gotIDs[int64(label["id"].(float64))] = true
+	}
+	if !gotIDs[ownID] || !gotIDs[otherID] || gotIDs[sharedID] {
+		t.Fatalf("label ids = %v, want workspace bug %d and other %d, not shared %d", gotIDs, ownID, otherID, sharedID)
 	}
 }

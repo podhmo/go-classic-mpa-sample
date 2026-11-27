@@ -151,6 +151,26 @@ func (s *Store) GetIssue(ctx context.Context, id int64) (*Issue, error) {
 	return i, nil
 }
 
+// GetIssueInWorkspace is GetIssue scoped to wsID: a right id in another
+// workspace is the same ErrNotFound as a missing id.
+func (s *Store) GetIssueInWorkspace(ctx context.Context, wsID, id int64) (*Issue, error) {
+	i, err := scanIssue(s.db.QueryRowContext(ctx,
+		`SELECT i.id, i.workspace_id, i.title, i.body, i.status, i.created_at, i.updated_at,
+			u.id, u.name, u.created_at
+			FROM issues i LEFT JOIN users u ON u.id = i.author_id
+			WHERE i.id = ? AND i.workspace_id = ?`, id, wsID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := s.attachLabels(ctx, []*Issue{i}); err != nil {
+		return nil, err
+	}
+	return i, nil
+}
+
 // CreateIssue inserts an open issue in workspace wsID and returns its
 // new ID (also the issue number; IDs are never reused and stay global
 // across workspaces). authorID is the posting user's ID, or 0 for an
@@ -206,6 +226,55 @@ func (s *Store) UpdateIssue(ctx context.Context, id int64, in IssueInput) error 
 	}
 	if err := setIssueLabels(ctx, tx, id, wsID, in.LabelIDs); err != nil {
 		return err
+	}
+	if err := s.commitTx(ctx, tx, events.Change{Topic: events.IssueTopic(id), Kind: events.KindEdit, Target: id}); err != nil {
+		return err
+	}
+	return nil
+}
+
+// IssuePatch is a partial issue update. Nil Title/Body leave the stored
+// value unchanged; SetLabels controls whether LabelIDs replaces the label
+// set (including with an empty slice).
+type IssuePatch struct {
+	Title     *string
+	Body      *string
+	LabelIDs  []int64
+	SetLabels bool
+}
+
+func patchString(p *string) any {
+	if p == nil {
+		return nil
+	}
+	return *p
+}
+
+// PatchIssueInWorkspace applies patch to an issue scoped to wsID without
+// first loading it. As with UpdateIssue, updated_at bumps even when the
+// patch only rewrites the same values. ErrNotFound covers both a missing
+// issue and an issue in another workspace.
+func (s *Store) PatchIssueInWorkspace(ctx context.Context, wsID, id int64, patch IssuePatch) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	res, err := tx.ExecContext(ctx,
+		`UPDATE issues SET title = COALESCE(?, title), body = COALESCE(?, body), updated_at = ?
+			WHERE id = ? AND workspace_id = ?`,
+		patchString(patch.Title), patchString(patch.Body), time.Now().UTC().Unix(), id, wsID)
+	if err != nil {
+		return err
+	}
+	if err := checkAffected(res); err != nil {
+		return err
+	}
+	if patch.SetLabels {
+		if err := setIssueLabels(ctx, tx, id, wsID, patch.LabelIDs); err != nil {
+			return err
+		}
 	}
 	if err := s.commitTx(ctx, tx, events.Change{Topic: events.IssueTopic(id), Kind: events.KindEdit, Target: id}); err != nil {
 		return err
@@ -286,6 +355,20 @@ func (s *Store) ListComments(ctx context.Context, issueID int64) ([]*Comment, er
 		out = append(out, c)
 	}
 	return out, rows.Err()
+}
+
+// GetComment returns one comment scoped to its issue, or ErrNotFound.
+func (s *Store) GetComment(ctx context.Context, issueID, commentID int64) (*Comment, error) {
+	c, err := scanComment(s.db.QueryRowContext(ctx,
+		`SELECT c.id, c.issue_id, c.body, c.created_at,
+			c.edited_at, c.hidden_at, c.hidden_reason,
+			u.id, u.name, u.created_at
+			FROM comments c LEFT JOIN users u ON u.id = c.author_id
+			WHERE c.issue_id = ? AND c.id = ?`, issueID, commentID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return c, err
 }
 
 // CreateComment appends a comment. Returns ErrNotFound if the issue is

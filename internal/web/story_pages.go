@@ -1462,3 +1462,53 @@ func StoryPullMergeConflict() {
 			Files: []string{"internal/web/templates/pulls.html"}},
 	})
 }
+
+func (s storyStore) GetIssueInWorkspace(ctx context.Context, wsID, id int64) (*store.Issue, error) {
+	is, err := s.GetIssue(ctx, id)
+	if err != nil || is.WorkspaceID != wsID {
+		return nil, store.ErrNotFound
+	}
+	return is, nil
+}
+
+func (storyStore) PatchIssueInWorkspace(context.Context, int64, int64, store.IssuePatch) error {
+	return nil
+}
+
+func (s storyStore) GetComment(_ context.Context, issueID, commentID int64) (*store.Comment, error) {
+	for _, c := range s.comments[issueID] {
+		if c.ID == commentID {
+			return c, nil
+		}
+	}
+	return nil, store.ErrNotFound
+}
+
+func (s storyStore) LabelByName(ctx context.Context, wsID int64, kind, name string) (*store.Label, error) {
+	labels, _ := s.ListLabels(ctx, wsID, kind)
+	var shared *store.Label
+	for _, l := range labels {
+		if l.Name != name {
+			continue
+		}
+		if l.WorkspaceID == wsID {
+			return l, nil
+		}
+		if l.WorkspaceID == 0 {
+			shared = l
+		}
+	}
+	if shared != nil {
+		return shared, nil
+	}
+	return nil, store.ErrNotFound
+}
+
+func (storyStore) GetPRComment(_ context.Context, prID, commentID int64) (*store.PRComment, error) {
+	for _, c := range storyPRComments {
+		if c.PRID == prID && c.ID == commentID {
+			return c, nil
+		}
+	}
+	return nil, store.ErrNotFound
+}
