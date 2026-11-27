@@ -873,3 +873,9 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 - **PR 作成は DB commit 後に pin し、pin 失敗で行を巻き戻さない**: `CreatePullRequest` は row commit 後に pin callback を呼び、失敗時も有効な id と `ErrPinFailed` を返す。web/API/local CLI はこれを作成失敗ではなく warning として扱い、PR を利用可能なまま残す。transaction 内で git subprocess を握り続ける設計は解消した。
 - **open PR の pin 検査は存在だけを見る**: create 時点の head に pin したまま feature branch が進むのは仕様なので、open 中は SHA 不一致を欠損とみなさない。closed/merged では記録済み head SHA との一致まで検査し、missing/stale を repair 対象にする。
 - **修復は明示操作で冪等に行う**: web detail は欠損時に警告と `POST /pulls/{id}/repair-pin` ボタンを出し、API は `POST /api/v1/pulls/{id}/repair-pin`、CLI は `zatu pr repair-pin N` を持つ。open 中は現在の head tip、closed/merged では記録済み head SHA を対象に、検出時に見えた pin 値へ compare-and-swap する `RepairPin` で書き込む。pin が健全なら git 書き込みをしない successful no-op とし、修復対象 commit が解決できない場合はエラーにする。create 時の `PinHead` も missing 限定の conditional create であり、close/merge が先に書いた最終 pin を古い create-time head で上書きしない。
+
+## ログイン後の復帰先（2026-11-27、owner improvements 対応）
+
+- **layout はページ view model と request state を分ける**: `layoutData{Data, CurrentPath}` を shared layout にだけ渡し、head/content template は従来どおり page data を受ける。72 ある typed render 呼び出しを個別変更せず、ResponseWriter wrapper が現在の path+query を renderer へ届ける。dispatch 時に評価すると form size cap より先に body parse が始まるため request 参照だけを持ち、render 時に遅延評価する。SSE flush のため wrapper は `Unwrap` を実装する。
+- **anonymous nav の login/register は現在 URL を `next` に入れる**: query 込みで `url.QueryEscape` し、既存の `safeNext` による same-site path 制限を通す。auth form は hidden `next` に加えて action query にも同じ値を置き、validation 再描画でも落とさない（`withUser` の shallow copy 経由でも render 時に body を再読みしないため）。
+- **login/register の切り替え link も `next` を引き継ぐ**: 片方の画面で間違いに気付いても元ページ情報が消えない。auth page 上の header link では現在の auth URL ではなく既存 `next` を使い、`/login?next=/login?...` の入れ子を作らない。

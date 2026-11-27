@@ -11,6 +11,20 @@ import (
 	"github.com/podhmo/go-classic-mpa-sample/internal/auth"
 )
 
+type panicOnRead struct{}
+
+func (panicOnRead) Read([]byte) (int, error) { panic("request body was read") }
+func (panicOnRead) Close() error             { return nil }
+
+func TestRenderCurrentPathDoesNotParsePostBody(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "http://example.test/preview", nil)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Body = panicOnRead{}
+	if got := renderCurrentPath(req); got != "/issues" {
+		t.Fatalf("renderCurrentPath = %q, want /issues", got)
+	}
+}
+
 func TestSessionLookupFailureIs500NotAnonymous(t *testing.T) {
 	srv, f := newTestServer(t)
 	u := f.addUser(t, "alice", "password123")
@@ -107,6 +121,93 @@ func getWithCookie(t *testing.T, srv *httptest.Server, path string, c *http.Cook
 		t.Fatalf("GET %s: %v", path, err)
 	}
 	return resp.StatusCode, getBody(t, resp)
+}
+
+func TestAuthLinksReturnToCurrentPathAndQuery(t *testing.T) {
+	srv, f := newTestServer(t)
+	f.addUser(t, "alice", "password123")
+
+	code, body := getWithCookie(t, srv, "/w/default/issues?q=bug+fix&status=open", nil)
+	if code != http.StatusOK {
+		t.Fatalf("GET issues = %d", code)
+	}
+	next := url.QueryEscape("/w/default/issues?q=bug+fix&status=open")
+	for _, want := range []string{`/login?next=` + next, `/register?next=` + next} {
+		if !strings.Contains(body, want) {
+			t.Errorf("anonymous nav missing %s", want)
+		}
+	}
+
+	returnTo := "/w/default/issues?q=bug+fix&status=open"
+	resp := postForm(t, noRedirectClient(), srv.URL+"/login", url.Values{
+		"name": {"alice"}, "password": {"password123"}, "next": {returnTo},
+	})
+	defer resp.Body.Close()
+	if loc := resp.Header.Get("Location"); loc != returnTo {
+		t.Fatalf("login redirect = %q, want %q", loc, returnTo)
+	}
+}
+
+func TestAuthModeSwitchPreservesNext(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	code, body := getWithCookie(t, srv, "/login?next=/w/default/issues/3", nil)
+	if code != http.StatusOK {
+		t.Fatalf("GET login = %d", code)
+	}
+	if !strings.Contains(body, `name="next" value="/w/default/issues/3"`) {
+		t.Error("login form dropped hidden next")
+	}
+	if !strings.Contains(body, `action="/login?next=%2Fw%2Fdefault%2Fissues%2F3"`) {
+		t.Error("login form action dropped next")
+	}
+	if !strings.Contains(body, `href="/register?next=%2Fw%2Fdefault%2Fissues%2F3"`) {
+		t.Error("login footer link dropped next")
+	}
+	if strings.Contains(body, `/login?next=%2Flogin`) {
+		t.Error("login header nested the auth URL in next")
+	}
+
+	code, body = getWithCookie(t, srv, "/register?next=/w/default/issues/3", nil)
+	if code != http.StatusOK {
+		t.Fatalf("GET register = %d", code)
+	}
+	if !strings.Contains(body, `name="next" value="/w/default/issues/3"`) {
+		t.Error("register form dropped hidden next")
+	}
+	if !strings.Contains(body, `href="/login?next=%2Fw%2Fdefault%2Fissues%2F3"`) {
+		t.Error("register footer link dropped next")
+	}
+}
+
+func TestAuthValidationKeepsNextInModeSwitch(t *testing.T) {
+	srv, f := newTestServer(t)
+	f.addUser(t, "alice", "password123")
+
+	resp := postForm(t, srv.Client(), srv.URL+"/login?next=/w/default/issues/3", url.Values{
+		"name": {"alice"}, "password": {"wrong-pass"}, "next": {"/w/default/issues/3"},
+	})
+	body := getBody(t, resp)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422", resp.StatusCode)
+	}
+	if !strings.Contains(body, `name="next" value="/w/default/issues/3"`) {
+		t.Error("failed login dropped hidden next")
+	}
+	if strings.Count(body, `href="/register?next=%2Fw%2Fdefault%2Fissues%2F3"`) != 2 {
+		t.Error("failed login header or footer link dropped next")
+	}
+	if !strings.Contains(body, `action="/login?next=%2Fw%2Fdefault%2Fissues%2F3"`) {
+		t.Error("failed login retry action dropped next")
+	}
+
+	resp = postForm(t, noRedirectClient(), srv.URL+"/login?next=/w/default/issues/3", url.Values{
+		"name": {"alice"}, "password": {"password123"}, "next": {"/w/default/issues/3"},
+	})
+	defer resp.Body.Close()
+	if loc := resp.Header.Get("Location"); loc != "/w/default/issues/3" {
+		t.Fatalf("retry redirect = %q, want original page", loc)
+	}
 }
 
 func TestRegisterFlowSetsSessionCookie(t *testing.T) {

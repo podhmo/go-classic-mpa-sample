@@ -414,6 +414,32 @@ func TestCreateCommentEmpty(t *testing.T) {
 	}
 }
 
+func TestCommentErrorLoginReturnsToDetailPage(t *testing.T) {
+	srv, f := newTestServer(t)
+	f.addIssue("Comment target", "", store.StatusOpen, time.Now())
+
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/w/default/issues/1/comments", strings.NewReader(url.Values{"body": {""}}.Encode()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Referer", srv.URL+"/w/default/issues/1")
+	resp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := getBody(t, resp)
+	if resp.StatusCode != http.StatusUnprocessableEntity && resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 422 or 400", resp.StatusCode)
+	}
+	if !strings.Contains(body, `href="/login?next=%2Fw%2Fdefault%2Fissues%2F1"`) {
+		t.Error("login link did not return to the submitting detail page")
+	}
+	if strings.Contains(body, `%2Fcomments`) {
+		t.Error("login link points back at the POST-only comments URL")
+	}
+}
+
 func TestToggleStatus(t *testing.T) {
 	srv, f := newTestServer(t)
 	f.addIssue("Toggle me", "", store.StatusOpen, time.Now())

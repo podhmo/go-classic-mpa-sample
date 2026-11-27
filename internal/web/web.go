@@ -378,6 +378,49 @@ func shortRef(ref string) string {
 	return strings.TrimPrefix(strings.TrimPrefix(ref, "refs/heads/"), "refs/")
 }
 
+// renderPathWriter carries the request path+query to the shared layout
+// without changing every typed render method. Unwrap keeps
+// http.ResponseController (used by SSE flush) working through the wrapper.
+type renderPathWriter struct {
+	http.ResponseWriter
+	req *http.Request
+}
+
+func (w renderPathWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+// renderPath is lazy: computing it while dispatching would parse the POST
+// body before parseForm installs its size cap.
+func (w renderPathWriter) renderPath() string { return renderCurrentPath(w.req) }
+
+// renderCurrentPath avoids nesting one auth redirect inside another when
+// the header is rendered on the login/register page itself.
+func renderCurrentPath(r *http.Request) string {
+	if (r.URL.Path == "/login" || r.URL.Path == "/register") && r.URL.Query().Get("next") != "" {
+		return safeNext(r.URL.Query().Get("next"))
+	}
+	if r.Method == http.MethodPost {
+		// Never trigger parsing here: withUser hands handlers a shallow request
+		// copy, so this original request can still have an uncapped unread body.
+		// Auth forms put next in their action query; PostForm is only a no-read
+		// convenience when the handler already parsed the same request object.
+		if r.PostForm != nil {
+			if next := r.PostForm.Get("next"); next != "" {
+				return safeNext(next)
+			}
+		}
+		// Validation errors are rendered from POST-only mutation URLs. Use the
+		// submitting page as the return destination; without it there is no
+		// meaningful page to go back to.
+		if ref := r.Referer(); ref != "" {
+			if u, err := url.Parse(ref); err == nil && u.Host == r.Host && (u.Scheme == "http" || u.Scheme == "https") {
+				return safeNext(u.RequestURI())
+			}
+		}
+		return "/issues"
+	}
+	return r.URL.RequestURI()
+}
+
 // New returns the root http.Handler for the application.
 func New(st Store, opts ...Option) http.Handler {
 	var cfg config
@@ -648,7 +691,7 @@ func New(st Store, opts ...Option) http.Handler {
 			staticMux.ServeHTTP(w, r)
 			return
 		}
-		authedMux.ServeHTTP(w, r)
+		authedMux.ServeHTTP(renderPathWriter{ResponseWriter: w, req: r}, r)
 	})
 	return securityHeaders(withLocale(http.NewCrossOriginProtection().Handler(root)))
 }
@@ -758,6 +801,7 @@ var funcMap = template.FuncMap{
 	"hideReasons":    func() []string { return store.HideReasons },
 	"dict":           dict,
 	"shortRef":       shortRef,
+	"urlquery":       url.QueryEscape,
 }
 
 // dict builds a map from alternating key/value pairs so templates can pass
