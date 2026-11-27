@@ -47,7 +47,7 @@ Two credential kinds:
 | POST   | `/api/v1/pulls/{id}/comments/{cid}/hide` + `…/unhide` | Reasoned minimize/restore         |
 | POST   | `/api/v1/pulls/{id}/status`                | `{status: "open"\|"closed"}`                    |
 | POST   | `/api/v1/pulls/{id}/merge`                 | `{method: "merge"\|"squash"\|"rebase", message?}` |
-| GET    | `/api/v1/pulls/{id}/diff`                  | Unified diff as `text/plain`                     |
+| GET    | `/api/v1/pulls/{id}/diff`                  | Unified diff as `text/plain`; `X-Truncated: true` means the patch hit the server output cap |
 | GET    | `/api/v1/pulls/{id}/markdown`              | PR + commits + review comments as `text/markdown` |
 
 Notes:

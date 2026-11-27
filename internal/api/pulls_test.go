@@ -130,6 +130,45 @@ func TestPullsAPI_CreateListGet(t *testing.T) {
 	}
 }
 
+func TestPullsAPI_DiffTruncationHeader(t *testing.T) {
+	srv, _, repo := newPullServer(t)
+	big := strings.Repeat("0123456789abcdef\n", 600000)
+	if err := writeTestFile(filepath.Join(repo.Dir, "b.txt"), big); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("git", "-C", repo.Dir, "add", "b.txt")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v\n%s", err, out)
+	}
+	cmd = exec.Command("git", "-C", repo.Dir, "commit", "-m", "large diff")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git commit: %v\n%s", err, out)
+	}
+
+	status, body := do(t, srv, "POST", "/api/v1/pulls",
+		`{"base":"main","head":"feat/x","title":"large diff"}`)
+	if status != http.StatusCreated {
+		t.Fatalf("POST /pulls: %d %v", status, body)
+	}
+	id := int64(body["pull_request"].(map[string]any)["id"].(float64))
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/api/v1/pulls/%d/diff", srv.URL, id), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+testToken)
+	resp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET diff: %d", resp.StatusCode)
+	}
+	if got := resp.Header.Get("X-Truncated"); got != "true" {
+		t.Fatalf("X-Truncated = %q, want true", got)
+	}
+}
+
 func TestPullsAPI_CreateValidation(t *testing.T) {
 	srv, _, _ := newPullServer(t)
 	status, body := do(t, srv, "POST", "/api/v1/pulls",

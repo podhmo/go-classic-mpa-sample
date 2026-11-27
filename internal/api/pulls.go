@@ -722,7 +722,7 @@ func (h *handler) pullDiff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	from, to := h.diffRange(r, pr)
-	diff, _, err := h.repo.Diff(r.Context(), from, to)
+	diff, truncated, err := h.repo.Diff(r.Context(), from, to)
 	if err != nil {
 		if !h.gitError(w, err) {
 			writeError(w, http.StatusInternalServerError, "Internal server error.", nil)
@@ -730,6 +730,9 @@ func (h *handler) pullDiff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	if truncated {
+		w.Header().Set("X-Truncated", "true")
+	}
 	io.WriteString(w, diff)
 }
 
