@@ -369,6 +369,42 @@ func TestPinSurvivesGC(t *testing.T) {
 	}
 }
 
+func TestUpdatePinFailureKeepsGitError(t *testing.T) {
+	ctx := context.Background()
+	dir := initRepo(t)
+	r := openRepo(t, dir)
+	head := strings.TrimSpace(git(t, dir, "rev-parse", "main"))
+	if err := r.PinHead(ctx, 42, head); err != nil {
+		t.Fatalf("pin: %v", err)
+	}
+
+	// Keep the pin readable through packed-refs, then replace its loose
+	// ref parent with a regular file: RevParse still sees the existing
+	// pin, but update-ref cannot create its lock even as root.
+	git(t, dir, "pack-refs", "--all")
+	lockDir := filepath.Join(dir, ".git", "refs", "zatudan", "pr", "42")
+	if err := os.RemoveAll(lockDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(lockDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(lockDir, []byte("not a directory"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := r.UpdatePin(ctx, 42, head)
+	if err == nil {
+		t.Fatal("UpdatePin succeeded with an unwritable ref path")
+	}
+	if errors.Is(err, ErrConcurrentUpdate) {
+		t.Fatalf("permission failure was mislabeled concurrent: %v", err)
+	}
+	var gitErr *Error
+	if !errors.As(err, &gitErr) || strings.TrimSpace(gitErr.Stderr) == "" {
+		t.Fatalf("error lost git stderr: %T %v", err, err)
+	}
+}
+
 func TestLogDiffFiles(t *testing.T) {
 	ctx := context.Background()
 	dir := initRepo(t)

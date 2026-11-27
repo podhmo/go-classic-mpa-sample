@@ -380,7 +380,13 @@ func (r *Repo) UpdatePin(ctx context.Context, id int64, sha string) error {
 	}
 	_, err = r.run(ctx, nil, "update-ref", PinRef(id), sha, old)
 	if err != nil {
-		return ErrConcurrentUpdate
+		// A compare-and-swap failure means someone moved the ref. Other
+		// update-ref failures (permissions, locks, corruption) must keep
+		// git's stderr instead of being mislabeled as a race.
+		if now, revErr := r.RevParse(ctx, PinRef(id)); revErr == nil && now != old {
+			return ErrConcurrentUpdate
+		}
+		return err
 	}
 	return nil
 }
