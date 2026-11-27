@@ -24,6 +24,10 @@
 - [正] **1 画面 1 プライマリ**（ページ内アクションに限る）。
 - [正] **グローバルヘッダの "New issue" / "New discussion" は枠線 `.btn`**。
   Primary はページ内アクション 1 つのみ（2026-11-16 枠線化）。
+- [正] **グローバル nav は 40em 以下で `<details>` メニューに畳む**。
+  nav tree は 1 本のまま、no-JS fallback として open 開始し、
+  `nav-menu.js` が小幅だけ初期 close・広幅へ戻す。summary は "Menu"
+  の可視ラベルを持ち、リンクは通常どおり Tab 順に入る（2026-11-26）。
 - [正] **破壊的アクションは `btn-danger`（枠線型・hover で塗り）で抑制し、
   必ず確認を挟む**（モーダル `<dialog>` or GET 確認ページ）。
 - [正] **削除モーダルは Cancel に `autofocus`**。Esc・Cancel・背景クリック

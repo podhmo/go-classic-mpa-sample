@@ -827,3 +827,9 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 - markdown 入力欄は JS で Write/Preview タブへ拡張し、Preview は `POST /preview` / `POST /w/{ws}/preview` が返すサーバー描画 fragment を使う。CSP を緩めず、no-JS では従来の textarea のままにする。
 - 下書きは `draft:<path>:<form>` 系キーの localStorage に保存する。partial post は成功後の reset で削除し、classic post は hidden `draft_key` を成功 redirect 時の短命 cookie で返して exact key だけを削除する。validation 失敗や別ページへの手動遷移では消えない。期限・手動クリア UI は設けない。
 - `#12` は markdown AST の Text node だけを `/w/{workspace}/issues/12` へリンク化する。code span/block と既存 link の中は書き換えず、cache key に workspace slug を含める。
+
+## モバイル nav の `<details>` 化（2026-11-26、owner improvements 対応）
+
+- **nav tree は1本のまま `<details>` で包む**: 大幅では summary を隠して inline nav、40em 以下では summary "Menu" から absolute dropdown を開く。リンクは別 tree に複製しない。
+- **no-JS では open のまま機能させる**: markup は `open` 開始にし、`nav-menu.js` は narrow 判定が分かった初期だけ close、wide では常に open へ戻す。narrow 内の resize でユーザーが開いた状態を勝手に閉じない。
+- **closed 時は明示的に nav を display:none にする**: `.site-nav` 自体の author display が closed `<details>` の UA hiding を上書きするブラウザがあるため、窄 layout では `.nav-menu:not([open]) .site-nav` を明示する。

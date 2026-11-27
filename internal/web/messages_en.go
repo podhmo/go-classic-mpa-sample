@@ -5,6 +5,7 @@ var messagesEN = messages{
 
 	LayoutSkip:             "Skip to main content",
 	LayoutNavMain:          "Main",
+	LayoutNavMenu:          "Menu",
 	LayoutNavIssues:        "Issues",
 	LayoutNavDiscussions:   "Discussions",
 	LayoutNavLabels:        "Labels",

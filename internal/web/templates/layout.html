@@ -18,6 +18,7 @@
      so the pageswap/pagereveal listeners are registered before the new
      page's first render — defer at the end of <body> can miss pagereveal. */}}
   <script src="{{staticURL "pagination-transition.js"}}"></script>
+  <script src="{{staticURL "nav-menu.js"}}" defer></script>
   {{template "head" .}}
 </head>
 <body>
@@ -26,6 +27,8 @@
     <div class="header-bar">
       <div class="container header-inner">
         <a class="site-title" href="{{if .Workspace}}/w/{{.Workspace.Slug}}/issues{{else}}/{{end}}">{{AppName}}</a>
+        <details class="nav-menu" open>
+        <summary class="nav-menu-summary btn">{{LayoutNavMenu}}</summary>
         <nav class="site-nav" aria-label="{{LayoutNavMain}}">
           {{if .Workspace}}
           <a href="/w/{{.Workspace.Slug}}/issues"{{if eq .Section "issues"}} aria-current="page"{{end}}>{{LayoutNavIssues}}</a>
@@ -57,6 +60,7 @@
              survive the switch — see docs/sketch/ja/i18n.md. */}}
           {{if eq (lang) "en"}}<a href="/locale?lang=ja" hreflang="ja" lang="ja">日本語</a>{{else}}<a href="/locale?lang=en" hreflang="en" lang="en">English</a>{{end}}
         </nav>
+        </details>
       </div>
     </div>
   </header>

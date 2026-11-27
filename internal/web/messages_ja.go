@@ -5,6 +5,7 @@ var messagesJA = messages{
 
 	LayoutSkip:             "メインコンテンツへスキップ",
 	LayoutNavMain:          "メイン",
+	LayoutNavMenu:          "メニュー",
 	LayoutNavIssues:        "イシュー",
 	LayoutNavDiscussions:   "ディスカッション",
 	LayoutNavLabels:        "ラベル",
