@@ -22,7 +22,7 @@ Guides referenced below are in the `modern-web-guidance` catalog (`.agents/skill
 - [x] **`createPull` の base/head 正規化エラーを分離する**: 片方の `NormalizeRef` エラーがもう片方で上書きされないようにし、不正 ref を 422 として返す（[bugs.md #37](docs/ja/bugs.md)、[owner-improvements §1.2](docs/sketch/ja/owner-improvements.md)）
 - [x] **API と web の PR 一覧で page をクランプする**: 巨大な `page` で `(page-1)*perPage` がオーバーフローしないよう、store 層の共通クランプに寄せる。API・web の回帰テストを足す（[bugs.md #38](docs/ja/bugs.md)、[owner-improvements §1.4](docs/sketch/ja/owner-improvements.md)）
 - [x] **PR diff の切り詰めをクライアントへ通知する**: API は `X-Truncated: true` を返し、remote CLI は不完全な diff であることを警告する（[bugs.md #41](docs/ja/bugs.md)、[owner-improvements §1.6](docs/sketch/ja/owner-improvements.md)）
-- [ ] **remote CLI の HTTP client に timeout を付ける**: 共有 `client.HTTPClient` に 30s 程度の timeout を設定し、無応答サーバーで CLI が永遠に待たないようにする（[owner-improvements §1.6](docs/sketch/ja/owner-improvements.md)）
+- [x] **remote CLI の HTTP client に timeout を付ける**: 共有 `client.HTTPClient` に 30s 程度の timeout を設定し、無応答サーバーで CLI が永遠に待たないようにする（[owner-improvements §1.6](docs/sketch/ja/owner-improvements.md)）
 - [ ] **pin 更新エラーの扱いを揃える**: api/cli/web で `repo.UpdatePin` の失敗を少なくともログへ記録する。必要なら共通 helper へ寄せる（[owner-improvements §1.6](docs/sketch/ja/owner-improvements.md)）
 - [ ] **`CheckMerge` に解決済み SHA を渡す**: ref 名ではなく `RevParse` 済みの base/head SHA で `merge-tree` を実行し、報告 SHA と判定対象を一致させる（[bugs.md #39](docs/ja/bugs.md)、[owner-improvements §1.6](docs/sketch/ja/owner-improvements.md)）
 - [ ] **`pullsEnabled` を Renderer ごとの状態にする**: global variable をやめ、同一プロセス内の複数 handler/storybook が競合しないようにする（[owner-improvements §1.6](docs/sketch/ja/owner-improvements.md)）
