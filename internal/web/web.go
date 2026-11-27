@@ -51,6 +51,7 @@ var staticManifest struct {
 	once    sync.Once
 	version string
 	jsNames []string
+	imports map[string][]string
 }
 
 // loadStaticManifest hashes every embedded asset into one deployment
@@ -72,6 +73,7 @@ func loadStaticManifest() {
 	sort.Strings(names)
 	h := sha256.New()
 	jsNames := make([]string, 0, len(names))
+	bodies := make(map[string][]byte, len(names))
 	for _, name := range names {
 		body, err := staticFS.ReadFile("static/" + name)
 		if err != nil {
@@ -83,11 +85,55 @@ func loadStaticManifest() {
 		h.Write([]byte{0})
 		if path.Ext(name) == ".js" {
 			jsNames = append(jsNames, name)
+			bodies[name] = body
+		}
+	}
+	imports := make(map[string][]string, len(jsNames))
+	for _, name := range jsNames {
+		seen := map[string]bool{}
+		for _, line := range bytes.Split(bodies[name], []byte("\n")) {
+			line = bytes.TrimSpace(line)
+			if !bytes.HasPrefix(line, []byte("import ")) && !bytes.HasPrefix(line, []byte("export ")) {
+				continue
+			}
+			for _, dep := range jsNames {
+				if name == dep || seen[dep] {
+					continue
+				}
+				if bytes.Contains(line, []byte(`"./`+dep+`"`)) || bytes.Contains(line, []byte(`'./`+dep+`'`)) {
+					seen[dep] = true
+					imports[name] = append(imports[name], dep)
+				}
+			}
 		}
 	}
 	sum := h.Sum(nil)
 	staticManifest.version = hex.EncodeToString(sum[:8])
 	staticManifest.jsNames = jsNames
+	staticManifest.imports = imports
+}
+
+// modulePreloads returns the direct and transitive relative imports of an
+// entry module in deterministic dependency-first order. The static directory
+// is flat, so matching embedded "./name.js" specifiers is enough for the
+// module graph this app serves.
+func modulePreloads(entry string) []string {
+	staticBuildVersion()
+	seen := map[string]bool{}
+	var out []string
+	var visit func(string)
+	visit = func(name string) {
+		for _, dep := range staticManifest.imports[name] {
+			if seen[dep] {
+				continue
+			}
+			seen[dep] = true
+			visit(dep)
+			out = append(out, dep)
+		}
+	}
+	visit(entry)
+	return out
 }
 
 func staticBuildVersion() string {
@@ -677,21 +723,22 @@ type handler struct {
 }
 
 var funcMap = template.FuncMap{
-	"fmtTime":     fmtTime,
-	"markdown":    renderMarkdown,
-	"staticURL":   staticURL,
-	"add":         func(a, b int) int { return a + b },
-	"sub":         func(a, b int) int { return a - b },
-	"isChecked":   isChecked,
-	"authorName":  authorName,
-	"listURL":     listURL,
-	"dListURL":    dListURL,
-	"statusURL":   statusURL,
-	"labelURL":    labelURL,
-	"maxTitleLen": func() int { return store.MaxTitleRunes },
-	"hideReasons": func() []string { return store.HideReasons },
-	"dict":        dict,
-	"shortRef":    shortRef,
+	"fmtTime":        fmtTime,
+	"markdown":       renderMarkdown,
+	"staticURL":      staticURL,
+	"modulePreloads": modulePreloads,
+	"add":            func(a, b int) int { return a + b },
+	"sub":            func(a, b int) int { return a - b },
+	"isChecked":      isChecked,
+	"authorName":     authorName,
+	"listURL":        listURL,
+	"dListURL":       dListURL,
+	"statusURL":      statusURL,
+	"labelURL":       labelURL,
+	"maxTitleLen":    func() int { return store.MaxTitleRunes },
+	"hideReasons":    func() []string { return store.HideReasons },
+	"dict":           dict,
+	"shortRef":       shortRef,
 }
 
 // dict builds a map from alternating key/value pairs so templates can pass

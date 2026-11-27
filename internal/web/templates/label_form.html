@@ -1,7 +1,12 @@
+{{define "head"}}
+{{range modulePreloads "page-form.js"}}<link rel="modulepreload" href="{{staticURL .}}">
+{{end}}
+<script type="module" src="{{staticURL "page-form.js"}}"></script>
+{{end}}
+
 {{define "content"}}
 {{/* One module entry (page-form.js) pulls in Ctrl/Cmd+Enter submit,
    aria-invalid sync, and the unsaved-input guard. */}}
-<script type="module" src="{{staticURL "page-form.js"}}"></script>
 <h1>{{.Heading}}</h1>
 <p class="field-hint">{{labelKind .Label.Kind}} {{LabelNoun}} · {{labelScope .Label.WorkspaceID}}{{if .Label.Archived}} · {{BadgeArchived}}{{end}}</p>
 <form method="post" action="{{.Action}}" class="form" novalidate>

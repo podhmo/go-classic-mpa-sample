@@ -1404,6 +1404,78 @@ func TestVersionedStaticModuleImports(t *testing.T) {
 	}
 }
 
+func TestModulePreloadsIncludeTransitiveDependencies(t *testing.T) {
+	detail := modulePreloads("page-detail.js")
+	wantDetail := []string{
+		"announcer.js", "clipboard.js", "comment-submit-disabled.js", "copy-markdown.js",
+		"copy-permalink.js", "dom-hooks.js", "enter-submit.js", "form-errors.js",
+		"fragments.js", "i18n.js", "leave-guard.js", "live-updates.js",
+		"partial-submit.js", "toast.js",
+	}
+	if len(detail) != len(wantDetail) {
+		t.Fatalf("page-detail preload count = %d (%v), want %d", len(detail), detail, len(wantDetail))
+	}
+	seen := map[string]bool{}
+	for _, name := range detail {
+		if name == "page-detail.js" {
+			t.Errorf("preload graph contains its entrypoint")
+		}
+		if seen[name] {
+			t.Errorf("preload graph repeats %q", name)
+		}
+		seen[name] = true
+	}
+	for _, name := range wantDetail {
+		if !seen[name] {
+			t.Errorf("preload graph missing %q", name)
+		}
+	}
+
+	form := modulePreloads("page-form.js")
+	wantForm := map[string]bool{
+		"announcer.js": true, "dom-hooks.js": true, "enter-submit.js": true,
+		"form-errors.js": true, "leave-guard.js": true,
+	}
+	if len(form) != len(wantForm) {
+		t.Fatalf("page-form preload count = %d (%v), want %d", len(form), form, len(wantForm))
+	}
+	for _, name := range form {
+		if !wantForm[name] {
+			t.Errorf("unexpected page-form preload %q", name)
+		}
+	}
+}
+
+func TestDetailModulePreloadsAreInHead(t *testing.T) {
+	srv, f := newTestServer(t)
+	f.addIssue("Preload me", "", store.StatusOpen, time.Now())
+	resp, err := srv.Client().Get(srv.URL + "/w/default/issues/1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := getBody(t, resp)
+	headEnd := strings.Index(body, "</head>")
+	preload := strings.Index(body, `<link rel="modulepreload" href="`+staticURL("fragments.js")+`"`)
+	script := strings.Index(body, `<script type="module" src="`+staticURL("page-detail.js")+`"`)
+	if headEnd < 0 || preload < 0 || script < 0 {
+		t.Fatalf("missing head/modulepreload/script markers (head=%d preload=%d script=%d)", headEnd, preload, script)
+	}
+	if preload > headEnd || script > headEnd {
+		t.Errorf("module script and preload must be discovered in <head> (head=%d preload=%d script=%d)", headEnd, preload, script)
+	}
+	if preload > script {
+		t.Errorf("modulepreload should precede the entrypoint script")
+	}
+
+	resp, err = srv.Client().Get(srv.URL + "/w/default/issues")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if body := getBody(t, resp); strings.Contains(body, `rel="modulepreload"`) {
+		t.Error("issue list preloads detail-page modules it does not use")
+	}
+}
+
 func TestLayoutReferencesVersionedStaticAssets(t *testing.T) {
 	srv, _ := newTestServer(t)
 	resp, err := srv.Client().Get(srv.URL + "/w/default/issues")

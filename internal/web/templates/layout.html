@@ -17,6 +17,7 @@
      so the pageswap/pagereveal listeners are registered before the new
      page's first render — defer at the end of <body> can miss pagereveal. */}}
   <script src="{{staticURL "pagination-transition.js"}}"></script>
+  {{template "head" .}}
 </head>
 <body>
   <a class="skip-link" href="#main-content">{{LayoutSkip}}</a>
@@ -69,3 +70,5 @@
 </body>
 </html>
 {{end}}
+
+{{define "head"}}{{end}}
