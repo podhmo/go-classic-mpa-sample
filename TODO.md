@@ -25,7 +25,7 @@ Guides referenced below are in the `modern-web-guidance` catalog (`.agents/skill
 - [x] **remote CLI の HTTP client に timeout を付ける**: 共有 `client.HTTPClient` に 30s 程度の timeout を設定し、無応答サーバーで CLI が永遠に待たないようにする（[owner-improvements §1.6](docs/sketch/ja/owner-improvements.md)）
 - [x] **pin 更新エラーの扱いを揃える**: api/cli/web で `repo.UpdatePin` の失敗を少なくともログへ記録する。必要なら共通 helper へ寄せる（[owner-improvements §1.6](docs/sketch/ja/owner-improvements.md)）
 - [x] **`CheckMerge` に解決済み SHA を渡す**: ref 名ではなく `RevParse` 済みの base/head SHA で `merge-tree` を実行し、報告 SHA と判定対象を一致させる（[bugs.md #39](docs/ja/bugs.md)、[owner-improvements §1.6](docs/sketch/ja/owner-improvements.md)）
-- [ ] **`pullsEnabled` を Renderer ごとの状態にする**: global variable をやめ、同一プロセス内の複数 handler/storybook が競合しないようにする（[owner-improvements §1.6](docs/sketch/ja/owner-improvements.md)）
+- [x] **`pullsEnabled` を Renderer ごとの状態にする**: global variable をやめ、同一プロセス内の複数 handler/storybook が競合しないようにする（[owner-improvements §1.6](docs/sketch/ja/owner-improvements.md)）
 - [ ] **hide reason の Bad request 見出しを翻訳する**: `comments.go` / `pulls.go` の直書き `"Bad request"` を `msgFor(r).ErrBadRequestH` に置き換える（[bugs.md #40](docs/ja/bugs.md)、[owner-improvements §1.6](docs/sketch/ja/owner-improvements.md)）
 - [ ] **`Accept-Language` の q 値を解釈する**: `en, ja;q=0.1` で英語を選ぶよう簡易 q パースを実装し、`wantsJapanese` の回帰テストを足す（[owner-improvements §1.6](docs/sketch/ja/owner-improvements.md)）
 - [ ] **SQLite を WAL + immediate transaction にする**: `_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_txlock=immediate` を検証し、並行 writer で `SQLITE_BUSY` が出ないテストを足す（[owner-improvements §1.3](docs/sketch/ja/owner-improvements.md)）

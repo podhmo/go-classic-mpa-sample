@@ -1315,33 +1315,32 @@ func (storyStore) SetPRCommentHidden(ctx context.Context, prID, commentID int64,
 
 func renderPullList(status int, data pullListPage) {
 	rec := httptest.NewRecorder()
-	NewRenderer().renderPullList(rec, status, data, supportedLangs[0])
+	NewRendererWithPulls(true).renderPullList(rec, status, data, supportedLangs[0])
 	printRec(rec)
 }
 func renderPullDetail(status int, data pullDetailPage) {
 	rec := httptest.NewRecorder()
-	NewRenderer().renderPullDetail(rec, status, data, supportedLangs[0])
+	NewRendererWithPulls(true).renderPullDetail(rec, status, data, supportedLangs[0])
 	printRec(rec)
 }
 func renderPullForm(status int, data pullFormPage) {
 	rec := httptest.NewRecorder()
-	NewRenderer().renderPullForm(rec, status, data, supportedLangs[0])
+	NewRendererWithPulls(true).renderPullForm(rec, status, data, supportedLangs[0])
 	printRec(rec)
 }
 func renderPullFiles(status int, data pullFilesPage) {
 	rec := httptest.NewRecorder()
-	NewRenderer().renderPullFiles(rec, status, data, supportedLangs[0])
+	NewRendererWithPulls(true).renderPullFiles(rec, status, data, supportedLangs[0])
 	printRec(rec)
 }
 func renderPullMerge(status int, data pullMergePage) {
 	rec := httptest.NewRecorder()
-	NewRenderer().renderPullMerge(rec, status, data, supportedLangs[0])
+	NewRendererWithPulls(true).renderPullMerge(rec, status, data, supportedLangs[0])
 	printRec(rec)
 }
 
 // StoryPullList renders the pull request index with open/merged/closed rows.
 func StoryPullList() {
-	pullsEnabled = true
 	renderPullList(http.StatusOK, pullListPage{
 		Title: "Pull requests", Section: "pulls",
 		Filter: store.PRListFilter{Status: "all"},
@@ -1354,7 +1353,6 @@ func StoryPullList() {
 // StoryPullDetail renders an open PR's conversation: merge-clean badge,
 // commits, and an anchored review comment.
 func StoryPullDetail() {
-	pullsEnabled = true
 	renderPullDetail(http.StatusOK, pullDetailPage{
 		Title: storyPulls[0].Title, Section: "pulls",
 		PR: storyPulls[0],
@@ -1370,7 +1368,6 @@ func StoryPullDetail() {
 // StoryPullDetailMerged renders the conversation of a merged PR — static
 // merge info, no live mergeability probe.
 func StoryPullDetailMerged() {
-	pullsEnabled = true
 	renderPullDetail(http.StatusOK, pullDetailPage{
 		Title: storyPulls[1].Title, Section: "pulls",
 		PR:       storyPulls[1],
@@ -1380,7 +1377,6 @@ func StoryPullDetailMerged() {
 
 // StoryPullNew renders the create form with base/head selects.
 func StoryPullNew() {
-	pullsEnabled = true
 	renderPullForm(http.StatusOK, pullFormPage{
 		Title: "New pull request", Heading: "Open a pull request",
 		Action: "/pulls", Section: "pulls",
@@ -1395,7 +1391,6 @@ func StoryPullNew() {
 
 // StoryPullEdit renders the edit form: refs frozen as text, only title/body.
 func StoryPullEdit() {
-	pullsEnabled = true
 	renderPullForm(http.StatusOK, pullFormPage{
 		Title: "Edit pull request", Heading: "Edit pull request",
 		Action: "/pulls/12/edit", Section: "pulls",
@@ -1407,7 +1402,6 @@ func StoryPullEdit() {
 // StoryPullFiles renders the files-changed page: one modified file with an
 // inline comment form and one anchored comment.
 func StoryPullFiles() {
-	pullsEnabled = true
 	renderPullFiles(http.StatusOK, pullFilesPage{
 		Title: storyPulls[0].Title, Section: "pulls",
 		PR: storyPulls[0],
@@ -1445,7 +1439,6 @@ func StoryPullFiles() {
 
 // StoryPullMerge renders the merge confirmation page on a clean probe.
 func StoryPullMerge() {
-	pullsEnabled = true
 	renderPullMerge(http.StatusOK, pullMergePage{
 		Title: "Merge pull request", Section: "pulls",
 		PR:    storyPulls[0],
@@ -1456,7 +1449,6 @@ func StoryPullMerge() {
 // StoryPullMergeConflict renders the merge page when the probe reports a
 // conflict — the merge button is gone, the file list is shown.
 func StoryPullMergeConflict() {
-	pullsEnabled = true
 	renderPullMerge(http.StatusOK, pullMergePage{
 		Title: "Merge pull request", Section: "pulls",
 		PR: storyPulls[0],

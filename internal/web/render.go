@@ -21,11 +21,20 @@ type Renderer struct {
 	pagesByLang map[string]map[string]*template.Template
 }
 
-// NewRenderer parses the embedded page templates and returns a Renderer.
+// NewRenderer parses the embedded page templates and returns a Renderer for
+// a server without the pull-requests feature.
 func NewRenderer() *Renderer {
+	return NewRendererWithPulls(false)
+}
+
+// NewRendererWithPulls parses the embedded page templates with the nav's
+// pull-request link state bound to this Renderer. Keeping that state here
+// instead of in package state lets one process host repo-backed and repo-less
+// handlers at the same time.
+func NewRendererWithPulls(pullsOn bool) *Renderer {
 	pages := make(map[string]map[string]*template.Template, len(supportedLangs))
 	for _, lang := range supportedLangs {
-		pages[lang] = parsePages(lang)
+		pages[lang] = parsePages(lang, pullsOn)
 	}
 	return &Renderer{pagesByLang: pages}
 }
@@ -35,7 +44,7 @@ func NewRenderer() *Renderer {
 // "content" block. ParseFS works the same when this package is interpreted
 // (e.g. by minigo for the storybook preview): the bound template's ParseFS
 // proxies a script-side embed.FS through fs.FS.
-func parsePages(lang string) map[string]*template.Template {
+func parsePages(lang string, pullsOn bool) map[string]*template.Template {
 	names := []string{"issues", "issue_detail", "issue_form", "issue_delete", "error", "auth_form",
 		"discussions", "discussion_detail", "discussion_form", "discussion_delete",
 		"workspaces", "workspace_form", "workspace_delete", "labels", "label_form",
@@ -57,6 +66,7 @@ func parsePages(lang string) map[string]*template.Template {
 	messageFuncs(funcs, lang)
 	funcs["lang"] = func() string { return lang }
 	funcs["jsDict"] = func() template.HTMLAttr { return jsDictFor(lang) }
+	funcs["pullsOn"] = func() bool { return pullsOn }
 	pages := make(map[string]*template.Template, len(names))
 	for _, name := range names {
 		files := []string{"templates/layout.html", "templates/" + name + ".html"}

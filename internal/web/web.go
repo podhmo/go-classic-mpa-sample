@@ -150,11 +150,6 @@ func WithRepo(repo *gitrepo.Repo) Option {
 	return func(c *config) { c.repo = repo }
 }
 
-// pullsEnabled reports whether /pulls is mounted — drives the layout's nav
-// link. The process runs a single handler and it is set once in New before
-// serving, so a plain var suffices; pages that never see a repo stay hidden.
-var pullsEnabled bool
-
 // shortRef renders a full ref name for display: refs/heads/main → main.
 func shortRef(ref string) string {
 	return strings.TrimPrefix(strings.TrimPrefix(ref, "refs/heads/"), "refs/")
@@ -169,8 +164,7 @@ func New(st Store, opts ...Option) http.Handler {
 	if cfg.hub == nil {
 		cfg.hub = events.NewHub()
 	}
-	h := &handler{store: st, r: NewRenderer(), hub: cfg.hub, repo: cfg.repo}
-	pullsEnabled = cfg.repo != nil
+	h := &handler{store: st, r: NewRendererWithPulls(cfg.repo != nil), hub: cfg.hub, repo: cfg.repo}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", h.home)
@@ -476,7 +470,6 @@ var funcMap = template.FuncMap{
 	"maxTitleLen": func() int { return store.MaxTitleRunes },
 	"hideReasons": func() []string { return store.HideReasons },
 	"dict":        dict,
-	"pullsOn":     func() bool { return pullsEnabled },
 	"shortRef":    shortRef,
 }
 
