@@ -691,7 +691,7 @@ chrome-devtools の trace insight で計測した結果、CSS はボトルネッ
 
 ## i18n プロトタイプ（2026-11-20、`docs/sketch/ja/i18n.md`）
 
-- **ロケール解決は `withLocale` ミドルウェア**（`?lang=` → cookie → `Accept-Language` → `en`）。`?lang=` は cookie を Set して `lang=` を除いた URL へ 303 リダイレクト。URL に言語を残さない方針（SEO 不要の localhost アプリ）。
+- **ロケール解決は `withLocale` ミドルウェア**（`?lang=` → cookie → `Accept-Language` → `en`）。`?lang=` は cookie を Set して `lang=` を除いた URL へ 303 リダイレクト。URL に言語を残さない方針（SEO 不要の localhost アプリ）。Accept-Language は ja/en の q 値を比較し、同値なら先出を優先する簡易パースとする。
 - **カタログは自作の薄い層**: `internal/web/i18n.go` の `messages` struct（フィールド = メッセージ）に `messagesEN`/`messagesJA` を置く。初版は JSON+`{{t "key"}}` だったが、キーの typo が両面で検出不能とのレビュー指摘で struct + フィールド関数名化に変更（typo がコンパイル/パースエラーになる）。空フィールドは en にフォールバック（部分適用が壊れない）。go-i18n / x/text/message は ja/en のみ・複数形ほぼ不要の現要件では過剰と判断。JS 側でカタログが要るなら JSON + `{{t "key"}}` 突合 lint（minigo）が代替。
 - **テンプレートはロケール別にパース**: `parsePages(locale)` が `messageFuncs`（struct フィールド → 同名関数）と `{{lang}}` をそのロケールに束縛し、`pagesByLang[locale][page]` で保持。ビューモデル 15+ にフィールドを足さず `layout.html` の `<html lang>` まで届くのが採用理由。
 - **プロトタイプ範囲は issues 一覧 + layout のみ**。validation 文言・エラーページ・静的 JS 文字列・`fmtTime` 書式・UGC の `lang` は未対応（TODO.md の「i18n の全面適用」参照）。
