@@ -5,7 +5,8 @@
 // server-side truth. Events are debounced/coalesced (a burst like an AI
 // posting several comments becomes one fetch), and any lost connection
 // triggers a whole-list resync on reconnect — missed hints are expected,
-// never replayed.
+// never replayed. Hidden tabs close the stream entirely and use the same
+// resync path when they become visible again.
 //
 // Progressive enhancement: with JS off (or EventSource missing) the page
 // is a normal static detail page; nothing here is required for posting.
@@ -48,43 +49,89 @@ function start(section) {
   let timer = 0;
   let flushing = false;
   let queued = false;
+  let es = null;
+  let gone = false;
 
-  const es = new EventSource(eventsURL);
-  es.addEventListener("comment", (e) => add(pending.ids, e));
-  es.addEventListener("thread", (e) => add(pending.ids, e));
-  es.addEventListener("reply", (e) => {
-    const { target, parent } = JSON.parse(e.data);
-    if (!pending.replies.has(parent)) pending.replies.set(parent, new Set());
-    pending.replies.get(parent).add(target);
-    poke();
+  function connect() {
+    if (es || gone) return;
+    es = new EventSource(eventsURL);
+    es.addEventListener("comment", (e) => add(pending.ids, e));
+    es.addEventListener("thread", (e) => add(pending.ids, e));
+    es.addEventListener("reply", (e) => {
+      const { target, parent } = JSON.parse(e.data);
+      if (!pending.replies.has(parent)) pending.replies.set(parent, new Set());
+      pending.replies.get(parent).add(target);
+      poke();
+    });
+    es.addEventListener("answer", (e) => {
+      const { target, parent } = JSON.parse(e.data);
+      pending.answerIds.add(target);
+      if (parent) pending.answerIds.add(parent);
+      poke();
+    });
+    es.addEventListener("status", () => mark("article"));
+    es.addEventListener("edit", () => mark("article"));
+    es.addEventListener("new", () => {});
+    es.addEventListener("delete", () => {
+      gone = true;
+      mark("deleted");
+    });
+    // A comment-level row (issue comment / thread / reply) was deleted:
+    // drop the node directly — issue comments live under #comment-N,
+    // threads under #thread-N, replies share the #comment-N namespace.
+    es.addEventListener("remove", (e) => {
+      pending.removes.push(JSON.parse(e.data));
+      poke();
+    });
+    es.addEventListener("resync", () => mark("resync"));
+    // EventSource fires onerror while retrying (its own backoff honors our
+    // `retry:` directive); onopen covers the successful reconnect.
+    es.onerror = () => {
+      lost = true;
+    };
+    es.onopen = () => {
+      if (lost) mark("resync");
+      lost = false;
+    };
+  }
+
+  function disconnect() {
+    const current = es;
+    es = null;
+    current?.close();
+  }
+
+  if (document.visibilityState !== "hidden") connect();
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      disconnect();
+      return;
+    }
+    if (!gone) void resume();
   });
-  es.addEventListener("answer", (e) => {
-    const { target, parent } = JSON.parse(e.data);
-    pending.answerIds.add(target);
-    if (parent) pending.answerIds.add(parent);
-    poke();
-  });
-  es.addEventListener("status", () => mark("article"));
-  es.addEventListener("edit", () => mark("article"));
-  es.addEventListener("new", () => {});
-  es.addEventListener("delete", () => mark("deleted"));
-  // A comment-level row (issue comment / thread / reply) was deleted:
-  // drop the node directly — issue comments live under #comment-N,
-  // threads under #thread-N, replies share the #comment-N namespace.
-  es.addEventListener("remove", (e) => {
-    pending.removes.push(JSON.parse(e.data));
-    poke();
-  });
-  es.addEventListener("resync", () => mark("resync"));
-  // EventSource fires onerror while retrying (its own backoff honors our
-  // `retry:` directive); onopen covers the successful reconnect.
-  es.onerror = () => {
+
+  // Return from hidden time: probe the article first so a deleted resource
+  // is detected without a doomed /events connection, then subscribe before
+  // taking the whole-detail snapshot. `lost` makes the first open schedule
+  // that snapshot; until then no server-side change can fall between the
+  // snapshot and the subscription. Even an offline probe still connects —
+  // EventSource retries and the eventual open performs the resync.
+  async function resume() {
+    let article = "failed";
+    try {
+      article = await refreshArticle(false);
+    } catch {
+      // Offline: connecting now lets the stream recover on its own.
+    }
+    if (gone || document.visibilityState === "hidden") return;
+    if (article === "missing") {
+      gone = true;
+      showDeleted();
+      return;
+    }
     lost = true;
-  };
-  es.onopen = () => {
-    if (lost) mark("resync");
-    lost = false;
-  };
+    connect();
+  }
 
   function add(set, e) {
     set.add(JSON.parse(e.data).target);
@@ -99,33 +146,51 @@ function start(section) {
     timer = setTimeout(flush, 250);
   }
 
-  // A replaced element may hold a reply draft (details.reply-details on
-  // a thread <li>) — open or merely closed-with-text: stash both state
-  // and value and restore onto the freshly rendered node so an answer
-  // mark never eats a half-typed reply.
+  // A replaced element may hold a reply draft or an open moderation
+  // picker — open or merely closed-with-input: stash both state and
+  // value and restore onto the freshly rendered node so a resync never
+  // eats a half-typed interaction.
   function stashDrafts(root) {
     const drafts = new Map();
     for (const d of root.querySelectorAll("details.reply-details")) {
       const ta = d.querySelector("textarea");
       const li = d.closest("li[id]");
       if (li && ta && (d.open || ta.value !== "")) {
-        drafts.set(li.id, { open: d.open, text: ta.value });
+        drafts.set(`reply:${li.id}`, { open: d.open, text: ta.value });
+      }
+    }
+    for (const d of root.querySelectorAll("details.comment-hide")) {
+      const select = d.querySelector("select[name=reason]");
+      const li = d.closest("li[id]");
+      if (li && select && (d.open || select.value !== "")) {
+        drafts.set(`hide:${li.id}`, { open: d.open, reason: select.value });
       }
     }
     return drafts;
   }
   function restoreDrafts(root, drafts) {
-    for (const [liId, draft] of drafts) {
+    for (const [key, draft] of drafts) {
+      const [kind, liId] = key.split(":", 2);
       const li = root.querySelector(`li#${CSS.escape(liId)}`);
-      const d = li?.querySelector("details.reply-details");
-      const ta = d?.querySelector("textarea");
-      if (d && ta) {
-        d.open = draft.open;
-        ta.value = draft.text;
-        // Programmatic assignment raises no input event, so the restored
-        // draft would match the baseline leave-guard snapshots on attach
-        // — mark the form dirty or leaving drops the draft silently.
-        if (draft.text !== "") markDirty(ta.closest("form"));
+      if (kind === "reply") {
+        const d = li?.querySelector("details.reply-details");
+        const ta = d?.querySelector("textarea");
+        if (d && ta) {
+          d.open = draft.open;
+          ta.value = draft.text;
+          // Programmatic assignment raises no input event, so the restored
+          // draft would match the baseline leave-guard snapshots on attach
+          // — mark the form dirty or leaving drops the draft silently.
+          if (draft.text !== "") markDirty(ta.closest("form"));
+        }
+      } else if (kind === "hide") {
+        const d = li?.querySelector("details.comment-hide");
+        const select = d?.querySelector("select[name=reason]");
+        if (d && select) {
+          d.open = draft.open;
+          select.value = draft.reason;
+          if (draft.reason !== "") markDirty(select.closest("form"));
+        }
       }
     }
   }
@@ -197,10 +262,58 @@ function start(section) {
     nodes.at(-1)?.scrollIntoView({ block: "nearest" });
   }
 
-  // Whole-list rebuild: drafts preserved across the rebuild; nodes whose
-  // id already exists get replaced, everything else appended, and stale
-  // leftovers (deleted rows) are dropped — replaceChildren owns the list.
+  function showDeleted() {
+    // The watched resource is gone: a persistent notice beats a
+    // transient toast — the user may be mid-read.
+    if (!section.querySelector("[data-live-deleted]")) {
+      const p = document.createElement("p");
+      p.className = "card";
+      p.setAttribute("role", "alert");
+      p.dataset.liveDeleted = "";
+      const a = document.createElement("a");
+      a.href = listURL;
+      a.textContent = t("back_to", listName);
+      p.append(
+        document.createTextNode(t("noun_deleted", noun) + " "),
+        a,
+      );
+      section.before(p);
+    }
+    announce(t("noun_deleted", noun));
+  }
+
+  // Refresh the main article card. "missing" means the detail resource
+  // itself is gone; other failures are transient and leave the old card.
+  async function refreshArticle(announceChange) {
+    const res = await fetch(`${fragBase}/article`);
+    if (res.status === 404) return "missing";
+    if (!res.ok) return "failed";
+    const nodes = parseFragment(await res.text()).filter(
+      (n) => n.nodeType === Node.ELEMENT_NODE,
+    );
+    const old = document.querySelector(".issue-detail");
+    if (old && nodes[0]) {
+      await runScopedTransition(commonScope([old]), () =>
+        old.replaceWith(nodes[0]),
+      );
+      if (announceChange) {
+        announce(t("entity_updated", noun[0].toUpperCase() + noun.slice(1)));
+      }
+    }
+    return "ok";
+  }
+
+  // Whole-detail rebuild after hidden time or a lost connection: refresh
+  // the main card as well as the timeline. A missing article means the
+  // resource was deleted while disconnected.
   async function resync() {
+    const article = await refreshArticle(false);
+    if (article === "missing") {
+      gone = true;
+      disconnect();
+      showDeleted();
+      return;
+    }
     const url = `${fragBase}/${fragPath}`;
     const res = await fetch(url);
     if (!res.ok) return;
@@ -243,48 +356,44 @@ function start(section) {
       return;
     }
     flushing = true;
+    // Snapshot and clear the batch before awaiting. Hints that arrive while
+    // fragment fetches are in flight must survive for the next flush; they
+    // may describe writes that happened after those fetches read the DB.
+    const batch = {
+      ids: new Set(pending.ids),
+      replies: new Map(
+        [...pending.replies].map(([threadId, ids]) => [threadId, new Set(ids)]),
+      ),
+      answerIds: new Set(pending.answerIds),
+      removes: [...pending.removes],
+      article: pending.article,
+      deleted: pending.deleted,
+      resync: pending.resync,
+    };
+    pending.ids.clear();
+    pending.replies.clear();
+    pending.answerIds.clear();
+    pending.removes.length = 0;
+    pending.article = pending.deleted = pending.resync = false;
     try {
-      if (pending.deleted) {
-        es.close();
-        // The watched resource is gone: a persistent notice beats a
-        // transient toast — the user may be mid-read.
-        if (!section.querySelector("[data-live-deleted]")) {
-          const p = document.createElement("p");
-          p.className = "card";
-          p.setAttribute("role", "alert");
-          p.dataset.liveDeleted = "";
-          const a = document.createElement("a");
-          a.href = listURL;
-          a.textContent = t("back_to", listName);
-          p.append(
-            document.createTextNode(t("noun_deleted", noun) + " "),
-            a,
-          );
-          section.before(p);
-        }
-        announce(t("noun_deleted", noun));
+      if (batch.deleted) {
+        gone = true;
+        disconnect();
+        showDeleted();
         return;
       }
-      if (pending.resync) {
-        await resync();
-      } else {
-        if (pending.article) {
-          const res = await fetch(`${fragBase}/article`);
-          if (res.ok) {
-            const nodes = parseFragment(await res.text()).filter(
-              (n) => n.nodeType === Node.ELEMENT_NODE,
-            );
-            const old = document.querySelector(".issue-detail");
-            if (old && nodes[0]) {
-              await runScopedTransition(commonScope([old]), () =>
-                old.replaceWith(nodes[0]),
-              );
-              announce(t("entity_updated", noun[0].toUpperCase() + noun.slice(1)));
-            }
-          }
+      if (batch.resync) {
+        try {
+          await resync();
+        } catch {
+          // A dropped network is recovered by EventSource's retry/open path.
         }
-        if (pending.answerIds.size) {
-          const ids = [...pending.answerIds].join(",");
+      } else {
+        if (batch.article) {
+          await refreshArticle(true);
+        }
+        if (batch.answerIds.size) {
+          const ids = [...batch.answerIds].join(",");
           const appended = await applyFragment(
             `${fragBase}/threads?ids=${ids}`,
             () => list,
@@ -292,8 +401,8 @@ function start(section) {
           if (appended?.length) highlight(appended);
           announce(t("answer_updated"));
         }
-        if (pending.ids.size) {
-          const ids = [...pending.ids].join(",");
+        if (batch.ids.size) {
+          const ids = [...batch.ids].join(",");
           const appended = await applyFragment(
             `${fragBase}/${fragPath}?ids=${ids}`,
             () => list,
@@ -303,7 +412,7 @@ function start(section) {
             announce(t(kind === "discussion" ? "new_thread" : "new_comment"));
           }
         }
-        for (const [threadId, ids] of pending.replies) {
+        for (const [threadId, ids] of batch.replies) {
           const ol = section.querySelector(
             `#thread-${CSS.escape(String(threadId))} .comment-replies`,
           );
@@ -318,7 +427,7 @@ function start(section) {
             announce(t("new_reply"));
           }
         }
-        for (const { target, parent } of pending.removes) {
+        for (const { target, parent } of batch.removes) {
           const node = document.getElementById(
             parent || kind !== "discussion"
               ? `comment-${target}`
@@ -332,7 +441,7 @@ function start(section) {
             ol.hidden = true;
           }
         }
-        if (pending.removes.length) {
+        if (batch.removes.length) {
           // Recount top-level items like resync does (reply removals
           // leave it untouched — replies are nested, not :scope > li).
           const n = list.querySelectorAll(":scope > li").length;
@@ -348,11 +457,6 @@ function start(section) {
       }
     } finally {
       flushing = false;
-      pending.ids.clear();
-      pending.replies.clear();
-      pending.answerIds.clear();
-      pending.removes.length = 0;
-      pending.article = pending.deleted = pending.resync = false;
       if (queued) {
         queued = false;
         poke();

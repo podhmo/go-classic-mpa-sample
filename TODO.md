@@ -35,7 +35,7 @@ Guides referenced below are in the `modern-web-guidance` catalog (`.agents/skill
 - [x] **PR 詳細の git 呼び出しをまとめる**: `rev-parse` の束ね方と `(baseSHA, headSHA)` キーの小さな cache を検討し、`Log` / `CheckMerge` の重複実行を減らす（[owner-improvements §2.6](docs/sketch/ja/owner-improvements.md)）
 - [x] **テンプレート parse をロケールごとの clone に寄せる**: layout+fragments を 1 回 parse して `Clone()` し、`jsDictFor` の JSON 化もロケール単位にする（[owner-improvements §2.7](docs/sketch/ja/owner-improvements.md)）
 - [x] **API のラウンドトリップを減らす**: workspace 解決を scoped update に寄せる、`GetComment` または `INSERT ... RETURNING` を足す、`LabelByName` を足す、の小さな store API 拡張を行う（[owner-improvements §2.8](docs/sketch/ja/owner-improvements.md)）
-- [ ] **hidden タブの SSE を閉じる**: `visibilitychange` で hidden 時に `EventSource` を閉じ、visible 時に再接続 + resync する。storybook/実 app で確認する（**JS**、[owner-improvements §2.9](docs/sketch/ja/owner-improvements.md)）
+- [x] **hidden タブの SSE を閉じる**: `visibilitychange` で hidden 時に `EventSource` を閉じ、visible 時に再接続 + resync する。storybook/実 app で確認する（**JS**、[owner-improvements §2.9](docs/sketch/ja/owner-improvements.md)）
 - [ ] **web handler の小さな定型重複を削る**: `requireIssue` / `requireDiscussion`、generic な `filterByID`、フォーム page builder を入れ、未使用の `Renderer.execute` / `Renderer.notFound` を整理する（[owner-improvements §3.4](docs/sketch/ja/owner-improvements.md)）
 - [ ] **重複テンプレートを共通化する**: pager と delete confirm の双子テンプレートを整理し、pulls 側の空 `q=` 出力も直す。markup 差分は storybook で確認する（[owner-improvements §3.5](docs/sketch/ja/owner-improvements.md)）
 - [ ] **i18n catalog を分割し ja の空フィールドを検出する**: `messages.go` / `messages_en.go` / `messages_ja.go` / `locale.go` に分け、en fallback に黙って落ちるフィールドをテストで防ぐ（[owner-improvements §3.6](docs/sketch/ja/owner-improvements.md)）
