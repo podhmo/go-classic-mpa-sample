@@ -899,7 +899,7 @@ func (h *handler) setPRCommentHidden(w http.ResponseWriter, r *http.Request, hid
 	if hide {
 		reason = r.PostFormValue("reason")
 		if !store.ValidHideReason(reason) {
-			h.renderError(w, r, http.StatusBadRequest, "Bad request", msgFor(r).ErrHideReason)
+			h.renderError(w, r, http.StatusBadRequest, msgFor(r).ErrBadRequestH, msgFor(r).ErrHideReason)
 			return
 		}
 	}

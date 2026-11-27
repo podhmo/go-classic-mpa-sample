@@ -168,6 +168,22 @@ func TestCommentHideInvalidReason(t *testing.T) {
 	}
 }
 
+func TestCommentHideInvalidReasonRendersLocalizedHeading(t *testing.T) {
+	srv, _, cid := seedComment(t)
+	resp := postFormWithHeaders(t, srv.URL+"/w/default/issues/1/comments/"+itoa(cid)+"/hide",
+		url.Values{"reason": {"bogus"}}, map[string]string{"Cookie": langCookieName + "=ja"})
+	body := getBody(t, resp)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+	if !strings.Contains(body, "<h1>不正なリクエスト</h1>") {
+		t.Error("ja response should localize the bad-request heading")
+	}
+	if strings.Contains(body, "<h1>Bad request</h1>") {
+		t.Error("ja response still uses the English bad-request heading")
+	}
+}
+
 // The partial hide contract: X-Partial answers the hidden-state <li>
 // that replace mode swaps over the visible comment.
 func TestCommentHidePartial(t *testing.T) {
