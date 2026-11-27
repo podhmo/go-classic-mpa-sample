@@ -113,8 +113,8 @@ type PRListFilter struct {
 	Status  string // "open" (default), "closed", "merged", or "all"
 	Query   string // case-insensitive substring match on title OR body
 	Sort    string // "newest" (default) or "oldest"
-	Page    int    // 1-based; values < 1 are clamped to 1
-	PerPage int    // <= 0 defaults to 20
+	Page    int    // 1-based; invalid or absurd values fall back to 1
+	PerPage int    // <= 0 defaults to 20; absurd values are capped
 }
 
 // prColumns lists pull_requests in SELECT order shared by the scans.
@@ -158,15 +158,11 @@ func (s *Store) ListPullRequests(ctx context.Context, f PRListFilter) ([]*PullRe
 	if f.Sort == "oldest" {
 		dir = "ASC"
 	}
-	page := max(f.Page, 1)
-	perPage := f.PerPage
-	if perPage <= 0 {
-		perPage = 20
-	}
+	page, perPage := normalizePage(f.Page, f.PerPage)
 	q := `SELECT ` + prColumns + `
 		FROM pull_requests p LEFT JOIN users u ON u.id = p.author_id` + where +
 		" ORDER BY p.created_at " + dir + ", p.id " + dir + " LIMIT ? OFFSET ?"
-	rows, err := s.db.QueryContext(ctx, q, append(args, perPage, (page-1)*perPage)...)
+	rows, err := s.db.QueryContext(ctx, q, append(args, perPage, int64(page-1)*int64(perPage))...)
 	if err != nil {
 		return nil, 0, err
 	}

@@ -55,8 +55,8 @@ type ListFilter struct {
 	Query   string // case-insensitive substring match on title OR body
 	LabelID int64  // 0 means no label filter
 	Sort    string // "newest" (default, created_at DESC) or "oldest" (ASC)
-	Page    int    // 1-based; values < 1 are clamped to 1
-	PerPage int    // <= 0 defaults to 20
+	Page    int    // 1-based; invalid or absurd values fall back to 1
+	PerPage int    // <= 0 defaults to 20; absurd values are capped
 }
 
 // ListIssues returns the page of issues in workspace wsID matching f
@@ -100,17 +100,13 @@ func (s *Store) ListIssues(ctx context.Context, wsID int64, f ListFilter) ([]*Is
 	if f.Sort == "oldest" {
 		dir = "ASC"
 	}
-	page := max(f.Page, 1)
-	perPage := f.PerPage
-	if perPage <= 0 {
-		perPage = 20
-	}
+	page, perPage := normalizePage(f.Page, f.PerPage)
 
 	q := `SELECT i.id, i.workspace_id, i.title, i.body, i.status, i.created_at, i.updated_at,
 		u.id, u.name, u.created_at
 		FROM issues i LEFT JOIN users u ON u.id = i.author_id` + where +
 		" ORDER BY i.created_at " + dir + ", i.id " + dir + " LIMIT ? OFFSET ?"
-	rows, err := s.db.QueryContext(ctx, q, append(args, perPage, (page-1)*perPage)...)
+	rows, err := s.db.QueryContext(ctx, q, append(args, perPage, int64(page-1)*int64(perPage))...)
 	if err != nil {
 		return nil, 0, err
 	}

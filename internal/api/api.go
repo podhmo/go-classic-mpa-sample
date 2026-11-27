@@ -329,6 +329,14 @@ func queryInt(r *http.Request, name string, def int) int {
 	return def
 }
 
+// queryPage reads a page number; absurd values fall back to page 1.
+func queryPage(r *http.Request) int {
+	if v, err := strconv.Atoi(r.URL.Query().Get("page")); err == nil && v > 0 && v <= store.MaxListPage {
+		return v
+	}
+	return 1
+}
+
 // scoped resolves the {ws} path segment into its workspace (a JSON 404 on
 // a miss) and calls fn with it.
 func (h *handler) scoped(fn func(http.ResponseWriter, *http.Request, *store.Workspace)) http.HandlerFunc {

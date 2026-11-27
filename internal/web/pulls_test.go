@@ -10,8 +10,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/podhmo/go-classic-mpa-sample/internal/gitrepo"
+	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
 func initTestGitRepo(t *testing.T) *gitrepo.Repo {
@@ -43,6 +45,56 @@ func initTestGitRepo(t *testing.T) *gitrepo.Repo {
 		t.Fatal("Resolve returned nil for an explicit repo")
 	}
 	return repo
+}
+
+func addFakePull(f *fakeStore, title, status string, created time.Time) {
+	f.pulls = append(f.pulls, &store.PullRequest{
+		ID:        f.nextPull,
+		BaseRef:   "refs/heads/main",
+		HeadRef:   "refs/heads/feat",
+		Title:     title,
+		Status:    status,
+		CreatedAt: created,
+		UpdatedAt: created,
+	})
+	f.nextPull++
+}
+
+func TestListPullsOutOfRangePageShowsLastPage(t *testing.T) {
+	repo := initTestGitRepo(t)
+	f := newFakeStore()
+	now := time.Now()
+	for i := range 25 {
+		addFakePull(f, "Paged pull "+string(rune('a'+i)), store.PRStatusOpen, now.Add(-time.Duration(i)*time.Hour))
+	}
+	srv := httptest.NewServer(New(f, WithRepo(repo)))
+	t.Cleanup(srv.Close)
+
+	resp, err := srv.Client().Get(srv.URL + "/pulls?status=all&page=99999")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := getBody(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	for _, want := range []string{"Showing 21–25 of 25 pull requests", "Page 2 of 2", ">Previous</a>"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("clamped pulls page missing %q", want)
+		}
+	}
+	if strings.Contains(body, "empty-state") {
+		t.Error("out-of-range pulls page must not render the empty state")
+	}
+
+	resp, err = srv.Client().Get(srv.URL + "/pulls?status=all&page=1000001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body = getBody(t, resp)
+	if !strings.Contains(body, "Showing 1–20 of 25 pull requests") || !strings.Contains(body, "Page 1 of 2") {
+		t.Error("page above MaxListPage must fall back to page 1")
+	}
 }
 
 func TestCreatePullInvalidRefRendersUnprocessable(t *testing.T) {

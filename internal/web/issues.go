@@ -613,6 +613,15 @@ func labelURL(ws *store.Workspace, f store.ListFilter, labelID int64) string {
 	return issuesURL(ws, f)
 }
 
+// parsePageQuery reads a positive page number. Absurd values fall back to
+// page 1 so later (page-1)*perPage arithmetic cannot overflow.
+func parsePageQuery(raw string) int {
+	if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= store.MaxListPage {
+		return n
+	}
+	return 1
+}
+
 // parseListFilter reads and normalizes the list query parameters.
 func parseListFilter(r *http.Request) store.ListFilter {
 	q := r.URL.Query()
@@ -632,11 +641,7 @@ func parseListFilter(r *http.Request) store.ListFilter {
 		f.Sort = ""
 	}
 
-	// Reject absurd page numbers: huge values can overflow the store's
-	// (page-1)*perPage offset arithmetic and are never meaningful anyway.
-	if n, err := strconv.Atoi(q.Get("page")); err == nil && n > 0 && n <= 1_000_000 {
-		f.Page = n
-	}
+	f.Page = parsePageQuery(q.Get("page"))
 	if v := q.Get("label"); v != "" {
 		if id, err := strconv.ParseInt(v, 10, 64); err == nil && id > 0 {
 			f.LabelID = id

@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/podhmo/go-classic-mpa-sample/internal/store"
 )
 
 // apiMaxPerPage mirrors the server's cap on ?per_page= (api.maxPerPage);
@@ -26,19 +28,25 @@ const apiMaxPerPage = 100
 // one API request for the given API page and returns (items, total).
 func listWindow[E any](ctx context.Context, page, perPage int,
 	fetch func(apiPage, apiPerPage int) ([]*E, int, error)) ([]*E, int, error) {
-	if page < 1 {
+	if page < 1 || page > store.MaxListPage {
 		page = 1
 	}
 	if perPage <= apiMaxPerPage {
 		return fetch(page, perPage)
 	}
-	start := (page - 1) * perPage
-	skip := start % apiMaxPerPage
+	if perPage > store.MaxListPerPage {
+		perPage = store.MaxListPerPage
+	}
+	start := int64(page-1) * int64(perPage)
+	skip := int(start % apiMaxPerPage)
 	need := skip + perPage // items required counting from the first fetched page
 	var acc []*E
 	total := 0
 	for apiPage := start/apiMaxPerPage + 1; len(acc) < need; apiPage++ {
-		items, t, err := fetch(apiPage, apiMaxPerPage)
+		if apiPage > store.MaxListPage {
+			return nil, 0, fmt.Errorf("list window exceeds the API's maximum page %d", store.MaxListPage)
+		}
+		items, t, err := fetch(int(apiPage), apiMaxPerPage)
 		if err != nil {
 			return nil, 0, err
 		}

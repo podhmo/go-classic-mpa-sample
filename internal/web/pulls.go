@@ -287,10 +287,7 @@ func (h *handler) listPulls(w http.ResponseWriter, r *http.Request) {
 	if filter.Sort != "oldest" {
 		filter.Sort = "newest"
 	}
-	filter.Page, _ = strconv.Atoi(q.Get("page"))
-	if filter.Page < 1 {
-		filter.Page = 1
-	}
+	filter.Page = parsePageQuery(q.Get("page"))
 	filter.PerPage = perPage
 	pulls, total, err := h.store.ListPullRequests(r.Context(), filter)
 	if err != nil {
@@ -298,6 +295,14 @@ func (h *handler) listPulls(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	totalPages := (total + perPage - 1) / perPage
+	if total > 0 && filter.Page > totalPages {
+		filter.Page = totalPages
+		pulls, total, err = h.store.ListPullRequests(r.Context(), filter)
+		if err != nil {
+			h.internalError(w, r, err)
+			return
+		}
+	}
 	page := pullListPage{
 		Title:           msgFor(r).PullsTitle,
 		Section:         "pulls",

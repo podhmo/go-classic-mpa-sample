@@ -99,7 +99,7 @@ type DiscussionListFilter struct {
 	Answered     string // "", "yes" (has an answer thread), or "no"
 	Query        string // case-insensitive substring match on title OR body
 	Sort         string // "newest" (default, created_at DESC) or "oldest" (ASC)
-	Page         int    // 1-based; values < 1 are clamped to 1
+	Page         int    // 1-based; invalid or absurd values fall back to 1
 	PerPage      int    // <= 0 defaults to 20
 }
 
@@ -164,11 +164,7 @@ func (s *Store) ListDiscussions(ctx context.Context, wsID int64, f DiscussionLis
 	if f.Sort == "oldest" {
 		dir = "ASC"
 	}
-	page := max(f.Page, 1)
-	perPage := f.PerPage
-	if perPage <= 0 {
-		perPage = 20
-	}
+	page, perPage := normalizePage(f.Page, f.PerPage)
 
 	q := `SELECT d.id, d.workspace_id, d.title, d.body, d.created_at, d.updated_at,
 		c.id, c.name, c.slug, c.description, c.format,
@@ -178,7 +174,7 @@ func (s *Store) ListDiscussions(ctx context.Context, wsID int64, f DiscussionLis
 		JOIN discussion_categories c ON c.id = d.category_id
 		LEFT JOIN users u ON u.id = d.author_id` + where +
 		" ORDER BY d.created_at " + dir + ", d.id " + dir + " LIMIT ? OFFSET ?"
-	rows, err := s.db.QueryContext(ctx, q, append(args, perPage, (page-1)*perPage)...)
+	rows, err := s.db.QueryContext(ctx, q, append(args, perPage, int64(page-1)*int64(perPage))...)
 	if err != nil {
 		return nil, 0, err
 	}
