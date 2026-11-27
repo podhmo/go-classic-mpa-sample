@@ -51,6 +51,7 @@ async page => {
     try {
       await page.goto(base + '/story/' + s, {waitUntil: 'load'});
       await page.evaluate(() => document.fonts && document.fonts.ready);
+      await page.evaluate(() => scrollTo(0, 0));
       // animations:'disabled' — otherwise live fades (e.g. the
       // .back-to-top scroll-state button) can land mid-flight and flake.
       await page.screenshot({path: outDir + '/' + s + '.png', fullPage: true, animations: 'disabled'});

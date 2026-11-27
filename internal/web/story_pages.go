@@ -297,6 +297,25 @@ func StoryIssueList() {
 	})
 }
 
+// StoryIssueListAuthenticated renders the issue list for a signed-in user:
+// the header switches from login/register links to the user handle and logout.
+func StoryIssueListAuthenticated() {
+	renderIssueList(http.StatusOK, issueListPage{
+		Title:      "Issues",
+		Issues:     storyIssues,
+		Labels:     storyLabels,
+		Filter:     store.ListFilter{Status: store.StatusOpen, Page: 1, PerPage: perPage},
+		Total:      len(storyIssues),
+		Page:       1,
+		TotalPages: 1,
+		RangeStart: 1,
+		RangeEnd:   len(storyIssues),
+		Workspace:  storyWorkspace,
+		Section:    "issues",
+		User:       &store.User{ID: 1, Name: "demo"},
+	})
+}
+
 // StoryIssueListEmpty renders the issue list with no results.
 func StoryIssueListEmpty() {
 	renderIssueList(http.StatusOK, issueListPage{
@@ -365,11 +384,69 @@ func StoryIssueDetail() {
 	})
 }
 
+// StoryIssueDetailNoBody renders an issue whose optional body was left empty.
+func StoryIssueDetailNoBody() {
+	issue := *storyIssue
+	issue.Body = ""
+	renderIssueDetail(http.StatusOK, issueDetailPage{
+		Title:     "#2 Improve responsive layout",
+		Issue:     &issue,
+		Comments:  storyComments,
+		Workspace: storyWorkspace,
+		Section:   "issues",
+	})
+}
+
+// StoryIssueDetailMarkdownRich exercises the markdown elements and alert
+// variants that the ordinary fixtures do not use.
+func StoryIssueDetailMarkdownRich() {
+	issue := *storyIssue
+	issue.Body = `# Heading 1
+
+## Heading 2
+
+### Heading 3
+
+#### Heading 4
+
+` + "```go\nfmt.Println(\"preformatted\")\n```" + `
+
+> A blockquote.
+
+> [!TIP]
+> A tip.
+
+> [!IMPORTANT]
+> Important information.
+
+> [!WARNING]
+> A warning.
+
+> [!CAUTION]
+> A caution.
+
+| Name | Value |
+| ---- | ----- |
+| one  | 1     |
+
+![placeholder](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAABaCAIAAACwpMoFAAACCUlEQVR42uzdQY4TMRAFUKaUG3AmNnOjEeuIG7HJUbgBUm4QIRbZoYhJ2nZ3lf3+kkVU9utvupPMzOnX7z9fZN6ELQAsgAWwABbAAlgAAxbAAlgAC2ABLIABC2ABLIBlaeDz5UalY94O/9Ldp6Lfv504lQR+qayYix3Rrx7Fju5KwNu0GNcAbnFinB24XYhxXuBeNozzNlimBe5bOyXWYAEMWAAL4DH3RO6zEgGP+KjAxw+JgAWwABbAchhw33sid1gaLLsD96rd/XXeP6780jW43ZhuauBGY7oFgDcb0y0DvMGY7rYc+bBxN3vyJxvQ1gN+WOXz5fbPv9AteUQ/6U13NuC6uu8f14TThv3qeyFmmzkUt/u0qYYPuo2jPpw2zxKC7qBRkywk6HYsbsLlRK0tK3cVHr6otwx/GKtlF37++GrO1A1uvMZ3q0iVOXMBd1n2DntXZc5ER/SI1Y44BrvPufNZHdPojnjZEXPu3OMDGjx6hV0qUmLIjA0u8f9liSEzNnjn02lbS0oMma7Bh7yPUeKdk9FDxtwbzTim3+ISb4KOmzAWKdCyxrFOb9Y0jqW2ckHj/o9J+Tfx/w8nSebv9fgUC+ouVeVYUHcp4+g1SsWvp69gHKsVt9yl2TherKxbZRUt4wXduY1PaOdeVIpvVcq4+DVKgAWwABbAAlgAC2DAAlhq5O8AQQsNZ/QVgE0AAAAASUVORK5CYII=)
+
+---
+`
+	renderIssueDetail(http.StatusOK, issueDetailPage{
+		Title:     "#2 Improve responsive layout",
+		Issue:     &issue,
+		Comments:  storyComments,
+		Workspace: storyWorkspace,
+		Section:   "issues",
+	})
+}
+
 // StoryIssueDetailLong renders the detail page with a long comment thread
 // so the back-to-top affordance can be exercised by scrolling.
 func StoryIssueDetailLong() {
 	var comments []*store.Comment
-	for i := range 24 {
+	for i := range 51 {
 		comments = append(comments, &store.Comment{
 			ID: int64(i + 1), IssueID: 2,
 			Body:      fmt.Sprintf("Comment %d — a filler line to make the thread tall enough to scroll.", i+1),
@@ -577,7 +654,7 @@ func StoryDiscussionDetailReplyOpen() {
 // placement) can be exercised.
 func StoryDiscussionDetailLong() {
 	var threads []*store.DiscussionThread
-	for i := range 24 {
+	for i := range 51 {
 		threads = append(threads, &store.DiscussionThread{
 			ID: int64(i + 1), DiscussionID: 2,
 			Body:      fmt.Sprintf("Thread %d — a filler line to make the page tall enough to scroll.", i+1),
@@ -1047,14 +1124,14 @@ func (storyStore) APITokenUser(ctx context.Context, token string) (*store.User, 
 // StoryHttpIssueList drives the real mux for GET /issues, so the
 // preview replays the handler's status and security headers too.
 func StoryHttpIssueList(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/issues", nil))
+	newStoryHandler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/issues", nil))
 }
 
 // StoryHttpNotFound drives the real mux for an unknown path; the
 // recorded 404 status is replayed by the preview, unlike print
 // stories which always answer 200.
 func StoryHttpNotFound(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/no-such-page", nil))
+	newStoryHandler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/no-such-page", nil))
 }
 
 // renderFragment prints one named template fragment the way a partial
@@ -1129,54 +1206,60 @@ func storyPost(target string, form url.Values, partial bool) *http.Request {
 	return req
 }
 
+// newStoryHandler pins the handler clock so fragments rendered for a
+// successful POST stay byte-stable in visual-diff.
+func newStoryHandler() http.Handler {
+	return New(newStoryStore(), WithClock(storyNow))
+}
+
 // StoryHttpCreateCommentPartial replays a comment POST with X-Partial:
 // the mux answers the new comment's fragment instead of a 303 redirect.
 func StoryHttpCreateCommentPartial(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/issues/2/comments", url.Values{"body": {"posted via fetch"}}, true))
+	newStoryHandler().ServeHTTP(w, storyPost("/w/default/issues/2/comments", url.Values{"body": {"posted via fetch"}}, true))
 }
 
 // StoryHttpCreateCommentRedirect replays the same POST without the
 // header — the unchanged full-reload path answering 303 #comment-N.
 func StoryHttpCreateCommentRedirect(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/issues/2/comments", url.Values{"body": {"classic post"}}, false))
+	newStoryHandler().ServeHTTP(w, storyPost("/w/default/issues/2/comments", url.Values{"body": {"classic post"}}, false))
 }
 
 // StoryHttpCreateCommentPartialError replays a partial post with an
 // empty body: the 422 response is the error-marked form fragment.
 func StoryHttpCreateCommentPartialError(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/issues/2/comments", url.Values{"body": {""}}, true))
+	newStoryHandler().ServeHTTP(w, storyPost("/w/default/issues/2/comments", url.Values{"body": {""}}, true))
 }
 
 // StoryHttpCreateDiscussionReplyPartial replays a partial reply POST:
 // the fragment carries comment-reply markup for .comment-replies.
 func StoryHttpCreateDiscussionReplyPartial(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/discussions/2/comments", url.Values{"body": {"a reply"}, "thread_id": {"1"}}, true))
+	newStoryHandler().ServeHTTP(w, storyPost("/w/default/discussions/2/comments", url.Values{"body": {"a reply"}, "thread_id": {"1"}}, true))
 }
 
 // StoryHttpSetStatusPartial replays a partial status toggle: the mux
 // answers the re-rendered issue article — badge, meta and flipped button
 // — that replace mode swaps over .issue-detail.
 func StoryHttpSetStatusPartial(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/issues/2/status", url.Values{"status": {"closed"}}, true))
+	newStoryHandler().ServeHTTP(w, storyPost("/w/default/issues/2/status", url.Values{"status": {"closed"}}, true))
 }
 
 // StoryHttpSetStatusRedirect replays the same POST without X-Partial —
 // the unchanged 303 PRG path.
 func StoryHttpSetStatusRedirect(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/issues/2/status", url.Values{"status": {"closed"}}, false))
+	newStoryHandler().ServeHTTP(w, storyPost("/w/default/issues/2/status", url.Values{"status": {"closed"}}, false))
 }
 
 // StoryHttpHideCommentPartial replays a partial hide POST: the mux
 // answers the hidden-state <li> (reason note + collapsed body) that
 // replace mode swaps over the visible comment.
 func StoryHttpHideCommentPartial(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/issues/2/comments/2/hide", url.Values{"reason": {"spam"}}, true))
+	newStoryHandler().ServeHTTP(w, storyPost("/w/default/issues/2/comments/2/hide", url.Values{"reason": {"spam"}}, true))
 }
 
 // StoryHttpHideCommentRedirect replays the same POST without X-Partial
 // — the unchanged 303 #comment-N path.
 func StoryHttpHideCommentRedirect(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/issues/2/comments/2/hide", url.Values{"reason": {"spam"}}, false))
+	newStoryHandler().ServeHTTP(w, storyPost("/w/default/issues/2/comments/2/hide", url.Values{"reason": {"spam"}}, false))
 }
 
 // StoryHttpUnhideCommentPartial replays a partial unhide POST — the
@@ -1193,13 +1276,13 @@ func StoryHttpUnhideCommentPartial(w http.ResponseWriter, r *http.Request) {
 // two <li>s — the newly marked comment 2 and comment 1 losing the mark —
 // each self-targeting by id.
 func StoryHttpSetCommentAnswerPartial(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/discussions/2/comments/2/answer", url.Values{"answer": {"1"}}, true))
+	newStoryHandler().ServeHTTP(w, storyPost("/w/default/discussions/2/comments/2/answer", url.Values{"answer": {"1"}}, true))
 }
 
 // StoryHttpSetCommentAnswerRedirect replays the same POST without
 // X-Partial — the unchanged 303 #comment-N path.
 func StoryHttpSetCommentAnswerRedirect(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, storyPost("/w/default/discussions/2/comments/2/answer", url.Values{"answer": {"1"}}, false))
+	newStoryHandler().ServeHTTP(w, storyPost("/w/default/discussions/2/comments/2/answer", url.Values{"answer": {"1"}}, false))
 }
 
 // StoryHttpApp routes the real incoming request through the app's mux.
@@ -1208,7 +1291,7 @@ func StoryHttpSetCommentAnswerRedirect(w http.ResponseWriter, r *http.Request) {
 // partial-submit.js (fetch → fragment → DOM swap) to run end to end
 // without a database.
 func StoryHttpApp(w http.ResponseWriter, r *http.Request) {
-	New(newStoryStore()).ServeHTTP(w, r)
+	newStoryHandler().ServeHTTP(w, r)
 }
 
 // The storybook runs in the single "default" workspace; management
@@ -1416,7 +1499,7 @@ func StoryPullEdit() {
 func StoryPullFiles() {
 	files := []pullFileView{
 		{
-			Change:       gitrepo.FileChange{Status: "M", NewPath: "internal/web/templates/pulls.html"},
+			Change:       gitrepo.FileChange{Status: "M", OldPath: "internal/web/templates/pulls.html", NewPath: "internal/web/templates/pulls.html"},
 			CommentPath:  "internal/web/templates/pulls.html",
 			StatusLetter: "M",
 			Anchor:       "file-internal-web-templates-pulls-html",
@@ -1431,7 +1514,7 @@ func StoryPullFiles() {
 			Comments: []*store.PRComment{storyPRComments[1]},
 		},
 		{
-			Change:       gitrepo.FileChange{Status: "A", NewPath: "internal/web/pulls.go"},
+			Change:       gitrepo.FileChange{Status: "A", OldPath: "internal/web/pulls.go", NewPath: "internal/web/pulls.go"},
 			CommentPath:  "internal/web/pulls.go",
 			StatusLetter: "A",
 			Anchor:       "file-internal-web-pulls-go",
@@ -1441,6 +1524,28 @@ func StoryPullFiles() {
 				{Kind: "add", NewNo: 1, Text: "+package web"},
 				{Kind: "add", NewNo: 2, Text: "+"},
 				{Kind: "add", NewNo: 3, Text: "+// Pull request pages."},
+			},
+		},
+		{
+			Change:       gitrepo.FileChange{Status: "D", OldPath: "internal/web/old_pulls.go", NewPath: "internal/web/old_pulls.go"},
+			CommentPath:  "internal/web/old_pulls.go",
+			StatusLetter: "D",
+			Anchor:       "file-internal-web-old-pulls-go",
+			Lines: []diffLine{
+				{Kind: "hunk", Text: "@@ -1,2 +0,0 @@"},
+				{Kind: "del", OldNo: 1, Text: "-package web"},
+				{Kind: "del", OldNo: 2, Text: "-// Removed in favor of pull_pages.go."},
+			},
+		},
+		{
+			Change:       gitrepo.FileChange{Status: "R100", OldPath: "internal/web/prs.go", NewPath: "internal/web/pull_files_view.go"},
+			CommentPath:  "internal/web/pull_files_view.go",
+			StatusLetter: "R",
+			Anchor:       "file-internal-web-pull-files-view-go",
+			Lines: []diffLine{
+				{Kind: "hunk", Text: "@@ -1,2 +1,2 @@"},
+				{Kind: "ctx", OldNo: 1, NewNo: 1, Text: " package web"},
+				{Kind: "ctx", OldNo: 2, NewNo: 2, Text: " // Pull request pages."},
 			},
 		},
 	}

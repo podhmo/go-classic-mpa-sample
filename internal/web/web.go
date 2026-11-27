@@ -332,6 +332,7 @@ type config struct {
 	apiEnabled bool
 	hub        *events.Hub
 	repo       *gitrepo.Repo
+	clock      func() time.Time
 }
 
 // WithAPIToken mounts the JSON API (docs/sketch/ja/cli-and-web-api.md)
@@ -364,6 +365,12 @@ func WithAPIEnabled(on bool) Option {
 // exist but never emit.
 func WithHub(hub *events.Hub) Option {
 	return func(c *config) { c.hub = hub }
+}
+
+// WithClock overrides the wall clock used for response-only entities.
+// Tests and storybook replays use it to keep rendered fragments deterministic.
+func WithClock(clock func() time.Time) Option {
+	return func(c *config) { c.clock = clock }
 }
 
 // WithRepo enables the pull-requests feature (docs/sketch/ja/pull-requests.md):
@@ -430,7 +437,10 @@ func New(st Store, opts ...Option) http.Handler {
 	if cfg.hub == nil {
 		cfg.hub = events.NewHub()
 	}
-	h := &handler{store: st, r: NewRendererWithPulls(cfg.repo != nil), hub: cfg.hub, repo: cfg.repo}
+	if cfg.clock == nil {
+		cfg.clock = time.Now
+	}
+	h := &handler{store: st, r: NewRendererWithPulls(cfg.repo != nil), hub: cfg.hub, repo: cfg.repo, clock: cfg.clock}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", h.home)
@@ -781,6 +791,7 @@ type handler struct {
 	r     *Renderer
 	hub   *events.Hub
 	repo  *gitrepo.Repo
+	clock func() time.Time
 }
 
 var funcMap = template.FuncMap{
