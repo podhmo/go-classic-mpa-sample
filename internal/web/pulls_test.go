@@ -185,3 +185,116 @@ func TestCreatePullInvalidRefRendersUnprocessable(t *testing.T) {
 		})
 	}
 }
+
+func TestSplitUnifiedDiffsUsesChangedFileOrder(t *testing.T) {
+	changes := []gitrepo.FileChange{
+		{Status: "M", OldPath: "dir/a file.txt", NewPath: "dir/a file.txt"},
+		{Status: "A", OldPath: "b.txt", NewPath: "b.txt"},
+	}
+	patch := "diff --git a/dir/a file.txt b/dir/a file.txt\n" +
+		"--- a/dir/a file.txt\n+++ b/dir/a file.txt\n@@ -1 +1 @@\n-one\n+two\n" +
+		"diff --git a/b.txt b/b.txt\n" +
+		"--- /dev/null\n+++ b/b.txt\n@@ -0,0 +1 @@\n+x\n"
+	got := splitUnifiedDiffs(patch, changes)
+	if !strings.Contains(got["dir/a file.txt"], "+two") || strings.Contains(got["dir/a file.txt"], "+x") {
+		t.Fatalf("first file split wrong: %q", got["dir/a file.txt"])
+	}
+	if !strings.Contains(got["b.txt"], "+x") || strings.Contains(got["b.txt"], "+two") {
+		t.Fatalf("second file split wrong: %q", got["b.txt"])
+	}
+}
+
+func TestPullFilesRendersOneServerSideCommentForm(t *testing.T) {
+	repo := initTestGitRepo(t)
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repo.Dir
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",
+			"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+	}
+	git("checkout", "-qb", "feat")
+	if err := os.WriteFile(filepath.Join(repo.Dir, "a.txt"), []byte("one\ntwo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo.Dir, "b.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git("add", "a.txt", "b.txt")
+	git("commit", "-qm", "change files")
+
+	f := newFakeStore()
+	f.pulls = append(f.pulls, &store.PullRequest{
+		ID: 1, BaseRef: "refs/heads/main", HeadRef: "refs/heads/feat",
+		Title: "files test", Status: store.PRStatusOpen,
+		CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	})
+	srv := httptest.NewServer(New(f, WithRepo(repo)))
+	t.Cleanup(srv.Close)
+
+	resp, err := srv.Client().Get(srv.URL + "/pulls/1/files")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := getBody(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if !strings.Contains(body, `<table class="diff">`) {
+		t.Error("diff should use table markup")
+	}
+	if strings.Contains(body, `<pre class="diff">`) || strings.Contains(body, `<details class="line-comment">`) {
+		t.Error("old invalid pre/details diff markup remains")
+	}
+	if strings.Contains(body, `class="line-comment-form`) {
+		t.Error("plain files view should not emit line comment forms")
+	}
+	if !strings.Contains(body, `line=2&amp;path=a.txt&amp;side=right`) {
+		t.Error("commentable line should link to the server-rendered form GET")
+	}
+
+	resp, err = srv.Client().Get(srv.URL + "/pulls/1/files?path=a.txt&line=2&side=right")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body = getBody(t, resp)
+	if strings.Count(body, `class="line-comment-form`) != 1 {
+		t.Fatalf("open form count = %d, want 1", strings.Count(body, `class="line-comment-form`))
+	}
+	for _, want := range []string{
+		`<label class="visually-hidden" for="line-comment-body">Comment on a.txt line 2</label>`,
+		`<input type="hidden" name="path" value="a.txt">`,
+		`<input type="hidden" name="line" value="2">`,
+		`<input type="hidden" name="side" value="right">`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("open form missing %s", want)
+		}
+	}
+}
+
+func TestPullFilesTruncatedNotice(t *testing.T) {
+	rec := httptest.NewRecorder()
+	NewRendererWithPulls(true).renderPullFiles(rec, http.StatusOK, pullFilesPage{
+		Title: "files", Section: "pulls",
+		PR: &store.PullRequest{ID: 1, Title: "t"},
+		Files: []pullFileView{{
+			Change:       gitrepo.FileChange{Status: "M", NewPath: "large.txt"},
+			CommentPath:  "large.txt",
+			StatusLetter: "M",
+			Anchor:       "f-large-txt",
+			Truncated:    true,
+		}},
+	}, "en")
+	body := rec.Body.String()
+	if !strings.Contains(body, "Diff truncated — later changes are not shown.") {
+		t.Fatal("truncated diff warning missing")
+	}
+	if !strings.Contains(body, `class="muted diff-truncated" role="status"`) {
+		t.Fatal("truncated warning should be a status for assistive technology")
+	}
+}

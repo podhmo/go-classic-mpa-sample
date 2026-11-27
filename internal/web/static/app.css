@@ -2105,34 +2105,60 @@ html:active-view-transition-type(backward)::view-transition-new(root) {
   border-color: var(--closed-border);
 }
 
-pre.diff {
-  margin: 0;
-  padding: 0;
-  font-size: 0.8rem;
-  font-family: var(--font-mono);
+.diff-scroll {
   overflow-x: auto;
 }
 
-/* Each diff row is a grid: comment toggle, line number, text. The
-   <details> on commentable lines supplies the toggle (summary shows the
-   line number); non-commentable rows show a plain number span. */
-.diff-line {
-  display: flex;
-  align-items: baseline;
-  white-space: pre;
+table.diff {
+  width: 100%;
+  min-width: 42rem;
+  margin: 0;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  font-family: var(--font-mono);
 }
 
-.diff-line .line-no {
-  flex: 0 0 3.5rem;
+.diff td {
+  padding: 0.05rem 0.5rem;
+  vertical-align: top;
+}
+
+.diff .line-no {
+  width: 4rem;
   padding-inline-end: 0.5rem;
   text-align: right;
   color: var(--text-muted);
   user-select: none;
 }
 
-.diff-line .line-text {
+.diff .line-no a {
+  display: block;
+  min-width: 2.75rem;
+  min-height: 1.5rem;
+  color: inherit;
+  text-decoration: none;
+}
+
+@media (hover: hover) {
+  .diff .line-no a:hover {
+    color: var(--accent);
+    text-decoration: underline;
+  }
+}
+
+.diff .line-no a:focus-visible {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.diff .line-text {
+  width: 100%;
   padding-inline-start: 0.5rem;
-  overflow-x: visible;
+  white-space: pre;
+}
+
+.diff .line-text code {
+  font-family: inherit;
 }
 
 .diff-hunk .line-text {
@@ -2151,33 +2177,16 @@ pre.diff {
   background: color-mix(in srgb, var(--danger) 9%, transparent);
 }
 
-/* Per-line comment: the <details> wraps the whole row so the form
-   unfolds directly under the line it annotates (no-JS friendly —
-   ui-rules §1). Summary is the line number itself. */
-.line-comment {
-  display: contents;
-}
-
-.line-comment > summary {
-  display: contents;
-  list-style: none;
-  cursor: pointer;
-}
-
-.line-comment > summary::-webkit-details-marker {
-  display: none;
-}
-
-.line-comment > summary:hover .line-no {
-  color: var(--accent);
-  text-decoration: underline;
+/* The one server-rendered line-comment form opens in the row selected by
+   ?path=&line=&side= — no hidden form is emitted for every diff line. */
+.line-comment-row > td {
+  padding: 0;
 }
 
 .line-comment-form {
-  flex: 1 1 100%;
   padding: 0.5rem;
   background: var(--surface);
-  border-block-start: 1px solid var(--border-muted);
+  border-block: 1px solid var(--border-muted);
   white-space: normal;
 }
 

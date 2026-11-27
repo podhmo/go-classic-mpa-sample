@@ -269,9 +269,10 @@ type messages struct {
 	FilesChangedTitle   string // args: PR title — "Files changed · X"
 	FilesEmpty          string
 	BinaryNote          string
+	DiffTruncated       string
 	CommentLineTitle    string
-	CommentLinePh       string // args: line no
-	CommentLinePhLeft   string // args: line no
+	CommentLinePh       string // args: path, line no
+	CommentLinePhLeft   string // args: path, line no
 	RefsLabel           string
 	BaseBranch          string
 	HeadBranch          string

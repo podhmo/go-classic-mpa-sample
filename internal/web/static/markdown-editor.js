@@ -16,14 +16,25 @@ function previewURL() {
 
 function draftKey(textarea) {
   const form = textarea.closest("form");
-  let identity = textarea.id;
-  if (!identity && form) {
+  let identity = "";
+  if (form) {
     const action = form.getAttribute("action") || "body";
-    const anchor = [...form.querySelectorAll('input[type="hidden"]')]
-      .filter((input) => ["path", "line", "side", "thread_id"].includes(input.name))
+    const hidden = [...form.querySelectorAll('input[type="hidden"]')];
+    const lineAnchor = hidden
+      .filter((input) => ["path", "line", "side"].includes(input.name))
       .map((input) => `${input.name}=${input.value}`);
     const index = [...form.querySelectorAll('textarea[name="body"]')].indexOf(textarea);
-    identity = [action, ...anchor, `textarea${Math.max(index, 0)}`].join(":");
+    if (lineAnchor.length) {
+      identity = [action, ...lineAnchor].join(":");
+    } else {
+      identity = textarea.id;
+    }
+    if (!identity) {
+      const anchor = hidden
+        .filter((input) => ["thread_id"].includes(input.name))
+        .map((input) => `${input.name}=${input.value}`);
+      identity = [action, ...anchor, `textarea${Math.max(index, 0)}`].join(":");
+    }
   }
   const account = document.documentElement.dataset.userId || "anonymous";
   // Use the form action rather than location.pathname: a rejected create
