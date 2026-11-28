@@ -30,29 +30,22 @@ func TestWatchRequiresHTTP(t *testing.T) {
 // TestRenderAllStories exercises the whole app story corpus through the
 // interpreter. Discovery alone is not enough: fixture construction,
 // markdown rendering, template execution and handler replay all fail at
-// Render time when minigo cannot represent a value the app uses.
+// render time when minigo cannot represent a value the app uses. The
+// upstream check owns the render loop; this test adds the app-specific
+// grouping hygiene rule.
 func TestRenderAllStories(t *testing.T) {
 	b := newBook()
 	stories, err := b.Stories()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(stories) == 0 {
-		t.Fatal("no stories discovered")
-	}
 	for _, story := range stories {
 		if story.Kind != storybook.KindHTTP && (story.Group == "" || story.GroupInferred) {
 			t.Errorf("%s group = %q inferred=%v; declare //storybook:group", story.Name, story.Group, story.GroupInferred)
 		}
-		t.Run(story.Name, func(t *testing.T) {
-			page, err := b.Render(t.Context(), story.Name)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if page.Status < 100 || page.Status >= 500 {
-				t.Fatalf("unexpected status %d", page.Status)
-			}
-		})
+	}
+	if err := b.Check(t.Context()); err != nil {
+		t.Fatal(err)
 	}
 }
 
