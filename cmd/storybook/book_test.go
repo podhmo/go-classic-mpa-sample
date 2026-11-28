@@ -129,7 +129,7 @@ func TestAppMountSSEStreams(t *testing.T) {
 	srv := httptest.NewServer(newBook().Handler())
 	defer srv.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+"/w/default/issues/2/events", nil)
 	if err != nil {
@@ -147,8 +147,18 @@ func TestAppMountSSEStreams(t *testing.T) {
 		t.Fatalf("SSE content type %q, want text/event-stream", ct)
 	}
 	buf := make([]byte, len("retry: 3000\n\n"))
-	if _, err := io.ReadFull(resp.Body, buf); err != nil {
-		t.Fatalf("read initial SSE frame: %v", err)
+	initialRead := make(chan error, 1)
+	go func() {
+		_, err := io.ReadFull(resp.Body, buf)
+		initialRead <- err
+	}()
+	select {
+	case err := <-initialRead:
+		if err != nil {
+			t.Fatalf("read initial SSE frame: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out reading initial SSE frame")
 	}
 	if string(buf) != "retry: 3000\n\n" {
 		t.Fatalf("initial SSE frame %q", string(buf))
