@@ -153,4 +153,17 @@ func TestAppMountSSEStreams(t *testing.T) {
 	if string(buf) != "retry: 3000\n\n" {
 		t.Fatalf("initial SSE frame %q", string(buf))
 	}
+
+	readResult := make(chan error, 1)
+	go func() {
+		var one [1]byte
+		_, err := resp.Body.Read(one[:])
+		readResult <- err
+	}()
+	select {
+	case err := <-readResult:
+		t.Fatalf("SSE closed after the initial frame: %v", err)
+	case <-time.After(200 * time.Millisecond):
+		// No EOF: the stream is still open even though no heartbeat is due yet.
+	}
 }
