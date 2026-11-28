@@ -135,7 +135,11 @@ func TestAppMountSSEStreams(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp, err := srv.Client().Do(req)
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.ResponseHeaderTimeout = 3 * time.Second
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport}
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
