@@ -899,7 +899,7 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 
 ## storybook の minigo 取り込み方式は維持しつつ追従する（2026-11-29、minigo#1455 追従）
 
-- **third_party clone・nested module・replace は維持する**: root module を通常の Go module 依存へ切り替える案もあったが、storybook は opt-in ツールとして既存構成を変えない。更新は従来どおり `make setup-minigo` で fast-forward する。
+- **third_party clone・nested module・replace は維持する**: root module を通常の Go module 依存へ切り替える案もあったが、storybook は opt-in ツールとして既存構成を変えない。更新は従来どおり `make setup-minigo` で fast-forward する。今回の検証対象は minigo main `9fc8d93`。
 - **fixture 生成は現時点では app story に採用しない**: `x/storybook/fixture` は storybook 実行時には解決できるが、`//go:build story` な story ファイルを root module 側でも型チェックする経路では nested module の依存が見えない。root module 構成を変えずに入れると別の迂回が増えるため、今回は互換性確認と workaround 除去に絞る。
 - **markdown cache key は `[32]byte` へ戻す**: binary digest を string に詰めていた旧 workaround はやめる。minigo 側が host-bound `sha256.Sum256` の array return を script の array type へそのまま適合させられないため、現時点では explicit conversion を1箇所だけ残す（podhmo/minigo#1456）。
 - **story grouping の説明は明示 marker を正にする**: 末尾の unqualified `renderXxx` 呼び出しを強制する必要はなくなった。`//storybook:group renderXxx` を使える。既存 story は従来どおり末尾 helper でもよいが、group が helper 名へ盗まれる場合だけ明示 marker にする。
