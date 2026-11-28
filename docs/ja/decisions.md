@@ -904,4 +904,4 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 - **markdown cache key は `[32]byte` へ戻す**: binary digest を string に詰めていた旧 workaround はやめる。minigo 側が host-bound `sha256.Sum256` の array return を script の array type へそのまま適合させられないため、現時点では explicit conversion を1箇所だけ残す（podhmo/minigo#1456）。
 - **story grouping の説明は明示 marker を正にする**: 末尾の unqualified `renderXxx` 呼び出しを強制する必要はなくなった。`//storybook:group renderXxx` を使える。既存 story は従来どおり末尾 helper でもよいが、group が helper 名へ盗まれる場合だけ明示 marker にする。
 - **storybook 回帰テストは全 story を Render する**: discovery だけでは fixture 構築・markdown 描画・template 実行・handler replay の interpreter 互換性を検出できないため、`cmd/storybook` のテストで全 story を描画し、5xx を失敗にする。
-- **gofmt 確認は tracked file に限定する**: `third_party/minigo` は ignore された upstream clone であり、`gofmt -l .` が consumer の未コミット前確認を upstream 側の testdata で落とす。AGENTS の確認コマンドは `git ls-files '*.go'` 経由にする。
+- **gofmt 確認は tracked file に限定し、終了コードも見る**: `third_party/minigo` は ignore された upstream clone であり、`gofmt -l .` が consumer の未コミット前確認を upstream 側の testdata で落とす。AGENTS の確認コマンドは `git ls-files '*.go'` 経由にしつつ、command substitution 内の gofmt 失敗を `test -z` が隠さないよう一旦変数へ受ける。
