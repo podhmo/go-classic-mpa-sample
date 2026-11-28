@@ -20,9 +20,10 @@ make storybook        # serves internal/web stories on http://127.0.0.1:6006
 make storybook-watch  # same + open pages auto-reload on file changes (-watch)
 ```
 
-minigo is a pinned Go module dependency, so no clone or setup step is
-needed. Keep the process running for the whole task — every source read
-happens per request, so:
+It auto-runs `make setup-minigo` (clones `podhmo/minigo` into
+`third_party/`, a nested module `cmd/storybook` replaces it against).
+Keep the process running for the whole task — every source read happens
+per request, so:
 
 - editing `internal/web/templates/*.html` → reload the browser, done
 - editing `internal/web/story_pages.go` (fixtures, stories, `storyStore`) → reload, done
@@ -86,7 +87,7 @@ rendering **500**, not silently — treat that as the failure signal.
 ## Export (static snapshot)
 
 ```sh
-go run ./cmd/storybook -o /tmp/book ./internal/web
+cd cmd/storybook && go run . -o /tmp/book ../../internal/web
 python3 -m http.server -d /tmp/book    # index.html + grid_*.html + static/
 ```
 
@@ -97,10 +98,11 @@ a snapshot to a PR.
 
 - Story files in `internal/web` carry `//go:build story` — they never
   ship in the binary; keep `story_pages.go` for story data and helpers.
-- A print story either ends on an unqualified `renderXxx(...)` call or
-  declares `//storybook:group renderXxx` in its doc comment. Without one
-  of those it stays ungrouped; do not let a trailing `printRec(...)`
-  accidentally become the inferred group.
+- A print story is grouped by an explicit `//storybook:group renderXxx`
+  doc-comment marker when present; otherwise minigo infers the group from
+  the last unqualified non-builtin call. End on `renderXxx(...)` or declare
+  the marker — do not let a trailing helper such as `printRec(...)` steal
+  the inferred group.
 - Stories and fixtures live in `story_pages.go` and are pure script —
   no restarts, no recompiles; if you find yourself restarting the
   storybook after an edit, something is wrong.

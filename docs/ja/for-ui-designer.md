@@ -24,9 +24,9 @@
 make storybook    # http://127.0.0.1:6006 で待ち受け
 ```
 
-minigo は通常の Go module 依存として pin されている。初回でも
-clone やセットアップコマンドは不要で、`go run` が module cache に
-取得する。
+初回は `make setup-minigo` が自動で走り、`podhmo/minigo` を
+`third_party/` に clone する（`cmd/storybook` は nested module で
+ローカルの minigo に `replace` している）。
 
 ## ホットリロード — 全部リロードだけで反映される
 
@@ -108,7 +108,7 @@ JS を配信しない）。エラーで 500 になったページも watch 中�
 ## 静的スナップショット（export）
 
 ```sh
-go run ./cmd/storybook -o /tmp/book ./internal/web
+cd cmd/storybook && go run . -o /tmp/book ../../internal/web
 python3 -m http.server -d /tmp/book
 ```
 

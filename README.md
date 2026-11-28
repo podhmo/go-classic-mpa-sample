@@ -121,8 +121,9 @@ The web and API layers are tested with `httptest` against in-memory
 
 `make storybook` serves every page at <http://localhost:6006> with fake
 data and replayed production headers (CSP included) — UI work needs no
-database. It runs on `podhmo/minigo` as a pinned Go module dependency.
-`make storybook-watch` adds live reload. See `docs/ja/for-ui-designer.md`.
+database. It runs on `podhmo/minigo`, fetched once by `make setup-minigo`
+into `third_party/minigo`. `make storybook-watch` adds live reload.
+See `docs/ja/for-ui-designer.md`.
 
 ## Configuration
 
@@ -190,7 +191,7 @@ cmd/zatudan/       server binary: flags/env, store.Open, SeedMasterData
                    (+ SeedDemoData under -seed), http.Server with
                    timeouts, graceful shutdown
 cmd/zatu/          gh-style CLI binary (issue/comment/label/discussion/pr/auth/api/completion)
-cmd/storybook/     UI preview server (runs on minigo)
+cmd/storybook/     UI preview server (separate module, runs on minigo)
 internal/store/    persistence: sqlite schema, queries, ErrNotFound contract.
                    Exposes *store.Store; no HTTP knowledge.
 internal/web/      HTML layer: consumer-side Store interface, handlers,

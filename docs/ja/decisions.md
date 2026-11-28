@@ -897,10 +897,11 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 - **light/dark の baseline は別 directory に分ける**: `.visual-diff/baseline/light` と `.visual-diff/baseline/dark` を使い、`page.emulateMedia({colorScheme})` で OS/browser の実設定に依存しない。既定の `update` / `check` は両 mode を通し、個別確認だけが必要なときは第2引数か `MODES` で絞る。
 - **JS 駆動状態は storybook 上で実操作できるものだけ visual-diff に入れる**: dialog open と copy feedback は実際に click し、toast は storybook に POST 先が無いため `/static/toast.js` の `toast()` を直接起動して描画だけを固定する。これは `.toast` 系 CSS の visual coverage であり、partial POST 成功経路や SSE 由来 `.comment-new` の E2E 検証を置き換えない。
 
-## storybook の minigo を通常の Go module 依存へ戻す（2026-11-29、minigo#1455 追従）
+## storybook の minigo 取り込み方式は維持しつつ追従する（2026-11-29、minigo#1455 追従）
 
-- **third_party clone・nested module・replace は廃止する**: minigo は semver 未発行でも pseudo-version で commit を pin できる。consumer が clone を管理する必要はなく、`make setup-minigo` なしで `make storybook` / `go test ./...` が通る。upstream 修正を試す場合だけ一時的な `go mod edit -replace` を使う。
-- **storybook コマンドは root module に戻す**: `cmd/storybook` はアプリ本体と同じ module の opt-in コマンド。story 実行は相変わらず interpreter 経由なので、root module に入っても本番バイナリへ story fixture はリンクされない。
-- **fixture 生成は starting point としてだけ使う**: `fixture.LongText[issueListPage]()` で長文を含む表示データを作り、status・workspace・時刻・label など意味を持つ field は story が明示的に上書きする。型から作れる値だけで domain-valid な fixture を替えない。
-- **markdown cache key は `[32]byte` へ戻す**: binary digest を string に詰めていた旧 workaround はやめる。minigo 側が host-bound `sha256.Sum256` の array return を script の array type へそのまま適合させられないため、現時点では explicit conversion を1箇所だけ残す（upstream issue へ報告）。
-- **story grouping は明示 marker を正にする**: 末尾の unqualified `renderXxx` 呼び出しを強制する必要はなくなった。`//storybook:group renderXxx` を使える。既存 helper は描画 boilerplate の共有として残し、新規 story は helper か明示 marker のどちらでもよい。
+- **third_party clone・nested module・replace は維持する**: root module を通常の Go module 依存へ切り替える案もあったが、storybook は opt-in ツールとして既存構成を変えない。更新は従来どおり `make setup-minigo` で fast-forward する。
+- **fixture 生成は現時点では app story に採用しない**: `x/storybook/fixture` は storybook 実行時には解決できるが、`//go:build story` な story ファイルを root module 側でも型チェックする経路では nested module の依存が見えない。root module 構成を変えずに入れると別の迂回が増えるため、今回は互換性確認と workaround 除去に絞る。
+- **markdown cache key は `[32]byte` へ戻す**: binary digest を string に詰めていた旧 workaround はやめる。minigo 側が host-bound `sha256.Sum256` の array return を script の array type へそのまま適合させられないため、現時点では explicit conversion を1箇所だけ残す（podhmo/minigo#1456）。
+- **story grouping の説明は明示 marker を正にする**: 末尾の unqualified `renderXxx` 呼び出しを強制する必要はなくなった。`//storybook:group renderXxx` を使える。既存 story は従来どおり末尾 helper でもよいが、group が helper 名へ盗まれる場合だけ明示 marker にする。
+- **storybook 回帰テストは全 story を Render する**: discovery だけでは fixture 構築・markdown 描画・template 実行・handler replay の interpreter 互換性を検出できないため、`cmd/storybook` のテストで全 story を描画し、5xx を失敗にする。
+- **gofmt 確認は tracked file に限定する**: `third_party/minigo` は ignore された upstream clone であり、`gofmt -l .` が consumer の未コミット前確認を upstream 側の testdata で落とす。AGENTS の確認コマンドは `git ls-files '*.go'` 経由にする。

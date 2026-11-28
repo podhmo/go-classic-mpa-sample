@@ -7,10 +7,9 @@ sqlite なし・モックデータのみで表示確認できる環境を作っ�
 ## 動かし方
 
 ```sh
+make setup-minigo   # third_party/minigo に clone（gitignore 済み・1度だけ）
 make storybook      # http://127.0.0.1:6006 で storybook 的 UI が立つ
 ```
-
-minigo は通常の Go module 依存として pin されている（clone・セットアップ不要）。
 
 - `GET /` … 左ナビ（story 一覧）＋ iframe で各 story を表示。`?w=320|360|768` で iframe 幅を固定できるビューポート切替付き（モバイル確認用）
 - `GET /story/{name}` … story 個別描画（毎回 minigo インタプリタが走る）
@@ -23,41 +22,34 @@ minigo は通常の Go module 依存として pin されている（clone・セ�
 
 > 2026-11-23 更新: minigo 側でパッケージが **`github.com/podhmo/minigo/x/storybook`** に移動し、example 側が持っていた UI（index/grid/`Handler`/`Export`）もライブラリに取り込まれた（minigo#1418）。`cmd/storybook` の `page.go` は削除。アプリ mux のマウントは `Book.Fallback` に差し替え（`GET` の chrome ルート以外が fallback へ流れる）。残る独自分は `bindApp`・`appHandler`・flags のみ。
 
-> 2026-11-29 更新: minigo#1455 で `x/storybook/fixture` の型駆動 fixture 生成が入った。これに合わせて minigo は pseudo-version で pin する通常の Go module 依存へ切り替え、`third_party` clone・nested module・`replace`・`make setup-minigo` を廃止した。fixture 生成は `StoryGeneratedIssueList` で使い、重要な意味を持つフィールドだけ手で調整する形にしている。配列値の host 往復では minigo 側の既知の隙間（別 issue）が残るため、`sha256.Sum256` の cache key 化では explicit conversion を1箇所だけ残す。
+> 2026-11-29 更新: minigo main（9fc8d93）で全 story の `Render`・app mount・export・watch endpoint を再確認した。`x/storybook` に fixture 生成と `//storybook:group` 明示指定が入ったが、consumer 側の取り込み方式は従来どおり third_party clone + nested module + replace を維持する。markdown cache key は `[32]byte` へ戻せたが、host-bound `sha256.Sum256` の array return だけは minigo 側の隙間（podhmo/minigo#1456）があるため explicit conversion を残す。
 
 ## 何を作ったか
 
 ```
-cmd/storybook/          # ルート module の普通の Go パッケージ
+cmd/storybook/          # ネストした Go module（go.mod に replace でローカル参照）
   main.go               # CLI/HTTP エントリポイント（flags + Book.Fallback 設定）
   book.go               # storybook.Book の薄いラッパ + bindApp(Setup hook)
   app.go                # アプリ mux を HTTP handler story 経由で返す appHandler + errorPage
   book_test.go          # appHandler 経由の mount・watch 契約の回帰テスト
 internal/web/
   story_pages.go        # `//go:build story` 付きの story 群（fixtures + StoryXxx 関数 + renderXxx helpers）
-  story_fixture.go      # x/storybook/fixture を使う生成 fixture の story
-Makefile                # storybook / storybook-watch ターゲット
+Makefile                # setup-minigo / storybook ターゲット
+.gitignore              # /third_party/ を除外
 ```
 
 2026-11-15 の更新で **`render.go` の ParseFS 回避は元に戻した**（script 側 embed.FS が bound `template.ParseFS` に橋渡しされるようになったため）。
 
 ## 方式の決定と理由
 
-### minigo の取り込み: pinned Go module（2026-11-29 以降）
+### minigo の取り込み: third_party clone + ネスト module + replace
 
-現在は **pseudo-version で pin した通常の Go module 依存**。`third_party` clone・nested module・`replace` は廃止した。minigo は semver 未発行でも Go module は commit を pin できるため、consumer 側で clone を管理する必要はなかった。upstream に戻す修正を同時進行するときだけ、一時的な `go mod edit -replace` を使えばよい。
-
-<details>
-<summary>旧方式（third_party clone + ネスト module + replace）の記録</summary>
-
-`git submodule` / `go.work` / `vendor` / そのまま require ではなく、**gitignore した `third_party/minigo` への plain clone** を選んでいた。
+`git submodule` / `go.work` / `vendor` / そのまま require ではなく、**gitignore した `third_party/minigo` への plain clone** を選んだ。
 
 - minigo は未 publish でバージョンが無い。`require` + `replace` が必要になるのはどの方式でも同じ。
 - **`cmd/storybook` をネスト module にした**のが本質。ルート module（アプリ本体）の `go.mod` を minigo 依存で汚さず、`go build ./...` / `go test ./...` が clone 無しでもグリーンのまま。storybook は opt-in ツール。
 - submodule は「minigo のコードを書き換えてフィードバックを集める」という今回の用途ではコミット追従管理が重い。clone なら `third_party/minigo` をそのまま編集して minigo 側リポジトリとして push もできる。
 - go.work はルート module 全体に影響するので避けた（`.gitignore` 済みの選択肢だが、今回は cmd/storybook の閉じた依存で十分）。
-
-</details>
 
 ### コンポーネント = ページ × 状態
 

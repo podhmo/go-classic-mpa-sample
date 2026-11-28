@@ -40,16 +40,13 @@ func TestRenderAllStories(t *testing.T) {
 		t.Fatal("no stories discovered")
 	}
 	for _, story := range stories {
-		if story.Name == "StoryGeneratedIssueList" && (story.Group != "renderIssueList" || story.GroupInferred) {
-			t.Errorf("StoryGeneratedIssueList group = %q inferred=%v, want explicit renderIssueList", story.Group, story.GroupInferred)
-		}
 		t.Run(story.Name, func(t *testing.T) {
 			page, err := b.Render(t.Context(), story.Name)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if page.Status < 100 || page.Status >= 600 {
-				t.Fatalf("invalid status %d", page.Status)
+			if page.Status < 100 || page.Status >= 500 {
+				t.Fatalf("unexpected status %d", page.Status)
 			}
 		})
 	}
