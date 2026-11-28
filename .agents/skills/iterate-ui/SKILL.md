@@ -68,9 +68,9 @@ rendering **500**, not silently — treat that as the failure signal.
    - Changed an existing page? Open its story (e.g. `?s=StoryIssueList`),
      then its `⊞ grid` (`?g=<renderFunc>`) to check all data states at once.
    - New data state (empty, error, paged, …)? Add a print story in
-     `story_pages.go` ending on the existing `renderXxx(status, data)`
-     helper and mark its doc comment with `//storybook:group renderXxx` —
-     the index picks it up immediately, grouped with its siblings.
+     `story_pages.go` and mark its doc comment with
+     `//storybook:group renderXxx` — the index picks it up immediately,
+     grouped with its siblings.
    - New page/handler? Add a `renderXxx` helper + a `StoryXxx`, and a
      `StoryHttpXxx` if the route itself matters (status, headers).
 4. Check the variants grid at `?w=360` for narrow-viewport regressions

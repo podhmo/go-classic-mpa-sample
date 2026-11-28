@@ -79,9 +79,8 @@ JS を配信しない）。エラーで 500 になったページも watch 中�
 2. 既存ページの見た目を変えた → 対応 story（例: `?s=StoryIssueList`。フィルタで探すと早い）
    と `⊞ grid`（`?g=`）で全データ状態をまとめて確認。
 3. 新しいデータ状態（空・エラー・ページング等）を足したい →
-   `story_pages.go` に story を追加。末尾を既存の `renderXxx(status, data)`
-   呼び出しにし、doc comment に `//storybook:group renderXxx` を書くと
-   index に即座に現れ、同じグループに並ぶ。
+   `story_pages.go` に story を追加し、doc comment に
+   `//storybook:group renderXxx` を書くと index に即座に現れ、同じグループに並ぶ。
 4. 新しいページ/ハンドラ → `renderXxx` helper と `StoryXxx` を追加。
    ルート自体（status・ヘッダ）が重要なら `StoryHttpXxx` も。
 5. 狭幅が気になる → ツールバーの幅切替で 360px にする（grid 内では各セルがその幅になる）。
