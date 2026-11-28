@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/podhmo/minigo/x/storybook"
 )
@@ -121,5 +122,35 @@ func TestAppMount(t *testing.T) {
 	resp, _ = post("body=classic", nil)
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("plain POST status %d, want 303 (client must not follow)", resp.StatusCode)
+	}
+}
+
+func TestAppMountSSEStreams(t *testing.T) {
+	srv := httptest.NewServer(newBook().Handler())
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+"/w/default/issues/2/events", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("SSE status %d, want 200", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "text/event-stream" {
+		t.Fatalf("SSE content type %q, want text/event-stream", ct)
+	}
+	buf := make([]byte, len("retry: 3000\n\n"))
+	if _, err := io.ReadFull(resp.Body, buf); err != nil {
+		t.Fatalf("read initial SSE frame: %v", err)
+	}
+	if string(buf) != "retry: 3000\n\n" {
+		t.Fatalf("initial SSE frame %q", string(buf))
 	}
 }
