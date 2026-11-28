@@ -20,10 +20,9 @@ make storybook        # serves internal/web stories on http://127.0.0.1:6006
 make storybook-watch  # same + open pages auto-reload on file changes (-watch)
 ```
 
-It auto-runs `make setup-minigo` (clones `podhmo/minigo` into
-`third_party/`, a nested module `cmd/storybook` replaces it against).
-Keep the process running for the whole task — every source read happens
-per request, so:
+minigo is a pinned Go module dependency, so no clone or setup step is
+needed. Keep the process running for the whole task — every source read
+happens per request, so:
 
 - editing `internal/web/templates/*.html` → reload the browser, done
 - editing `internal/web/story_pages.go` (fixtures, stories, `storyStore`) → reload, done
@@ -41,11 +40,12 @@ rendering **500**, not silently — treat that as the failure signal.
 - **Filter**: the top search box narrows rows by name/doc/group, live
   (`?q=` in the URL). `/` focuses it, Esc clears, Enter opens the first
   match, arrows move between matches.
-- **Print stories** (`internal/web/story_pages.go`, `// +build story`
+- **Print stories** (`internal/web/story_pages.go`, `//go:build story`
   tag): each renders one `<html` page with fake data. They are grouped
-  under the render helper they end with (`renderIssueList`,
-  `renderIssueDetail`, `renderIssueForm`, `renderIssueDelete`,
-  `renderError`). Clicking a row previews it (`?s=`, no page reload);
+  by an explicit `//storybook:group renderXxx` marker or, as a fallback,
+  the render helper they end with (`renderIssueList`, `renderIssueDetail`,
+  `renderIssueForm`, `renderIssueDelete`, `renderError`). Clicking a row
+  previews it (`?s=`, no page reload);
   the `⊞ grid` pill on each group header previews **all variants side
   by side** in the same pane (`?g=`).
 - **Toolbar**: above the preview — the current group / story name /
@@ -68,8 +68,8 @@ rendering **500**, not silently — treat that as the failure signal.
      then its `⊞ grid` (`?g=<renderFunc>`) to check all data states at once.
    - New data state (empty, error, paged, …)? Add a print story in
      `story_pages.go` ending on the existing `renderXxx(status, data)`
-     helper — the index picks it up immediately, grouped with its
-     siblings.
+     helper or mark its doc comment with `//storybook:group renderXxx` —
+     the index picks it up immediately, grouped with its siblings.
    - New page/handler? Add a `renderXxx` helper + a `StoryXxx`, and a
      `StoryHttpXxx` if the route itself matters (status, headers).
 4. Check the variants grid at `?w=360` for narrow-viewport regressions
@@ -86,7 +86,7 @@ rendering **500**, not silently — treat that as the failure signal.
 ## Export (static snapshot)
 
 ```sh
-cd cmd/storybook && go run . -o /tmp/book ../../internal/web
+go run ./cmd/storybook -o /tmp/book ./internal/web
 python3 -m http.server -d /tmp/book    # index.html + grid_*.html + static/
 ```
 
@@ -97,9 +97,10 @@ a snapshot to a PR.
 
 - Story files in `internal/web` carry `//go:build story` — they never
   ship in the binary; keep `story_pages.go` for story data and helpers.
-- A print story must end on an unqualified `renderXxx(...)` call — the
-  group name is derived from it (a story ending on `printRec(...)`
-  collapses the whole corpus into one group).
+- A print story either ends on an unqualified `renderXxx(...)` call or
+  declares `//storybook:group renderXxx` in its doc comment. Without one
+  of those it stays ungrouped; do not let a trailing `printRec(...)`
+  accidentally become the inferred group.
 - Stories and fixtures live in `story_pages.go` and are pure script —
   no restarts, no recompiles; if you find yourself restarting the
   storybook after an edit, something is wrong.

@@ -43,9 +43,6 @@ go.work.sum
 .playwright-cli/
 .playwright/
 
-# minigo clone used by cmd/storybook (unstable, not yet published)
-/third_party/
-
 # storybook binary
 cmd/storybook/storybook
 .demo-pr-repo/

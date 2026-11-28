@@ -26,6 +26,35 @@ func TestWatchRequiresHTTP(t *testing.T) {
 	}
 }
 
+// TestRenderAllStories exercises the whole app story corpus through the
+// interpreter. Discovery alone is not enough: fixture construction,
+// markdown rendering, template execution and handler replay all fail at
+// Render time when minigo cannot represent a value the app uses.
+func TestRenderAllStories(t *testing.T) {
+	b := newBook()
+	stories, err := b.Stories()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stories) == 0 {
+		t.Fatal("no stories discovered")
+	}
+	for _, story := range stories {
+		if story.Name == "StoryGeneratedIssueList" && (story.Group != "renderIssueList" || story.GroupInferred) {
+			t.Errorf("StoryGeneratedIssueList group = %q inferred=%v, want explicit renderIssueList", story.Group, story.GroupInferred)
+		}
+		t.Run(story.Name, func(t *testing.T) {
+			page, err := b.Render(t.Context(), story.Name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if page.Status < 100 || page.Status >= 600 {
+				t.Fatalf("invalid status %d", page.Status)
+			}
+		})
+	}
+}
+
 // The catch-all mount routes every non-storybook path through the app's
 // real mux via StoryHttpApp — the storybook doubles as a fake-data
 // instance of the app, so browser JS has live endpoints to hit.

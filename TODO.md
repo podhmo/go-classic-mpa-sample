@@ -12,4 +12,6 @@ Module path: `github.com/podhmo/go-classic-mpa-sample`
 
 ## To Be Implemented
 
+- [x] **minigo storybook 更新追従**: 最新の `x/storybook`（fixture generation 等）で全 story / app mount / export が動くことを確認し、古い制限由来の迂回実装や手順を素直な使い方へ整理する。見つかった upstream 側の不足は minigo issue へ返す。
+
 Guides referenced below are in the `modern-web-guidance` catalog (`.agents/skills/modern-web-guidance/`): run `npx -y modern-web-guidance@latest retrieve "<id>"` before implementing. Prefer declarative HTML/CSS; JavaScript is allowed only when its behavior can be verified via the storybook (`docs/ja/decisions.md` "JavaScript 方針") — entries marked **JS** need a `/static/` external file (CSP `script-src 'self'`; inline `<script>` stays blocked). When the first JS file lands, update the "No JavaScript." claim in `layout.html`'s footer.

@@ -56,7 +56,7 @@
   ままだと 15 秒で切断される。SSE ハンドラ内で
   `http.NewResponseController(w).SetWriteDeadline(time.Time{})`（Go 1.20+、
   zero で期限解除）して当該ルートだけ無期限にする必要がある。
-- **先例が repo 内にある**: `third_party/minigo/x/storybook/watch.go` の
+- **先例が依存 module 内にある**: `github.com/podhmo/minigo/x/storybook` の
   live-reload が「in-process broadcaster + `text/event-stream` + EventSource
   client」の同じ構成を既に実装している（`/_livereload`、切断検知→`onopen` で
   再同期、iframe は親に任せる方針）。
