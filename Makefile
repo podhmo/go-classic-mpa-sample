@@ -5,7 +5,7 @@ test:
 	go test ./...
 
 ## test-storybook: run storybook tests without Go's test cache (stories are interpreted at runtime)
-test-storybook: ensure-minigo
+test-storybook: setup-minigo
 	cd cmd/storybook && go test -count=1 ./...
 
 # CLI の E2E: init → register → auth token → serve → zatu/リモート動作確認
