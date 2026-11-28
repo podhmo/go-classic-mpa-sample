@@ -58,8 +58,8 @@ JS を配信しない）。エラーで 500 になったページも watch 中�
   （入力中ライブ反映、URL は `?q=`）。`/` でフォーカス、Esc でクリア、
   Enter で先頭候補を開く、↑↓ で候補を移動。
 - **print stories** — `story_pages.go` の story 群。各 story は偽データで
-  `<html>` を 1 ページ描く。`//storybook:group renderXxx` または末尾の
-  `renderXxx` 呼び出し名でグループ化される。クリックすると右のプレビューに
+  `<html>` を 1 ページ描く。doc comment の `//storybook:group renderXxx`
+  marker でグループ化される。クリックすると右のプレビューに
   開く（`?s=`、ページリロードなし）。
 - **⊞ grid ピル** — グループ見出しの右にあるボタン。**同じページの
   全バリアントを並べた grid** をプレビュー領域に開く（`?g=`）。
@@ -80,7 +80,7 @@ JS を配信しない）。エラーで 500 になったページも watch 中�
    と `⊞ grid`（`?g=`）で全データ状態をまとめて確認。
 3. 新しいデータ状態（空・エラー・ページング等）を足したい →
    `story_pages.go` に story を追加。末尾を既存の `renderXxx(status, data)`
-   呼び出しにするか、doc comment に `//storybook:group renderXxx` を書くと
+   呼び出しにし、doc comment に `//storybook:group renderXxx` を書くと
    index に即座に現れ、同じグループに並ぶ。
 4. 新しいページ/ハンドラ → `renderXxx` helper と `StoryXxx` を追加。
    ルート自体（status・ヘッダ）が重要なら `StoryHttpXxx` も。

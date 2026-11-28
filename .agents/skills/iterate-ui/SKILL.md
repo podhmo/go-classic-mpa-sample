@@ -43,8 +43,8 @@ rendering **500**, not silently — treat that as the failure signal.
   match, arrows move between matches.
 - **Print stories** (`internal/web/story_pages.go`, `//go:build story`
   tag): each renders one `<html` page with fake data. They are grouped
-  by an explicit `//storybook:group renderXxx` marker or, as a fallback,
-  the render helper they end with (`renderIssueList`, `renderIssueDetail`,
+  by their explicit `//storybook:group renderXxx` markers
+  (`renderIssueList`, `renderIssueDetail`,
   `renderIssueForm`, `renderIssueDelete`, `renderError`). Clicking a row
   previews it (`?s=`, no page reload);
   the `⊞ grid` pill on each group header previews **all variants side
@@ -69,7 +69,7 @@ rendering **500**, not silently — treat that as the failure signal.
      then its `⊞ grid` (`?g=<renderFunc>`) to check all data states at once.
    - New data state (empty, error, paged, …)? Add a print story in
      `story_pages.go` ending on the existing `renderXxx(status, data)`
-     helper or mark its doc comment with `//storybook:group renderXxx` —
+     helper and mark its doc comment with `//storybook:group renderXxx` —
      the index picks it up immediately, grouped with its siblings.
    - New page/handler? Add a `renderXxx` helper + a `StoryXxx`, and a
      `StoryHttpXxx` if the route itself matters (status, headers).
@@ -98,11 +98,9 @@ a snapshot to a PR.
 
 - Story files in `internal/web` carry `//go:build story` — they never
   ship in the binary; keep `story_pages.go` for story data and helpers.
-- A print story is grouped by an explicit `//storybook:group renderXxx`
-  doc-comment marker when present; otherwise minigo infers the group from
-  the last unqualified non-builtin call. End on `renderXxx(...)` or declare
-  the marker — do not let a trailing helper such as `printRec(...)` steal
-  the inferred group.
+- Every print story declares `//storybook:group renderXxx` in its doc
+  comment. Do not rely on minigo's last-call inference: a trailing helper
+  such as `printRec(...)` or `renderFragment(...)` would steal the group.
 - Stories and fixtures live in `story_pages.go` and are pure script —
   no restarts, no recompiles; if you find yourself restarting the
   storybook after an edit, something is wrong.

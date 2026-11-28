@@ -41,6 +41,9 @@ func TestRenderAllStories(t *testing.T) {
 		t.Fatal("no stories discovered")
 	}
 	for _, story := range stories {
+		if story.Kind != storybook.KindHTTP && story.GroupInferred {
+			t.Errorf("%s uses inferred group %q; declare //storybook:group", story.Name, story.Group)
+		}
 		t.Run(story.Name, func(t *testing.T) {
 			page, err := b.Render(t.Context(), story.Name)
 			if err != nil {

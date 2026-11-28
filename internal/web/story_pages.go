@@ -281,6 +281,8 @@ func renderCommentDelete(status int, data commentDeletePage) {
 }
 
 // StoryIssueList renders the issue list with several issues.
+//
+//storybook:group renderIssueList
 func StoryIssueList() {
 	renderIssueList(http.StatusOK, issueListPage{
 		Title:      "Issues",
@@ -299,6 +301,8 @@ func StoryIssueList() {
 
 // StoryIssueListAuthenticated renders the issue list for a signed-in user:
 // the header switches from login/register links to the user handle and logout.
+//
+//storybook:group renderIssueList
 func StoryIssueListAuthenticated() {
 	renderIssueList(http.StatusOK, issueListPage{
 		Title:      "Issues",
@@ -317,6 +321,8 @@ func StoryIssueListAuthenticated() {
 }
 
 // StoryIssueListEmpty renders the issue list with no results.
+//
+//storybook:group renderIssueList
 func StoryIssueListEmpty() {
 	renderIssueList(http.StatusOK, issueListPage{
 		Title:           "Issues",
@@ -331,6 +337,8 @@ func StoryIssueListEmpty() {
 }
 
 // StoryIssueListPaged renders a middle page of a long filtered list.
+//
+//storybook:group renderIssueList
 func StoryIssueListPaged() {
 	renderIssueList(http.StatusOK, issueListPage{
 		Title:      "Issues",
@@ -356,6 +364,8 @@ func StoryIssueListPaged() {
 
 // StoryIssueListSearch renders the list with a search term that matches
 // issue titles — the search-highlight.js enhancement should mark them.
+//
+//storybook:group renderIssueList
 func StoryIssueListSearch() {
 	renderIssueList(http.StatusOK, issueListPage{
 		Title:           "Issues",
@@ -374,6 +384,8 @@ func StoryIssueListSearch() {
 }
 
 // StoryIssueDetail renders the issue detail page with comments.
+//
+//storybook:group renderIssueDetail
 func StoryIssueDetail() {
 	renderIssueDetail(http.StatusOK, issueDetailPage{
 		Title:     "#2 Improve responsive layout",
@@ -385,6 +397,8 @@ func StoryIssueDetail() {
 }
 
 // StoryIssueDetailNoBody renders an issue whose optional body was left empty.
+//
+//storybook:group renderIssueDetail
 func StoryIssueDetailNoBody() {
 	issue := *storyIssue
 	issue.Body = ""
@@ -399,6 +413,8 @@ func StoryIssueDetailNoBody() {
 
 // StoryIssueDetailMarkdownRich exercises the markdown elements and alert
 // variants that the ordinary fixtures do not use.
+//
+//storybook:group renderIssueDetail
 func StoryIssueDetailMarkdownRich() {
 	issue := *storyIssue
 	issue.Body = `# Heading 1
@@ -444,6 +460,8 @@ func StoryIssueDetailMarkdownRich() {
 
 // StoryIssueDetailLong renders the detail page with a long comment thread
 // so the back-to-top affordance can be exercised by scrolling.
+//
+//storybook:group renderIssueDetail
 func StoryIssueDetailLong() {
 	var comments []*store.Comment
 	for i := range 51 {
@@ -464,6 +482,8 @@ func StoryIssueDetailLong() {
 
 // StoryIssueDetailCommentError re-renders the detail page after a failed
 // comment submission.
+//
+//storybook:group renderIssueDetail
 func StoryIssueDetailCommentError() {
 	renderIssueDetail(http.StatusUnprocessableEntity, issueDetailPage{
 		Title:        "#2 Improve responsive layout",
@@ -478,6 +498,8 @@ func StoryIssueDetailCommentError() {
 
 // StoryIssueDetailEmpty renders the detail page with no comments: the
 // empty list state plus the bottom comment form's initial state.
+//
+//storybook:group renderIssueDetail
 func StoryIssueDetailEmpty() {
 	renderIssueDetail(http.StatusOK, issueDetailPage{
 		Title:     "#2 Improve responsive layout",
@@ -488,6 +510,8 @@ func StoryIssueDetailEmpty() {
 }
 
 // StoryIssueFormNew renders the empty create form.
+//
+//storybook:group renderIssueForm
 func StoryIssueFormNew() {
 	renderIssueForm(http.StatusOK, issueFormPage{
 		Title:       "New issue",
@@ -501,6 +525,8 @@ func StoryIssueFormNew() {
 }
 
 // StoryIssueFormErrors re-renders the create form with validation errors.
+//
+//storybook:group renderIssueForm
 func StoryIssueFormErrors() {
 	renderIssueForm(http.StatusUnprocessableEntity, issueFormPage{
 		Title:       "New issue",
@@ -516,6 +542,8 @@ func StoryIssueFormErrors() {
 }
 
 // StoryIssueFormEdit renders the populated edit form.
+//
+//storybook:group renderIssueForm
 func StoryIssueFormEdit() {
 	renderIssueForm(http.StatusOK, issueFormPage{
 		Title:       "Edit issue #2",
@@ -530,6 +558,8 @@ func StoryIssueFormEdit() {
 }
 
 // StoryIssueDelete renders the delete confirmation page.
+//
+//storybook:group renderIssueDelete
 func StoryIssueDelete() {
 	renderIssueDelete(http.StatusOK, issueDeletePage{
 		Title:     "Delete issue #2",
@@ -542,6 +572,8 @@ func StoryIssueDelete() {
 // StoryIssueDetailModerated renders the detail page with an edited
 // comment and a hidden one — the "edited" marker, the reason note and
 // the collapsed body, plus the Unhide row in place of the hide picker.
+//
+//storybook:group renderIssueDetail
 func StoryIssueDetailModerated() {
 	renderIssueDetail(http.StatusOK, issueDetailPage{
 		Title:     "#2 Improve responsive layout",
@@ -554,6 +586,8 @@ func StoryIssueDetailModerated() {
 
 // StoryCommentEdit renders the shared comment edit page (the issue
 // comment flavor — threads and replies use the same template).
+//
+//storybook:group renderCommentEdit
 func StoryCommentEdit() {
 	renderCommentEdit(http.StatusOK, commentEditPage{
 		Title:     "Edit comment #2",
@@ -568,6 +602,8 @@ func StoryCommentEdit() {
 
 // StoryCommentDelete renders the shared delete-confirm page — a thread
 // fixture so the "and its N replies" warning is exercised too.
+//
+//storybook:group renderCommentDelete
 func StoryCommentDelete() {
 	renderCommentDelete(http.StatusOK, commentDeletePage{
 		Title:     "Delete thread #2",
@@ -583,6 +619,8 @@ func StoryCommentDelete() {
 }
 
 // StoryError404 renders the styled 404 page.
+//
+//storybook:group renderError
 func StoryError404() {
 	renderError(http.StatusNotFound, "Not found",
 		"The page or issue you are looking for does not exist or may have been deleted.")
@@ -590,6 +628,8 @@ func StoryError404() {
 
 // StoryDiscussionList renders the discussion list with several entries,
 // one of them answered.
+//
+//storybook:group renderDiscussionList
 func StoryDiscussionList() {
 	renderDiscussionList(http.StatusOK, discussionListPage{
 		Title:       "Discussions",
@@ -608,6 +648,8 @@ func StoryDiscussionList() {
 
 // StoryDiscussionListEmpty renders the filtered discussion list with no
 // results.
+//
+//storybook:group renderDiscussionList
 func StoryDiscussionListEmpty() {
 	renderDiscussionList(http.StatusOK, discussionListPage{
 		Title:           "Discussions",
@@ -622,6 +664,8 @@ func StoryDiscussionListEmpty() {
 
 // StoryDiscussionDetail renders the Q&A detail page: an answer-marked
 // thread with a reply, plus a second thread with a reply chain.
+//
+//storybook:group renderDiscussionDetail
 func StoryDiscussionDetail() {
 	renderDiscussionDetail(http.StatusOK, discussionDetailPage{
 		Title:      "#2 How do custom labels get their color?",
@@ -636,6 +680,8 @@ func StoryDiscussionDetail() {
 // server opens a thread's <details> only when re-rendering a rejected
 // reply draft, which is also how the Cancel/Comment action row and the
 // reply field error get their visual check.
+//
+//storybook:group renderDiscussionDetail
 func StoryDiscussionDetailReplyOpen() {
 	renderDiscussionDetail(http.StatusUnprocessableEntity, discussionDetailPage{
 		Title:         "#2 How do custom labels get their color?",
@@ -652,6 +698,8 @@ func StoryDiscussionDetailReplyOpen() {
 // StoryDiscussionDetailLong renders enough threads for the page to
 // scroll, so the fixed back-to-top affordance (and its narrow-viewport
 // placement) can be exercised.
+//
+//storybook:group renderDiscussionDetail
 func StoryDiscussionDetailLong() {
 	var threads []*store.DiscussionThread
 	for i := range 51 {
@@ -671,6 +719,8 @@ func StoryDiscussionDetailLong() {
 }
 
 // StoryDiscussionFormNew renders the empty create form with categories.
+//
+//storybook:group renderDiscussionForm
 func StoryDiscussionFormNew() {
 	renderDiscussionForm(http.StatusOK, discussionFormPage{
 		Title:       "New discussion",
@@ -686,6 +736,8 @@ func StoryDiscussionFormNew() {
 
 // StoryDiscussionFormErrors re-renders the create form with a missing
 // title and no category selected.
+//
+//storybook:group renderDiscussionForm
 func StoryDiscussionFormErrors() {
 	renderDiscussionForm(http.StatusUnprocessableEntity, discussionFormPage{
 		Title:       "New discussion",
@@ -702,6 +754,8 @@ func StoryDiscussionFormErrors() {
 }
 
 // StoryDiscussionDelete renders the delete confirmation page.
+//
+//storybook:group renderDiscussionDelete
 func StoryDiscussionDelete() {
 	renderDiscussionDelete(http.StatusOK, discussionDeletePage{
 		Title:      "Delete discussion #2",
@@ -713,6 +767,8 @@ func StoryDiscussionDelete() {
 
 // StoryLabels renders the label management page: both kinds, the
 // shared/workspace scope tags and the archived section.
+//
+//storybook:group renderLabels
 func StoryLabels() {
 	renderLabels(http.StatusOK, labelsPage{
 		Title:            "Labels",
@@ -726,6 +782,8 @@ func StoryLabels() {
 
 // StoryLabelsCreateError re-renders the management page after a failed
 // create — the draft values stay in the form with the field errors.
+//
+//storybook:group renderLabels
 func StoryLabelsCreateError() {
 	renderLabels(http.StatusUnprocessableEntity, labelsPage{
 		Title:            "Labels",
@@ -742,6 +800,8 @@ func StoryLabelsCreateError() {
 }
 
 // StoryLabelFormEdit renders the label edit form.
+//
+//storybook:group renderLabelForm
 func StoryLabelFormEdit() {
 	renderLabelForm(http.StatusOK, labelFormPage{
 		Title:     "Edit label bug",
@@ -1144,6 +1204,8 @@ func renderFragment(page, name string, status int, data any) {
 
 // StoryIssueCommentFragment is the <li> a successful partial comment
 // POST returns for an issue — appended to .comment-list by the swap.
+//
+//storybook:group renderIssueDetail
 func StoryIssueCommentFragment() {
 	renderFragment("issue_detail", "issue_comment", http.StatusOK,
 		dict("C", storyComments[1], "Workspace", storyWorkspace))
@@ -1151,6 +1213,8 @@ func StoryIssueCommentFragment() {
 
 // StoryIssueCommentHiddenFragment is the hidden-state <li> a partial
 // hide POST swaps over the visible comment.
+//
+//storybook:group renderIssueDetail
 func StoryIssueCommentHiddenFragment() {
 	renderFragment("issue_detail", "issue_comment", http.StatusOK,
 		dict("C", storyCommentsModerated[2], "Workspace", storyWorkspace))
@@ -1159,6 +1223,8 @@ func StoryIssueCommentHiddenFragment() {
 // StoryDiscussionDetailModerated renders the discussion detail with a
 // hidden thread and a hidden reply (the thread's replies stay visible —
 // they are other posts).
+//
+//storybook:group renderDiscussionDetail
 func StoryDiscussionDetailModerated() {
 	renderDiscussionDetail(http.StatusOK, discussionDetailPage{
 		Title:      "#2 How do custom labels get their color?",
@@ -1171,6 +1237,8 @@ func StoryDiscussionDetailModerated() {
 
 // StoryIssueCommentFormFragment is the error-marked form a 422 partial
 // response swaps back in place of the submitted one.
+//
+//storybook:group renderIssueDetail
 func StoryIssueCommentFormFragment() {
 	renderFragment("issue_detail", "issue_comment_form", http.StatusUnprocessableEntity, issueDetailPage{
 		Issue:        storyIssue,
@@ -1182,6 +1250,8 @@ func StoryIssueCommentFormFragment() {
 
 // StoryDiscussionCommentFragment renders a top-level discussion comment
 // <li> — collapsed reply form and qa answer button included.
+//
+//storybook:group renderDiscussionDetail
 func StoryDiscussionCommentFragment() {
 	renderFragment("discussion_detail", "discussion_comment", http.StatusOK,
 		dict("Discussion", storyDiscussion, "C", storyDThreads[1], "Workspace", storyWorkspace))
@@ -1189,6 +1259,8 @@ func StoryDiscussionCommentFragment() {
 
 // StoryDiscussionReplyFragment renders the reply <li> appended to the
 // parent's .comment-replies by a partial reply POST.
+//
+//storybook:group renderDiscussionDetail
 func StoryDiscussionReplyFragment() {
 	renderFragment("discussion_detail", "discussion_reply", http.StatusOK,
 		dict("Discussion", storyDiscussion, "C", storyDThreads[0].Comments[0], "Workspace", storyWorkspace))
@@ -1435,6 +1507,8 @@ func renderPullMerge(status int, data pullMergePage) {
 }
 
 // StoryPullList renders the pull request index with open/merged/closed rows.
+//
+//storybook:group renderPullList
 func StoryPullList() {
 	renderPullList(http.StatusOK, pullListPage{
 		Title: "Pull requests", Section: "pulls",
@@ -1447,6 +1521,8 @@ func StoryPullList() {
 
 // StoryPullDetail renders an open PR's conversation: merge-clean badge,
 // commits, and an anchored review comment.
+//
+//storybook:group renderPullDetail
 func StoryPullDetail() {
 	renderPullDetail(http.StatusOK, pullDetailPage{
 		Title: storyPulls[0].Title, Section: "pulls",
@@ -1462,6 +1538,8 @@ func StoryPullDetail() {
 
 // StoryPullDetailMerged renders the conversation of a merged PR — static
 // merge info, no live mergeability probe.
+//
+//storybook:group renderPullDetail
 func StoryPullDetailMerged() {
 	renderPullDetail(http.StatusOK, pullDetailPage{
 		Title: storyPulls[1].Title, Section: "pulls",
@@ -1471,6 +1549,8 @@ func StoryPullDetailMerged() {
 }
 
 // StoryPullNew renders the create form with base/head selects.
+//
+//storybook:group renderPullForm
 func StoryPullNew() {
 	renderPullForm(http.StatusOK, pullFormPage{
 		Title: "New pull request", Heading: "Open a pull request",
@@ -1485,6 +1565,8 @@ func StoryPullNew() {
 }
 
 // StoryPullEdit renders the edit form: refs frozen as text, only title/body.
+//
+//storybook:group renderPullForm
 func StoryPullEdit() {
 	renderPullForm(http.StatusOK, pullFormPage{
 		Title: "Edit pull request", Heading: "Edit pull request",
@@ -1496,6 +1578,8 @@ func StoryPullEdit() {
 
 // StoryPullFiles renders the files-changed page: one modified file with an
 // inline comment form and one anchored comment.
+//
+//storybook:group renderPullFiles
 func StoryPullFiles() {
 	files := []pullFileView{
 		{
@@ -1560,6 +1644,8 @@ func StoryPullFiles() {
 }
 
 // StoryPullMerge renders the merge confirmation page on a clean probe.
+//
+//storybook:group renderPullMerge
 func StoryPullMerge() {
 	renderPullMerge(http.StatusOK, pullMergePage{
 		Title: "Merge pull request", Section: "pulls",
@@ -1570,6 +1656,8 @@ func StoryPullMerge() {
 
 // StoryPullMergeConflict renders the merge page when the probe reports a
 // conflict — the merge button is gone, the file list is shown.
+//
+//storybook:group renderPullMerge
 func StoryPullMergeConflict() {
 	renderPullMerge(http.StatusOK, pullMergePage{
 		Title: "Merge pull request", Section: "pulls",
