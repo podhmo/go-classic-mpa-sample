@@ -35,7 +35,7 @@ tools/demo-history.sh [DB]              # zatu のみでデモ履歴をリプレ
 tools/demo-pr-history.sh [DB] [REPO]    # 実 git repo + `zatu pr` で PR 履歴をリプレイ
 go test ./...               # 全テスト（unit + store + E2E）
 make test-storybook         # storybook の回帰テスト（-count=1 固定）
-go vet ./... && gofmt -l .  # 静的解析・フォーマット確認（コミット前に）
+go vet ./... && out="$(git ls-files '*.go' | xargs gofmt -l)" && test -z "$out"  # 静的解析・フォーマット確認（コミット前に。third_party を除外）
 go fix ./...                # モダナイズ（必要に応じて）
 make todo-gc                # TODO.md の [x] 項目を TODO-archive.md へ移す
 ```

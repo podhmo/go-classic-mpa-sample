@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/podhmo/minigo"
@@ -71,6 +72,16 @@ func (b *Book) appHandler() http.Handler {
 			b.errorPage(w, http.StatusInternalServerError, err)
 			return
 		}
+		if strings.HasSuffix(r.URL.Path, "/events") {
+			// SSE endpoints must write through to the client. Buffering them in
+			// a recorder would never complete, and the recorder cannot lift
+			// the server's write deadline or flush frames.
+			if _, err := s.Call(r.Context(), pkg, appStory, w, r); err != nil {
+				b.errorPage(w, http.StatusInternalServerError, fmt.Errorf("%s: %w", appStory, err))
+			}
+			return
+		}
+
 		rec := httptest.NewRecorder()
 		if _, err := s.Call(r.Context(), pkg, appStory, rec, r); err != nil {
 			b.errorPage(w, http.StatusInternalServerError, fmt.Errorf("%s: %w", appStory, err))

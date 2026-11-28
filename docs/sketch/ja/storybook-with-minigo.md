@@ -22,6 +22,8 @@ make storybook      # http://127.0.0.1:6006 で storybook 的 UI が立つ
 
 > 2026-11-23 更新: minigo 側でパッケージが **`github.com/podhmo/minigo/x/storybook`** に移動し、example 側が持っていた UI（index/grid/`Handler`/`Export`）もライブラリに取り込まれた（minigo#1418）。`cmd/storybook` の `page.go` は削除。アプリ mux のマウントは `Book.Fallback` に差し替え（`GET` の chrome ルート以外が fallback へ流れる）。残る独自分は `bindApp`・`appHandler`・flags のみ。
 
+> 2026-11-29 更新: minigo main（9fc8d93）で全 story の `Render`・app mount・export・watch endpoint を再確認した。`x/storybook` に fixture 生成と `//storybook:group` 明示指定が入ったが、consumer 側の取り込み方式は従来どおり third_party clone + nested module + replace を維持する。markdown cache key は `[32]byte` へ戻せたが、host-bound `sha256.Sum256` の array return だけは minigo 側の隙間（podhmo/minigo#1456）があるため explicit conversion を残す。
+
 ## 何を作ったか
 
 ```

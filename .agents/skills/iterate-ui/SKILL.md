@@ -41,11 +41,12 @@ rendering **500**, not silently — treat that as the failure signal.
 - **Filter**: the top search box narrows rows by name/doc/group, live
   (`?q=` in the URL). `/` focuses it, Esc clears, Enter opens the first
   match, arrows move between matches.
-- **Print stories** (`internal/web/story_pages.go`, `// +build story`
+- **Print stories** (`internal/web/story_pages.go`, `//go:build story`
   tag): each renders one `<html` page with fake data. They are grouped
-  under the render helper they end with (`renderIssueList`,
-  `renderIssueDetail`, `renderIssueForm`, `renderIssueDelete`,
-  `renderError`). Clicking a row previews it (`?s=`, no page reload);
+  by their explicit `//storybook:group renderXxx` markers
+  (`renderIssueList`, `renderIssueDetail`,
+  `renderIssueForm`, `renderIssueDelete`, `renderError`). Clicking a row
+  previews it (`?s=`, no page reload);
   the `⊞ grid` pill on each group header previews **all variants side
   by side** in the same pane (`?g=`).
 - **Toolbar**: above the preview — the current group / story name /
@@ -67,9 +68,9 @@ rendering **500**, not silently — treat that as the failure signal.
    - Changed an existing page? Open its story (e.g. `?s=StoryIssueList`),
      then its `⊞ grid` (`?g=<renderFunc>`) to check all data states at once.
    - New data state (empty, error, paged, …)? Add a print story in
-     `story_pages.go` ending on the existing `renderXxx(status, data)`
-     helper — the index picks it up immediately, grouped with its
-     siblings.
+     `story_pages.go` and mark its doc comment with
+     `//storybook:group renderXxx` — the index picks it up immediately,
+     grouped with its siblings.
    - New page/handler? Add a `renderXxx` helper + a `StoryXxx`, and a
      `StoryHttpXxx` if the route itself matters (status, headers).
 4. Check the variants grid at `?w=360` for narrow-viewport regressions
@@ -97,9 +98,9 @@ a snapshot to a PR.
 
 - Story files in `internal/web` carry `//go:build story` — they never
   ship in the binary; keep `story_pages.go` for story data and helpers.
-- A print story must end on an unqualified `renderXxx(...)` call — the
-  group name is derived from it (a story ending on `printRec(...)`
-  collapses the whole corpus into one group).
+- Every print story declares `//storybook:group renderXxx` in its doc
+  comment. Do not rely on minigo's last-call inference: a trailing helper
+  such as `printRec(...)` or `renderFragment(...)` would steal the group.
 - Stories and fixtures live in `story_pages.go` and are pure script —
   no restarts, no recompiles; if you find yourself restarting the
   storybook after an edit, something is wrong.

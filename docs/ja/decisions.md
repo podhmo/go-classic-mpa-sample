@@ -896,3 +896,13 @@ go-spa-sample#23 で修正された SPA 側の comment mutation regression を M
 
 - **light/dark の baseline は別 directory に分ける**: `.visual-diff/baseline/light` と `.visual-diff/baseline/dark` を使い、`page.emulateMedia({colorScheme})` で OS/browser の実設定に依存しない。既定の `update` / `check` は両 mode を通し、個別確認だけが必要なときは第2引数か `MODES` で絞る。
 - **JS 駆動状態は storybook 上で実操作できるものだけ visual-diff に入れる**: dialog open と copy feedback は実際に click し、toast は storybook に POST 先が無いため `/static/toast.js` の `toast()` を直接起動して描画だけを固定する。これは `.toast` 系 CSS の visual coverage であり、partial POST 成功経路や SSE 由来 `.comment-new` の E2E 検証を置き換えない。
+
+## storybook の minigo 取り込み方式は維持しつつ追従する（2026-11-29、minigo#1455 追従）
+
+- **third_party clone・nested module・replace は維持する**: root module を通常の Go module 依存へ切り替える案もあったが、storybook は opt-in ツールとして既存構成を変えない。更新は従来どおり `make setup-minigo` で fast-forward する。今回の検証対象は minigo main `9fc8d93`。
+- **fixture 生成は現時点では app story に採用しない**: `x/storybook/fixture` は storybook 実行時には解決できるが、`//go:build story` な story ファイルを root module 側でも型チェックする経路では nested module の依存が見えない。root module 構成を変えずに入れると別の迂回が増えるため、今回は互換性確認と workaround 除去に絞る。
+- **markdown cache key は `[32]byte` へ戻す**: binary digest を string に詰めていた旧 workaround はやめる。minigo 側が host-bound `sha256.Sum256` の array return を script の array type へそのまま適合させられないため、現時点では explicit conversion を1箇所だけ残す（podhmo/minigo#1456）。
+- **story grouping は明示 marker を正にする**: 末尾の unqualified `renderXxx` 呼び出しの heuristic に依存せず、print story は `//storybook:group renderXxx` を doc comment に書く。fragment story のように最後の呼び出しが `renderFragment` 等の helper でも、表示上のページ単位（例: `renderIssueDetail`）へ明示的に寄せる。
+- **storybook 回帰テストは全 story を Render する**: discovery だけでは fixture 構築・markdown 描画・template 実行・handler replay の interpreter 互換性を検出できないため、`cmd/storybook` のテストで全 story を描画し、5xx を失敗にする。
+- **app mount の SSE は recorder を通さない**: 通常ページは live-reload script を注入するため `httptest.ResponseRecorder` にいったん描くが、`/events` は長寿命 stream であり、buffer すると応答が完了せず write deadline も外せない。events route だけ実 `ResponseWriter` へ直接書き、最初の retry frame を回帰テストする。
+- **gofmt 確認は tracked file に限定し、終了コードも見る**: `third_party/minigo` は ignore された upstream clone であり、`gofmt -l .` が consumer の未コミット前確認を upstream 側の testdata で落とす。AGENTS の確認コマンドは `git ls-files '*.go'` 経由にしつつ、command substitution 内の gofmt 失敗を `test -z` が隠さないよう一旦変数へ受ける。

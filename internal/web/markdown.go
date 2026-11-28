@@ -22,7 +22,7 @@ const (
 )
 
 type markdownCacheEntry struct {
-	key  string
+	key  [32]byte
 	html template.HTML
 }
 
@@ -32,19 +32,19 @@ type markdownCacheEntry struct {
 type markdownLRU struct {
 	mu      sync.Mutex
 	order   *list.List
-	entries map[string]*list.Element
+	entries map[[32]byte]*list.Element
 	cap     int
 }
 
 func newMarkdownLRU(capacity int) *markdownLRU {
 	return &markdownLRU{
 		order:   list.New(),
-		entries: map[string]*list.Element{},
+		entries: map[[32]byte]*list.Element{},
 		cap:     capacity,
 	}
 }
 
-func (c *markdownLRU) get(key string) (template.HTML, bool) {
+func (c *markdownLRU) get(key [32]byte) (template.HTML, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	el, ok := c.entries[key]
@@ -55,7 +55,7 @@ func (c *markdownLRU) get(key string) (template.HTML, bool) {
 	return el.Value.(markdownCacheEntry).html, true
 }
 
-func (c *markdownLRU) add(key string, html template.HTML) {
+func (c *markdownLRU) add(key [32]byte, html template.HTML) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if el, ok := c.entries[key]; ok {
@@ -97,14 +97,12 @@ var (
 
 // markdownCacheKeyForWorkspace scopes the display cache key because issue
 // reference expansion depends on the workspace.
-func markdownCacheKeyForWorkspace(workspace string, src []byte) string {
+func markdownCacheKeyForWorkspace(workspace string, src []byte) [32]byte {
 	return markdownCacheKey(append(append([]byte(workspace), 0), src...))
 }
 
-func markdownCacheKey(src []byte) string {
-	h := sha256.New()
-	h.Write(src)
-	return string(h.Sum(nil))
+func markdownCacheKey(src []byte) [32]byte {
+	return [32]byte(sha256.Sum256(src))
 }
 
 var issueRefPattern = regexp.MustCompile(`(^|[^\w#])#([0-9]+)`)
@@ -122,7 +120,7 @@ func renderMarkdownForWorkspace(ws *store.Workspace, s string) template.HTML {
 	}
 	cacheable := len(s)+len(workspace) <= markdownCacheMaxSource
 	src := []byte(s)
-	var key string
+	var key [32]byte
 	if cacheable {
 		key = markdownCacheKeyForWorkspace(workspace, src)
 		if cached, ok := renderedMarkdown.get(key); ok {
